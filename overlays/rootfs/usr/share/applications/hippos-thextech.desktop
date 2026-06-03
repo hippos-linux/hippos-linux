@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=TheXTech
+GenericName=Super Mario Bros X
+Comment=TheXTech Super Mario Bros X engine
+Exec=/usr/lib/hippos/emulators/launch-thextech
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

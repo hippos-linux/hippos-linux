@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+mkdir -p /userdata/system /run/hippos
+
+while true; do
+    # Stop any Plasma/desktop WM user services left from a previous desktop session.
+    XDG_RUNTIME_DIR=/run/user/1000 systemctl --user stop \
+        plasmashell.service ksmserver.service 'plasma-*.service' 2>/dev/null || true
+    pkill -KILL -u hippos -f "ksmserver|startplasma" 2>/dev/null || true
+    # Wait for the WM selection to clear; force-kill if it lingers.
+    for _ in $(seq 1 20); do
+        DISPLAY=:0 xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q "no such atom" && break
+        pkill -KILL -u hippos kwin_x11 2>/dev/null || true
+        sleep 0.5
+    done
+    /usr/lib/hippos/session-es || true
+    [[ -f /run/hippos/quit-action ]] && break
+    sleep 1
+done

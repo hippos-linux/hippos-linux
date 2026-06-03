@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+event="${2:-}"
+
+case "${event}" in
+    up|vpn-up|dhcp4-change|dhcp6-change|connectivity-change)
+        systemctl start --no-block hippos-network-roms-discover.service >/dev/null 2>&1 || true
+        systemctl start --no-block hippos-network-roms.service >/dev/null 2>&1 || true
+        ;;
+esac

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# hippos-model — print normalised device model string from DMI or device tree.
+# Output: alphanumeric + underscores only, empty on failure.
+
+_norm() { tr -d '\0' < "$1" 2>/dev/null | sed 's/[^A-Za-z0-9]/_/g'; }
+
+model=$(_norm /sys/firmware/devicetree/base/model)
+[[ -z "${model}" ]] && model=$(_norm /sys/devices/virtual/dmi/id/product_name)
+[[ -z "${model}" || "${model}" == "Default_string" ]] && \
+    model=$(_norm /sys/devices/virtual/dmi/id/board_name)
+
+[[ -n "${model}" ]] && echo "${model}"

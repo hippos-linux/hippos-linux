@@ -1,0 +1,6 @@
+requireArtifact: python-pyxel
+systems:
+  pyxel:
+    cores:
+    - pyxel
+features: []

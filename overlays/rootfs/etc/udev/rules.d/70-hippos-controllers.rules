@@ -1,0 +1,52 @@
+# HippOS: gamepad input and hidraw access
+# Sets input group + read/write permissions for all event/js nodes
+# and hidraw nodes for known gamepad vendors (needed for rumble, LEDs, gyro).
+
+SUBSYSTEM!="input", SUBSYSTEM!="hidraw", GOTO="hippos_controllers_end"
+
+# ── Input event/js nodes ──────────────────────────────────────────────────────
+SUBSYSTEM=="input", KERNEL=="event*", GROUP="input", MODE="0660"
+SUBSYSTEM=="input", KERNEL=="js*",    GROUP="input", MODE="0660"
+
+# ── HID raw nodes ─────────────────────────────────────────────────────────────
+SUBSYSTEM!="hidraw", GOTO="hippos_controllers_end"
+
+# Sony DualShock 4 (USB 05c4, BT 09cc)
+ATTRS{idVendor}=="054c", ATTRS{idProduct}=="05c4", GROUP="input", MODE="0660"
+ATTRS{idVendor}=="054c", ATTRS{idProduct}=="09cc", GROUP="input", MODE="0660"
+
+# Sony DualSense (PS5, USB 0ce6, BT 0df2)
+ATTRS{idVendor}=="054c", ATTRS{idProduct}=="0ce6", GROUP="input", MODE="0660"
+ATTRS{idVendor}=="054c", ATTRS{idProduct}=="0df2", GROUP="input", MODE="0660"
+
+# Nintendo Switch Pro Controller
+ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", GROUP="input", MODE="0660"
+
+# Nintendo Joy-Con L / R
+ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2006", GROUP="input", MODE="0660"
+ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2007", GROUP="input", MODE="0660"
+
+# Xbox 360 (045e:028e wired, 028f wireless receiver)
+ATTRS{idVendor}=="045e", ATTRS{idProduct}=="028e", GROUP="input", MODE="0660"
+ATTRS{idVendor}=="045e", ATTRS{idProduct}=="028f", GROUP="input", MODE="0660"
+
+# Xbox One / Series controllers
+ATTRS{idVendor}=="045e", ATTRS{idProduct}=="02d1", GROUP="input", MODE="0660"
+ATTRS{idVendor}=="045e", ATTRS{idProduct}=="02dd", GROUP="input", MODE="0660"
+ATTRS{idVendor}=="045e", ATTRS{idProduct}=="02e3", GROUP="input", MODE="0660"
+ATTRS{idVendor}=="045e", ATTRS{idProduct}=="02ea", GROUP="input", MODE="0660"
+ATTRS{idVendor}=="045e", ATTRS{idProduct}=="0b12", GROUP="input", MODE="0660"
+ATTRS{idVendor}=="045e", ATTRS{idProduct}=="0b13", GROUP="input", MODE="0660"
+
+# 8BitDo (vendor 2dc8)
+ATTRS{idVendor}=="2dc8", GROUP="input", MODE="0660"
+
+# Valve Steam Deck / Steam Controller
+ATTRS{idVendor}=="28de", GROUP="input", MODE="0660"
+
+# Logitech F310/F510/F710 (046d)
+ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c21d", GROUP="input", MODE="0660"
+ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c21e", GROUP="input", MODE="0660"
+ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c21f", GROUP="input", MODE="0660"
+
+LABEL="hippos_controllers_end"

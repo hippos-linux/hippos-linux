@@ -1,0 +1,101 @@
+# Gaming and controller-focused layer
+
+# Android emulation via Waydroid
+waydroid
+aapt
+weston
+unclutter
+
+# Enable i386 before installing:
+# dpkg --add-architecture i386
+# apt-get update
+
+# Vulkan / OpenGL gaming stack
+libvulkan1
+libvulkan1:i386
+vulkan-tools
+
+libgl1:amd64
+libgl1:i386
+
+libglx-mesa0:amd64
+libglx-mesa0:i386
+
+libgl1-mesa-dri:amd64
+libgl1-mesa-dri:i386
+
+libgbm1:amd64
+libgbm1:i386
+
+libegl1:amd64
+libegl1:i386
+
+libgles2:amd64
+libgles2:i386
+
+mesa-vulkan-drivers
+mesa-vulkan-drivers:i386
+
+# Steam (repo.steampowered.com configured in configure-rootfs.sh)
+steam-launcher
+
+# Performance and overlay tools
+gamemode
+mangohud
+vkbasalt
+python3-pil
+python3-qrcode
+# evmapy installed via pip in configure-rootfs.sh (not in Debian repos)
+# source: https://github.com/kempniu/evmapy
+inotify-tools
+python3-pyudev
+
+# Video acceleration (VA-API + VDPAU)
+mesa-va-drivers
+mesa-vdpau-drivers
+vainfo
+
+# Wine (system wine for winetricks/q4wine)
+wine
+wine64
+wine32:i386
+winetricks
+
+# Game launchers
+lutris
+
+# RetroArch + core info (cores come from the retroarch build artifact)
+retroarch
+libretro-core-info
+
+# Emulator runtime libraries
+libserialport0                          # amiberry
+libsdl2-image-2.0-0                     # applewin, gsplus, hypseus-singe, vpinball
+libsdl3-0                               # lindbergh-loader
+libsdl3-image0                          # lindbergh-loader
+libqt6multimedia6                       # applewin, azahar, melonds, rpcs3
+libqt6multimediawidgets6                # rpcs3
+libqt6openglwidgets6                    # applewin
+libqt6concurrent6                       # azahar, rpcs3
+libqt6charts6                           # eden
+libbacktrace0                           # azahar, pcsx2
+libboost-context1.83.0                  # citron-neo, eden
+libboost-filesystem1.83.0              # eden
+libboost-program-options1.83.0         # cemu
+libboost-nowide1.83.0                   # cemu
+libzarchive0.1                          # cemu
+libpcre2-32-0                           # cemu
+libwebp7                                # cemu
+libwebpdecoder3                         # cemu
+libsoundtouch1                          # duckstation (also bundled as fallback)
+libfluidsynth3                          # dosbox-staging
+# libmt32emu2 not in Trixie; dosbox-staging uses bundled mt32emu fallback
+libluajit-5.1-2                         # gamescope
+libseat1                                # gamescope
+libdisplay-info2                        # gamescope
+
+# Standalone emulators (apt-only — no build artifact exists for these)
+# mame, scummvm, dosbox, hatari, openmsx, mupen64plus, dosbox-x, dolphin-emu,
+# desmume, stella, mednafen, mednaffe, mupen64plus-qt, nestopia, fceux, virtualjaguar
+# removed — superseded by build artifacts in /opt/emulators
+basilisk2

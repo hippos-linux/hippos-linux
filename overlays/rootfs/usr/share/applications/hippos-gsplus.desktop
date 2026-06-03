@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=GSplus
+GenericName=Apple IIgs Emulator
+Comment=GSplus Apple IIgs emulator
+Exec=/usr/lib/hippos/emulators/launch-gsplus
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

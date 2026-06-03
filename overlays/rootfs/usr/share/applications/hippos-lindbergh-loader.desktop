@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Lindbergh Loader
+GenericName=Sega Lindbergh Loader
+Comment=Lindbergh Loader Sega Lindbergh loader
+Exec=/usr/lib/hippos/emulators/launch-lindbergh-loader
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

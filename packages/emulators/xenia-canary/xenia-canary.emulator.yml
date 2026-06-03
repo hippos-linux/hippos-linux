@@ -1,0 +1,6 @@
+requireArtifact: xenia-canary
+systems:
+  xbox360:
+    cores:
+    - xenia_canary
+features: []

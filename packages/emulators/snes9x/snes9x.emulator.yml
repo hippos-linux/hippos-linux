@@ -1,0 +1,4 @@
+requireArtifact: snes9x
+systems:
+- snes
+features: []

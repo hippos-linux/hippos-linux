@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+hippos-settings set system.session es
+
+# Stop desktop fully before starting ES so the display is clean
+systemd-run --no-block --collect bash -c \
+    "systemctl stop hippos-desktop.service; systemctl start hippos-es.service"

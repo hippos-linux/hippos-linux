@@ -1,0 +1,4 @@
+requireArtifact: supermodel
+systems:
+- model3
+features: []

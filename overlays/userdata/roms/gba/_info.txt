@@ -1,0 +1,5 @@
+Game Boy Advance
+Manufacturer: Nintendo
+Released: 2001
+Hardware: portable
+Extensions: .gba .zip .7z

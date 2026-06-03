@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Apply saved audio.device setting to PipeWire default sink.
+# Called from session-es and session-desktop before launching the session.
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
+export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
+export PIPEWIRE_RUNTIME_DIR="${XDG_RUNTIME_DIR}"
+
+DEVICE=$(hippos-settings get audio.device 2>/dev/null || true)
+VOLUME=$(hippos-settings get audio.volume 2>/dev/null || true)
+
+# Give PipeWire up to 3s to be ready before giving up
+for i in 1 2 3; do
+    pactl info >/dev/null 2>&1 && break
+    sleep 1
+done
+
+if [[ -n "$DEVICE" && "$DEVICE" != "default" ]]; then
+    if pactl set-default-sink "$DEVICE" 2>/dev/null; then
+        echo "[hippos-audio-setup] default sink: $DEVICE"
+    else
+        echo "[hippos-audio-setup] sink '$DEVICE' not found, using PipeWire default" >&2
+    fi
+fi
+
+if [[ -n "$VOLUME" ]]; then
+    pactl set-sink-volume @DEFAULT_SINK@ "${VOLUME}%" 2>/dev/null \
+        && echo "[hippos-audio-setup] volume: ${VOLUME}%" \
+        || echo "[hippos-audio-setup] failed to set volume" >&2
+fi

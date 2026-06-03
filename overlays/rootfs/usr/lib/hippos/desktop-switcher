@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+declare -A DESKTOP_LABELS=(
+    [lxqt]="LXQt"
+    [plasma]="KDE Plasma"
+    [xfce]="XFCE"
+    [gnome]="GNOME"
+    [mate]="MATE"
+    [cinnamon]="Cinnamon"
+)
+
+declare -A DESKTOP_PACKAGES=(
+    [lxqt]="lxqt-core"
+    [plasma]="kde-plasma-desktop"
+    [xfce]="xfce4"
+    [gnome]="gnome-core"
+    [mate]="mate-desktop-environment"
+    [cinnamon]="cinnamon"
+)
+
+
+DESKTOP_ORDER=(lxqt plasma xfce gnome mate cinnamon)
+
+primary_package() {
+    read -ra pkgs <<< "${DESKTOP_PACKAGES[$1]}"
+    echo "${pkgs[0]}"
+}
+
+is_installed() {
+    dpkg -l "$(primary_package "$1")" 2>/dev/null | grep -q '^ii'
+}
+
+cmd_list() {
+    local current; current=$(hippos-settings get system.desktop 2>/dev/null || echo "")
+    printf "%-12s %-30s %-12s\n" "ID" "Name" "Status"
+    printf "%-12s %-30s %-12s\n" "---" "---" "---"
+    for key in "${DESKTOP_ORDER[@]}"; do
+        local status="available"
+        is_installed "$key" && status="installed"
+        local marker=""
+        [[ "$key" == "$current" ]] && marker=" *"
+        printf "%-12s %-30s %-12s%s\n" "$key" "${DESKTOP_LABELS[$key]}" "$status" "$marker"
+    done
+}
+
+cmd_install() {
+    local key="${1:-}"
+    [[ -n "$key" ]] || { echo "Usage: desktop-switcher install <id>"; cmd_list; exit 1; }
+    [[ -v DESKTOP_LABELS[$key] ]] || { echo "Unknown desktop: $key"; exit 1; }
+
+    if is_installed "$key"; then
+        echo "${DESKTOP_LABELS[$key]} already installed"
+        cmd_switch "$key"
+        return 0
+    fi
+
+    read -ra pkgs <<< "${DESKTOP_PACKAGES[$key]}"
+    echo "Installing ${DESKTOP_LABELS[$key]} (${pkgs[*]})..."
+    sudo apt-get update -q
+    sudo apt-get install -y "${pkgs[@]}"
+
+    cmd_switch "$key"
+}
+
+cmd_switch() {
+    local key="${1:-}"
+    [[ -n "$key" ]] || { echo "Usage: desktop-switcher switch <id|es>"; cmd_list; exit 1; }
+    if [[ "$key" == "es" ]]; then
+        hippos-settings set system.session es
+        echo "Switched to EmulationStation (game mode)"
+        echo "Apply with: systemctl restart hippos-session"
+        return 0
+    fi
+    [[ -v DESKTOP_LABELS[$key] ]] || { echo "Unknown desktop: $key"; exit 1; }
+    if ! is_installed "$key"; then
+        echo "${DESKTOP_LABELS[$key]} is not installed — run: desktop-switcher install $key"
+        exit 1
+    fi
+    hippos-settings set system.desktop "$key"
+    hippos-settings set system.session desktop
+    echo "Switched to ${DESKTOP_LABELS[$key]}"
+    echo "Apply with: systemctl restart hippos-session"
+}
+
+cmd_current() {
+    hippos-settings get system.desktop
+}
+
+case "${1:-list}" in
+    list)    cmd_list ;;
+    install) cmd_install "${2:-}" ;;
+    switch)  cmd_switch "${2:-}" ;;
+    current) cmd_current ;;
+    *) echo "Usage: desktop-switcher [list|install <id>|switch <id>|current]"; exit 1 ;;
+esac

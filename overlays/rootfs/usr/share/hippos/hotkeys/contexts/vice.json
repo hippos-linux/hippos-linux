@@ -1,0 +1,12 @@
+{
+  "name": "vice",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "menu": "KEY_F12",
+    "save_state": ["KEY_LEFTALT", "KEY_F9"],
+    "restore_state": ["KEY_LEFTALT", "KEY_F10"],
+    "screenshot": "KEY_F8",
+    "reset": "KEY_F11",
+    "fastforward": "KEY_F1"
+  }
+}

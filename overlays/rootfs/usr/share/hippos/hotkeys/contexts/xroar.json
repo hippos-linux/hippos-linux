@@ -1,0 +1,11 @@
+{
+  "name": "xroar",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "menu": ["KEY_LEFTSHIFT", "KEY_F10"],
+    "save_state": ["KEY_LEFTCTRL", "KEY_F1"],
+    "restore_state": ["KEY_LEFTCTRL", "KEY_F2"],
+    "screenshot": ["KEY_LEFTSHIFT", "KEY_F5"],
+    "reset": ["KEY_LEFTCTRL", "KEY_R"]
+  }
+}

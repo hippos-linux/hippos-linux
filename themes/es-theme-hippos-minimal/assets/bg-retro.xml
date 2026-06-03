@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<theme>
+  <view name="system">
+    <image name="staticBackground">
+      <size>1 1</size>
+      <pos>0 0</pos>
+      <origin>0 0</origin>
+      <tile>false</tile>
+      <linearSmooth>true</linearSmooth>
+      <path>./assets/bg-retro.png</path>
+      <zIndex>0</zIndex>
+      <color>FFFFFFFF</color>
+    </image>
+  </view>
+  <view name="video, basic, detailed, grid">
+    <image name="background" extra="true">
+      <size>1 1</size>
+      <pos>0 0</pos>
+      <origin>0 0</origin>
+      <path>./assets/bg-retro.png</path>
+      <zIndex>0</zIndex>
+      <color>FFFFFFFF</color>
+    </image>
+  </view>
+</theme>

@@ -1,0 +1,13 @@
+[Unit]
+Description=HippOS storage event processor
+After=local-fs.target userdata.mount
+Wants=userdata.mount
+Before=hippos-rom-scan.service hippos-roms-pool.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/hippos/hippos-storage-process-queue
+
+[Install]
+WantedBy=multi-user.target

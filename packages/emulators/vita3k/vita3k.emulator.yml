@@ -1,0 +1,4 @@
+requireArtifact: vita3k
+systems:
+- psvita
+features: []

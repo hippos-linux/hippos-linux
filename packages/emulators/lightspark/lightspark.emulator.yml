@@ -1,0 +1,6 @@
+requireArtifact: lightspark
+systems:
+  flash:
+    cores:
+    - lightspark
+features: []

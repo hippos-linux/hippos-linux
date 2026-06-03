@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=DOSBox Staging
+GenericName=DOS Emulator
+Comment=DOSBox Staging DOS emulator
+Exec=/usr/lib/hippos/emulators/launch-dosbox-staging
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# ES API: version — outputs OS version string
+cat /usr/share/hippos/version 2>/dev/null || echo "0.1.0"

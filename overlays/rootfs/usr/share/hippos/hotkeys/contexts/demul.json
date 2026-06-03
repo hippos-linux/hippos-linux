@@ -1,0 +1,10 @@
+{
+  "name": "demul",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "menu": "KEY_TAB",
+    "coin": "KEY_5",
+    "reset": "KEY_F3",
+    "screenshot": "KEY_F12"
+  }
+}

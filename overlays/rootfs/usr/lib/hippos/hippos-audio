@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# ES API: audio list/get/set/list-profiles/get-profile/set-profile/getSystemVolume/setSystemVolume
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
+export PIPEWIRE_RUNTIME_DIR="${XDG_RUNTIME_DIR}"
+
+_default_sink() { LC_ALL=C pactl get-default-sink 2>/dev/null || true; }
+_volume_pct()   { LC_ALL=C pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null | grep -oE '[0-9]+%' | head -1 | tr -d '%'; }
+
+case "${1:-}" in
+    list)
+        printf 'auto\tauto\n'
+        LC_ALL=C pactl list sinks 2>/dev/null | awk '
+            /^Sink #/         { name=""; desc="" }
+            /[[:space:]]Name:/ { name=$2 }
+            /Description:/    { sub(/.*Description: /,""); desc=$0 }
+            /State:/ && name  { printf "%s\t%s\n", name, (desc?desc:name) }
+        '
+        ;;
+    get)
+        hippos-settings get audio.device 2>/dev/null || _default_sink
+        ;;
+    set)
+        DEV="${2:-auto}"
+        if [[ "$DEV" == "auto" ]]; then
+            BT=$(LC_ALL=C pactl list sinks short 2>/dev/null | awk '/bluez_output/{print $2; exit}')
+            DEV="${BT:-@DEFAULT_SINK@}"
+        fi
+        LC_ALL=C pactl set-default-sink "$DEV" || exit 1
+        hippos-settings set audio.device "$DEV" 2>/dev/null || true
+        ;;
+    list-profiles)
+        printf 'auto\tauto\n'
+        LC_ALL=C pactl list cards 2>/dev/null | awk '
+            /^Card #/  { card="" }
+            /[[:space:]]Name:/ && !card { card=$2 }
+            /Available: yes/ { avail=1 }
+            /^\t\t[a-z].*:/ && avail {
+                split($0,p,":"); sub(/^\t\t/,"",p[1])
+                desc=p[2]; sub(/^ /,"",desc)
+                printf "%s@%s\t%s\n", p[1], card, (desc?desc:p[1])
+                avail=0
+            }
+        '
+        ;;
+    get-profile)
+        hippos-settings get audio.profile 2>/dev/null || echo "auto"
+        ;;
+    set-profile)
+        PROFILE="${2:-auto}"
+        if [[ "$PROFILE" != "auto" ]]; then
+            CARD="${PROFILE##*@}"; PROF="${PROFILE%%@*}"
+            LC_ALL=C pactl set-card-profile "$CARD" "$PROF" || exit 1
+        fi
+        hippos-settings set audio.profile "$PROFILE" 2>/dev/null || true
+        ;;
+    getSystemVolume)
+        _volume_pct
+        ;;
+    setSystemVolume)
+        VOL="${2:-}"
+        case "$VOL" in
+            mute)        LC_ALL=C pactl set-sink-mute @DEFAULT_SINK@ 1 ;;
+            unmute)      LC_ALL=C pactl set-sink-mute @DEFAULT_SINK@ 0 ;;
+            mute-toggle) LC_ALL=C pactl set-sink-mute @DEFAULT_SINK@ toggle ;;
+            [0-9]*)      LC_ALL=C pactl set-sink-volume @DEFAULT_SINK@ "${VOL}%" || exit 1 ;;
+            [+-][0-9]*)
+                CUR=$(_volume_pct)
+                NEW=$(( CUR + VOL ))
+                NEW=$(( NEW < 0 ? 0 : (NEW > 150 ? 150 : NEW) ))
+                LC_ALL=C pactl set-sink-volume @DEFAULT_SINK@ "${NEW}%" || exit 1
+                ;;
+            *) echo "invalid volume value" >&2; exit 1 ;;
+        esac
+        ;;
+    test)
+        aplay /usr/share/sounds/alsa/Front_Center.wav 2>/dev/null || \
+            speaker-test -t sine -f 440 -l 1 2>/dev/null || true
+        ;;
+    *)
+        echo "Usage: $0 list|get|set|list-profiles|get-profile|set-profile|getSystemVolume|setSystemVolume|test" >&2
+        exit 1
+        ;;
+esac

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Hypseus Singe
+GenericName=Laserdisc Emulator
+Comment=Hypseus Singe laserdisc emulator
+Exec=/usr/lib/hippos/emulators/launch-hypseus-singe
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

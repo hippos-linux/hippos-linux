@@ -1,0 +1,8 @@
+{
+  "name": "lindbergh-loader",
+  "keys": {
+    "exit": "KEY_ESC",
+    "coin": "KEY_5",
+    "screenshot": "KEY_F12"
+  }
+}

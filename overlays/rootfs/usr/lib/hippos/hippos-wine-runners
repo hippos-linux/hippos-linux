@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# hippos-wine-runners — list available Wine runners
+# Prints one runner name per line.
+# Bundled runners live in /opt/wine-builds/<name>/
+# User runners live in /userdata/system/wine-runners/<name>/
+# umu is always listed (uses Proton via UMU-Launcher, no directory required).
+
+WINE_BASE="/opt/wine-builds"
+USER_RUNNERS="/userdata/system/wine-runners"
+
+seen=()
+
+_emit() {
+    local name="$1"
+    for s in "${seen[@]:-}"; do [[ "${s}" == "${name}" ]] && return; done
+    seen+=("${name}")
+    printf '%s\n' "${name}"
+}
+
+# User runners take priority
+if [[ -d "${USER_RUNNERS}" ]]; then
+    while IFS= read -r -d '' d; do
+        _emit "$(basename "${d}")"
+    done < <(find "${USER_RUNNERS}" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
+fi
+
+# Bundled runners
+if [[ -d "${WINE_BASE}" ]]; then
+    while IFS= read -r -d '' d; do
+        _emit "$(basename "${d}")"
+    done < <(find "${WINE_BASE}" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
+fi
+
+# umu is always available (invokes umu-run, no runner directory needed)
+_emit "umu"

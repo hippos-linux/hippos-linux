@@ -1,0 +1,11 @@
+{
+  "name": "flycast",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "menu": "KEY_TAB",
+    "save_state": ["KEY_LEFTSHIFT", "KEY_F5"],
+    "restore_state": ["KEY_LEFTSHIFT", "KEY_F8"],
+    "screenshot": ["KEY_LEFTALT", "KEY_F12"],
+    "pause": "KEY_PAUSE"
+  }
+}

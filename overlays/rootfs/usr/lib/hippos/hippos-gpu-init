@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+# hippos-gpu-init — NVIDIA driver selection and multi-GPU PRIME detection.
+# AMD/Intel are handled automatically by the kernel (amdgpu/i915 + Mesa).
+
+set -euo pipefail
+
+LOG="/var/log/hippos-gpu.log"
+mkdir -p /var/log /var/tmp /run/hippos/modprobe
+
+log() { printf '[hippos-gpu] %s\n' "$*" | tee -a "${LOG}"; }
+
+get_conf() {
+    hippos-settings get "gpu.$1" 2>/dev/null || true
+}
+
+# ── NVIDIA driver selection ────────────────────────────────────────────────
+
+nvidia_init() {
+    local mode
+    mode="$(get_conf nvidia-driver)"
+    [[ -z "${mode}" ]] && mode="auto"
+
+    if [[ "${mode}" == "false" || "${mode}" == "none" ]]; then
+        log "NVIDIA driver disabled by config"
+        rm -f /etc/modprobe.d/hippos-nvidia-blacklist.conf /etc/modprobe.d/hippos-nvidia-drm.conf
+        return
+    fi
+
+    if [[ "${mode}" == "auto" ]]; then
+        local nvidia_pci
+        nvidia_pci="$(lspci -mn 2>/dev/null \
+            | awk '{ gsub("\"",""); if (($2~/030[0-2]/) && ($3=="10de"||$3=="12d2")) print $1 }')"
+        if [[ -z "${nvidia_pci}" ]]; then
+            log "No NVIDIA GPU detected"
+            return
+        fi
+        log "NVIDIA GPU at: ${nvidia_pci}"
+        mode="current"
+        if command -v nvidia-detect >/dev/null 2>&1; then
+            local detected
+            detected="$(nvidia-detect 2>/dev/null || true)"
+            if printf '%s' "${detected}" | grep -q "legacy-470"; then
+                mode="legacy470"
+            elif printf '%s' "${detected}" | grep -q "nouveau"; then
+                mode="nouveau"
+            fi
+            log "nvidia-detect recommends: ${mode}"
+        fi
+    fi
+
+    log "NVIDIA driver mode: ${mode}"
+    case "${mode}" in
+        current|open|legacy470)
+            printf 'blacklist nouveau\noptions nouveau modeset=0\n' \
+                > /etc/modprobe.d/hippos-nvidia-blacklist.conf
+            printf 'options nvidia-drm modeset=1\n' \
+                > /etc/modprobe.d/hippos-nvidia-drm.conf
+            modprobe nvidia         2>>"${LOG}" || true
+            modprobe nvidia-modeset 2>>"${LOG}" || true
+            modprobe nvidia-drm     2>>"${LOG}" || true
+            modprobe nvidia-uvm     2>>"${LOG}" || true
+            ;;
+        nouveau)
+            rm -f /etc/modprobe.d/hippos-nvidia-blacklist.conf \
+                  /etc/modprobe.d/hippos-nvidia-drm.conf
+            modprobe nouveau 2>>"${LOG}" || true
+            ;;
+        *)
+            log "Unknown mode '${mode}' — falling back to auto"
+            mode="auto"
+            nvidia_init
+            ;;
+    esac
+}
+
+# ── PRIME multi-GPU detection ──────────────────────────────────────────────
+
+find_connected_gpu() {
+    for gpu_entry in "$@"; do
+        local pci_id="${gpu_entry%% *}"
+        for card_path in /sys/class/drm/card*/; do
+            readlink -f "${card_path}device" 2>/dev/null | grep -q "${pci_id}" || continue
+            local card; card="$(basename "${card_path}")"
+            for status_file in /sys/class/drm/"${card}"/*-*/status; do
+                [[ -f "${status_file}" ]] && [[ "$(cat "${status_file}")" == "connected" ]] && {
+                    printf '%s\n' "${pci_id}"; return 0
+                }
+            done
+        done
+    done
+}
+
+prime_init() {
+    rm -f /var/tmp/hippos-nvidia.prime /var/tmp/hippos-amd.prime /var/tmp/hippos-intel.prime
+
+    local gpu_count
+    gpu_count="$(lspci -nn 2>/dev/null | grep -cE "(VGA|3D|Display controller)" || true)"
+    [[ "${gpu_count}" -lt 2 ]] && { log "Single GPU — no PRIME needed"; return; }
+
+    log "Multi-GPU detected (${gpu_count}) — checking PRIME"
+
+    # NVIDIA PRIME
+    if [[ "$(get_conf nvidia-prime)" != "false" ]]; then
+        local ngpu
+        ngpu="$(lspci -nn 2>/dev/null | grep -iE "nvidia" | grep -iE "VGA|3D|Display controller" | head -1 || true)"
+        if [[ -n "${ngpu}" ]]; then
+            touch /var/tmp/hippos-nvidia.prime
+            log "NVIDIA PRIME: ${ngpu}"
+            return
+        fi
+    fi
+
+    # AMD PRIME
+    if [[ "$(get_conf radeon-prime)" != "false" ]]; then
+        mapfile -t amd_gpus < <(lspci -nn 2>/dev/null \
+            | grep -iE "AMD/ATI" | grep -iE "VGA|3D|Display controller" || true)
+        if [[ "${#amd_gpus[@]}" -ge 1 ]]; then
+            local connected gpu_name
+            connected="$(find_connected_gpu "${amd_gpus[@]}" || true)"
+            if [[ -n "${connected}" ]]; then
+                for g in "${amd_gpus[@]}"; do
+                    printf '%s' "${g}" | grep -q "${connected}" && gpu_name="${g}" && break
+                done
+            else
+                gpu_name="${amd_gpus[1]:-${amd_gpus[0]}}"
+            fi
+            local fmt
+            fmt="$(printf '%s' "${gpu_name}" | awk '{print $1}' \
+                | sed -e 's/:/_/g' -e 's/\./_/' -e 's/^/pci-0000_/')"
+            printf '%s\n' "${fmt}" > /var/tmp/hippos-amd.prime
+            log "AMD PRIME: ${gpu_name} (${fmt})"
+            return
+        fi
+    fi
+
+    # Intel discrete PRIME
+    if [[ "$(get_conf intel-prime)" != "false" ]]; then
+        mapfile -t intel_gpus < <(lspci -nn 2>/dev/null \
+            | grep -iE "Intel" | grep -iE "VGA|3D|Display controller" || true)
+        if [[ "${#intel_gpus[@]}" -ge 2 ]]; then
+            local connected gpu_name
+            connected="$(find_connected_gpu "${intel_gpus[@]}" || true)"
+            if [[ -n "${connected}" ]]; then
+                for g in "${intel_gpus[@]}"; do
+                    printf '%s' "${g}" | grep -q "${connected}" && gpu_name="${g}" && break
+                done
+            else
+                gpu_name="${intel_gpus[1]}"
+            fi
+            local fmt
+            fmt="$(printf '%s' "${gpu_name}" | awk '{print $1}' \
+                | sed -e 's/:/_/g' -e 's/\./_/' -e 's/^/pci-0000_/')"
+            printf '%s\n' "${fmt}" > /var/tmp/hippos-intel.prime
+            log "Intel discrete PRIME: ${gpu_name} (${fmt})"
+        fi
+    fi
+}
+
+# ── PRIME configuration (env + Xorg) ─────────────────────────────────────────
+# Called after prime_init() has written marker files.
+# Generates:
+#   /run/hippos/prime.env        — sourced by sessions (DRI_PRIME / NV offload vars)
+#   /run/hippos/prime-xrandr     — run after Xorg starts for NVIDIA PRIME sync
+#   /etc/X11/xorg.conf.d/90-hippos-prime.conf — Xorg layout option for NVIDIA
+
+prime_configure() {
+    local prime_env="/run/hippos/prime.env"
+    local xorg_prime="/etc/X11/xorg.conf.d/90-hippos-prime.conf"
+
+    rm -f "${prime_env}" "${xorg_prime}"
+
+    if [[ -f /var/tmp/hippos-nvidia.prime ]]; then
+        # NVIDIA PRIME (Optimus): with nvidia-drm modeset=1, the iGPU drives
+        # the display and NVIDIA handles render offload via env vars.
+        # AllowNVIDIAPrime tells Xorg to enable PRIME support.
+        cat > "${xorg_prime}" <<'EOF'
+Section "ServerLayout"
+    Identifier  "Prime"
+    Option      "AllowNVIDIAPrime" "1"
+EndSection
+EOF
+        cat > "${prime_env}" <<'EOF'
+export __NV_PRIME_RENDER_OFFLOAD=1
+export __NV_PRIME_RENDER_OFFLOAD_PROVIDER=NVIDIA-G0
+export __GLX_VENDOR_LIBRARY_NAME=nvidia
+export __VK_LAYER_NV_optimus=NVIDIA_only
+EOF
+        log "PRIME: NVIDIA — AllowNVIDIAPrime Xorg conf + render offload env written"
+
+    elif [[ -f /var/tmp/hippos-amd.prime ]]; then
+        local pci_id
+        pci_id="$(cat /var/tmp/hippos-amd.prime)"
+        printf 'export DRI_PRIME=%s\n' "${pci_id}" > "${prime_env}"
+        log "PRIME: AMD — DRI_PRIME=${pci_id}"
+
+    elif [[ -f /var/tmp/hippos-intel.prime ]]; then
+        local pci_id
+        pci_id="$(cat /var/tmp/hippos-intel.prime)"
+        printf 'export DRI_PRIME=%s\n' "${pci_id}" > "${prime_env}"
+        log "PRIME: Intel — DRI_PRIME=${pci_id}"
+    fi
+}
+
+log "hippos-gpu-init start"
+nvidia_init
+prime_init
+prime_configure
+log "hippos-gpu-init done"

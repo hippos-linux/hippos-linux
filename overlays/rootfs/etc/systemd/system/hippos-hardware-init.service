@@ -1,0 +1,12 @@
+[Unit]
+Description=HippOS Hardware Profile Detection
+After=local-fs.target
+Before=hippos-system-init.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/hippos/hippos-hardware-init
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,6 @@
+requireArtifact: xenia
+systems:
+  xbox360:
+    cores:
+    - xenia
+features: []

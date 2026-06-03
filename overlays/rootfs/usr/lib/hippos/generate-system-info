@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""Generate _info.txt in each ROM directory from es_systems.cfg metadata."""
+
+import xml.etree.ElementTree as ET
+import os
+import sys
+
+ES_SYSTEMS = "/usr/share/emulationstation/es_systems.cfg"
+ROMS_ROOT  = "/userdata/roms"
+
+def main():
+    try:
+        tree = ET.parse(ES_SYSTEMS)
+    except Exception as e:
+        print(f"[generate-system-info] failed to parse {ES_SYSTEMS}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    root = tree.getroot()
+    count = 0
+
+    for system in root.findall("system"):
+        name      = (system.findtext("name")         or "").strip()
+        fullname  = (system.findtext("fullname")      or name).strip()
+        mfr       = (system.findtext("manufacturer")  or "").strip()
+        release   = (system.findtext("release")       or "").strip()
+        hardware  = (system.findtext("hardware")      or "").strip()
+        path      = (system.findtext("path")          or "").strip()
+        extension = (system.findtext("extension")     or "").strip()
+
+        if not path or not os.path.isdir(path):
+            continue
+
+        lines = [fullname]
+        if mfr:
+            lines.append(f"Manufacturer: {mfr}")
+        if release and release.lower() != "none":
+            lines.append(f"Released: {release}")
+        if hardware and hardware.lower() != "system":
+            lines.append(f"Hardware: {hardware}")
+        if extension:
+            lines.append(f"Extensions: {extension}")
+
+        info_path = os.path.join(path, "_info.txt")
+        try:
+            with open(info_path, "w") as f:
+                f.write("\n".join(lines) + "\n")
+            os.chown(info_path, 1000, 100)  # hippos:users
+            count += 1
+        except OSError as e:
+            print(f"[generate-system-info] could not write {info_path}: {e}", file=sys.stderr)
+
+    print(f"[generate-system-info] wrote {count} _info.txt files")
+
+if __name__ == "__main__":
+    main()

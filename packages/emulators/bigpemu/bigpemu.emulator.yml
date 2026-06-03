@@ -1,0 +1,5 @@
+requireArtifact: bigpemu
+systems:
+- jaguar
+- jaguarcd
+features: []

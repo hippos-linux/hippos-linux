@@ -1,0 +1,11 @@
+{
+  "name": "openmsx",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "menu": ["KEY_LEFTALT", "KEY_M"],
+    "save_state": ["KEY_LEFTCTRL", "KEY_F9"],
+    "restore_state": ["KEY_LEFTCTRL", "KEY_F8"],
+    "screenshot": "KEY_SYSRQ",
+    "reset": ["KEY_LEFTALT", "KEY_F12"]
+  }
+}

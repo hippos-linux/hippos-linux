@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# hippos-automount <devname>
+# Mounts any supported removable filesystem at /media/<label>.
+# Refuses to touch system mountpoints (/, /boot, /userdata).
+
+MEDIA="/media"
+SUPPORTED_FS="vfat exfat ntfs ext2 ext3 ext4 btrfs hfsplus f2fs"
+
+log()  { logger -t hippos-automount -- "$*"; }
+info() { log "INFO: $*"; }
+die()  { log "ERROR: $*"; exit 1; }
+
+DEVNAME="${1:?Usage: hippos-automount <devname>}"
+DEVICE="/dev/${DEVNAME}"
+
+[[ -b "${DEVICE}" ]] || die "${DEVICE} is not a block device"
+
+# ── Filesystem check ───────────────────────────────────────────────────────
+
+FS_TYPE="$(blkid -o value -s TYPE "${DEVICE}" 2>/dev/null || true)"
+[[ -n "${FS_TYPE}" ]] || { info "${DEVICE} has no detectable filesystem — skipping"; exit 0; }
+
+found=0
+for fs in ${SUPPORTED_FS}; do
+    [[ "${FS_TYPE}" == "${fs}" ]] && found=1 && break
+done
+if [[ "${found}" -eq 0 ]]; then
+    info "${DEVICE} filesystem '${FS_TYPE}' not in supported list — skipping"
+    exit 0
+fi
+
+# ── Safety: refuse system devices ─────────────────────────────────────────
+
+for system_mp in / /boot /boot/efi /userdata; do
+    src="$(findmnt -n -o SOURCE "${system_mp}" 2>/dev/null || true)"
+    [[ "${src}" == "${DEVICE}" ]] && die "refusing to remount system device ${DEVICE} (${system_mp})"
+done
+
+# ── Already mounted? ───────────────────────────────────────────────────────
+
+existing="$(findmnt -S "${DEVICE}" -o TARGET -n 2>/dev/null || true)"
+if [[ -n "${existing}" ]]; then
+    info "${DEVICE} already mounted at ${existing} — skipping"
+    exit 0
+fi
+
+# ── Determine mountpoint ───────────────────────────────────────────────────
+
+LABEL="$(blkid -o value -s LABEL "${DEVICE}" 2>/dev/null || true)"
+if [[ -z "${LABEL}" ]]; then
+    UUID="$(blkid -o value -s UUID "${DEVICE}" 2>/dev/null || true)"
+    LABEL="${UUID:-${DEVNAME}}"
+fi
+
+SAFE_LABEL="$(printf '%s' "${LABEL}" \
+    | tr -cs '[:alnum:]._-' '_' \
+    | sed 's/__*/_/g; s/^_//; s/_$//' \
+    | cut -c1-64)"
+[[ -n "${SAFE_LABEL}" ]] || SAFE_LABEL="${DEVNAME}"
+
+MOUNT_POINT="${MEDIA}/${SAFE_LABEL}"
+
+if mountpoint -q "${MOUNT_POINT}" 2>/dev/null; then
+    info "${MOUNT_POINT} already occupied — skipping"
+    exit 0
+fi
+
+mkdir -p "${MOUNT_POINT}"
+
+# ── Mount ──────────────────────────────────────────────────────────────────
+
+case "${FS_TYPE}" in
+    ntfs)
+        MOUNT_OPTS="noatime,uid=0,gid=0,umask=022"
+        MOUNT_TYPE="ntfs3"
+        # Fall back to ntfs-3g if kernel ntfs3 unavailable
+        if ! mount -t ntfs3 -o "${MOUNT_OPTS}" "${DEVICE}" "${MOUNT_POINT}" 2>/dev/null; then
+            mount -t ntfs-3g -o "${MOUNT_OPTS}" "${DEVICE}" "${MOUNT_POINT}"
+        fi
+        ;;
+    vfat)
+        mount -t vfat -o noatime,iocharset=utf8,flush "${DEVICE}" "${MOUNT_POINT}"
+        ;;
+    btrfs)
+        mount -t btrfs -o subvolid=5,noatime "${DEVICE}" "${MOUNT_POINT}"
+        ;;
+    *)
+        mount -t "${FS_TYPE}" -o noatime "${DEVICE}" "${MOUNT_POINT}"
+        ;;
+esac
+
+info "mounted ${DEVICE} (${FS_TYPE}, label='${LABEL}') → ${MOUNT_POINT}"

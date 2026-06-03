@@ -1,0 +1,6 @@
+requireArtifact: lindbergh-loader
+systems:
+  lindbergh:
+    cores:
+    - lindbergh
+features: []

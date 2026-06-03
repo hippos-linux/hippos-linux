@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+"""
+ES hotkeys config interface for HippOS.
+
+Modes:
+  (no args)            Output <hotkeys> XML: per-device configured bindings
+  --values             Output <mapping> XML: available action names
+  --detect             Output <keys> XML: connected gamepads + their bound keys
+  --detect --count 1 --nowait --evformat --device <path>
+                       Detect single button press on device, output <keys> XML
+  --set --config <cfg> --key <key> --action <action>
+                       Write one binding to user mapping file
+  --remove --config <cfg> --key <key>
+                       Remove a binding from user mapping file
+"""
+from __future__ import annotations
+import json, re, sys, time
+from pathlib import Path
+import xml.etree.ElementTree as ET
+
+OS_MAPPING_DIR   = Path('/usr/share/hippos/hotkeys/devices')
+USER_MAPPING_DIR = Path('/userdata/system/configs/hippos-hotkeys/devices')
+DEFAULT_MAPPING  = Path('/usr/share/hippos/hotkeys/default_mapping.json')
+
+def _mapping_filename(name: str, vendor: int, product: int) -> str:
+    safe = re.sub(r'[^a-zA-Z0-9_]', '', name.replace(' ', '_'))
+    return f'{safe}-{vendor:x}-{product:x}.mapping'
+
+def _load_json(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text()) if path.exists() else {}
+    except Exception:
+        return {}
+
+def _save_json(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix('.tmp')
+    tmp.write_text(json.dumps(data, indent=4) + '\n')
+    tmp.replace(path)
+
+def _gamepads():
+    try:
+        import evdev
+        from evdev import ecodes
+    except ImportError:
+        return []
+    GP = {ecodes.BTN_SOUTH, ecodes.BTN_EAST, ecodes.BTN_NORTH, ecodes.BTN_WEST,
+          ecodes.BTN_START, ecodes.BTN_SELECT, ecodes.BTN_MODE}
+    devs = []
+    for p in sorted(Path('/dev/input').glob('event*')):
+        try:
+            d = evdev.InputDevice(str(p))
+            keys = set(d.capabilities().get(ecodes.EV_KEY, []))
+            if keys & GP:
+                devs.append(d)
+        except OSError:
+            continue
+    return devs
+
+def _device_mapping(dev) -> dict:
+    fname = _mapping_filename(dev.name, dev.info.vendor, dev.info.product)
+    user = USER_MAPPING_DIR / fname
+    os   = OS_MAPPING_DIR / fname
+    return _load_json(user) or _load_json(os)
+
+def cmd_list() -> None:
+    root = ET.Element('hotkeys')
+    for dev in _gamepads():
+        mapping = _device_mapping(dev)
+        if not mapping:
+            continue
+        cfg = _mapping_filename(dev.name, dev.info.vendor, dev.info.product)
+        dev_el = ET.SubElement(root, 'device',
+                               fancy_name=dev.name,
+                               config=cfg.replace('.mapping', ''))
+        for key, action in sorted(mapping.items()):
+            ET.SubElement(dev_el, 'hotkey', key=key, action=action)
+    print(ET.tostring(root, encoding='unicode'))
+
+def cmd_values() -> None:
+    actions = sorted(set(_load_json(DEFAULT_MAPPING).values()))
+    root = ET.Element('mapping')
+    for a in actions:
+        ET.SubElement(root, 'key', name=a)
+    print(ET.tostring(root, encoding='unicode'))
+
+def cmd_detect(device_path: str | None, count: int, nowait: bool) -> None:
+    root = ET.Element('keys')
+    if device_path:
+        try:
+            import evdev
+            d = evdev.InputDevice(device_path)
+            fname = _mapping_filename(d.name, d.info.vendor, d.info.product)
+            cfg = fname.replace('.mapping', '')
+            found = 0
+            deadline = time.time() + (0.1 if nowait else 5.0)
+            for event in d.read_loop():
+                if time.time() > deadline:
+                    break
+                if event.type == evdev.ecodes.EV_KEY and event.value == 1:
+                    key_name = evdev.ecodes.KEY.get(event.code, f'KEY_{event.code}')
+                    ET.SubElement(root, 'key', key=key_name, config=cfg)
+                    found += 1
+                    if found >= count:
+                        break
+        except Exception:
+            pass
+    else:
+        # List all connected gamepad bindings
+        for dev in _gamepads():
+            mapping = _device_mapping(dev)
+            fname = _mapping_filename(dev.name, dev.info.vendor, dev.info.product)
+            cfg = fname.replace('.mapping', '')
+            for key in sorted(mapping.keys()):
+                ET.SubElement(root, 'key', key=key, config=cfg)
+    print(ET.tostring(root, encoding='unicode'))
+
+def cmd_set(config: str, key: str, action: str) -> None:
+    fname = config + '.mapping'
+    user_path = USER_MAPPING_DIR / fname
+    os_path   = OS_MAPPING_DIR / fname
+    data = _load_json(user_path) or _load_json(os_path)
+    data[key] = action
+    _save_json(user_path, data)
+
+def cmd_remove(config: str, key: str) -> None:
+    fname = config + '.mapping'
+    user_path = USER_MAPPING_DIR / fname
+    data = _load_json(user_path)
+    if key in data:
+        del data[key]
+        _save_json(user_path, data)
+
+def main() -> None:
+    args = sys.argv[1:]
+
+    if '--values' in args:
+        cmd_values(); return
+
+    if '--set' in args:
+        config = args[args.index('--config') + 1] if '--config' in args else ''
+        key    = args[args.index('--key') + 1]    if '--key'    in args else ''
+        action = args[args.index('--action') + 1] if '--action' in args else ''
+        if config and key and action:
+            cmd_set(config, key, action)
+        return
+
+    if '--remove' in args:
+        config = args[args.index('--config') + 1] if '--config' in args else ''
+        key    = args[args.index('--key') + 1]    if '--key'    in args else ''
+        if config and key:
+            cmd_remove(config, key)
+        return
+
+    if '--detect' in args:
+        device  = args[args.index('--device') + 1] if '--device' in args else None
+        count   = int(args[args.index('--count') + 1]) if '--count' in args else 10
+        nowait  = '--nowait' in args
+        cmd_detect(device, count, nowait); return
+
+    cmd_list()
+
+if __name__ == '__main__':
+    main()

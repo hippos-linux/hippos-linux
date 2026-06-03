@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Run at boot after /userdata is ready.
+# Sets the ready flag then replays any events queued during early boot.
+
+READY_FLAG="/run/hippos-storage-ready"
+DELAY_DIR="/run/hippos-storage-delay"
+
+log() { printf '[hippos-storage] %s\n' "$*"; }
+
+touch "${READY_FLAG}"
+
+[[ -d "${DELAY_DIR}" ]] || exit 0
+
+for queued in "${DELAY_DIR}"/*.add; do
+    [[ -f "${queued}" ]] || continue
+    IFS=: read -r devname devtype < "${queued}"
+    log "replaying queued add: ${devname}"
+    /usr/lib/hippos/hippos-storage-event mount "${devname}" "${devtype}" || true
+    rm -f "${queued}"
+done

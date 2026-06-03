@@ -1,0 +1,753 @@
+#!/usr/bin/env python3
+"""HippOS system updater — apply updates and manage rollback deployments."""
+
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import urllib.request
+from datetime import datetime
+
+VERSION_FILE = "/usr/share/hippos/version"
+SYSCONF      = "/userdata/system/hippos.conf"
+CACHE_DIR    = "/userdata/system/cache/update"
+BTRFS_MNT    = "/tmp/hippos-btrfs-update"
+LOG_FILE     = "/userdata/system/logs/upgrade.log"
+
+MANIFEST_URLS = [
+    "https://hippos-linux.org/api/update/manifest.json",
+]
+
+_log_fh = None
+
+def _open_log():
+    global _log_fh
+    try:
+        os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+        _log_fh = open(LOG_FILE, "a")
+        _log_fh.write(f"\n--- {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+        _log_fh.flush()
+    except Exception:
+        _log_fh = None
+
+def log(msg):
+    line = f"[hippos-upgrade] {msg}"
+    print(line, flush=True)
+    if _log_fh:
+        try:
+            _log_fh.write(line + "\n")
+            _log_fh.flush()
+        except Exception:
+            pass
+
+def die(msg):
+    log(f"ERROR: {msg}")
+    sys.exit(1)
+
+
+def current_version():
+    try:
+        return open(VERSION_FILE).read().strip()
+    except FileNotFoundError:
+        return "0.0.0"
+
+
+def current_subvol():
+    """Return the subvolume name we are currently booted into."""
+    # HippOS uses overlayfs for /; lowerdir reveals the active btrfs subvol.
+    for line in open("/proc/mounts"):
+        parts = line.split()
+        if len(parts) >= 4 and parts[1] == "/" and parts[2] == "overlay":
+            for opt in parts[3].split(","):
+                if opt.startswith("lowerdir="):
+                    lowerdir = opt[len("lowerdir="):]
+                    last = lowerdir.rstrip("/").split("/")[-1]
+                    if last.startswith("@rootfs"):
+                        return last
+    return "@rootfs"
+
+
+def get_channel():
+    try:
+        for line in open(SYSCONF):
+            k, _, v = line.strip().partition("=")
+            if k.strip() == "updates.type":
+                return v.strip().strip('"')
+    except FileNotFoundError:
+        pass
+    return "stable"
+
+
+def fetch_manifest(channel):
+    urls = MANIFEST_URLS[:]
+    urls.insert(1, f"https://updates.hippos.org/{channel}/manifest.json")
+    for url in urls:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "hippos-upgrade/1.0"})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                return json.loads(r.read())
+        except Exception:
+            continue
+    return None
+
+
+def ver_tuple(v):
+    return tuple(int(x) for x in v.lstrip("v").split(".")[:3] + [0, 0, 0])
+
+
+def btrfs_device():
+    # HippOS root is overlayfs; find the btrfs device via any btrfs mount.
+    for line in open("/proc/mounts"):
+        parts = line.split()
+        if len(parts) >= 3 and parts[2] == "btrfs":
+            return parts[0]
+    die("Cannot find btrfs root device")
+
+
+def mount_toplevel():
+    os.makedirs(BTRFS_MNT, exist_ok=True)
+    subprocess.run(
+        ["mount", "-t", "btrfs", "-o", "subvolid=5", btrfs_device(), BTRFS_MNT],
+        check=True
+    )
+
+
+def umount_toplevel():
+    subprocess.run(["umount", "-l", BTRFS_MNT], check=False)
+
+
+def list_deployments():
+    """Return sorted list of @rootfs-* subvolume names."""
+    r = subprocess.run(
+        ["btrfs", "subvolume", "list", "-o", BTRFS_MNT],
+        capture_output=True, text=True
+    )
+    names = []
+    for line in r.stdout.splitlines():
+        parts = line.split()
+        if parts:
+            name = parts[-1]
+            if name.startswith("@rootfs-"):
+                names.append(name)
+    return sorted(names)
+
+
+def find_boot_files(subvol_path):
+    """Find kernel and initrd filenames in subvol /boot."""
+    boot = os.path.join(subvol_path, "boot")
+    kernel = initrd = None
+    try:
+        for f in os.listdir(boot):
+            if f.startswith("vmlinuz") and not kernel:
+                kernel = f
+            if f.startswith("initrd") and not initrd:
+                initrd = f
+    except FileNotFoundError:
+        pass
+    return kernel or "vmlinuz", initrd or "initrd.img"
+
+
+EFI_GRUB_CFG = "/boot/efi/grub/grub.cfg"
+
+
+def read_grub_uuid_partuuid():
+    """Extract fs-uuid and PARTUUID from grub.cfg on the EFI partition."""
+    uuid = partuuid = None
+    try:
+        for line in open(EFI_GRUB_CFG):
+            if "--fs-uuid" in line and not uuid:
+                for t in line.split():
+                    if len(t) == 36 and t.count("-") == 4:
+                        uuid = t
+            if "PARTUUID=" in line and not partuuid:
+                for t in line.split():
+                    if "PARTUUID=" in t:
+                        partuuid = t.split("PARTUUID=")[1].split()[0].rstrip("\\")
+    except FileNotFoundError:
+        pass
+    return uuid, partuuid
+
+
+def os_prober_entries():
+    """Run os-prober and return list of GRUB menuentry strings for other OSes."""
+    try:
+        result = subprocess.run(
+            ["os-prober"], capture_output=True, text=True, timeout=30
+        )
+        lines = result.stdout.strip().splitlines()
+    except Exception:
+        return []
+
+    entries = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split(":")
+        if len(parts) < 4:
+            continue
+        devpath, label, _short, etype = parts[0], parts[1], parts[2], parts[3]
+
+        if etype == "efi":
+            if "@" not in devpath:
+                continue
+            dev, efi_path = devpath.split("@", 1)
+            try:
+                dev_uuid = subprocess.run(
+                    ["blkid", "-s", "UUID", "-o", "value", dev],
+                    capture_output=True, text=True, check=True
+                ).stdout.strip()
+            except Exception:
+                dev_uuid = ""
+            if not dev_uuid:
+                log(f"os-prober: cannot get UUID for {dev} — skipping '{label}'")
+                continue
+            log(f"os-prober: found EFI entry '{label}' ({dev} {efi_path})")
+            entries.append("\n".join([
+                f'menuentry "{label}" {{',
+                f'    insmod part_gpt',
+                f'    insmod fat',
+                f'    search --no-floppy --set=root --fs-uuid {dev_uuid}',
+                f'    chainloader {efi_path}',
+                f'}}',
+                '',
+            ]))
+    return entries
+
+
+def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
+    """Regenerate grub.cfg on the EFI partition with entries for each subvol."""
+    # Preserve extra kernel args (console=, plymouth., etc.) from existing config.
+    extra_args = ""
+    try:
+        for line in open(EFI_GRUB_CFG):
+            line = line.strip()
+            if line.startswith("linux "):
+                idx = line.find("ro quiet splash")
+                if idx >= 0:
+                    extra_args = " " + line[idx + len("ro quiet splash"):].strip()
+                break
+    except Exception:
+        pass
+
+    # Build ordered entry list: default first, rest as rollback
+    ordered = [default_subvol] + [s for s in reversed(all_subvols) if s != default_subvol]
+
+    # Check for other OSes — if found, show a menu on every boot.
+    other_entries = os_prober_entries()
+    default_timeout = "5" if other_entries else "0"
+    default_style   = "menu" if other_entries else "hidden"
+
+    # Boot-counter logic: grubenv holds boot_counter (set to 3 on each update).
+    # Each failed boot decrements it; when it hits 0 the rollback entry is shown.
+    # A successful boot clears it via hippos-boot-success.service.
+    boot_counter_block = [
+        "load_env",
+        "set default=0",
+        f"set timeout={default_timeout}",
+        f"set timeout_style={default_style}",
+        "",
+        "if [ \"${boot_counter}\" ] ; then",
+        "    if [ \"${boot_counter}\" = \"0\" ] ; then",
+        "        set default=1",
+        "        set timeout=10",
+        "        set timeout_style=menu",
+        "        set boot_counter=",
+        "        save_env boot_counter",
+        "    else",
+        "        set boot_counter=$((boot_counter - 1))",
+        "        save_env boot_counter",
+        "    fi",
+        "fi",
+        "",
+    ]
+
+    lines = boot_counter_block
+    for subvol in ordered:
+        subvol_path = os.path.join(BTRFS_MNT, subvol)
+        kernel, initrd = find_boot_files(subvol_path)
+        ver = subvol.replace("@rootfs-", "")
+        label = f"HippOS {ver}" if subvol != "@rootfs" else "HippOS"
+        if subvol != default_subvol:
+            label += " (rollback)"
+        cmdline = (
+            f"root=PARTUUID={partuuid} rootfstype=btrfs "
+            f"rootflags=subvol={subvol} ro quiet splash{extra_args}"
+        )
+        lines += [
+            f'menuentry "{label}" {{',
+            f'    insmod btrfs',
+            f'    search --no-floppy --set=root --fs-uuid {uuid}',
+            f'    linux /{subvol}/boot/{kernel} {cmdline}',
+            f'    initrd /{subvol}/boot/{initrd}',
+            f'}}',
+            '',
+        ]
+
+    if other_entries:
+        lines += other_entries
+
+    os.makedirs(os.path.dirname(EFI_GRUB_CFG), exist_ok=True)
+    with open(EFI_GRUB_CFG, "w") as f:
+        f.write("\n".join(lines))
+
+
+def sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(131072):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Subcommands
+# ---------------------------------------------------------------------------
+
+def cmd_check():
+    """Exit 0 + print info if update available; exit 1 if up to date."""
+    cur = current_version()
+    manifest = fetch_manifest(get_channel())
+    if not manifest:
+        sys.exit(1)
+    remote = manifest.get("version", "0.0.0")
+    if ver_tuple(remote) > ver_tuple(cur):
+        print(f"New version available: {remote}")
+        print(f"Current version: {cur}")
+        sys.exit(0)
+    sys.exit(1)
+
+
+def cmd_list_deployments():
+    """Print available rollback deployments, one per line."""
+    cur = current_subvol()
+    try:
+        mount_toplevel()
+        for sv in list_deployments():
+            if sv != cur:
+                ver = sv.replace("@rootfs-", "")
+                print(f"{sv}\t{ver}")
+    finally:
+        umount_toplevel()
+
+
+def cmd_rollback(subvol):
+    """Switch grub default to subvol and reboot."""
+    try:
+        mount_toplevel()
+        available = list_deployments()
+        if subvol not in available and subvol != "@rootfs":
+            die(f"Deployment '{subvol}' not found. Available: {available}")
+
+        cfg_path = EFI_GRUB_CFG
+        content = open(cfg_path).read()
+
+        # Find entry index for requested subvol
+        entry_idx = 0
+        target_idx = 0
+        for line in content.splitlines():
+            if line.strip().startswith("menuentry"):
+                if f"/{subvol}/" in content.split("menuentry")[entry_idx + 1] if entry_idx < content.count("menuentry") - 1 else False:
+                    target_idx = entry_idx
+                entry_idx += 1
+
+        # Simpler: find the menuentry that contains the subvol path
+        entries = content.split("menuentry")
+        for i, block in enumerate(entries[1:], 0):
+            if f"/{subvol}/boot/" in block or f"subvol={subvol}" in block:
+                target_idx = i
+                break
+
+        new_lines = []
+        for line in content.splitlines():
+            if line.startswith("set default="):
+                new_lines.append(f"set default={target_idx}")
+            elif line.startswith("set timeout=0"):
+                new_lines.append("set timeout=5")
+            else:
+                new_lines.append(line)
+
+        with open(cfg_path, "w") as f:
+            f.write("\n".join(new_lines) + "\n")
+
+        log(f"GRUB default set to entry {target_idx} ({subvol})")
+    finally:
+        umount_toplevel()
+
+    log("Rollback configured. Reboot to apply.")
+
+
+def cmd_apply():
+    cur = current_version()
+    channel = get_channel()
+    log(f"Current version: {cur}  channel: {channel}")
+    log("Fetching manifest...")
+
+    manifest = fetch_manifest(channel)
+    if not manifest:
+        die("Could not fetch update manifest — check network")
+
+    remote = manifest.get("version", "0.0.0")
+    if ver_tuple(remote) <= ver_tuple(cur):
+        log(f"Already up to date ({cur})")
+        sys.exit(0)
+
+    log(f"New version: {remote}")
+    payload = manifest.get("payloads", {}).get("rootfs", {})
+    url    = payload.get("url", "")
+    sha256 = payload.get("sha256", "")
+    if not url:
+        die("Manifest has no rootfs payload URL")
+
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    archive = os.path.join(CACHE_DIR, f"hippos-rootfs-{remote}.tar.zst")
+
+    if not os.path.exists(archive):
+        log("Downloading rootfs payload...")
+        req = urllib.request.Request(url, headers={"User-Agent": "hippos-upgrade/1.0"})
+        with urllib.request.urlopen(req) as resp, open(archive, "wb") as f:
+            total = int(resp.headers.get("Content-Length", 0))
+            done = 0
+            while chunk := resp.read(262144):
+                f.write(chunk)
+                done += len(chunk)
+                if total:
+                    log(f"Downloading... {done * 100 // total}%")
+
+    if sha256:
+        log("Verifying checksum...")
+        if sha256_file(archive) != sha256:
+            os.remove(archive)
+            die("SHA256 mismatch — download may be corrupt")
+        log("Checksum OK")
+
+    try:
+        mount_toplevel()
+
+        # Snapshot current running subvol for rollback
+        running = current_subvol()
+        backup_name = f"@rootfs-{cur}"
+        backup_path = os.path.join(BTRFS_MNT, backup_name)
+        running_path = os.path.join(BTRFS_MNT, running)
+
+        if not os.path.exists(backup_path):
+            log(f"Snapshotting {running} → {backup_name}...")
+            subprocess.run(
+                ["btrfs", "subvolume", "snapshot", "-r", running_path, backup_path],
+                check=True
+            )
+
+        # Create and populate new subvolume
+        new_subvol = f"@rootfs-{remote}"
+        new_path = os.path.join(BTRFS_MNT, new_subvol)
+        if os.path.exists(new_path):
+            subprocess.run(["btrfs", "subvolume", "delete", new_path], check=True)
+        log(f"Creating {new_subvol}...")
+        subprocess.run(["btrfs", "subvolume", "create", new_path], check=True)
+
+        log(f"Extracting rootfs...")
+        subprocess.run(
+            ["tar", "--xattrs", "--acls", "--numeric-owner",
+             "-I", "zstd -d", "-xf", archive, "-C", new_path],
+            check=True
+        )
+
+        # Preserve fstab — the rootfs tarball has the build-time placeholder;
+        # the real one contains machine-specific PARTUUIDs for EFI and userdata.
+        shutil.copy2("/etc/fstab", os.path.join(new_path, "etc", "fstab"))
+        log("fstab preserved from running system")
+
+        # Update grub.cfg in @rootfs
+        uuid, partuuid = read_grub_uuid_partuuid()
+        if not uuid or not partuuid:
+            die("Cannot read UUID/PARTUUID from existing grub.cfg")
+
+        deployments = list_deployments()  # includes new_subvol now
+        write_grub_cfg(new_subvol, deployments, uuid, partuuid)
+        log(f"GRUB updated — default: {new_subvol}")
+
+        # Arm the boot counter so rollback is offered after 3 failed boot attempts.
+        grubenv = "/boot/efi/grub/grubenv"
+        subprocess.run(["grub-editenv", grubenv, "create"], check=False)
+        subprocess.run(["grub-editenv", grubenv, "set", "boot_counter=3"], check=True)
+        log("Boot counter armed (3 attempts before rollback)")
+
+        # Prune old deployments (keep only current + 1 rollback)
+        old = [s for s in deployments if s not in (new_subvol, backup_name)]
+        for stale in old:
+            log(f"Pruning old deployment {stale}...")
+            subprocess.run(
+                ["btrfs", "subvolume", "delete", os.path.join(BTRFS_MNT, stale)],
+                check=False
+            )
+    finally:
+        umount_toplevel()
+
+    try:
+        os.remove(archive)
+    except Exception:
+        pass
+
+    log("Update complete. Reboot to apply the new version.")
+
+
+EMULATORS_DIR = "/userdata/emulators"
+FRONTEND_INSTALL_ROOT = "/"
+
+
+def installed_emulator_version(name):
+    vf = os.path.join(EMULATORS_DIR, name, "version")
+    try:
+        return open(vf).read().strip()
+    except FileNotFoundError:
+        return None
+
+
+def installed_frontend_version(name):
+    # Version file is placed by pack-frontend.sh inside the tarball at ./version
+    # and extracted to the install root, so it lands at /version — use a dedicated
+    # path per frontend to avoid collisions.
+    vf = f"/usr/share/hippos/frontend-{name}-version"
+    try:
+        return open(vf).read().strip()
+    except FileNotFoundError:
+        return None
+
+
+def cmd_list_emulator_updates():
+    """Print emulators with pending updates only, one per line: name\tinstalled → available."""
+    manifest = fetch_manifest(get_channel())
+    if not manifest:
+        die("Could not fetch manifest")
+    emulators = manifest.get("payloads", {}).get("emulators", {})
+    if not emulators:
+        log("No emulator payloads in manifest")
+        return
+    for name, info in sorted(emulators.items()):
+        remote = info.get("version", "")
+        installed = installed_emulator_version(name)
+        if installed != remote:
+            status = f"{installed or 'not installed'} → {remote}"
+            print(f"{name}\t{status}")
+
+
+def cmd_update_emulator(name, force=False):
+    manifest = fetch_manifest(get_channel())
+    if not manifest:
+        die("Could not fetch manifest")
+
+    emulators = manifest.get("payloads", {}).get("emulators", {})
+    if name not in emulators:
+        die(f"Emulator '{name}' not found in manifest. Available: {sorted(emulators.keys())}")
+
+    info = emulators[name]
+    remote = info.get("version", "")
+    url    = info.get("url", "")
+    sha256 = info.get("sha256", "")
+
+    installed = installed_emulator_version(name)
+    if installed == remote and not force:
+        log(f"{name} is already at {remote}")
+        sys.exit(0)
+
+    log(f"{'Force-reinstalling' if force else 'Updating'} {name}: {installed or 'not installed'} → {remote}")
+
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    archive = os.path.join(CACHE_DIR, f"hippos-emulator-{name}-{remote}.tar.zst")
+
+    if force and os.path.exists(archive):
+        os.remove(archive)
+
+    if not os.path.exists(archive):
+        log(f"Downloading {name} {remote}...")
+        req = urllib.request.Request(url, headers={"User-Agent": "hippos-upgrade/1.0"})
+        with urllib.request.urlopen(req) as resp, open(archive, "wb") as f:
+            total = int(resp.headers.get("Content-Length", 0))
+            done = 0
+            while chunk := resp.read(262144):
+                f.write(chunk)
+                done += len(chunk)
+                if total:
+                    log(f"Downloading... {done * 100 // total}%")
+
+    if sha256:
+        log("Verifying checksum...")
+        if sha256_file(archive) != sha256:
+            os.remove(archive)
+            die("SHA256 mismatch — download may be corrupt")
+        log("Checksum OK")
+
+    dest = os.path.join(EMULATORS_DIR, name)
+    os.makedirs(dest, exist_ok=True)
+
+    log(f"Extracting {name} to {dest}...")
+    subprocess.run(
+        ["tar", "--xattrs", "--acls", "--numeric-owner",
+         "-I", "zstd -d", "-xf", archive, "-C", dest],
+        check=True
+    )
+
+    try:
+        os.remove(archive)
+    except Exception:
+        pass
+
+    log(f"{name} updated to {remote}")
+
+
+def cmd_update_all_emulators():
+    manifest = fetch_manifest(get_channel())
+    if not manifest:
+        die("Could not fetch manifest")
+    emulators = manifest.get("payloads", {}).get("emulators", {})
+    if not emulators:
+        log("No emulator payloads in manifest")
+        return
+    for name, info in sorted(emulators.items()):
+        remote = info.get("version", "")
+        installed = installed_emulator_version(name)
+        if installed == remote:
+            log(f"{name}: already at {remote}")
+        else:
+            cmd_update_emulator(name)
+
+
+def cmd_list_frontend_updates():
+    """Print frontends with pending updates only, one per line: name\tinstalled → available."""
+    manifest = fetch_manifest(get_channel())
+    if not manifest:
+        die("Could not fetch manifest")
+    frontends = manifest.get("payloads", {}).get("frontend", {})
+    if not frontends:
+        log("No frontend payloads in manifest")
+        return
+    for name, info in sorted(frontends.items()):
+        remote = info.get("version", "")
+        installed = installed_frontend_version(name)
+        if installed != remote:
+            status = f"{installed or 'not installed'} → {remote}"
+            print(f"{name}\t{status}")
+
+
+def cmd_update_frontend(name):
+    manifest = fetch_manifest(get_channel())
+    if not manifest:
+        die("Could not fetch manifest")
+
+    frontends = manifest.get("payloads", {}).get("frontend", {})
+    if name not in frontends:
+        die(f"Frontend '{name}' not found in manifest. Available: {sorted(frontends.keys())}")
+
+    info = frontends[name]
+    remote = info.get("version", "")
+    url    = info.get("url", "")
+    sha256 = info.get("sha256", "")
+
+    installed = installed_frontend_version(name)
+    if installed == remote:
+        log(f"{name} is already at {remote}")
+        sys.exit(0)
+
+    log(f"Updating frontend {name}: {installed or 'not installed'} → {remote}")
+
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    archive = os.path.join(CACHE_DIR, f"hippos-frontend-{name}-{remote}.tar.zst")
+
+    if not os.path.exists(archive):
+        log(f"Downloading {name} {remote}...")
+        req = urllib.request.Request(url, headers={"User-Agent": "hippos-upgrade/1.0"})
+        with urllib.request.urlopen(req) as resp, open(archive, "wb") as f:
+            total = int(resp.headers.get("Content-Length", 0))
+            done = 0
+            while chunk := resp.read(262144):
+                f.write(chunk)
+                done += len(chunk)
+                if total:
+                    log(f"Downloading... {done * 100 // total}%")
+
+    if sha256:
+        log("Verifying checksum...")
+        if sha256_file(archive) != sha256:
+            os.remove(archive)
+            die("SHA256 mismatch — download may be corrupt")
+        log("Checksum OK")
+
+    log(f"Extracting {name} to /...")
+    subprocess.run(
+        ["tar", "--xattrs", "--acls", "--numeric-owner",
+         "-I", "zstd -d", "-xf", archive, "-C", "/"],
+        check=True
+    )
+
+    try:
+        os.remove(archive)
+    except Exception:
+        pass
+
+    log(f"Frontend {name} updated to {remote}")
+    log("Restart EmulationStation to apply the update.")
+
+
+def cmd_update_grub():
+    """Rewrite grub.cfg with current boot counter logic and btrfs subvol state."""
+    try:
+        mount_toplevel()
+        uuid, partuuid = read_grub_uuid_partuuid()
+        if not uuid or not partuuid:
+            die("Cannot read UUID/PARTUUID from existing grub.cfg")
+        running = current_subvol()
+        deployments = list_deployments()
+        write_grub_cfg(running, deployments, uuid, partuuid)
+        log(f"grub.cfg rewritten — default: {running}")
+    finally:
+        umount_toplevel()
+
+
+# ---------------------------------------------------------------------------
+
+def _require_root():
+    if os.geteuid() != 0:
+        result = subprocess.run(["sudo", sys.executable] + sys.argv)
+        sys.exit(result.returncode)
+
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "apply"
+
+    # Read-only commands that don't need root
+    READONLY_CMDS = {"check", "list-deployments", "list-emulator-updates",
+                     "list-frontend-updates"}
+    if cmd not in READONLY_CMDS:
+        _require_root()
+        _open_log()
+
+    if cmd == "check":
+        cmd_check()
+    elif cmd == "list-deployments":
+        cmd_list_deployments()
+    elif cmd == "rollback":
+        if len(sys.argv) < 3:
+            die("Usage: hippos-upgrade rollback <subvol>")
+        cmd_rollback(sys.argv[2])
+    elif cmd == "list-emulator-updates":
+        cmd_list_emulator_updates()
+    elif cmd == "update-emulator":
+        args = [a for a in sys.argv[2:] if not a.startswith("-")]
+        force = "--force" in sys.argv
+        if not args:
+            die("Usage: hippos-upgrade update-emulator [--force] <name>")
+        cmd_update_emulator(args[0], force=force)
+    elif cmd == "update-all-emulators":
+        cmd_update_all_emulators()
+    elif cmd == "list-frontend-updates":
+        cmd_list_frontend_updates()
+    elif cmd == "update-frontend":
+        if len(sys.argv) < 3:
+            die("Usage: hippos-upgrade update-frontend <name>")
+        cmd_update_frontend(sys.argv[2])
+    elif cmd == "update-grub":
+        cmd_update_grub()
+    else:
+        cmd_apply()

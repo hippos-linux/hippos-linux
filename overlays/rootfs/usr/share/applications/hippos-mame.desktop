@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=MAME
+GenericName=Arcade Emulator
+Comment=MAME arcade emulator
+Exec=/usr/lib/hippos/emulators/launch-mame
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

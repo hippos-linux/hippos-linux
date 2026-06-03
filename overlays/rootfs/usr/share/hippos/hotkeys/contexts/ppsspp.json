@@ -1,0 +1,14 @@
+{
+  "name": "ppsspp",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "menu": "KEY_ESC",
+    "save_state": "KEY_F2",
+    "restore_state": "KEY_F4",
+    "next_slot": "KEY_F6",
+    "previous_slot": "KEY_F5",
+    "screenshot": "KEY_F12",
+    "fastforward": "KEY_TAB",
+    "pause": "KEY_F1"
+  }
+}

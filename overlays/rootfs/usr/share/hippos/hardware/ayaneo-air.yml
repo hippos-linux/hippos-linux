@@ -1,0 +1,8 @@
+id: ayaneo-air
+dmi:
+  sys_vendor: "AYANEO"
+  product_name: "AIR"
+defaults:
+  display.rotate: "0"
+  system.suspendmode: "suspend"
+  global.tdp: "10"

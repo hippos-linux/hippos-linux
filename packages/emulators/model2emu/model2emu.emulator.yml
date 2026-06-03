@@ -1,0 +1,6 @@
+requireArtifact: model2emu
+systems:
+  model2:
+    cores:
+    - model2emu
+features: []

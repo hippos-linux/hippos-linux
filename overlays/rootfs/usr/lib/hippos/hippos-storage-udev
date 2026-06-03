@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Called directly from udev — minimal logic only.
+# If the system is ready, dispatch immediately.
+# If still booting, queue the event for later replay.
+
+ACTION="$1"   # add | remove
+DEVNAME="$2"  # e.g. sdb1
+DEVTYPE="$3"  # partition | disk
+
+READY_FLAG="/run/hippos-storage-ready"
+DELAY_DIR="/run/hippos-storage-delay"
+
+if [[ "${ACTION}" == "add" ]]; then
+    if [[ -f "${READY_FLAG}" ]]; then
+        /usr/lib/hippos/hippos-storage-event mount "${DEVNAME}" "${DEVTYPE}" &
+    else
+        mkdir -p "${DELAY_DIR}"
+        printf '%s:%s\n' "${DEVNAME}" "${DEVTYPE}" \
+            > "${DELAY_DIR}/$(date +%s%N).${DEVNAME}.add"
+    fi
+else
+    # Remove: always dispatch immediately and purge any queued add
+    rm -f "${DELAY_DIR:+${DELAY_DIR}}"/*."${DEVNAME}".add 2>/dev/null || true
+    /usr/lib/hippos/hippos-storage-event umount "${DEVNAME}" "${DEVTYPE}" &
+fi

@@ -1,0 +1,13 @@
+[Unit]
+Description=HippOS First-Boot Flatpak App Installer
+After=network.target local-fs.target
+ConditionPathExists=!/userdata/.config/hippos/flatpak-apps-installed
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/hippos/hippos-firstboot-flatpak
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

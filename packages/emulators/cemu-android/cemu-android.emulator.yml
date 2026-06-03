@@ -1,0 +1,4 @@
+requireArtifact: cemu-android
+systems:
+- wiiu
+features: []

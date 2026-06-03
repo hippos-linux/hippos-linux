@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Xenia Canary
+GenericName=Xbox 360 Emulator (Canary)
+Comment=Xenia Canary Xbox 360 emulator (canary build)
+Exec=/usr/lib/hippos/emulators/launch-xenia-canary
+Icon=xenia-canary
+Terminal=false
+Categories=Game;Emulator;

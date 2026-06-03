@@ -1,0 +1,5 @@
+requireArtifact: gsplus
+systems:
+- apple2
+- apple2gs
+features: []

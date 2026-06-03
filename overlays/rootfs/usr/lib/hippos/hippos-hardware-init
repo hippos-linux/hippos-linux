@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""hippos-hardware-init — match DMI data to a hardware profile and write hardware-defaults.conf."""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+    _HAS_YAML = True
+except ImportError:
+    _HAS_YAML = False
+
+PROFILES_DIR    = Path('/usr/share/hippos/hardware')
+HW_DEFAULTS     = Path('/run/hippos/hardware-defaults.conf')
+HW_PROFILE_FILE = Path('/run/hippos/hardware-profile')
+DMI_DIR         = Path('/sys/class/dmi/id')
+
+
+def _dmi(key: str) -> str:
+    try:
+        return (DMI_DIR / key).read_text(encoding='utf-8').strip()
+    except OSError:
+        return ''
+
+
+def main() -> int:
+    if not _HAS_YAML:
+        print('[hippos-hardware-init] python3-yaml not available — skipping', file=sys.stderr)
+        return 0
+
+    sys_vendor   = _dmi('sys_vendor')
+    product_name = _dmi('product_name')
+    board_name   = _dmi('board_name')
+    print(f'[hippos-hardware-init] DMI: vendor={sys_vendor!r} product={product_name!r} board={board_name!r}')
+
+    for yml_path in sorted(PROFILES_DIR.glob('*.yml')):
+        try:
+            profile = yaml.safe_load(yml_path.read_text(encoding='utf-8')) or {}
+        except Exception as exc:
+            print(f'[hippos-hardware-init] warning: skipping {yml_path.name}: {exc}', file=sys.stderr)
+            continue
+
+        dmi = profile.get('dmi', {})
+        if dmi.get('sys_vendor')   and dmi['sys_vendor']   not in sys_vendor:
+            continue
+        if dmi.get('product_name') and dmi['product_name'] not in product_name:
+            continue
+        if dmi.get('board_name')   and dmi['board_name']   not in board_name:
+            continue
+
+        profile_id = profile.get('id', yml_path.stem)
+        defaults   = profile.get('defaults', {})
+
+        HW_DEFAULTS.write_text(
+            ''.join(f'{k}={v}\n' for k, v in sorted(defaults.items())),
+            encoding='utf-8',
+        )
+        HW_PROFILE_FILE.write_text(profile_id + '\n', encoding='utf-8')
+        print(f'[hippos-hardware-init] matched profile: {profile_id}')
+        return 0
+
+    print('[hippos-hardware-init] no profile matched — generic hardware')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

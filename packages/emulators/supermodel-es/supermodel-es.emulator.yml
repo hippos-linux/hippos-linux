@@ -1,0 +1,6 @@
+requireArtifact: supermodel-es
+systems:
+  model3:
+    cores:
+    - supermodel-es
+features: []

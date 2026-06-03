@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+LOG_DIR=/userdata/system/logs/boot
+BOOT_ID="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || date +%s)"
+OUT_DIR="${LOG_DIR}/${BOOT_ID}"
+
+sleep "${HIPPOS_BOOT_LOG_DELAY:-20}"
+mkdir -p "${OUT_DIR}"
+
+journalctl -b --no-pager > "${OUT_DIR}/journal.log" 2>&1 || true
+journalctl -b -p warning..alert --no-pager > "${OUT_DIR}/warnings.log" 2>&1 || true
+journalctl -b -u hippos-es.service -u hippos-xserver.service -u hippos-hotkeys.service --no-pager > "${OUT_DIR}/frontend.log" 2>&1 || true
+dmesg -T > "${OUT_DIR}/dmesg.log" 2>&1 || true
+
+if [[ -f /tmp/Xorg.0.log ]]; then
+    cp -f /tmp/Xorg.0.log "${OUT_DIR}/Xorg.0.log" || true
+fi
+
+ln -sfn "${OUT_DIR}" "${LOG_DIR}/latest"

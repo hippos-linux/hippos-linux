@@ -1,0 +1,8 @@
+systems:
+  androidapps:
+    cores:
+    - waydroid
+  androidgames:
+    cores:
+    - waydroid
+features: []

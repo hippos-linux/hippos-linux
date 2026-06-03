@@ -1,0 +1,9 @@
+{
+  "name": "hypseus-singe",
+  "keys": {
+    "exit": "KEY_ESC",
+    "coin": "KEY_5",
+    "screenshot": "KEY_F12",
+    "pause": "KEY_P"
+  }
+}

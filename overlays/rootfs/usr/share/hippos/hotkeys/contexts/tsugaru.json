@@ -1,0 +1,9 @@
+{
+  "name": "tsugaru",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "menu": "KEY_F11",
+    "screenshot": "KEY_SYSRQ",
+    "reset": "KEY_F12"
+  }
+}

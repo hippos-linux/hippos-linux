@@ -1,0 +1,15 @@
+[Unit]
+Description=HippOS system settings initialisation (hostname, locale, SSH, WiFi, CPU governor)
+After=NetworkManager.service
+Before=hippos-xserver.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/hippos/hippos-system-init
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=HippOS MergerFS ROM pool
+After=local-fs.target userdata.mount hippos-rom-scan.service
+Before=hippos-es.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/hippos/mount-roms-pool
+ExecStop=umount /userdata/roms
+
+[Install]
+WantedBy=multi-user.target

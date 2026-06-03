@@ -1,0 +1,16 @@
+requireArtifact: clk
+systems:
+- amstradcpc
+- archimedes
+- atarist
+- colecovision
+- electron
+- enterprise
+- macintosh
+- mastersystem
+- msx1
+- msx2
+- oricatmos
+- zxspectrum
+- bbcmicro
+features: []

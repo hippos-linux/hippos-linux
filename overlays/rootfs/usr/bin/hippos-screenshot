@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCREENSHOT_DIR="/userdata/screenshots"
+FILE="${SCREENSHOT_DIR}/screenshot-$(date +%Y.%m.%d-%Hh%M.%S).png"
+
+mkdir -p "${SCREENSHOT_DIR}"
+
+export DISPLAY="${DISPLAY:-:0}"
+
+scrot "${FILE}"

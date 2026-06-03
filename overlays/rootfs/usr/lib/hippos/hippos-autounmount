@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# hippos-autounmount <devname>
+# Unmounts a device mounted by hippos-automount and drops the live ROM pool
+# first so mergerfs does not keep the device branch busy.
+
+MEDIA="/media"
+POOL="/userdata/roms"
+
+log()  { logger -t hippos-autounmount -- "$*"; }
+info() { log "INFO: $*"; }
+die()  { log "ERROR: $*"; exit 1; }
+
+DEVNAME="${1:?Usage: hippos-autounmount <devname>}"
+DEVICE="/dev/${DEVNAME}"
+
+mount_for_device() {
+    findmnt -n -S "${DEVICE}" -o TARGET 2>/dev/null | head -n 1
+}
+
+MOUNT_POINT="$(mount_for_device || true)"
+
+if [[ -z "${MOUNT_POINT}" ]]; then
+    # udev remove can arrive after the block node disappeared. Fall back to a
+    # direct /proc/mounts lookup while the stale mount is still visible.
+    MOUNT_POINT="$(awk -v dev="${DEVICE}" '$1 == dev { print $2; exit }' /proc/mounts 2>/dev/null || true)"
+fi
+
+if [[ -z "${MOUNT_POINT}" ]]; then
+    info "${DEVICE} is not mounted"
+    exit 0
+fi
+
+case "${MOUNT_POINT}" in
+    "${MEDIA}"/*) ;;
+    *)
+        die "refusing to unmount non-media mountpoint ${MOUNT_POINT}"
+        ;;
+esac
+
+if findmnt "${POOL}" >/dev/null 2>&1; then
+    info "unmounting ROM pool before removing ${MOUNT_POINT}"
+    umount "${POOL}" 2>/dev/null || umount -l "${POOL}" 2>/dev/null || true
+fi
+
+info "unmounting ${DEVICE} from ${MOUNT_POINT}"
+umount "${MOUNT_POINT}" 2>/dev/null || umount -l "${MOUNT_POINT}" 2>/dev/null || die "failed to unmount ${MOUNT_POINT}"
+
+rmdir "${MOUNT_POINT}" 2>/dev/null || true
+info "unmounted ${DEVICE}"

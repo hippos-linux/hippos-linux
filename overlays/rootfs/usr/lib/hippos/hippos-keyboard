@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""hippos-keyboard — keyboard layout/variant management.
+
+Commands:
+  list-layouts               list available layouts as "code\tname" lines
+  list-variants <layout>     list variants for a layout as "code\tname" lines
+  set <layout> <variant>     apply layout (and optional variant)
+"""
+
+import os
+import re
+import subprocess
+import sys
+
+EVDEV_LST = "/usr/share/X11/xkb/rules/evdev.lst"
+LOCALE_CONF = "/etc/vconsole.conf"
+X11_KEYBOARD = "/etc/X11/xorg.conf.d/00-keyboard.conf"
+
+
+def _parse_section(section_name):
+    """Return list of (code, name) from a section in evdev.lst."""
+    results = []
+    in_section = False
+    try:
+        with open(EVDEV_LST, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                m = re.match(r"^!\s+(.+)$", line)
+                if m:
+                    in_section = (m.group(1).strip() == section_name)
+                    continue
+                if not in_section:
+                    continue
+                # lines: "  code   human readable name"
+                m = re.match(r"^\s+(\S+)\s+(.+)$", line)
+                if m:
+                    results.append((m.group(1), m.group(2).strip()))
+    except FileNotFoundError:
+        pass
+    return results
+
+
+def cmd_list_layouts():
+    for code, name in _parse_section("layout"):
+        print(f"{code}\t{name}")
+
+
+def cmd_list_variants(layout):
+    # variant lines: "  variantcode(layout)   name" or "  variantcode   name"
+    results = []
+    in_section = False
+    try:
+        with open(EVDEV_LST, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                m = re.match(r"^!\s+(.+)$", line)
+                if m:
+                    in_section = (m.group(1).strip() == "variant")
+                    continue
+                if not in_section:
+                    continue
+                m = re.match(r"^\s+(\S+)\s+(.+)$", line)
+                if not m:
+                    continue
+                code = m.group(1)
+                name = m.group(2).strip()
+                # Some variants are scoped: "varcode(layout)" means only for that layout
+                scope_m = re.match(r"^(.+)\((.+)\)$", code)
+                if scope_m:
+                    if scope_m.group(2) == layout:
+                        results.append((scope_m.group(1), name))
+                else:
+                    results.append((code, name))
+    except FileNotFoundError:
+        pass
+    for code, name in results:
+        print(f"{code}\t{name}")
+
+
+def cmd_set(layout, variant):
+    # Apply with localectl if available
+    localectl = subprocess.run(["which", "localectl"], capture_output=True).returncode == 0
+    if localectl:
+        cmd = ["localectl", "set-x11-keymap", layout]
+        if variant and variant != "none":
+            cmd += ["", variant]  # model is empty, variant is 4th arg
+        subprocess.run(cmd, check=False)
+    else:
+        _write_xorg_conf(layout, variant)
+    _write_vconsole(layout, variant)
+
+
+def _write_xorg_conf(layout, variant):
+    os.makedirs(os.path.dirname(X11_KEYBOARD), exist_ok=True)
+    variant_line = f'    Option "XkbVariant" "{variant}"\n' if variant and variant != "none" else ""
+    content = (
+        'Section "InputClass"\n'
+        '    Identifier "system-keyboard"\n'
+        '    MatchIsKeyboard "on"\n'
+        f'    Option "XkbLayout" "{layout}"\n'
+        f'{variant_line}'
+        'EndSection\n'
+    )
+    with open(X11_KEYBOARD, "w") as f:
+        f.write(content)
+
+
+def _write_vconsole(layout, variant):
+    keymap = layout
+    if variant and variant != "none":
+        keymap = f"{layout}-{variant}"
+    lines = []
+    try:
+        with open(LOCALE_CONF) as f:
+            lines = [l for l in f if not l.startswith("KEYMAP=")]
+    except FileNotFoundError:
+        pass
+    lines.append(f"KEYMAP={keymap}\n")
+    with open(LOCALE_CONF, "w") as f:
+        f.writelines(lines)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: hippos-keyboard list-layouts|list-variants <layout>|set <layout> [variant]")
+        sys.exit(1)
+
+    cmd = sys.argv[1]
+    if cmd == "set" and os.geteuid() != 0:
+        os.execvp("sudo", ["sudo"] + sys.argv)
+    if cmd == "list-layouts":
+        cmd_list_layouts()
+    elif cmd == "list-variants" and len(sys.argv) >= 3:
+        cmd_list_variants(sys.argv[2])
+    elif cmd == "set" and len(sys.argv) >= 3:
+        lay = sys.argv[2]
+        var = sys.argv[3] if len(sys.argv) >= 4 else "none"
+        cmd_set(lay, var)
+    else:
+        print("Usage: hippos-keyboard list-layouts|list-variants <layout>|set <layout> [variant]")
+        sys.exit(1)

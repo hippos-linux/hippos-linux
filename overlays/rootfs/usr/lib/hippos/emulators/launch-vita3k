@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+. /usr/lib/hippos/emulator-env
+export QT_QPA_PLATFORM=xcb
+exec /opt/emulators/vita3k/bin/Vita3K "$@"

@@ -1,0 +1,12 @@
+[Unit]
+Description=Handheld Daemon Service
+ConditionPathExists=/home/hippos/.local/share/hhd/venv/bin/hhd
+
+[Service]
+ExecStart=/home/hippos/.local/share/hhd/venv/bin/hhd --user %i
+Nice=-12
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,3 @@
+# Allow the hippos user to run CRT setup/teardown scripts that write to /etc
+hippos ALL=(ALL) NOPASSWD: /usr/lib/hippos/hippos-crt-setup
+hippos ALL=(ALL) NOPASSWD: /usr/lib/hippos/hippos-crt-teardown

@@ -1,0 +1,4 @@
+requireArtifact: ppsspp
+systems:
+- psp
+features: []

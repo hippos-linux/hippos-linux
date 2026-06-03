@@ -1,0 +1,8 @@
+{
+  "name": "eka2l1",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "menu": "KEY_F10",
+    "screenshot": "KEY_F12"
+  }
+}

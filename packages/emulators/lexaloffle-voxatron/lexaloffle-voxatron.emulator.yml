@@ -1,0 +1,6 @@
+requireArtifact: lexaloffle-voxatron
+systems:
+  voxatron:
+    cores:
+    - voxatron
+features: []

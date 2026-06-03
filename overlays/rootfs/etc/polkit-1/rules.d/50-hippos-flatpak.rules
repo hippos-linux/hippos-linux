@@ -1,0 +1,16 @@
+polkit.addRule(function(action, subject) {
+    var allowed = [
+        "org.freedesktop.Flatpak.appstream-update",
+        "org.freedesktop.Flatpak.app-install",
+        "org.freedesktop.Flatpak.runtime-install",
+        "org.freedesktop.Flatpak.install-bundle",
+        "org.freedesktop.Flatpak.app-uninstall",
+        "org.freedesktop.Flatpak.runtime-uninstall",
+        "org.freedesktop.Flatpak.modify-repo",
+        "org.freedesktop.Flatpak.configure-remote",
+        "org.freedesktop.Flatpak.update-remote",
+    ];
+    if (allowed.indexOf(action.id) >= 0 && subject.user === "hippos") {
+        return polkit.Result.YES;
+    }
+});

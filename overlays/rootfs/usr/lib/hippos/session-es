@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+if [[ ! -x /usr/bin/emulationstation ]]; then
+    echo "hippos-session: emulationstation not installed, switching to desktop"
+    hippos-settings set system.session desktop
+    exit 0
+fi
+
+mkdir -p /userdata/system/configs/emulationstation
+
+export HOME=/userdata
+export XDG_RUNTIME_DIR=/run/user/1000
+export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus"
+export DISPLAY=:0
+unset XAUTHORITY
+
+# shellcheck disable=SC1091
+[[ -f /run/hippos/prime.env ]] && source /run/hippos/prime.env
+
+dbus-update-activation-environment --systemd DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS HOME 2>/dev/null || true
+
+/usr/lib/hippos/hippos-audio-setup
+/usr/lib/hippos/hippos-display-setup
+
+if hippos-touchscreen-detect 2>/dev/null; then
+    pkill -x touchegg 2>/dev/null || true
+    touchegg --daemon &
+    sleep 0.5
+    touchegg &
+fi
+
+pkill -x unclutter 2>/dev/null || true
+unclutter -idle 3 -root &
+
+exec openbox --sm-disable --startup /usr/bin/emulationstation

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# ES API: info --full — system info for ES about screen
+case "${1:-}" in
+    --full)
+        echo "HippOS $(cat /usr/share/hippos/version 2>/dev/null || echo 0.1.0)"
+        uname -r
+        grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs
+        free -h | awk '/^Mem:/{print $2 " RAM"}'
+        ;;
+    *)
+        echo "HippOS $(cat /usr/share/hippos/version 2>/dev/null || echo 0.1.0)"
+        ;;
+esac

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=XRoar
+GenericName=Dragon/CoCo Emulator
+Comment=XRoar Dragon and TRS-80 CoCo emulator
+Exec=/usr/lib/hippos/emulators/launch-xroar
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

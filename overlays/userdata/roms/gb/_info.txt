@@ -1,0 +1,5 @@
+Game Boy
+Manufacturer: Nintendo
+Released: 1989
+Hardware: portable
+Extensions: .gb .zip .7z

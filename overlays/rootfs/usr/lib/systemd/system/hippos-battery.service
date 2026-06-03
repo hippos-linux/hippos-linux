@@ -1,0 +1,13 @@
+[Unit]
+Description=HippOS battery monitor
+After=multi-user.target hippos-xserver.service
+ConditionPathExists=/sys/class/power_supply
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/hippos/hippos-battery
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

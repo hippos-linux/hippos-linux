@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""Generate EmulationStation .flatpak launchers from installed Flatpak apps."""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+
+USERDATA   = Path('/userdata')
+ROMS_DIR   = USERDATA / 'roms' / 'flatpak'
+STATE_FILE = USERDATA / 'system' / 'flatpak-launchers.json'
+
+
+def log(message: str) -> None:
+    print(f'[hippos-flatpak-sync] {message}', flush=True)
+
+
+def installed_apps() -> dict[str, str]:
+    try:
+        result = subprocess.run(
+            ['flatpak', 'list', '--app', '--columns=application,name'],
+            capture_output=True, text=True, timeout=30,
+        )
+        apps: dict[str, str] = {}
+        for line in result.stdout.splitlines():
+            parts = line.split('\t', 1)
+            if len(parts) == 2:
+                app_id, name = parts[0].strip(), parts[1].strip()
+                if app_id:
+                    apps[app_id] = name or app_id
+        return apps
+    except Exception as exc:
+        log(f'flatpak list failed: {exc}')
+        return {}
+
+
+def safe_filename(name: str) -> str:
+    cleaned = re.sub(r'[\\/:*?"<>|]+', ' ', name)
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip(' .')
+    return cleaned or 'Flatpak App'
+
+
+def read_state() -> dict[str, str]:
+    try:
+        data = json.loads(STATE_FILE.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): str(v) for k, v in data.items()}
+
+
+def write_state(state: dict[str, str]) -> None:
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = STATE_FILE.with_suffix('.json.tmp')
+    tmp.write_text(json.dumps(state, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+    tmp.replace(STATE_FILE)
+
+
+def sync() -> int:
+    apps = installed_apps()
+    ROMS_DIR.mkdir(parents=True, exist_ok=True)
+
+    old_state = read_state()
+    new_state: dict[str, str] = {}
+    created = updated = removed = 0
+
+    for app_id, name in sorted(apps.items(), key=lambda x: safe_filename(x[1]).lower()):
+        previous = Path(old_state.get(app_id, ''))
+        if previous.name and previous.parent == ROMS_DIR:
+            path = previous
+        else:
+            path = ROMS_DIR / f'{safe_filename(name)}.flatpak'
+
+        existing = path.read_text(encoding='utf-8', errors='replace').strip() if path.exists() else None
+        if existing != app_id:
+            path.write_text(app_id + '\n', encoding='utf-8')
+            if existing is None:
+                created += 1
+            else:
+                updated += 1
+        new_state[app_id] = str(path)
+
+    for app_id, old_path_str in old_state.items():
+        if app_id in new_state:
+            continue
+        old_path = Path(old_path_str)
+        if old_path.parent == ROMS_DIR and old_path.exists():
+            try:
+                if old_path.read_text(encoding='utf-8', errors='replace').strip() == app_id:
+                    old_path.unlink()
+                    removed += 1
+            except OSError:
+                pass
+
+    write_state(new_state)
+
+    try:
+        os.chown(ROMS_DIR, 1000, 100)
+        os.chown(STATE_FILE, 1000, 100)
+        for path_str in new_state.values():
+            try:
+                os.chown(path_str, 1000, 100)
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+    log(f'found={len(apps)} created={created} updated={updated} removed={removed}')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(sync())

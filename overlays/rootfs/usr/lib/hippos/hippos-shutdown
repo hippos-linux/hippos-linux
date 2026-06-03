@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# hippos-shutdown — shutdown, reboot, or suspend the system.
+# Respects system.suspendmode when called with no argument.
+# Usage:
+#   hippos-shutdown              act according to system.suspendmode
+#   hippos-shutdown shutdown     power off
+#   hippos-shutdown reboot       reboot
+#   hippos-shutdown suspend      suspend (RAM)
+#   hippos-shutdown hibernate    hibernate (disk)
+#   hippos-shutdown hybrid       hybrid sleep
+
+[[ "${EUID}" -ne 0 ]] && exec sudo "$0" "$@"
+
+mkdir -p /run/hippos
+
+ACTION="${1:-}"
+
+if [[ -z "${ACTION}" ]]; then
+    ACTION="$(hippos-settings get system.suspendmode 2>/dev/null || true)"
+    [[ -z "${ACTION}" ]] && ACTION="suspend"
+fi
+
+case "${ACTION}" in
+    shutdown|poweroff|gui)
+        echo "poweroff" > /run/hippos/quit-action
+        systemctl poweroff
+        ;;
+    reboot|restart)
+        echo "reboot" > /run/hippos/quit-action
+        systemctl reboot
+        ;;
+    suspend)
+        systemctl suspend
+        ;;
+    hibernate)
+        systemctl hibernate
+        ;;
+    hybrid|hybrid-sleep)
+        systemctl hybrid-sleep
+        ;;
+    *)
+        printf 'hippos-shutdown: unknown action "%s"\n' "${ACTION}" >&2
+        printf 'Valid: shutdown | reboot | suspend | hibernate | hybrid\n' >&2
+        exit 1
+        ;;
+esac

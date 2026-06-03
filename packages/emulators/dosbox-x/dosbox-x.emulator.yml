@@ -1,0 +1,6 @@
+requireArtifact: dosbox-x
+systems:
+  dos:
+    cores:
+    - dosbox-x
+features: []

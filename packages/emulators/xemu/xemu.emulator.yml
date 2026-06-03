@@ -1,0 +1,9 @@
+requireArtifact: xemu
+systems:
+- xbox
+- chihiro
+features:
+- ratio
+- rewind
+- autosave
+- internal_resolution

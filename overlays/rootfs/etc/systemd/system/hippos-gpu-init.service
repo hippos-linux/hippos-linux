@@ -1,0 +1,14 @@
+[Unit]
+Description=HippOS GPU initialisation (NVIDIA driver selection + PRIME detection)
+After=local-fs.target
+Before=hippos-xserver.service display-manager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/hippos/hippos-gpu-init
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

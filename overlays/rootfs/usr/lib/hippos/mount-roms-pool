@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+POOL=/userdata/roms
+BIND=/run/hippos/roms-internal
+OPTS="cache.files=off,dropcacheonclose=true,allow_other,use_ino,moveonenospc=false"
+MEDIA=/media
+
+log() { printf '[hippos-roms-pool] %s\n' "$*"; }
+
+is_rom_root() {
+    local root="$1"
+    [[ -d "${root}" ]] || return 1
+
+    # Common system directory names from EmulationStation. This lets a mounted
+    # network share whose root is the ROM library be pooled directly.
+    local system
+    for system in \
+        3do arcade atomiswave dreamcast fbneo gamecube gba gbc genesis mame \
+        mastersystem megadrive model2 model3 n64 naomi nds neogeo nes ps2 ps3 \
+        psp psx saturn sega32x snes switch tg16 wii wiiu xbox xbox360; do
+        [[ -d "${root}/${system}" ]] && return 0
+    done
+
+    [[ -f "${root}/gamelist.xml" ]]
+}
+
+add_branch() {
+    local branch="$1"
+    [[ -d "${branch}" ]] || return 0
+    [[ "${branch}" == "${BIND}" || "${branch}" == "${POOL}" ]] && return 0
+    [[ ":${branches}:" == *":${branch}=RO:"* ]] && return 0
+    branches="${branches}:${branch}=RO"
+}
+
+if findmnt "${POOL}" >/dev/null 2>&1; then
+    log "already mounted at ${POOL}"
+    exit 0
+fi
+
+mkdir -p "${POOL}" "${BIND}"
+chown 1000:1000 "${POOL}"
+
+# Bind-mount the storage dir so mergerfs can use it as the RW branch
+# while mounting over the same path.
+mount --bind "${POOL}" "${BIND}"
+
+branches="${BIND}=RW"
+for dir in "${MEDIA}"/*/; do
+    [[ -d "${dir}" ]] || continue
+
+    # Fast paths for layouts users commonly bring from appliance installs.
+    add_branch "${dir%/}/roms"
+    add_branch "${dir%/}/userdata/roms"
+
+    # Include a share mounted directly at its ROM root, for example
+    # nfs:host:/exports/roms -> /media/host_exports_roms.
+    if is_rom_root "${dir%/}"; then
+        add_branch "${dir%/}"
+    fi
+
+    # Bounded discovery for nested layouts such as /media/USB/foo/userdata/roms.
+    while IFS= read -r -d '' roms_dir; do
+        add_branch "${roms_dir}"
+    done < <(find "${dir%/}" -mindepth 1 -maxdepth 4 -type d -iname roms -print0 2>/dev/null)
+done
+
+log "branches: ${branches}"
+
+if [[ "${branches}" == "${BIND}=RW" ]]; then
+    log "no external media — using ${POOL} directly"
+    umount "${BIND}"
+    exit 0
+fi
+
+if mergerfs -o "${OPTS}" "${branches}" "${POOL}"; then
+    log "mergerfs pool mounted at ${POOL}"
+else
+    log "mergerfs failed — using ${POOL} directly"
+    umount "${BIND}" 2>/dev/null || true
+fi

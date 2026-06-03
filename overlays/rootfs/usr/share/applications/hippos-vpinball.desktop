@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Visual Pinball
+GenericName=Visual Pinball Engine
+Comment=Visual Pinball X pinball engine
+Exec=/usr/lib/hippos/emulators/launch-vpinball
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

@@ -1,0 +1,45 @@
+# Desktop layer (LXQt + supporting tools)
+
+# Compositor
+picom
+
+# LXQt desktop environment
+lxqt-core
+nm-tray
+qt6-image-formats-plugins
+pcmanfm-qt
+breeze-icon-theme
+
+# File manager backends and removable media
+gvfs
+gvfs-backends
+gvfs-fuse
+lbzip2
+
+# Archive manager (GUI + right-click integration)
+xarchiver
+
+# Privilege escalation for desktop tools
+pkexec
+
+# Per-user dbus session
+dbus-user-session
+
+# XDG integration
+xdg-utils
+xdg-desktop-portal
+xdg-desktop-portal-gtk
+
+# Network sharing and discovery
+samba
+smbclient
+cifs-utils
+nfs-common
+avahi-daemon
+avahi-utils
+
+# Screenshot
+scrot
+
+# Python extras
+python3-pyudev

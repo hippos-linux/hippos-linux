@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=EmulationStation
+Comment=Switch to EmulationStation game mode
+Exec=/usr/lib/hippos/switch-to-es
+Icon=applications-games
+Terminal=false
+Categories=Game;

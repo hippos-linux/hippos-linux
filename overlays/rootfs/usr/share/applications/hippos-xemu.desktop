@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Xemu
+GenericName=Xbox Emulator
+Comment=Xemu original Xbox emulator
+Exec=/usr/lib/hippos/emulators/launch-xemu
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

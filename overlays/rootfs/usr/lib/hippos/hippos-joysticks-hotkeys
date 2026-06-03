@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""Gamepad combo hotkey manager for ES.
+
+Usage:
+  (no args)              Output <hotkeys> XML: button → action mappings
+  --values               Output available action names, one per line
+  --<button> <action>    Set hotkey bindings (multiple pairs allowed)
+"""
+from __future__ import annotations
+import json
+import sys
+from pathlib import Path
+
+SYSTEM_HOTKEYS  = Path('/usr/share/hippos/hotkeys/hotkeys.json')
+USER_HOTKEYS    = Path('/userdata/system/configs/hippos-hotkeys/hotkeys.json')
+DEFAULT_MAPPING = Path('/usr/share/hippos/hotkeys/default_mapping.json')
+
+
+def _load_json(path: Path, default=None):
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return default if default is not None else {}
+
+
+def _key_to_action(key: str, mapping: dict[str, str]) -> str:
+    return mapping.get(key, key.lower().replace('key_', ''))
+
+
+def _load_actions() -> list[dict]:
+    src = USER_HOTKEYS if USER_HOTKEYS.exists() else SYSTEM_HOTKEYS
+    data = _load_json(src, {})
+    return data.get('actions_player1', [])
+
+
+def cmd_list() -> None:
+    mapping = _load_json(DEFAULT_MAPPING)
+    system_actions = _load_json(SYSTEM_HOTKEYS, {}).get('actions_player1', [])
+
+    # Build default button→action from system hotkeys
+    defaults: dict[str, str] = {}
+    for entry in system_actions:
+        trigger = entry.get('trigger', [])
+        target  = entry.get('target', [])
+        if len(trigger) == 2 and trigger[0] == 'hotkey' and target:
+            defaults[trigger[1]] = _key_to_action(target[0], mapping)
+
+    # Build current button→action from active hotkeys
+    current: dict[str, str] = dict(defaults)
+    if USER_HOTKEYS.exists():
+        for entry in _load_json(USER_HOTKEYS, {}).get('actions_player1', []):
+            trigger = entry.get('trigger', [])
+            target  = entry.get('target', [])
+            if len(trigger) == 2 and trigger[0] == 'hotkey' and target:
+                current[trigger[1]] = _key_to_action(target[0], mapping)
+
+    print('<?xml version="1.0"?>')
+    print('<hotkeys>')
+    for button, action in current.items():
+        default = defaults.get(button, action)
+        print(f'  <hotkey button="{button}" action="{action}" default="{default}"/>')
+    print('</hotkeys>')
+
+
+def cmd_values() -> None:
+    mapping = _load_json(DEFAULT_MAPPING)
+    for action in sorted(set(mapping.values())):
+        print(action)
+
+
+def cmd_set(args: list[str]) -> None:
+    # args: --start exit --select savestate ...
+    pairs: dict[str, str] = {}
+    i = 0
+    while i < len(args):
+        if args[i].startswith('--') and i + 1 < len(args):
+            button = args[i][2:]
+            pairs[button] = args[i + 1]
+            i += 2
+        else:
+            i += 1
+
+    if not pairs:
+        return
+
+    mapping = _load_json(DEFAULT_MAPPING)
+    # Reverse mapping: action → KEY_*
+    action_to_key = {v: k for k, v in mapping.items()}
+
+    system_actions = _load_json(SYSTEM_HOTKEYS, {}).get('actions_player1', [])
+    user_data = _load_json(USER_HOTKEYS, {}) if USER_HOTKEYS.exists() else {}
+    user_actions: list[dict] = list(user_data.get('actions_player1', system_actions))
+
+    # Update or add entries for each button→action pair
+    for button, action in pairs.items():
+        key = action_to_key.get(action)
+        if not key:
+            continue
+        updated = False
+        for entry in user_actions:
+            trigger = entry.get('trigger', [])
+            if len(trigger) == 2 and trigger[0] == 'hotkey' and trigger[1] == button:
+                entry['target'] = [key]
+                updated = True
+                break
+        if not updated:
+            user_actions.append({
+                'trigger': ['hotkey', button],
+                'type': 'key',
+                'target': [key],
+            })
+
+    USER_HOTKEYS.parent.mkdir(parents=True, exist_ok=True)
+    USER_HOTKEYS.write_text(json.dumps({'actions_player1': user_actions}, indent=2))
+
+
+def main() -> None:
+    args = sys.argv[1:]
+    if not args:
+        cmd_list()
+    elif args[0] == '--values':
+        cmd_values()
+    else:
+        cmd_set(args)
+
+
+if __name__ == '__main__':
+    main()

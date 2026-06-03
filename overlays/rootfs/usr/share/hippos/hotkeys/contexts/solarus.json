@@ -1,0 +1,9 @@
+{
+  "name": "solarus",
+  "keys": {
+    "exit": ["KEY_LEFTCTRL", "KEY_Q"],
+    "save_state": "KEY_F5",
+    "restore_state": "KEY_F9",
+    "screenshot": "KEY_F11"
+  }
+}

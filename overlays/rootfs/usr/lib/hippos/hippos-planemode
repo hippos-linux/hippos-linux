@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# hippos-planemode — toggle airplane mode (WiFi + Bluetooth).
+# Usage: hippos-planemode status | enable | disable
+
+wifi_off() { nmcli radio wifi 2>/dev/null | grep -qi "disabled"; }
+bt_blocked() { rfkill list bluetooth 2>/dev/null | grep -q "Soft blocked: yes"; }
+
+case "${1:-status}" in
+    status)
+        if wifi_off && bt_blocked; then echo "on"; else echo "off"; fi
+        ;;
+    enable)
+        nmcli radio wifi off 2>/dev/null || true
+        rfkill block bluetooth 2>/dev/null || true
+        ;;
+    disable)
+        nmcli radio wifi on 2>/dev/null || true
+        rfkill unblock bluetooth 2>/dev/null || true
+        ;;
+    *)
+        echo "Usage: $0 [status|enable|disable]" >&2
+        exit 1
+        ;;
+esac

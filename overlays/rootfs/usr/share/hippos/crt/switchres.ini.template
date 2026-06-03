@@ -1,0 +1,52 @@
+#
+# Switchres config — managed by hippos-crt-setup
+# Do not edit /etc/switchres.ini directly; edit crt.* settings in hippos.conf.
+#
+
+	monitor                   @MONITOR@
+
+	crt_range0                auto
+	crt_range1                auto
+	crt_range2                auto
+	crt_range3                auto
+	crt_range4                auto
+	crt_range5                auto
+	crt_range6                auto
+	crt_range7                auto
+	crt_range8                auto
+	crt_range9                auto
+
+	lcd_range                 auto
+	modeline                  auto
+	user_mode                 auto
+
+	display                   @DISPLAY@
+	api                       xrandr
+
+	lock_unsupported_modes    1
+	lock_system_modes         0
+	refresh_dont_care         0
+	keep_changes              0
+
+	modeline_generation       1
+	interlace                 @INTERLACE@
+	doublescan                0
+	dotclock_min              @DOTCLOCK_MIN@
+	sync_refresh_tolerance    2.0
+	super_width               @SUPER_WIDTH@
+	aspect                    4:3
+	v_shift_correct           0
+	h_size                    1.0
+	h_shift                   0
+	v_shift                   0
+	pixel_precision           1
+	interlace_force_even      0
+	scale_proportional        1
+
+	screen_compositing        0
+	screen_reordering         0
+	allow_hardware_refresh    0
+	custom_timing             auto
+
+	verbose                   0
+	verbosity                 1

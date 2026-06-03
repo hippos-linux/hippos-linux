@@ -1,0 +1,12 @@
+[Unit]
+Description=HippOS network ROM share retry timer
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=2min
+AccuracySec=30s
+Unit=hippos-network-roms.service
+
+[Install]
+WantedBy=timers.target
+

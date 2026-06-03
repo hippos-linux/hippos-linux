@@ -1,0 +1,5 @@
+# Allow the hippos user to perform session-level system operations without a password
+hippos ALL=(ALL) NOPASSWD: /usr/lib/hippos/hippos-shutdown
+hippos ALL=(ALL) NOPASSWD: /usr/lib/hippos/hippos-keyboard
+hippos ALL=(ALL) NOPASSWD: /usr/lib/hippos/hippos-timezone
+hippos ALL=(ALL) NOPASSWD: /usr/lib/hippos/hippos-upgrade

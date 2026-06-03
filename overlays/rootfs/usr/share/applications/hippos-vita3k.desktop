@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Vita3K
+GenericName=PlayStation Vita Emulator
+Comment=Vita3K PlayStation Vita emulator
+Exec=/usr/lib/hippos/emulators/launch-vita3k
+Icon=vita3k
+Terminal=false
+Categories=Game;Emulator;

@@ -1,0 +1,9 @@
+id: steam-deck-oled
+dmi:
+  sys_vendor: "Valve"
+  product_name: "Galileo"
+defaults:
+  display.rotate: "90"
+  system.suspendmode: "suspend"
+  global.tdp: "15"
+  steam.deckmode: "true"

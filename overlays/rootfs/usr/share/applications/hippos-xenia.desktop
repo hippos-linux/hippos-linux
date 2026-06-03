@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Xenia
+GenericName=Xbox 360 Emulator
+Comment=Xenia Xbox 360 emulator
+Exec=/usr/lib/hippos/emulators/launch-xenia
+Icon=xenia
+Terminal=false
+Categories=Game;Emulator;

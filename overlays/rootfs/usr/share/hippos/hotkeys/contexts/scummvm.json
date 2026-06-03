@@ -1,0 +1,11 @@
+{
+  "name": "scummvm",
+  "keys": {
+    "exit": ["KEY_LEFTCTRL", "KEY_Q"],
+    "menu": "KEY_F5",
+    "pause": "KEY_SPACE",
+    "save_state": ["KEY_LEFTCTRL", "KEY_F5"],
+    "restore_state": ["KEY_LEFTCTRL", "KEY_F7"],
+    "screenshot": "KEY_F5"
+  }
+}

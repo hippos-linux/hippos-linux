@@ -1,0 +1,13 @@
+[Unit]
+Description=Bind mount /userdata/emulators to /opt/emulators
+After=userdata.mount
+Requires=userdata.mount
+
+[Mount]
+What=/userdata/emulators
+Where=/opt/emulators
+Type=none
+Options=bind
+
+[Install]
+WantedBy=multi-user.target

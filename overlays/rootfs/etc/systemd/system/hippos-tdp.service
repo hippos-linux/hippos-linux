@@ -1,0 +1,13 @@
+[Unit]
+Description=HippOS AMD TDP configuration
+After=
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/hippos/hippos-tdp
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

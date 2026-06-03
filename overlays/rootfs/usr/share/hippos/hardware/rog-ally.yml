@@ -1,0 +1,8 @@
+id: rog-ally
+dmi:
+  sys_vendor: "ASUSTeK COMPUTER INC."
+  product_name: "RC71L"
+defaults:
+  display.rotate: "0"
+  system.suspendmode: "suspend"
+  global.tdp: "15"

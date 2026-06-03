@@ -1,0 +1,9 @@
+{
+  "name": "fsuae",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "menu": "KEY_F12",
+    "save_state": ["KEY_LEFTALT", "KEY_F10"],
+    "restore_state": ["KEY_LEFTALT", "KEY_F9"]
+  }
+}

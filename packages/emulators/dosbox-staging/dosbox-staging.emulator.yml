@@ -1,0 +1,6 @@
+requireArtifact: dosbox-staging
+systems:
+  dos:
+    cores:
+    - dosbox_staging
+features: []

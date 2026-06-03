@@ -1,0 +1,8 @@
+{
+  "name": "openbor",
+  "keys": {
+    "exit": "KEY_ESC",
+    "screenshot": "KEY_SYSRQ",
+    "pause": "KEY_P"
+  }
+}

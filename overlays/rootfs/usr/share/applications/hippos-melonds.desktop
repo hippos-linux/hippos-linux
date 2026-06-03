@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=melonDS
+GenericName=Nintendo DS Emulator
+Comment=melonDS Nintendo DS emulator
+Exec=/usr/lib/hippos/emulators/launch-melonds
+Icon=melonds
+Terminal=false
+Categories=Game;Emulator;

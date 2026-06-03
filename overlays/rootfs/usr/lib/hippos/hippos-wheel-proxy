@@ -1,0 +1,483 @@
+#!/usr/bin/env python3
+"""HippOS wheel proxy.
+
+This helper reads the existing ES controller config, grabs a physical wheel
+device, and exposes a calibrated virtual wheel/gamepad device to the emulator.
+It is intentionally narrow: one physical device in, one virtual device out.
+"""
+
+from __future__ import annotations
+
+import argparse
+import select
+import signal
+import sys
+import time
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+
+import evdev
+from evdev import AbsInfo, UInput, ecodes
+
+
+ES_INPUT_FILES = (
+    Path('/userdata/system/configs/emulationstation/es_input.cfg'),
+    Path('/usr/share/emulationstation/es_input.cfg'),
+)
+
+
+def log(message: str) -> None:
+    print(f'[hippos-wheel-proxy] {message}', file=sys.stderr, flush=True)
+
+
+def normalize(value: str) -> str:
+    return ''.join(ch for ch in value.strip().casefold() if ch.isalnum())
+
+
+def env_int(value: str | None, default: int) -> int:
+    if value is None:
+        return default
+    value = value.strip()
+    if not value:
+        return default
+    try:
+        return int(float(value))
+    except ValueError:
+        return default
+
+
+def resolve_abs_code(name: str, fallback: int) -> int:
+    code = getattr(ecodes, name, None)
+    if code is None:
+        return fallback
+    return code
+
+
+def button_code_for(logical_name: str) -> Optional[int]:
+    logical_name = logical_name.lower()
+    mapping = {
+        'a': ecodes.BTN_SOUTH,
+        'b': ecodes.BTN_EAST,
+        'x': ecodes.BTN_NORTH,
+        'y': ecodes.BTN_WEST,
+        'start': ecodes.BTN_START,
+        'select': ecodes.BTN_SELECT,
+        'hotkey': ecodes.BTN_MODE,
+        'pageup': ecodes.BTN_TL,
+        'pagedown': ecodes.BTN_TR,
+        'l2': resolve_abs_code('BTN_TL2', ecodes.BTN_TL),
+        'r2': resolve_abs_code('BTN_TR2', ecodes.BTN_TR),
+        'l3': ecodes.BTN_THUMBL,
+        'r3': ecodes.BTN_THUMBR,
+        'accelerate': resolve_abs_code('BTN_TR2', ecodes.BTN_TR),
+        'brake': resolve_abs_code('BTN_TL2', ecodes.BTN_TL),
+        'downshift': ecodes.BTN_TL,
+        'upshift': ecodes.BTN_TR,
+    }
+    return mapping.get(logical_name)
+
+
+def virtual_abs_name(logical_name: str) -> Optional[str]:
+    logical_name = logical_name.lower()
+    mapping = {
+        'wheel': 'ABS_X',
+        'joystick1left': 'ABS_X',
+        'joystick1up': 'ABS_Y',
+        'joystick2left': 'ABS_RX',
+        'joystick2up': 'ABS_RY',
+    }
+    return mapping.get(logical_name)
+
+
+@dataclass(frozen=True)
+class Binding:
+    name: str
+    type: str
+    code: int
+    value: int
+
+
+@dataclass
+class ControllerConfig:
+    device_name: str
+    device_guid: str
+    inputs: dict[str, Binding]
+
+
+def load_es_input_configs() -> list[ControllerConfig]:
+    for path in ES_INPUT_FILES:
+        if path.exists():
+            es_path = path
+            break
+    else:
+        return []
+
+    try:
+        root = ET.parse(es_path).getroot()
+    except Exception as exc:
+        log(f'could not parse {es_path}: {exc}')
+        return []
+
+    configs: list[ControllerConfig] = []
+    for node in root.findall('inputConfig'):
+        if node.attrib.get('type') != 'joystick':
+            continue
+        inputs: dict[str, Binding] = {}
+        for input_node in node.findall('input'):
+            name = input_node.attrib.get('name', '').strip().lower()
+            type_name = input_node.attrib.get('type', '').strip().lower()
+            code_text = input_node.attrib.get('id') or input_node.attrib.get('code')
+            value_text = input_node.attrib.get('value', '0')
+            if not name or not type_name or code_text is None:
+                continue
+            try:
+                code = int(code_text)
+                value = int(value_text)
+            except ValueError:
+                continue
+            inputs[name] = Binding(name=name, type=type_name, code=code, value=value)
+        configs.append(
+            ControllerConfig(
+                device_name=node.attrib.get('deviceName', ''),
+                device_guid=node.attrib.get('deviceGUID', ''),
+                inputs=inputs,
+            )
+        )
+    return configs
+
+
+def pick_controller_config(
+    configs: list[ControllerConfig],
+    device_name: str,
+    device_guid: str,
+) -> ControllerConfig | None:
+    normalized_name = normalize(device_name)
+    normalized_guid = normalize(device_guid)
+
+    for config in configs:
+        if normalize(config.device_guid) == normalized_guid and normalize(config.device_name) == normalized_name:
+            return config
+    for config in configs:
+        if normalize(config.device_guid) == normalized_guid:
+            return config
+    for config in configs:
+        if normalize(config.device_name) == normalized_name:
+            return config
+    return configs[0] if configs else None
+
+
+def clamp(value: float, low: float, high: float) -> float:
+    return max(low, min(high, value))
+
+
+class WheelProxy:
+    def __init__(
+        self,
+        device_path: str,
+        device_guid: str,
+        device_name: str,
+        proxy_name: str,
+        wheel_name: str,
+        accelerate_name: str,
+        brake_name: str,
+        downshift_name: str,
+        upshift_name: str,
+        physical_rotation_angle: int,
+        wanted_rotation_angle: int,
+        wanted_deadzone: int,
+        wanted_midzone: int,
+    ) -> None:
+        self.device_path = device_path
+        self.device_guid = device_guid
+        self.device_name = device_name
+        self.proxy_name = proxy_name or f'HippOS wheel proxy {device_name}'
+        self.wheel_name = wheel_name.lower()
+        self.accelerate_name = accelerate_name.lower()
+        self.brake_name = brake_name.lower()
+        self.downshift_name = downshift_name.lower()
+        self.upshift_name = upshift_name.lower()
+        self.physical_rotation_angle = physical_rotation_angle or 900
+        self.wanted_rotation_angle = wanted_rotation_angle or self.physical_rotation_angle
+        self.wanted_deadzone = max(0, wanted_deadzone)
+        self.wanted_midzone = max(0, wanted_midzone)
+        self.device = evdev.InputDevice(device_path)
+        self.controller_config = pick_controller_config(
+            load_es_input_configs(), device_name, device_guid
+        )
+        if self.controller_config is None:
+            log(
+                f'could not match {device_name!r} / {device_guid!r} to any entry in es_input.cfg'
+            )
+        self.source_by_name: dict[str, Binding] = (
+            self.controller_config.inputs if self.controller_config is not None else {}
+        )
+        self.source_by_code: dict[tuple[str, int], list[Binding]] = {}
+        for binding in self.source_by_name.values():
+            self.source_by_code.setdefault((binding.type, binding.code), []).append(binding)
+
+        caps = self.device.capabilities(absinfo=True)
+        self.abs_caps: dict[int, AbsInfo] = {code: absinfo for code, absinfo in caps.get(ecodes.EV_ABS, [])}
+        self.wheel_binding = self.source_by_name.get(self.wheel_name)
+        if self.wheel_binding is None:
+            self.wheel_binding = self.source_by_name.get('joystick1left')
+        self.wheel_abs_code = self._resolve_wheel_axis_code()
+        self.wheel_abs_info = self._resolve_wheel_abs_info()
+        self.axis_min = self.wheel_abs_info.min
+        self.axis_max = self.wheel_abs_info.max
+        self.axis_center = (self.axis_min + self.axis_max) / 2.0
+        self.axis_span = max(1.0, (self.axis_max - self.axis_min) / 2.0)
+        self.scale = min(1.0, float(self.wanted_rotation_angle) / float(self.physical_rotation_angle))
+        self.neutral_span = max(
+            self._scaled_units(self.wanted_deadzone),
+            self._scaled_units(self.wanted_midzone),
+        )
+        self.target_span = max(self.axis_span * self.scale, self.neutral_span + 1.0)
+        self.target_min = self.axis_center - self.target_span
+        self.target_max = self.axis_center + self.target_span
+        self.button_state: dict[str, bool] = {}
+        self.hat_x = 0
+        self.hat_y = 0
+        self.stop = False
+        self.uinput = self._create_uinput()
+
+    def _resolve_wheel_axis_code(self) -> int:
+        if self.wheel_binding is not None and self.wheel_binding.type == 'axis':
+            return self.wheel_binding.code
+        for code in self.abs_caps:
+            return code
+        return ecodes.ABS_X
+
+    def _resolve_wheel_abs_info(self) -> AbsInfo:
+        info = self.abs_caps.get(self.wheel_abs_code)
+        if info is not None:
+            return info
+        return AbsInfo(0, -32768, 32767, 0, 0, 0)
+
+    def _scaled_units(self, amount: int) -> float:
+        if amount <= 0:
+            return 0.0
+        return self.axis_span * float(amount) / float(self.physical_rotation_angle)
+
+    def _mapped_axis_value(self, raw: int) -> int:
+        value = float(raw)
+        center = self.axis_center
+        neutral = self.neutral_span
+
+        if abs(value - center) <= neutral:
+            return int(round(center))
+
+        if value < center:
+            source_low = self.axis_min
+            source_high = center - neutral
+            target_low = self.target_min
+            target_high = center - neutral
+            if source_high <= source_low:
+                return int(round(clamp(center, self.axis_min, self.axis_max)))
+            ratio = (value - source_low) / (source_high - source_low)
+            mapped = target_low + ratio * (target_high - target_low)
+            mapped = clamp(mapped, self.target_min, center - neutral)
+            return int(round(mapped))
+
+        source_low = center + neutral
+        source_high = self.axis_max
+        target_low = center + neutral
+        target_high = self.target_max
+        if source_high <= source_low:
+            return int(round(clamp(center, self.axis_min, self.axis_max)))
+        ratio = (value - source_low) / (source_high - source_low)
+        mapped = target_low + ratio * (target_high - target_low)
+        mapped = clamp(mapped, center + neutral, self.target_max)
+        return int(round(mapped))
+
+    def _create_uinput(self) -> UInput:
+        key_codes = sorted({
+            code for name in (
+                'a', 'b', 'x', 'y', 'start', 'select', 'hotkey',
+                'pageup', 'pagedown', 'l2', 'r2', 'l3', 'r3',
+                'accelerate', 'brake', 'downshift', 'upshift',
+            )
+            if (code := button_code_for(name)) is not None
+        })
+        abs_caps = {
+            ecodes.ABS_X: AbsInfo(0, int(self.target_min), int(self.target_max), 0, int(self.neutral_span), 0),
+            ecodes.ABS_Y: AbsInfo(0, -32768, 32767, 0, 0, 0),
+            ecodes.ABS_RX: AbsInfo(0, -32768, 32767, 0, 0, 0),
+            ecodes.ABS_RY: AbsInfo(0, -32768, 32767, 0, 0, 0),
+            ecodes.ABS_Z: AbsInfo(0, 0, 255, 0, 0, 0),
+            ecodes.ABS_RZ: AbsInfo(0, 0, 255, 0, 0, 0),
+            ecodes.ABS_HAT0X: AbsInfo(0, -1, 1, 0, 0, 0),
+            ecodes.ABS_HAT0Y: AbsInfo(0, -1, 1, 0, 0, 0),
+        }
+        caps = {
+            ecodes.EV_KEY: key_codes,
+            ecodes.EV_ABS: list(abs_caps.items()),
+        }
+        return UInput(caps, name=self.proxy_name)
+
+    def _emit_button(self, logical_name: str, pressed: bool) -> None:
+        logical_name = logical_name.lower()
+        if logical_name in ('left', 'right'):
+            self.hat_x = -1 if logical_name == 'left' and pressed else self.hat_x
+            self.hat_x = 1 if logical_name == 'right' and pressed else self.hat_x
+            if not pressed:
+                if logical_name == 'left' and self.hat_x == -1:
+                    self.hat_x = 0
+                if logical_name == 'right' and self.hat_x == 1:
+                    self.hat_x = 0
+            self.uinput.write(ecodes.EV_ABS, ecodes.ABS_HAT0X, self.hat_x)
+            self.uinput.syn()
+            return
+        if logical_name in ('up', 'down'):
+            self.hat_y = -1 if logical_name == 'up' and pressed else self.hat_y
+            self.hat_y = 1 if logical_name == 'down' and pressed else self.hat_y
+            if not pressed:
+                if logical_name == 'up' and self.hat_y == -1:
+                    self.hat_y = 0
+                if logical_name == 'down' and self.hat_y == 1:
+                    self.hat_y = 0
+            self.uinput.write(ecodes.EV_ABS, ecodes.ABS_HAT0Y, self.hat_y)
+            self.uinput.syn()
+            return
+
+        code = button_code_for(logical_name)
+        if code is None:
+            return
+        previous = self.button_state.get(logical_name)
+        if previous is not None and previous == pressed:
+            return
+        self.button_state[logical_name] = pressed
+        self.uinput.write(ecodes.EV_KEY, code, 1 if pressed else 0)
+        self.uinput.syn()
+
+    def _handle_axis_button(self, binding: Binding, event: evdev.InputEvent) -> None:
+        absinfo = self.abs_caps.get(binding.code)
+        if absinfo is None:
+            pressed = event.value != 0
+        else:
+            center = (absinfo.min + absinfo.max) / 2.0
+            threshold = max(1.0, (absinfo.max - absinfo.min) * 0.25)
+            if binding.value < 0:
+                pressed = event.value <= center - threshold
+            elif binding.value > 0:
+                pressed = event.value >= center + threshold
+            else:
+                pressed = event.value != int(round(center))
+        self._emit_button(binding.name, pressed)
+
+    def _handle_event(self, event: evdev.InputEvent) -> None:
+        if self.wheel_binding is not None and event.type == ecodes.EV_ABS and event.code == self.wheel_binding.code:
+            mapped = self._mapped_axis_value(event.value)
+            self.uinput.write(ecodes.EV_ABS, ecodes.ABS_X, mapped)
+            self.uinput.syn()
+            return
+
+        if event.type == ecodes.EV_KEY:
+            bindings = self.source_by_code.get(('button', event.code), [])
+            bindings += self.source_by_code.get(('key', event.code), [])
+            for binding in bindings:
+                self._emit_button(binding.name, event.value != 0)
+            return
+
+        if event.type == ecodes.EV_ABS:
+            bindings = self.source_by_code.get(('axis', event.code), [])
+            bindings += self.source_by_code.get(('hat', event.code), [])
+            for binding in bindings:
+                if binding.name == self.wheel_name:
+                    mapped = self._mapped_axis_value(event.value)
+                    self.uinput.write(ecodes.EV_ABS, ecodes.ABS_X, mapped)
+                    self.uinput.syn()
+                    continue
+                if binding.type == 'axis':
+                    self._handle_axis_button(binding, event)
+                elif binding.type == 'hat':
+                    self._emit_button(binding.name, event.value == binding.value)
+
+    def run(self) -> int:
+        try:
+            self.device.grab()
+        except OSError as exc:
+            log(f'could not grab {self.device_path}: {exc}')
+            return 1
+
+        signal.signal(signal.SIGTERM, self._stop)
+        signal.signal(signal.SIGINT, self._stop)
+
+        log(
+            f'proxying {self.device_path} '
+            f'(guid={self.device_guid}, name={self.device_name}, '
+            f'rotation={self.wanted_rotation_angle}, deadzone={self.wanted_deadzone}, midzone={self.wanted_midzone})'
+        )
+        log('ready')
+
+        try:
+            while not self.stop:
+                rlist, _, _ = select.select([self.device], [], [], 0.25)
+                if not rlist:
+                    continue
+                for event in self.device.read():
+                    self._handle_event(event)
+        except OSError as exc:
+            log(f'device error on {self.device_path}: {exc}')
+            return 1
+        finally:
+            try:
+                self.device.ungrab()
+            except Exception:
+                pass
+            try:
+                self.uinput.close()
+            except Exception:
+                pass
+            try:
+                self.device.close()
+            except Exception:
+                pass
+        return 0
+
+    def _stop(self, *_: object) -> None:
+        self.stop = True
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description='HippOS wheel proxy')
+    parser.add_argument('--device-path', required=True)
+    parser.add_argument('--device-guid', required=False, default='')
+    parser.add_argument('--device-name', required=False, default='')
+    parser.add_argument('--device-index', required=False, default='0')
+    parser.add_argument('--proxy-name', required=False, default='')
+    parser.add_argument('--wheel-name', required=False, default='joystick1left')
+    parser.add_argument('--accelerate-name', required=False, default='r2')
+    parser.add_argument('--brake-name', required=False, default='l2')
+    parser.add_argument('--downshift-name', required=False, default='pageup')
+    parser.add_argument('--upshift-name', required=False, default='pagedown')
+    parser.add_argument('--physical-rotation-angle', required=False, type=int, default=900)
+    parser.add_argument('--rotation', required=False, default='')
+    parser.add_argument('--deadzone', required=False, default='')
+    parser.add_argument('--midzone', required=False, default='')
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    proxy = WheelProxy(
+        device_path=args.device_path,
+        device_guid=args.device_guid,
+        device_name=args.device_name,
+        proxy_name=args.proxy_name,
+        wheel_name=args.wheel_name,
+        accelerate_name=args.accelerate_name,
+        brake_name=args.brake_name,
+        downshift_name=args.downshift_name,
+        upshift_name=args.upshift_name,
+        physical_rotation_angle=args.physical_rotation_angle or 900,
+        wanted_rotation_angle=env_int(args.rotation, args.physical_rotation_angle or 900),
+        wanted_deadzone=env_int(args.deadzone, 0),
+        wanted_midzone=env_int(args.midzone, 0),
+    )
+    return proxy.run()
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

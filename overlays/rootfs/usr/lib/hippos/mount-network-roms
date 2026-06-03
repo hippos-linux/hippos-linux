@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG=/userdata/system/configs/hippos/roms-sources.conf
+MEDIA=/media
+
+log() { printf '[hippos-network-roms] %s\n' "$*"; }
+
+setting() {
+    /usr/lib/hippos/hippos-settings get "$1" 2>/dev/null || printf '%s\n' "${2:-}"
+}
+
+is_true() {
+    case "$1" in
+        1|true|yes|on) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+if ! is_true "$(setting network.roms.enabled true)"; then
+    log "disabled by network.roms.enabled"
+    exit 0
+fi
+
+[[ -f "${CONFIG}" ]] || { log "no config at ${CONFIG}"; exit 0; }
+
+mkdir -p "${MEDIA}"
+changed=0
+
+while IFS= read -r line; do
+    [[ -z "${line}" || "${line}" == '#'* ]] && continue
+
+    if [[ "${line}" == nfs:* ]]; then
+        share="${line#nfs:}"
+        # Derive a mount name from host+path: 192.168.1.1:/exports/roms -> 192.168.1.1_exports_roms
+        label="$(printf '%s' "${share}" | sed 's|/|_|g;s|^_||;s|:||')"
+        mnt="${MEDIA}/${label}"
+        mkdir -p "${mnt}"
+        if mountpoint -q "${mnt}"; then
+            log "already mounted: ${share}"
+            continue
+        fi
+        if mount -t nfs -o ro,noatime,soft,timeo=30 "${share}" "${mnt}"; then
+            log "mounted NFS ${share} at ${mnt}"
+            changed=1
+        else
+            log "failed to mount NFS ${share}"
+            rmdir "${mnt}" 2>/dev/null || true
+        fi
+
+    elif [[ "${line}" == cifs:* ]]; then
+        # Format: cifs://host/share [options]
+        rest="${line#cifs://}"
+        share_path="${rest%% *}"
+        opts="${rest#"${share_path}"}"
+        opts="${opts# }"
+        label="$(printf '%s' "${share_path}" | tr '/' '_')"
+        mnt="${MEDIA}/${label}"
+        mkdir -p "${mnt}"
+        if mountpoint -q "${mnt}"; then
+            log "already mounted: //${share_path}"
+            continue
+        fi
+        mount_opts="ro,noatime,vers=3.0"
+        [[ -n "${opts}" ]] && mount_opts="${mount_opts},${opts}"
+        if mount -t cifs "//${share_path}" "${mnt}" -o "${mount_opts}"; then
+            log "mounted CIFS //${share_path} at ${mnt}"
+            changed=1
+        else
+            log "failed to mount CIFS //${share_path}"
+            rmdir "${mnt}" 2>/dev/null || true
+        fi
+    fi
+done < "${CONFIG}"
+
+# If any new shares mounted, rebuild the pool
+if [[ "${changed}" -eq 1 ]]; then
+    if findmnt /userdata/roms >/dev/null 2>&1; then
+        umount /userdata/roms 2>/dev/null || true
+    fi
+    /usr/lib/hippos/mount-roms-pool
+fi

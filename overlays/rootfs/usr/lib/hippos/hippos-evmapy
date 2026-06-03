@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# hippos-evmapy — manage the evmapy pad-to-key daemon.
+# Usage: hippos-evmapy start | stop | clear
+# evmapy watches /var/run/evmapy/ for per-device JSON configs.
+
+RUN_DIR='/var/run/evmapy'
+READY="${RUN_DIR}/ready"
+
+case "${1:-}" in
+    start)
+        killall evmapy 2>/dev/null || true
+        mkdir -p "$RUN_DIR"
+        touch "$READY"
+        # Wait for evmapy to signal readiness (up to 5s)
+        inotifywait "$READY" -t 5 -q &
+        WAIT_PID=$!
+        nohup evmapy >/dev/null 2>&1 &
+        wait "$WAIT_PID" || true
+        ;;
+    stop)
+        killall -9 evmapy 2>/dev/null || true
+        ;;
+    clear)
+        rm -rf "$RUN_DIR"
+        mkdir -p "$RUN_DIR"
+        ;;
+    *)
+        echo "Usage: hippos-evmapy start | stop | clear" >&2
+        exit 1
+        ;;
+esac

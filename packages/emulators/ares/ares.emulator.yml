@@ -1,0 +1,25 @@
+requireArtifact: ares
+systems:
+- nes
+- snes
+- n64
+- gb
+- gbc
+- gba
+- megadrive
+- mastersystem
+- gamegear
+- sg1000
+- sc3000
+- pce
+- pcenginecd
+- supergrafx
+- wswan
+- wswanc
+- ngp
+- ngpc
+- msx1
+- msx2
+- atari2600
+- virtualboy
+features: []

@@ -1,0 +1,14 @@
+[Unit]
+Description=HippOS Session Dispatcher
+After=local-fs.target hippos-xserver.service user@1000.service
+Wants=hippos-xserver.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+ExecStart=/usr/lib/hippos/hippos-session
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical.target

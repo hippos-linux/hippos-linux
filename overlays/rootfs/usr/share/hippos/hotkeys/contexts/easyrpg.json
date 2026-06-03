@@ -1,0 +1,11 @@
+{
+  "name": "easyrpg",
+  "keys": {
+    "exit": "KEY_F12",
+    "menu": "KEY_ESC",
+    "save_state": "KEY_F5",
+    "restore_state": "KEY_F9",
+    "screenshot": "KEY_F10",
+    "fastforward": "KEY_F"
+  }
+}

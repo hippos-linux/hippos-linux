@@ -1,0 +1,37 @@
+name: gamescope
+version: '3.16.23'
+source:
+  site: https://github.com/ValveSoftware/gamescope.git
+  site_method: git
+  git_submodules: true
+tag: '3.16.23'
+build_dependencies:
+  - glslang-tools
+  - spirv-tools
+  - libavif-dev
+  - libcap-dev
+  - libdisplay-info-dev
+  - libdrm-dev
+  - libglm-dev
+  - libinput-dev
+  - libpipewire-0.3-dev
+  - libsdl2-dev
+  - libseat-dev
+  - libstb-dev
+  - libudev-dev
+  - libvulkan-dev
+  - libwayland-dev
+  - libxkbcommon-dev
+  - wayland-protocols
+runtime_dependencies:
+  - libcap2
+  - libdrm2
+  - libpipewire-0.3-0
+  - libsdl2-2.0-0
+  - libvulkan1
+  - libwayland-client0
+  - libxkbcommon0
+artifact_path: /artifacts/tools/gamescope
+notes:
+  description: Micro-compositor for running games in a nested session
+  build_strategy: source-build-meson

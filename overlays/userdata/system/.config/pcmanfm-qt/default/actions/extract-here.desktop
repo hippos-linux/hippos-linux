@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Extract Here
+Comment=Extract archive contents to current folder
+Exec=sh -c 'cd "$(dirname "%f")" && 7z x "%f"'
+Icon=xarchiver
+Terminal=false
+MimeType=application/zip;application/x-7z-compressed;application/x-rar;application/x-rar-compressed;application/x-tar;application/x-bzip2;application/gzip;application/x-gzip;application/x-xz;application/x-lzma;application/zstd;

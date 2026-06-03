@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# hippos-crt-teardown — remove CRT X11 config, switchres.ini, videomodes.conf,
+# and GRUB dropin written by hippos-crt-setup.
+# Called from hippos-display-setup when crt.enabled is no longer true.
+# Idempotent — safe to run when files are already absent.
+
+set -euo pipefail
+
+LOG_TAG="[hippos-crt-teardown]"
+log()  { printf '%s %s\n'         "${LOG_TAG}" "$*"; }
+
+XORG_CONF_D="/etc/X11/xorg.conf.d"
+GRUB_CRT_CONF="/etc/default/grub.d/50-crt.cfg"
+
+_remove() {
+    local f="$1"
+    if [[ -e "${f}" ]]; then
+        rm -f "${f}"
+        log "removed ${f}"
+    fi
+}
+
+# ── X11 config fragments ──────────────────────────────────────────────────────
+_remove "${XORG_CONF_D}/90-crt-gpu.conf"
+_remove "${XORG_CONF_D}/10-crt-ignore.conf"
+
+# ── switchres.ini ─────────────────────────────────────────────────────────────
+_remove "/etc/switchres.ini"
+
+# ── videomodes.conf ───────────────────────────────────────────────────────────
+_remove "/userdata/system/videomodes.conf"
+
+# ── EDID firmware ─────────────────────────────────────────────────────────────
+_remove "/lib/firmware/edid/crt.bin"
+
+# ── GRUB dropin ───────────────────────────────────────────────────────────────
+if [[ -f "${GRUB_CRT_CONF}" ]]; then
+    rm -f "${GRUB_CRT_CONF}"
+    log "removed ${GRUB_CRT_CONF}"
+    if update-grub 2>/dev/null; then
+        log "GRUB updated — CRT kernel params removed"
+    else
+        log "WARNING: update-grub failed — rerun manually to apply"
+    fi
+fi
+
+log "CRT teardown complete. X11 config changes take effect after X restart."

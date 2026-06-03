@@ -1,0 +1,12 @@
+[Unit]
+Description=HippOS network ROM shares
+After=network-online.target userdata.mount hippos-roms-pool.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/hippos/mount-network-roms
+
+[Install]
+WantedBy=multi-user.target

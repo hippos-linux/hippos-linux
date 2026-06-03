@@ -1,0 +1,10 @@
+{
+  "name": "amiberry",
+  "keys": {
+    "exit": ["KEY_LEFTCTRL", "KEY_F12"],
+    "menu": "KEY_F12",
+    "save_state": ["KEY_LEFTCTRL", "KEY_F10"],
+    "restore_state": ["KEY_LEFTCTRL", "KEY_F9"],
+    "screenshot": ["KEY_LEFTALT", "KEY_F12"]
+  }
+}

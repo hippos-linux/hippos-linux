@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=TIC-80
+GenericName=Fantasy Computer
+Comment=TIC-80 fantasy computer and game platform
+Exec=/usr/lib/hippos/emulators/launch-tic80
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

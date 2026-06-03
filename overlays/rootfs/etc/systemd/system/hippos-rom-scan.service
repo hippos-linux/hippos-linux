@@ -1,0 +1,11 @@
+[Unit]
+Description=HippOS ROM drive scan
+After=local-fs.target userdata.mount hippos-storage.service
+Wants=userdata.mount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/hippos/hippos-rom-scan
+
+[Install]
+WantedBy=multi-user.target

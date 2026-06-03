@@ -1,0 +1,18 @@
+requireArtifact: amiberry
+systems:
+  amiga500:
+    cores:
+    - A500
+    - A500+
+  amiga1200:
+    cores:
+    - A1200
+    - A4000
+  amigacd32:
+    cores:
+    - CD32
+  amigacdtv:
+    cores:
+    - CDTV
+features:
+- padtokeyboard

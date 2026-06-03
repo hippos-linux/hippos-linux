@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# ES API: resolution listModes/setMode/currentMode/currentResolution/listOutputs/currentOutput/setOutput
+export DISPLAY="${DISPLAY:-:0}"
+
+_current_output() {
+    xrandr --query 2>/dev/null | awk '/connected primary/{print $1; exit} /connected/{o=$1} END{if(o)print o}'
+}
+
+# CRT mode is active when hippos-crt-setup has written /etc/switchres.ini.
+# Avoids a hippos-settings subprocess on every call.
+_crt_active() { [[ -f /etc/switchres.ini ]]; }
+
+# Parse a videomodes.conf mode key (e.g. 320x240.60.00013) and apply it via
+# switchres. switchres reads monitor profile, output, and api from /etc/switchres.ini.
+_crt_setmode() {
+    local mode="$1"
+    local w h hz rest
+    w="${mode%%x*}"
+    rest="${mode#*x}"
+    h="${rest%%.*}"
+    rest="${rest#*.}"
+    hz="${rest%%.*}"
+    if ! command -v switchres >/dev/null 2>&1; then
+        echo "[hippos-resolution] switchres not found" >&2
+        return 1
+    fi
+    switchres "${w}" "${h}" "${hz}" 2>/dev/null
+}
+
+# Restore the CRT session's base resolution (used after a game exits).
+_crt_restore() {
+    local boot_res w h hz
+    boot_res="$(hippos-settings get crt.boot_resolution 2>/dev/null || echo '640x480@60')"
+    w="${boot_res%%x*}"
+    h="${boot_res#*x}"; h="${h%%@*}"
+    hz="${boot_res#*@}"; hz="${hz%%.*}"
+    switchres "${w}" "${h}" "${hz}" 2>/dev/null || \
+        xrandr --output "${PSCREEN}" --auto 2>/dev/null || true
+}
+
+PSCREEN=
+if [[ "${1:-}" == "--screen" ]]; then
+    shift; PSCREEN="$1"; shift
+fi
+[[ -z "$PSCREEN" ]] && PSCREEN=$(_current_output)
+
+case "${1:-}" in
+    listModes)
+        if _crt_active && [[ -f /userdata/system/videomodes.conf ]]; then
+            cat /userdata/system/videomodes.conf
+        else
+            echo "max-1920x1080:maximum 1920x1080"
+            echo "max-640x480:maximum 640x480"
+            xrandr --query 2>/dev/null | awk -v s="$PSCREEN" '
+                /^[^ ]+ connected/ { in_s = ($1 == s) }
+                /^[[:space:]]+[0-9]+x[0-9]+/ && in_s {
+                    res=$1; hz=$2; gsub(/[*+]/,"",hz)
+                    ihz=int(hz+0.5)
+                    printf "%s.%d:%s %dHz\n", res, ihz, res, ihz
+                }
+            '
+        fi
+        ;;
+    setMode)
+        MODE="${2:-}"
+        if _crt_active; then
+            _crt_setmode "${MODE}"
+        elif [[ "$MODE" == max-* ]]; then
+            RES="${MODE#max-}"
+            xrandr --output "$PSCREEN" --mode "$RES" 2>/dev/null || xrandr --output "$PSCREEN" --auto
+        elif [[ "$MODE" == *"."* ]]; then
+            RES="${MODE%.*}"; RATE="${MODE##*.}"
+            xrandr --output "$PSCREEN" --mode "$RES" --rate "$RATE"
+        else
+            xrandr --output "$PSCREEN" --mode "$MODE"
+        fi
+        hippos-settings set display.resolution "$MODE" 2>/dev/null || true
+        ;;
+    currentMode)
+        xrandr --query 2>/dev/null | awk -v s="$PSCREEN" '
+            /^[^ ]+ connected/ { in_s=($1==s) }
+            /\*/ && in_s { gsub(/[*+]/,"",$0); print $1; exit }
+        '
+        ;;
+    currentResolution)
+        xrandr --query 2>/dev/null | awk -v s="$PSCREEN" '
+            $1==s && /connected/ { match($0,/[0-9]+x[0-9]+\+/); if(RSTART) print substr($0,RSTART,RLENGTH-1); exit }
+        '
+        ;;
+    listOutputs)
+        xrandr --query 2>/dev/null | awk '/connected/{print $1}'
+        ;;
+    currentOutput)
+        echo "$PSCREEN"
+        ;;
+    setOutput)
+        OUT="${2:-}"
+        xrandr --query 2>/dev/null | awk '/connected/{print $1}' | while read -r o; do
+            [[ "$o" != "$OUT" ]] && xrandr --output "$o" --off 2>/dev/null || true
+        done
+        xrandr --output "$OUT" --primary --auto
+        hippos-settings set display.output "$OUT" 2>/dev/null || true
+        ;;
+    minTomaxResolution|minTomaxResolution-secure)
+        if _crt_active; then
+            _crt_restore
+        else
+            # Pick highest mode with width ≤ 1920 and height ≤ 1080.
+            # xrandr lists modes in descending order so first match is best.
+            BEST=$(xrandr --query 2>/dev/null | awk -v s="$PSCREEN" '
+                /^[^ ]+ connected/ { in_s=($1==s) }
+                in_s && /^[[:space:]]+[0-9]+x[0-9]+/ {
+                    split($1,d,"x")
+                    if (d[1]+0 <= 1920 && d[2]+0 <= 1080) { print $1; exit }
+                }
+            ')
+            if [[ -n "$BEST" ]]; then
+                xrandr --output "$PSCREEN" --mode "$BEST"
+            else
+                xrandr --output "$PSCREEN" --auto
+            fi
+        fi
+        ;;
+    getDisplayMode)   echo "xorg" ;;
+    getRotation)      echo "0" ;;
+    refreshRate)
+        xrandr --query 2>/dev/null | awk -v s="$PSCREEN" '
+            /^[^ ]+ connected/ { in_s=($1==s) }
+            /\*/ && in_s { for(i=1;i<=NF;i++) if($i~/\*/) { gsub(/[*+]/,"",$i); print $i; exit } }
+        '
+        ;;
+    setRotation|setDPI|setReflection|forceMode|supportSystemRotation|supportSystemReflection)
+        exit 0
+        ;;
+    *)
+        echo "Unknown action: ${1:-}" >&2; exit 1
+        ;;
+esac

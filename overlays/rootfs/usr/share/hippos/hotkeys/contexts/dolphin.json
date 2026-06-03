@@ -1,0 +1,11 @@
+{
+  "name": "dolphin",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "save_state": "KEY_F5",
+    "restore_state": "KEY_F8",
+    "previous_slot": ["KEY_LEFTSHIFT", "KEY_F2"],
+    "next_slot": ["KEY_LEFTSHIFT", "KEY_F1"],
+    "screenshot": "KEY_F9"
+  }
+}

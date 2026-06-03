@@ -1,0 +1,4 @@
+requireArtifact: ryujinx
+systems:
+- switch
+features: []

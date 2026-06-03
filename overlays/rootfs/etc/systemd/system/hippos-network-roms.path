@@ -1,0 +1,9 @@
+[Unit]
+Description=HippOS network ROM source config watcher
+
+[Path]
+PathChanged=/userdata/system/configs/hippos/roms-sources.conf
+Unit=hippos-network-roms.service
+
+[Install]
+WantedBy=multi-user.target

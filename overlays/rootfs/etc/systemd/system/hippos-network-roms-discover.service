@@ -1,0 +1,10 @@
+[Unit]
+Description=HippOS network ROM share discovery
+After=network-online.target userdata.mount
+Wants=network-online.target userdata.mount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/hippos/hippos-network-roms-discover discover
+Nice=10
+

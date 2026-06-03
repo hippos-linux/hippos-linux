@@ -1,0 +1,8 @@
+{
+  "name": "rpcs3",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "screenshot": "KEY_F12",
+    "pause": "KEY_PAUSE"
+  }
+}

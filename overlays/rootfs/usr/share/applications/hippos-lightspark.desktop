@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Lightspark
+GenericName=Flash Emulator
+Comment=Lightspark Flash emulator
+Exec=/usr/lib/hippos/emulators/launch-lightspark
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

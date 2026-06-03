@@ -1,0 +1,24 @@
+[Unit]
+Description=HippOS Persistent X Server
+After=local-fs.target systemd-user-sessions.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+ExecStartPre=/bin/rm -f /tmp/.X0-lock /tmp/.X11-unix/X0
+ExecStart=/usr/lib/xorg/Xorg :0 vt1 -nolisten tcp -logfile /tmp/Xorg.0.log -ac
+ExecStartPost=/bin/sh -c 'for i in 1 2 3 4 5; do sleep 1; DISPLAY=:0 xrandr --auto 2>/dev/null && break; done; true'
+Restart=on-failure
+RestartSec=2
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=no
+PAMName=login
+User=root
+
+[Install]
+WantedBy=graphical.target

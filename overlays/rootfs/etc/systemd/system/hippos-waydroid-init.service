@@ -1,0 +1,15 @@
+[Unit]
+Description=HippOS Waydroid first-boot initialisation
+After=network-online.target var-lib-waydroid.mount
+Wants=network-online.target
+Requires=var-lib-waydroid.mount
+ConditionPathExists=!/userdata/system/waydroid/waydroid.cfg
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/waydroid init -s GAPPS
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

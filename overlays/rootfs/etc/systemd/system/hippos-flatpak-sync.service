@@ -1,0 +1,12 @@
+[Unit]
+Description=HippOS Flatpak launcher sync
+After=local-fs.target userdata.mount hippos-firstboot-flatpak.service
+Wants=userdata.mount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/hippos/hippos-flatpak-sync
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,5 @@
+Game Boy Color
+Manufacturer: Nintendo
+Released: 1998
+Hardware: portable
+Extensions: .gbc .zip .7z

@@ -1,0 +1,6 @@
+requireArtifact: xenia-edge
+systems:
+  xbox360:
+    cores:
+    - xenia_edge
+features: []
