@@ -1,0 +1,11 @@
+{
+  "name": "dosboxx",
+  "keys": {
+    "exit": ["KEY_LEFTCTRL", "KEY_F9"],
+    "menu": ["KEY_LEFTCTRL", "KEY_F10"],
+    "screenshot": ["KEY_LEFTCTRL", "KEY_F5"],
+    "fastforward": ["KEY_LEFTCTRL", "KEY_F12"],
+    "save_state": ["KEY_LEFTALT", "KEY_F5"],
+    "restore_state": ["KEY_LEFTALT", "KEY_F9"]
+  }
+}

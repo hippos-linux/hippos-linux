@@ -1,0 +1,320 @@
+requireArtifact: retroarch
+systems:
+  3do:
+    cores:
+    - opera
+  arduboy:
+    cores:
+    - arduous
+  atari2600:
+    cores:
+    - stella
+    - stella2014
+  atari5200:
+    cores:
+    - atari800
+    - a5200
+  atari7800:
+    cores:
+    - prosystem
+  atari800:
+    cores:
+    - atari800
+  cassettevision:
+    cores:
+    - pd777
+  cavestory:
+    cores:
+    - nxengine
+  channelf:
+    cores:
+    - freechaf
+  dos:
+    cores:
+    - dosbox_pure
+  dreamcast:
+    cores:
+    - flycast
+  easyrpg:
+    cores:
+    - easyrpg
+  fbneo:
+    cores:
+    - fbneo
+    - fbalpha
+  fds:
+    cores:
+    - fceumm
+    - nestopia
+    - mesen
+  gb:
+    cores:
+    - gambatte
+    - mgba
+    - vba-m
+  gb2players:
+    cores:
+    - tgbdual
+  gba:
+    cores:
+    - mgba
+    - vba-m
+    - gpsp
+  gbc:
+    cores:
+    - gambatte
+    - mgba
+    - vba-m
+  gbc2players:
+    cores:
+    - tgbdual
+  gamecube:
+    cores:
+    - dolphin
+  gamegear:
+    cores:
+    - genesis_plus_gx
+    - picodrive
+    - gearsystem
+  gx4000:
+    cores:
+    - cap32
+  intellivision:
+    cores:
+    - freeintv
+  lowresnx:
+    cores:
+    - lowresnx
+  lynx:
+    cores:
+    - handy
+    - mednafen_lynx
+  mame:
+    cores:
+    - mame
+  mastersystem:
+    cores:
+    - genesis_plus_gx
+    - picodrive
+    - smsplus
+  megacd:
+    cores:
+    - genesis_plus_gx
+    - picodrive
+  megadrive:
+    cores:
+    - genesis_plus_gx
+    - picodrive
+    - blastem
+  megadrive-msu:
+    cores:
+    - genesis_plus_gx
+    - genesis_plus_gx-wide
+  multivision:
+    cores:
+    - gearsystem
+  n64:
+    cores:
+    - mupen64plus_next
+    - parallel_n64
+  nds:
+    cores:
+    - melonds
+    - desmume
+  neogeo:
+    cores:
+    - fbneo
+    - fbalpha
+  neogeocd:
+    cores:
+    - neocd
+  nes:
+    cores:
+    - fceumm
+    - nestopia
+    - mesen
+  ngp:
+    cores:
+    - mednafen_ngp
+  ngpc:
+    cores:
+    - mednafen_ngp
+  odyssey2:
+    cores:
+    - o2em
+  pc88:
+    cores:
+    - quasi88
+  pc98:
+    cores:
+    - np2kai
+  pce:
+    cores:
+    - pce
+    - pce_fast
+  pcengine:
+    cores:
+    - pce
+    - pce_fast
+  pcenginecd:
+    cores:
+    - pce
+    - pce_fast
+  pcfx:
+    cores:
+    - pcfx
+  pico8:
+    cores:
+    - retro8
+  pokemini:
+    cores:
+    - pokemini
+  psp:
+    cores:
+    - ppsspp
+  psx:
+    cores:
+    - swanstation
+    - mednafen_psx_hw
+  satellaview:
+    cores:
+    - snes9x
+    - mesen-s
+  saturn:
+    cores:
+    - mednafen_saturn
+  scv:
+    cores:
+    - mame
+  sega32x:
+    cores:
+    - picodrive
+  sg1000:
+    cores:
+    - genesis_plus_gx
+  sgb:
+    cores:
+    - mgba
+    - mesen-s
+  sgb-msu1:
+    cores:
+    - bsnes
+    - bsnes_hd
+  snes:
+    cores:
+    - snes9x
+    - bsnes
+    - mesen-s
+  snes-msu1:
+    cores:
+    - bsnes_mercury_balanced
+    - bsnes_hd
+    - snes9x
+  sufami:
+    cores:
+    - snes9x
+  supergrafx:
+    cores:
+    - mednafen_supergrafx
+  supervision:
+    cores:
+    - potator
+  thomson:
+    cores:
+    - theodore
+  videopac:
+    cores:
+    - o2em
+  videopacplus:
+    cores:
+    - o2em
+  vircon32:
+    cores:
+    - vircon32
+  virtualboy:
+    cores:
+    - vb
+  wasm4:
+    cores:
+    - wasm4
+  wii:
+    cores:
+    - dolphin
+  wswan:
+    cores:
+    - mednafen_wswan
+  wswanc:
+    cores:
+    - mednafen_wswan
+  x1:
+    cores:
+    - x1
+  x68000:
+    cores:
+    - px68k
+  zx81:
+    cores:
+    - 81
+  arcade:
+    cores:
+    - fbneo
+    - mame
+  cannonball:
+    cores:
+    - cannonball
+  dice:
+    cores:
+    - dice
+  ecwolf:
+    cores:
+    - ecwolf
+  lutro:
+    cores:
+    - lutro
+  mrboom:
+    cores:
+    - mrboom
+  pico:
+    cores:
+    - genesis_plus_gx
+    - genesis_plus_gx-wide
+    - picodrive
+  prboom:
+    cores:
+    - prboom
+  quake:
+    cores:
+    - tyrquake
+  reminiscence:
+    cores:
+    - reminiscence
+  superbroswar:
+    cores:
+    - superbroswar
+  vis:
+    cores:
+    - mame
+  xrick:
+    cores:
+    - xrick
+features:
+- ratio
+- rewind
+- smooth
+- shaders
+- pixel_perfect
+- decoration
+- latency_reduction
+- game_translation
+- autosave
+- netplay
+- fullboot
+- emulated_wiimotes
+- screen_layout
+- internal_resolution
+- videomode
+- colorization
+- padTokeyboard
+- cheevos
+- autocontrollers
+- videofilters

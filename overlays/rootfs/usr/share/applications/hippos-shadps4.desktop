@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ShadPS4
+GenericName=PlayStation 4 Emulator
+Comment=ShadPS4 PlayStation 4 emulator
+Exec=/usr/lib/hippos/emulators/launch-shadps4
+Icon=shadps4
+Terminal=false
+Categories=Game;Emulator;

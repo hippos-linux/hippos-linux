@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+DESKTOP=$(hippos-settings get system.desktop)
+
+case "$DESKTOP" in
+    lxqt)     SESSION_CMD="/usr/bin/startlxqt" ;;
+    plasma)   SESSION_CMD="/usr/bin/startplasma-x11" ;;
+    xfce)     SESSION_CMD="/usr/bin/startxfce4" ;;
+    gnome)    SESSION_CMD="/usr/bin/gnome-session" ;;
+    mate)     SESSION_CMD="/usr/bin/mate-session" ;;
+    cinnamon) SESSION_CMD="/usr/bin/cinnamon-session" ;;
+    *)        SESSION_CMD="/usr/bin/startlxqt" ;;
+esac
+
+if [[ ! -x "$SESSION_CMD" ]]; then
+    echo "hippos-session: desktop '$DESKTOP' not installed, falling back to lxqt"
+    SESSION_CMD="/usr/bin/startlxqt"
+fi
+
+export HOME=/userdata
+export XDG_RUNTIME_DIR=/run/user/1000
+export XDG_SESSION_TYPE=x11
+export XDG_DATA_DIRS="/var/lib/flatpak/exports/share:${HOME}/.local/share/flatpak/exports/share:/usr/local/share:/usr/share"
+export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus"
+export XDG_CONFIG_HOME=/userdata/system/.config
+export DISPLAY=:0
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+export QT_QPA_PLATFORM=xcb
+unset XAUTHORITY
+
+# shellcheck disable=SC1091
+[[ -f /run/hippos/prime.env ]] && source /run/hippos/prime.env
+
+dbus-update-activation-environment --systemd DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS XDG_CONFIG_HOME HOME 2>/dev/null || true
+
+/usr/lib/hippos/hippos-audio-setup
+/usr/lib/hippos/hippos-display-setup
+
+exec "$SESSION_CMD"

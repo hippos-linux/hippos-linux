@@ -1,0 +1,2829 @@
+_defaults:
+  command: emulatorlauncher %CONTROLLERSCONFIG% -system %SYSTEM% -rom %ROM% -gameinfoxml
+    %GAMEINFOXML% -systemname %SYSTEMNAME%
+
+_emulator_defaults:
+  3do:           { emulator: retroarch,          core: opera              }
+  3ds:           { emulator: azahar,             core: azahar             }
+  adam:          { emulator: mame,               core: mame               }
+  advision:      { emulator: mame,               core: mame               }
+  amiga500:      { emulator: amiberry,           core: A500               }
+  amiga1200:     { emulator: amiberry,           core: A1200              }
+  amigacd32:     { emulator: amiberry,           core: CD32               }
+  amigacdtv:     { emulator: amiberry,           core: CDTV               }
+  amstradcpc:    { emulator: clk,                core: clk                }
+  androidapps:   { emulator: waydroid,           core: waydroid           }
+  androidgames:  { emulator: waydroid,           core: waydroid           }
+  apfm1000:      { emulator: mame,               core: mame               }
+  apple2:        { emulator: gsplus,              core: gsplus             }
+  apple2gs:      { emulator: gsplus,             core: gsplus             }
+  arcadia:       { emulator: mame,               core: mame               }
+  archimedes:    { emulator: clk,                core: clk                }
+  arduboy:       { emulator: retroarch,          core: arduous            }
+  arcade:        { emulator: retroarch,          core: fbneo              }
+  astrocade:     { emulator: mame,               core: mame               }
+  atari2600:     { emulator: retroarch,          core: stella             }
+  atari5200:     { emulator: retroarch,          core: a5200              }
+  atari7800:     { emulator: retroarch,          core: prosystem          }
+  atari800:      { emulator: retroarch,          core: atari800           }
+  atarist:       { emulator: hatari,             core: hatari             }
+  atomiswave:    { emulator: flycast,            core: flycast            }
+  atom:          { emulator: mame,               core: mame               }
+  bbcmicro:      { emulator: clk,                core: clk                }
+  beena:         { emulator: mame,               core: mame               }
+  bk:            { emulator: mame,               core: mame               }
+  c20:           { emulator: vice,               core: xvic               }
+  c64:           { emulator: vice,               core: x64                }
+  c128:          { emulator: vice,               core: x128               }
+  camplynx:      { emulator: mame,               core: mame               }
+  cave3rd:       { emulator: demul,              core: demul              }
+  cannonball:    { emulator: retroarch,          core: cannonball         }
+  cavestory:     { emulator: retroarch,          core: nxengine           }
+  cdi:           { emulator: mame,               core: mame               }
+  cgenie:        { emulator: mame,               core: mame               }
+  channelf:      { emulator: retroarch,          core: freechaf           }
+  chihiro:       { emulator: xemu,               core: xemu               }
+  coco:          { emulator: xroar,              core: xroar              }
+  colecovision:  { emulator: openmsx,            core: openmsx            }
+  commanderx16:  { emulator: x16emu,             core: x16emu             }
+  cplus4:        { emulator: vice,               core: xplus4             }
+  crvision:      { emulator: mame,               core: mame               }
+  ctvboy:        { emulator: mame,               core: mame               }
+  daphne:        { emulator: hypseus-singe,      core: hypseus-singe      }
+  dice:          { emulator: retroarch,          core: dice               }
+  dos:           { emulator: dosbox-staging,     core: dosbox_staging     }
+  dragon64:      { emulator: xroar,              core: xroar              }
+  dreamcast:     { emulator: flycast,            core: flycast            }
+  easyrpg:       { emulator: easyrpg,            core: easyrpg            }
+  ecwolf:        { emulator: retroarch,          core: ecwolf             }
+  electron:      { emulator: clk,                core: clk                }
+  enterprise:    { emulator: clk,                core: clk                }
+  fbneo:         { emulator: retroarch,          core: fbneo              }
+  fds:           { emulator: retroarch,          core: fceumm             }
+  flash:         { emulator: ruffle,             core: ruffle             }
+  fm7:           { emulator: mame,               core: mame               }
+  fmtowns:       { emulator: tsugaru,            core: tsugaru            }
+  gaelco:        { emulator: demul,              core: demul              }
+  gamate:        { emulator: mame,               core: mame               }
+  gameandwatch:  { emulator: mame,               core: mame               }
+  gamecom:       { emulator: mame,               core: mame               }
+  gamecube:      { emulator: dolphin-emu,        core: dolphin-emu        }
+  gamegear:      { emulator: retroarch,          core: genesis_plus_gx      }
+  gamepock:      { emulator: mame,               core: mame               }
+  gb:            { emulator: retroarch,          core: gambatte           }
+  gba:           { emulator: retroarch,          core: mgba               }
+  gbc:           { emulator: retroarch,          core: gambatte           }
+  gmaster:       { emulator: mame,               core: mame               }
+  gp32:          { emulator: mame,               core: mame               }
+  hikaru:        { emulator: demul,              core: demul              }
+  ikemen:        { emulator: ikemen,             core: ikemen             }
+  intellivision: { emulator: retroarch,          core: freeintv           }
+  jaguar:        { emulator: bigpemu,            core: bigpemu            }
+  jaguarcd:      { emulator: bigpemu,            core: bigpemu            }
+  laser310:      { emulator: mame,               core: mame               }
+  lcdgames:      { emulator: mame,               core: mame               }
+  lindbergh:     { emulator: lindbergh-loader,   core: lindbergh          }
+  loopy:         { emulator: mame,               core: mame               }
+  lutro:         { emulator: retroarch,          core: lutro              }
+  lowresnx:      { emulator: retroarch,          core: lowresnx           }
+  lynx:          { emulator: retroarch,          core: handy              }
+  macintosh:     { emulator: basilisk2,          core: basilisk2          }
+  mame:          { emulator: mame,               core: mame               }
+  mastersystem:  { emulator: retroarch,          core: genesis_plus_gx      }
+  mc10:          { emulator: xroar,              core: xroar              }
+  megacd:        { emulator: retroarch,          core: genesis_plus_gx    }
+  megadrive:     { emulator: retroarch,          core: genesis_plus_gx      }
+  megadrive-msu: { emulator: retroarch,          core: genesis_plus_gx    }
+  megaduck:      { emulator: mame,               core: mame               }
+  mrboom:        { emulator: retroarch,          core: mrboom             }
+  model2:        { emulator: model2emu,          core: model2emu          }
+  model3:        { emulator: supermodel,         core: supermodel         }
+  multivision:   { emulator: retroarch,          core: gearsystem         }
+  msx1:          { emulator: openmsx,            core: openmsx            }
+  msx2:          { emulator: openmsx,            core: openmsx            }
+  "msx2+":       { emulator: openmsx,            core: openmsx            }
+  msxturbor:     { emulator: openmsx,            core: openmsx            }
+  mz2000:        { emulator: mame,               core: mame               }
+  mz2500:        { emulator: mame,               core: mame               }
+  mz700:         { emulator: mame,               core: mame               }
+  mz800:         { emulator: mame,               core: mame               }
+  mz80k:         { emulator: mame,               core: mame               }
+  n64:           { emulator: retroarch,          core: mupen64plus_next   }
+  n64dd:         { emulator: mupen64plus,        core: mupen64plus        }
+  namco22:       { emulator: mame,               core: mame               }
+  namco2x6:      { emulator: play,               core: play               }
+  naomi:         { emulator: flycast,            core: flycast            }
+  naomi2:        { emulator: flycast,            core: flycast            }
+  nds:           { emulator: melonds,            core: melonds            }
+  neogeo:        { emulator: retroarch,          core: fbneo              }
+  neogeocd:      { emulator: retroarch,          core: neocd              }
+  nes:           { emulator: retroarch,          core: fceumm             }
+  ngage:         { emulator: eka2l1,             core: eka2l1             }
+  ngp:           { emulator: retroarch,          core: mednafen_ngp       }
+  ngpc:          { emulator: retroarch,          core: mednafen_ngp       }
+  odyssey2:      { emulator: retroarch,          core: o2em               }
+  openbor:       { emulator: openbor,            core: openbor            }
+  oricatmos:     { emulator: clk,                core: clk                }
+  pc60:          { emulator: mame,               core: mame               }
+  pc80:          { emulator: mame,               core: mame               }
+  pc88:          { emulator: retroarch,          core: quasi88            }
+  pc98:          { emulator: retroarch,          core: np2kai             }
+  pce:           { emulator: retroarch,          core: pce                }
+  pcengine:      { emulator: retroarch,          core: pce                }
+  pcenginecd:    { emulator: retroarch,          core: pce                }
+  pcfx:          { emulator: retroarch,          core: pcfx               }
+  pcw:           { emulator: mame,               core: mame               }
+  pdp1:          { emulator: mame,               core: mame               }
+  pet:           { emulator: vice,               core: xpet               }
+  pico:          { emulator: retroarch,          core: genesis_plus_gx    }
+  pico8:         { emulator: lexaloffle-pico8,   core: pico8              }
+  pokemini:      { emulator: retroarch,          core: pokemini           }
+  ports:         { emulator: sh,                 core: sh                 }
+  prboom:        { emulator: retroarch,          core: prboom             }
+  ps2:           { emulator: pcsx2,              core: pcsx2              }
+  ps3:           { emulator: rpcs3,              core: rpcs3              }
+  ps4:           { emulator: shadps4,            core: shadps4            }
+  psp:           { emulator: ppsspp,             core: ppsspp             }
+  psvita:        { emulator: vita3k,             core: vita3k             }
+  psx:           { emulator: duckstation,        core: duckstation        }
+  pv1000:        { emulator: mame,               core: mame               }
+  pv2000:        { emulator: mame,               core: mame               }
+  pygame:        { emulator: python-pygame2,     core: pygame             }
+  pyxel:         { emulator: python-pyxel,       core: pyxel              }
+  quake:         { emulator: retroarch,          core: tyrquake           }
+  reminiscence:  { emulator: retroarch,          core: reminiscence       }
+  rx78:          { emulator: mame,               core: mame               }
+  samcoupe:      { emulator: samcoupe,           core: simcoupe           }
+  satellaview:   { emulator: retroarch,          core: snes9x             }
+  saturn:        { emulator: ymir,               core: ymir               }
+  sc3000:        { emulator: ares,               core: ares               }
+  scummvm:       { emulator: scummvm,            core: scummvm            }
+  scv:           { emulator: retroarch,          core: mame               }
+  segaai:        { emulator: mame,               core: mame               }
+  sega32x:       { emulator: retroarch,          core: picodrive          }
+  sg1000:        { emulator: retroarch,          core: genesis_plus_gx      }
+  sgb:           { emulator: retroarch,          core: mgba               }
+  sgb-msu1:      { emulator: retroarch,          core: bsnes              }
+  singe:         { emulator: hypseus-singe,      core: hypseus-singe      }
+  snes:          { emulator: snes9x,             core: snes9x             }
+  snes-msu1:     { emulator: retroarch,          core: bsnes_mercury_balanced }
+  socrates:      { emulator: mame,               core: mame               }
+  solarus:       { emulator: solarus-engine,     core: solarus            }
+  spectravideo:  { emulator: openmsx,            core: openmsx            }
+  steam:         { emulator: steam,              core: steam              }
+  sufami:        { emulator: retroarch,          core: snes9x             }
+  supergrafx:    { emulator: retroarch,          core: mednafen_supergrafx }
+  supervision:   { emulator: retroarch,          core: potator            }
+  superbroswar:  { emulator: retroarch,          core: superbroswar       }
+  supracan:      { emulator: mame,               core: mame               }
+  sv8000:        { emulator: mame,               core: mame               }
+  switch:        { emulator: citron-neo,          core: citron-neo         }
+  systemsp:      { emulator: flycast,            core: flycast            }
+  thextech:      { emulator: thextech,           core: thextech           }
+  thomson:       { emulator: retroarch,          core: theodore           }
+  ti99:          { emulator: mame,               core: mame               }
+  tic80:         { emulator: tic80,              core: tic80              }
+  triforce:      { emulator: dolphin-emu,        core: dolphin-emu        }
+  trs80:         { emulator: mame,               core: mame               }
+  tutor:         { emulator: mame,               core: mame               }
+  tvc:           { emulator: mame,               core: mame               }
+  tvgames:       { emulator: mame,               core: mame               }
+  uzebox:        { emulator: mame,               core: mame               }
+  vc4000:        { emulator: mame,               core: mame               }
+  vectrex:       { emulator: mame,               core: mame               }
+  vgmplay:       { emulator: mame,               core: mame               }
+  voxatron:      { emulator: lexaloffle-voxatron, core: voxatron          }
+  videopac:      { emulator: retroarch,          core: o2em               }
+  videopacplus:  { emulator: retroarch,          core: o2em               }
+  vircon32:      { emulator: retroarch,          core: vircon32           }
+  vis:           { emulator: retroarch,          core: mame               }
+  virtualboy:    { emulator: retroarch,          core: vb                 }
+  vpinball:      { emulator: vpinball,           core: vpinball           }
+  vsmile:        { emulator: mame,               core: mame               }
+  wasm4:         { emulator: retroarch,          core: wasm4              }
+  wii:           { emulator: dolphin-emu,        core: dolphin-emu        }
+  wiiu:          { emulator: cemu,               core: cemu               }
+  windows:       { emulator: wine,               core: wine-tkg           }
+  windows_installers: { emulator: wine,          core: wine-tkg           }
+  wswan:         { emulator: retroarch,          core: mednafen_wswan     }
+  wswanc:        { emulator: retroarch,          core: mednafen_wswan     }
+  x1:            { emulator: retroarch,          core: x1                 }
+  x68000:        { emulator: retroarch,          core: px68k              }
+  xegs:          { emulator: mame,               core: mame               }
+  xrick:         { emulator: retroarch,          core: xrick              }
+  xbox:          { emulator: xemu,               core: xemu               }
+  xbox360:       { emulator: xenia-canary,       core: xenia_canary       }
+  zx81:          { emulator: retroarch,          core: 81                 }
+  zxspectrum:    { emulator: sugarbox,           core: sugarbox           }
+
+3ds:
+  extensions:
+  - 3ds
+  - cci
+  - cxi
+  - cia
+  - axf
+  - elf
+  - app
+  - squashfs
+  - zcci
+  - zcia
+  - zcxi
+  hardware: portable
+  manufacturer: Nintendo
+  name: 3DS
+  release: 2011
+3do:
+  extensions:
+  - iso
+  - chd
+  - cue
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Panasonic / Sanyo / Goldstar
+  name: 3DO
+  release: 1993
+  theme: 3do
+adam:
+  extensions:
+  - wav
+  - ddp
+  - mfi
+  - dfi
+  - hfe
+  - mfm
+  - td0
+  - imd
+  - d77
+  - d88
+  - 1dd
+  - cqm
+  - cqi
+  - dsk
+  - rom
+  - col
+  - bin
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Coleco
+  name: ADAM
+  release: 1983
+advision:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Entex
+  name: Adventure Vision
+  release: 1982
+amiga1200:
+  extensions:
+  - adf
+  - uae
+  - ipf
+  - dms
+  - dmz
+  - adz
+  - lha
+  - hdf
+  - exe
+  - m3u
+  - zip
+  - raw
+  - scp
+  group: amiga
+  hardware: computer
+  manufacturer: Commodore
+  name: Amiga AGA
+  platform: amiga
+  release: 1992
+amiga500:
+  extensions:
+  - adf
+  - uae
+  - ipf
+  - dms
+  - dmz
+  - adz
+  - lha
+  - hdf
+  - exe
+  - m3u
+  - zip
+  - raw
+  - scp
+  group: amiga
+  hardware: computer
+  manufacturer: Commodore
+  name: Amiga OCS/ECS
+  platform: amiga
+  release: 1987
+amigacd32:
+  extensions:
+  - bin
+  - cue
+  - iso
+  - chd
+  hardware: console
+  manufacturer: Commodore
+  name: Amiga CD32
+  release: 1994
+amigacdtv:
+  extensions:
+  - bin
+  - cue
+  - iso
+  - chd
+  - m3u
+  hardware: console
+  manufacturer: Commodore
+  name: Amiga CDTV
+  release: 1991
+amstradcpc:
+  extensions:
+  - dsk
+  - sna
+  - tap
+  - cdt
+  - voc
+  - m3u
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Amstrad
+  name: Amstrad CPC
+  release: 1984
+androidapps:
+  command: /usr/lib/hippos/waydroid-launcher %ROM%
+  extensions:
+  - apk
+  - waydroid
+  hardware: os
+  manufacturer: Google
+  name: Android Apps
+  platform: android
+  release: 2008
+androidgames:
+  command: /usr/lib/hippos/waydroid-launcher %ROM%
+  extensions:
+  - apk
+  hardware: os
+  manufacturer: Google
+  name: Android Games
+  platform: android
+  release: 2008
+apfm1000:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: APF Electronics
+  name: M-1000
+  release: 1978
+apple2:
+  extensions:
+  - nib
+  - do
+  - po
+  - dsk
+  - mfi
+  - dfi
+  - rti
+  - edd
+  - woz
+  - wav
+  - zip
+  - 7z
+  - chd
+  - hdv
+  - 2mg
+  hardware: computer
+  manufacturer: Apple
+  name: Apple II
+  release: 1977
+apple2gs:
+  extensions:
+  - 2mg
+  - do
+  - nib
+  - po
+  - dsk
+  hardware: computer
+  manufacturer: Apple
+  name: Apple IIGS
+  release: 1986
+arcadia:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Emerson
+  name: Arcadia 2001
+  release: 1982
+archimedes:
+  extensions:
+  - mfi
+  - dfi
+  - hfe
+  - mfm
+  - td0
+  - imd
+  - d77
+  - d88
+  - 1dd
+  - cqm
+  - cqi
+  - dsk
+  - ima
+  - img
+  - ufi
+  - '360'
+  - ipf
+  - adf
+  - apd
+  - jfd
+  - ads
+  - adm
+  - adl
+  - ssd
+  - bbc
+  - dsd
+  - st
+  - msa
+  - chd
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Acorn Computers
+  name: Archimedes
+  release: 1987
+arduboy:
+  extensions:
+  - hex
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: Kevin Bates
+  name: Arduboy
+  release: 2015
+astrocade:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Bally
+  name: Astrocade
+  release: 1978
+atari2600:
+  extensions:
+  - a26
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Atari
+  name: Atari 2600
+  release: 1977
+atari5200:
+  extensions:
+  - rom
+  - xfd
+  - atr
+  - atx
+  - cdm
+  - cas
+  - car
+  - bin
+  - a52
+  - xex
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Atari
+  name: Atari 5200
+  release: 1982
+atari7800:
+  extensions:
+  - a78
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Atari
+  name: Atari 7800
+  release: 1986
+atari800:
+  extensions:
+  - rom
+  - xfd
+  - atr
+  - atx
+  - cdm
+  - cas
+  - car
+  - bin
+  - a52
+  - xex
+  - zip
+  - 7z
+  - m3u
+  group: atari8bit
+  hardware: computer
+  manufacturer: Atari
+  name: Atari 800
+  release: 1979
+atarist:
+  extensions:
+  - st
+  - msa
+  - stx
+  - dim
+  - ipf
+  - m3u
+  - zip
+  - 7z
+  - hd
+  - gemdos
+  hardware: computer
+  manufacturer: Atari
+  name: Atari ST
+  release: 1985
+atom:
+  extensions:
+  - wav
+  - tap
+  - csw
+  - uef
+  - mfi
+  - dfi
+  - hfe
+  - mfm
+  - td0
+  - imd
+  - d77
+  - d88
+  - 1dd
+  - cqm
+  - cqi
+  - dsk
+  - 40t
+  - atm
+  - bin
+  - rom
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Acorn Computers
+  name: Atom
+  release: 1979
+atomiswave:
+  extensions:
+  - lst
+  - bin
+  - dat
+  - zip
+  - 7z
+  hardware: arcade
+  manufacturer: Sammy
+  name: Atomiswave
+  platform: atomiswave, arcade
+  release: 2003
+bbcmicro:
+  extensions:
+  - mfi
+  - dfi
+  - hfe
+  - mfm
+  - td0
+  - imd
+  - d77
+  - d88
+  - 1dd
+  - cqm
+  - cqi
+  - dsk
+  - ima
+  - img
+  - ufi
+  - '360'
+  - ipf
+  - ssd
+  - bbc
+  - dsd
+  - adf
+  - ads
+  - adm
+  - adl
+  - fsd
+  - wav
+  - tap
+  - bin
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Acorn Computers
+  name: BBC Micro
+  release: 1981
+beena:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Sega
+  name: Advanced Pico Beena
+  release: 2005
+bk:
+  extensions:
+  - bin
+  - img
+  - dsk
+  - bkd
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Elektronika
+  name: Elektronika BK
+  release: 1985
+c128:
+  extensions:
+  - d64
+  - d81
+  - prg
+  - lnx
+  - m3u
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Commodore
+  name: Commodore 128
+  platform: c64
+  release: 1985
+c20:
+  extensions:
+  - '20'
+  - '40'
+  - '60'
+  - rom
+  - a0
+  - b0
+  - crt
+  - d64
+  - d81
+  - prg
+  - tap
+  - t64
+  - m3u
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Commodore
+  name: Commodore VIC-20
+  release: 1980
+c64:
+  extensions:
+  - d64
+  - d71
+  - d81
+  - crt
+  - prg
+  - tap
+  - t64
+  - m3u
+  - zip
+  - 7z
+  - nib
+  - g64
+  group: c64
+  hardware: computer
+  manufacturer: Commodore
+  name: Commodore 64
+  release: 1982
+camplynx:
+  extensions:
+  - wav
+  - tap
+  - ldf
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Camputers
+  name: Camputers Lynx
+  release: 1983
+cave3rd:
+  extensions:
+  - zip
+  - 7z
+  hardware: arcade
+  manufacturer: Sega
+  name: Cave CV1000
+  platform: cave3rd, arcade
+  release: 2004
+cavestory:
+  extensions:
+  - exe
+  group: ports
+  hardware: port
+  manufacturer: Daisuke "Pixel" Amaya
+  name: Cave Story
+  platform: pc
+  release: 2004
+cdi:
+  extensions:
+  - chd
+  - cue
+  - toc
+  - nrg
+  - gdi
+  - iso
+  - cdr
+  hardware: console
+  manufacturer: Philips
+  name: CD-i
+  release: 1990
+cgenie:
+  extensions:
+  - cas
+  - wav
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: EACA
+  name: Colour Genie
+  release: 1982
+channelf:
+  extensions:
+  - zip
+  - rom
+  - bin
+  - chf
+  hardware: console
+  manufacturer: Fairchild
+  name: Channel-F
+  release: 1976
+chihiro:
+  extensions:
+  - iso
+  hardware: arcade
+  manufacturer: Sega & Microsoft
+  name: Sega Chihiro
+  release: 2002
+coco:
+  extensions:
+  - wav
+  - cas
+  - dsk
+  - ccc
+  - rom
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Tandy Radio Shack
+  name: Color Computer
+  release: 1980
+colecovision:
+  extensions:
+  - bin
+  - col
+  - rom
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Coleco
+  name: ColecoVision
+  release: 1982
+commanderx16:
+  extensions:
+  - bas
+  - img
+  - prg
+  hardware: computer
+  manufacturer: The 8-Bit Guy
+  name: Commander X16
+  release: 2019
+cplus4:
+  extensions:
+  - d64
+  - prg
+  - tap
+  - m3u
+  - zip
+  - 7z
+  group: c64
+  hardware: computer
+  manufacturer: Commodore
+  name: Commodore Plus4
+  release: 1984
+crvision:
+  extensions:
+  - bin
+  - rom
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: VTech
+  name: CreatiVision
+  release: 1982
+  theme: creativision
+ctvboy:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Gakken
+  name: Compact Vision TV Boy
+  release: 1983
+daphne:
+  extensions:
+  - daphne
+  - squashfs
+  hardware: arcade
+  manufacturer: Arcade
+  name: Daphne
+  platform: alg, daphne, arcade
+  release: 1983
+dos:
+  extensions:
+  - pc
+  - dos
+  - zip
+  - squashfs
+  - dosz
+  - m3u
+  - iso
+  - cue
+  hardware: computer
+  manufacturer: Microsoft
+  name: Dos (x86)
+  platform: pc
+  release: 1981
+  theme: pc
+dragon64:
+  extensions:
+  - wav
+  - cas
+  - dsk
+  - dmk
+  - ccc
+  - rom
+  - bin
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Dragon Data
+  name: Dragon 64
+  release: 1983
+dreamcast:
+  extensions:
+  - cdi
+  - cue
+  - gdi
+  - chd
+  - m3u
+  hardware: console
+  manufacturer: Sega
+  name: Dreamcast
+  release: 1998
+easyrpg:
+  extensions:
+  - easyrpg
+  - squashfs
+  - zip
+  hardware: port
+  manufacturer: EasyRPG Team
+  name: EasyRPG
+  release: 2000
+electron:
+  extensions:
+  - wav
+  - csw
+  - uef
+  - mfi
+  - dfi
+  - hfe
+  - mfm
+  - td0
+  - imd
+  - d77
+  - d88
+  - 1dd
+  - cqm
+  - cqi
+  - dsk
+  - ssd
+  - bbc
+  - img
+  - dsd
+  - adf
+  - ads
+  - adm
+  - adl
+  - rom
+  - bin
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Acorn Computers
+  name: Electron
+  release: 1983
+enterprise:
+  extensions:
+  - bas
+  - com
+  - zip
+  - img
+  - dsk
+  - tap
+  - dtf
+  - trn
+  - '128'
+  - cas
+  - cdt
+  - tzx
+  hardware: computer
+  manufacturer: Enterprise Computers
+  name: Enterprise
+  release: 1985
+fbneo:
+  extensions:
+  - zip
+  - 7z
+  hardware: arcade
+  manufacturer: Arcade
+  name: Final Burn Neo
+  platform: arcade
+  release: 2019
+fds:
+  extensions:
+  - fds
+  - zip
+  - 7z
+  group: nes
+  hardware: console
+  manufacturer: Nintendo
+  name: Family Computer Disk System
+  release: 1986
+flash:
+  extensions:
+  - swf
+  hardware: port
+  manufacturer: Adobe
+  name: Flash Player
+  release: 1996
+fm7:
+  extensions:
+  - wav
+  - t77
+  - mfi
+  - dfi
+  - hfe
+  - mfm
+  - td0
+  - imd
+  - d77
+  - d88
+  - 1dd
+  - cqm
+  - cqi
+  - dsk
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Fujitsu
+  name: FM-7
+  release: 1982
+fmtowns:
+  extensions:
+  - bin
+  - m3u
+  - cue
+  - d88
+  - d77
+  - xdf
+  - iso
+  - chd
+  - toc
+  - nrg
+  - gdi
+  - cdr
+  - mfi
+  - dfi
+  - hfe
+  - mfm
+  - td0
+  - imd
+  - 1dd
+  - cqm
+  - cqi
+  - dsk
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Fujitsu
+  name: FM-TOWNS
+  release: 1987
+gaelco:
+  extensions:
+  - zip
+  - 7z
+  hardware: arcade
+  manufacturer: Sega
+  name: Gaelco
+  platform: gaelco, arcade
+  release: 1999
+gamate:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: Bitcorp
+  name: Gamate
+  release: 1990
+gameandwatch:
+  extensions:
+  - mgw
+  - zip
+  - 7z
+  group: lcdgames
+  hardware: portable
+  manufacturer: Nintendo
+  name: Game and Watch
+  release: 1980
+gamecom:
+  extensions:
+  - bin
+  - tgc
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: Tiger Electronics
+  name: Game.com
+  release: 1997
+gamecube:
+  extensions:
+  - gcm
+  - iso
+  - gcz
+  - ciso
+  - wbfs
+  - rvz
+  - elf
+  - dol
+  - m3u
+  - json
+  hardware: console
+  manufacturer: Nintendo
+  name: GameCube
+  platform: gc
+  release: 2001
+  theme: gc
+gamegear:
+  extensions:
+  - bin
+  - gg
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: Sega
+  name: Game Gear
+  release: 1990
+gamepock:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: Epoch
+  name: Game Pocket Computer
+  release: 1984
+gb:
+  extensions:
+  - gb
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: Nintendo
+  name: Game Boy
+  release: 1989
+gba:
+  extensions:
+  - gba
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: Nintendo
+  name: Game Boy Advance
+  release: 2001
+gbc:
+  extensions:
+  - gbc
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: Nintendo
+  name: Game Boy Color
+  release: 1998
+gmaster:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: Hartung
+  name: Game Master
+  release: 1990
+gp32:
+  extensions:
+  - smc
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: GamePark
+  name: GP32
+  release: 2001
+hikaru:
+  extensions:
+  - zip
+  - 7z
+  hardware: arcade
+  manufacturer: Sega
+  name: Hikaru
+  platform: hikaru, arcade
+  release: 1999
+ikemen:
+  extensions:
+  - ikemen
+  - pc
+  hardware: port
+  manufacturer: Elecbyte
+  name: IKEMEN
+  release: 2021
+intellivision:
+  extensions:
+  - int
+  - bin
+  - rom
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Mattel
+  name: Mattel Intellivision
+  release: 1979
+jaguar:
+  extensions:
+  - j64
+  - jag
+  - cof
+  - abs
+  - rom
+  - zip
+  - 7z
+  group: jaguar
+  hardware: console
+  manufacturer: Atari
+  name: Jaguar
+  release: 1993
+  theme: atarijaguar
+jaguarcd:
+  extensions:
+  - cue
+  - cdi
+  - bigpimg
+  group: jaguar
+  hardware: console
+  manufacturer: Atari
+  name: Jaguar CD
+  platform: jaguar
+  release: 1995
+  theme: atarijaguarcd
+laser310:
+  extensions:
+  - vz
+  - wav
+  - cas
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: VTech
+  name: Laser 310
+  release: 1984
+lcdgames:
+  extensions:
+  - mgw
+  - zip
+  - 7z
+  group: lcdgames
+  hardware: portable
+  manufacturer: Various
+  name: LCD Games
+  release: 1979
+lindbergh:
+  extensions:
+  - game
+  hardware: arcade
+  manufacturer: Sega
+  name: Sega Lindbergh
+  platform: lindbergh, arcade
+  release: 2005
+loopy:
+  extensions:
+  - bin
+  - ic1
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Casio
+  name: Casio Loopy
+  release: 1995
+lynx:
+  extensions:
+  - bll
+  - lnx
+  - lyx
+  - o
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: Atari
+  name: Atari Lynx
+  platform: atarilynx
+  release: 1989
+  theme: atarilynx
+macintosh:
+  extensions:
+  - dsk
+  - zip
+  - 7z
+  - mfi
+  - dfi
+  - hfe
+  - mfm
+  - td0
+  - imd
+  - d77
+  - d88
+  - 1dd
+  - cqm
+  - cqi
+  - dsk
+  - ima
+  - img
+  - ufi
+  - ipf
+  - dc42
+  - woz
+  - 2mg
+  - '360'
+  - chd
+  - cue
+  - toc
+  - nrg
+  - gdi
+  - iso
+  - cdr
+  - hd
+  - hdv
+  - 2mg
+  - hdi
+  hardware: computer
+  manufacturer: Apple
+  name: Macintosh
+  release: 1984
+mame:
+  extensions:
+  - zip
+  - 7z
+  hardware: arcade
+  manufacturer: Arcade
+  name: Mame
+  platform: arcade
+  release: 1997
+mastersystem:
+  extensions:
+  - bin
+  - sms
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Sega
+  name: Master System
+  release: 1985
+mc10:
+  extensions:
+  - wav
+  - cas
+  - rom
+  - bin
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Tandy Radio Shack
+  name: MC-10
+  release: 1983
+megadrive:
+  extensions:
+  - bin
+  - gen
+  - md
+  - sg
+  - smd
+  - zip
+  - 7z
+  group: megadrive
+  hardware: console
+  manufacturer: Sega
+  name: Mega Drive
+  platform: genesis, megadrive
+  release: 1988
+megaduck:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: Welback Holdings
+  name: Mega Duck / Cougar Boy
+  release: 1993
+model2:
+  extensions:
+  - zip
+  hardware: arcade
+  manufacturer: Sega
+  name: Model 2
+  platform: model2, arcade
+  release: 1993
+model3:
+  extensions:
+  - zip
+  hardware: arcade
+  manufacturer: Sega
+  name: Model 3
+  platform: model3, arcade
+  release: 1996
+msx1:
+  extensions:
+  - dsk
+  - mx1
+  - rom
+  - zip
+  - 7z
+  - cas
+  - m3u
+  - ogv
+  - openmsx
+  hardware: computer
+  manufacturer: Microsoft
+  name: MSX1
+  platform: msx
+  release: 1983
+msx2:
+  extensions:
+  - dsk
+  - mx2
+  - rom
+  - zip
+  - 7z
+  - cas
+  - m3u
+  - ogv
+  - openmsx
+  hardware: computer
+  manufacturer: Microsoft
+  name: MSX2
+  release: 1985
+msx2+:
+  extensions:
+  - dsk
+  - mx2
+  - rom
+  - zip
+  - 7z
+  - cas
+  - m3u
+  - openmsx
+  hardware: computer
+  manufacturer: Microsoft
+  name: MSX2+
+  release: 1988
+msxturbor:
+  extensions:
+  - dsk
+  - mx2
+  - rom
+  - zip
+  - 7z
+  - openmsx
+  - m3u
+  hardware: computer
+  manufacturer: Microsoft
+  name: MSX Turbo-R
+  release: 1990
+mz2000:
+  extensions:
+  - mzf
+  - mzt
+  - m12
+  - wav
+  - d88
+  - dsk
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Sharp
+  name: Sharp MZ-2000
+  release: 1982
+mz2500:
+  extensions:
+  - d88
+  - dsk
+  - mfi
+  - dfi
+  - hfe
+  - mfm
+  - td0
+  - imd
+  - d77
+  - 1dd
+  - cqm
+  - cqi
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Sharp
+  name: Sharp MZ-2500
+  release: 1985
+mz700:
+  extensions:
+  - mzf
+  - mzt
+  - m12
+  - wav
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Sharp
+  name: Sharp MZ-700
+  release: 1982
+mz800:
+  extensions:
+  - mzf
+  - mzt
+  - m12
+  - wav
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Sharp
+  name: Sharp MZ-800
+  release: 1984
+mz80k:
+  extensions:
+  - mzf
+  - mzt
+  - m12
+  - wav
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Sharp
+  name: Sharp MZ-80K
+  release: 1978
+n64:
+  extensions:
+  - z64
+  - n64
+  - v64
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Nintendo
+  name: Nintendo 64
+  release: 1996
+n64dd:
+  extensions:
+  - z64
+  - n64
+  - ndd
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Nintendo
+  name: Nintendo 64 Disk Drive
+  release: 1999
+namco22:
+  extensions:
+  - zip
+  - 7z
+  hardware: arcade
+  manufacturer: Namco
+  name: Namco System 22
+  platform: namco, arcade
+  release: 1992
+namco2x6:
+  extensions:
+  - zip
+  hardware: arcade
+  manufacturer: Sony / Namco
+  name: Namco System 246/256
+  platform: namco, sega, arcade
+  release: 2000
+naomi:
+  extensions:
+  - lst
+  - bin
+  - dat
+  - zip
+  - 7z
+  hardware: arcade
+  manufacturer: Sega
+  name: Naomi
+  platform: naomi, arcade
+  release: 1998
+naomi2:
+  extensions:
+  - zip
+  - 7z
+  hardware: arcade
+  manufacturer: Sega
+  name: Naomi 2
+  platform: naomi2, arcade
+  release: 2000
+nds:
+  extensions:
+  - nds
+  - bin
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: Nintendo
+  name: Nintendo DS
+  release: 2004
+neogeo:
+  extensions:
+  - 7z
+  - zip
+  hardware: console
+  manufacturer: SNK
+  name: Neo-Geo
+  platform: neogeo, arcade
+  release: 1990
+nes:
+  extensions:
+  - nes
+  - unif
+  - unf
+  - zip
+  - 7z
+  group: nes
+  hardware: console
+  manufacturer: Nintendo
+  name: Nintendo Entertainment System
+  release: 1983
+ngage:
+  extensions:
+  - n-gage
+  - sisx
+  - sis
+  - zip
+  hardware: portable
+  manufacturer: Nokia
+  name: N-Gage
+  release: 2003
+ngp:
+  extensions:
+  - ngp
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: SNK
+  name: Neo-Geo Pocket
+  release: 1998
+ngpc:
+  extensions:
+  - ngc
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: SNK
+  name: Neo-Geo Pocket Color
+  release: 1999
+openbor:
+  extensions:
+  - pak
+  hardware: port
+  manufacturer: Ports
+  name: OpenBOR
+  release: null
+oricatmos:
+  extensions:
+  - tap
+  - dsk
+  - zip
+  hardware: computer
+  manufacturer: Tangerine Computer Systems
+  name: Oric Atmos
+  release: 1984
+  theme: oric
+pc60:
+  extensions:
+  - bin
+  - cas
+  - p6
+  - d77
+  - d88
+  - dsk
+  - 1dd
+  - mfi
+  - dfi
+  - mfm
+  - td0
+  - imd
+  - cqm
+  - cqi
+  - xdf
+  - hdm
+  - 2hd
+  - fdi
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: NEC
+  name: PC-6000
+  release: 1981
+pc80:
+  extensions:
+  - d77
+  - d88
+  - 1dd
+  - dsk
+  - n80
+  - bin
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: NEC
+  name: PC-8001
+  release: 1979
+pce:
+  extensions:
+  - pce
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: NEC
+  name: PC Engine / TurboGrafx-16
+  release: 1987
+  theme: pcengine
+pcenginecd:
+  extensions:
+  - pce
+  - cue
+  - ccd
+  - iso
+  - img
+  - chd
+  hardware: console
+  manufacturer: NEC
+  name: PC Engine CD
+  release: 1988
+  theme: pce-cd
+pcw:
+  extensions:
+  - mfi
+  - dfi
+  - mfm
+  - td0
+  - imd
+  - 86f
+  - d77
+  - d88
+  - 1dd
+  - cqm
+  - cqi
+  - dsk
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Amstrad
+  name: Amstrad PCW
+  release: 1985
+pdp1:
+  extensions:
+  - zip
+  - 7z
+  - tap
+  - rim
+  - drm
+  hardware: computer
+  manufacturer: Digital Equipment Corporation
+  name: PDP-1
+  release: 1961
+pet:
+  extensions:
+  - a0
+  - b0
+  - crt
+  - d64
+  - d81
+  - prg
+  - tap
+  - t64
+  - m3u
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Commodore
+  name: Commodore PET
+  release: 1977
+pico8:
+  extensions:
+  - p8
+  - png
+  - m3u
+  hardware: console
+  manufacturer: Fantasy
+  name: Pico-8
+  release: 2015
+ps2:
+  extensions:
+  - iso
+  - mdf
+  - nrg
+  - bin
+  - img
+  - dump
+  - gz
+  - cso
+  - chd
+  - m3u
+  hardware: console
+  manufacturer: Sony
+  name: PlayStation 2
+  release: 2000
+ps3:
+  extensions:
+  - ps3
+  - psn
+  - iso
+  - squashfs
+  hardware: console
+  manufacturer: Sony
+  name: PlayStation 3
+  release: 2006
+ps4:
+  extensions:
+  - ps4
+  hardware: console
+  manufacturer: Sony
+  name: PlayStation 4
+  release: 2013
+psp:
+  extensions:
+  - iso
+  - cso
+  - pbp
+  - chd
+  hardware: portable
+  manufacturer: Sony
+  name: PlayStation Portable
+  release: 2004
+psvita:
+  extensions:
+  - zip
+  - psvita
+  hardware: portable
+  manufacturer: Sony
+  name: PlayStation Vita
+  release: 2012
+psx:
+  extensions:
+  - cue
+  - img
+  - mdf
+  - pbp
+  - toc
+  - cbn
+  - m3u
+  - ccd
+  - chd
+  - iso
+  hardware: console
+  manufacturer: Sony
+  name: PlayStation
+  release: 1994
+pv1000:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Casio
+  name: PV-1000
+  release: 1983
+pv2000:
+  extensions:
+  - bin
+  - cas
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Casio
+  name: PV-2000
+  release: 1983
+pygame:
+  extensions:
+  - pygame
+  hardware: library
+  manufacturer: Pygame Team
+  name: Pygame
+  release: 2000
+pyxel:
+  extensions:
+  - py
+  - pyxapp
+  hardware: console
+  manufacturer: Fantasy
+  name: pyxel
+  release: 2021
+rx78:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Bandai
+  name: RX-78
+  release: 1983
+samcoupe:
+  extensions:
+  - cpm
+  - dsk
+  - sad
+  - mgt
+  - sdf
+  - td0
+  - sbt
+  - zip
+  hardware: computer
+  manufacturer: Miles Gordon Technology
+  name: SAM Coupé
+  release: 1989
+saturn:
+  extensions:
+  - cue
+  - ccd
+  - m3u
+  - chd
+  - iso
+  - zip
+  - mds
+  hardware: console
+  manufacturer: Sega
+  name: Saturn
+  release: 1994
+sc3000:
+  extensions:
+  - bin
+  - sg
+  - wav
+  - cas
+  - bit
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Sega
+  name: SC-3000
+  platform: sc-3000
+  release: 1983
+  theme: sc-3000
+scummvm:
+  extensions:
+  - scummvm
+  - squashfs
+  hardware: computer
+  manufacturer: LucasArts
+  name: ScummVM
+  release: 1987
+segaai:
+  extensions:
+  - bin
+  - wav
+  - flac
+  - cas
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Sega
+  name: Sega AI Computer
+  release: 1986
+sg1000:
+  extensions:
+  - bin
+  - sg
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Sega
+  name: SG-1000
+  platform: sg-1000
+  release: 1983
+  theme: sg-1000
+singe:
+  extensions:
+  - daphne
+  - squashfs
+  hardware: arcade
+  manufacturer: Arcade
+  name: Singe
+  platform: alg, daphne, arcade
+  release: 1990
+snes:
+  extensions:
+  - smc
+  - fig
+  - sfc
+  - gd3
+  - gd7
+  - dx2
+  - bsx
+  - swc
+  - zip
+  - 7z
+  group: snes
+  hardware: console
+  manufacturer: Nintendo
+  name: Super Nintendo Entertainment System
+  release: 1990
+socrates:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: VTech
+  name: Socrates
+  release: 1988
+solarus:
+  extensions:
+  - zip
+  - solarus
+  hardware: port
+  manufacturer: Solarus Team
+  name: Solarus
+  release: 2011
+spectravideo:
+  extensions:
+  - zip
+  - 7z
+  - cas
+  hardware: computer
+  manufacturer: Spectravideo
+  name: Spectravideo SV-328
+  release: 1983
+supergrafx:
+  extensions:
+  - pce
+  - sgx
+  - cue
+  - ccd
+  - chd
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: NEC
+  name: Supergrafx
+  release: 1989
+supracan:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Funtech Entertainment
+  name: Super A'Can
+  release: 1995
+sv8000:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Bandai
+  name: Super Vision 8000
+  release: 1979
+switch:
+  extensions:
+  - xci
+  - nsp
+  hardware: console
+  manufacturer: Nintendo
+  name: Switch
+  release: 2017
+systemsp:
+  extensions:
+  - lst
+  - bin
+  - dat
+  - zip
+  - 7z
+  hardware: arcade
+  manufacturer: Sega
+  name: Sega System SP
+  platform: systemsp, arcade
+  release: 2004
+thextech:
+  extensions:
+  - smbx
+  - squashfs
+  hardware: port
+  manufacturer: Wohlstand
+  name: TheXTech
+  release: 2020
+ti99:
+  extensions:
+  - rpk
+  - wav
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Texas Instruments
+  name: TI-99
+  release: 1981
+tic80:
+  extensions:
+  - tic
+  hardware: console
+  manufacturer: Fantasy
+  name: TIC-80
+  release: 2016
+triforce:
+  extensions:
+  - gcm
+  - iso
+  - gcz
+  - ciso
+  - wbfs
+  - elf
+  - dol
+  - m3u
+  hardware: arcade
+  manufacturer: Namco, Sega, Nintendo
+  name: Triforce
+  platform: triforce, arcade
+  release: 2003
+trs80:
+  extensions:
+  - cmd
+  - cas
+  - dsk
+  - dmk
+  - bas
+  - wav
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Tandy Radio Shack
+  name: TRS-80
+  release: 1977
+tutor:
+  extensions:
+  - bin
+  - wav
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Tomy
+  name: Tutor
+  release: 1983
+tvc:
+  extensions:
+  - cas
+  - tap
+  - dsk
+  - img
+  - zip
+  hardware: computer
+  manufacturer: Videoton
+  name: Videoton TVC
+  release: 1986
+tvgames:
+  extensions:
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Various
+  name: Plug and Play TV Games
+  release: 2002
+uzebox:
+  extensions:
+  - uze
+  - bin
+  - zip
+  hardware: console
+  manufacturer: Atmel
+  name: Uzebox
+  release: 2008
+vc4000:
+  extensions:
+  - bin
+  - rom
+  - pgm
+  - tvc
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Interton
+  name: VC 4000
+  release: 1978
+videopac:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Magnavox / Philips
+  name: Videopac / Odyssey2
+  release: 1978
+  theme: odyssey2
+vectrex:
+  extensions:
+  - bin
+  - gam
+  - vec
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: MB
+  name: Vectrex
+  release: 1982
+vgmplay:
+  extensions:
+  - vgm
+  - vgz
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Various
+  name: Video Game Music Player
+  release: 1980
+virtualboy:
+  extensions:
+  - vb
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Nintendo
+  name: Virtual Boy
+  release: 1995
+vpinball:
+  extensions:
+  - vpx
+  hardware: pinball
+  manufacturer: Randy Davis
+  name: Visual Pinball X
+  release: 2000
+vsmile:
+  extensions:
+  - u1
+  - u3
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: VTech
+  name: V.Smile
+  release: 2005
+wii:
+  extensions:
+  - gcm
+  - iso
+  - gcz
+  - ciso
+  - wbfs
+  - wad
+  - rvz
+  - elf
+  - dol
+  - m3u
+  - json
+  hardware: console
+  manufacturer: Nintendo
+  name: Wii
+  release: 2006
+wiiu:
+  extensions:
+  - wua
+  - wup
+  - wud
+  - wux
+  - rpx
+  - squashfs
+  - wuhb
+  hardware: console
+  manufacturer: Nintendo
+  name: Wii U
+  release: 2012
+wswan:
+  extensions:
+  - ws
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: Bandai
+  name: WonderSwan
+  platform: wonderswan
+  release: 1999
+  theme: wonderswan
+wswanc:
+  extensions:
+  - wsc
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: Bandai
+  name: WonderSwan Color
+  platform: wonderswancolor
+  release: 2000
+  theme: wonderswancolor
+xbox:
+  extensions:
+  - iso
+  - squashfs
+  hardware: console
+  manufacturer: Microsoft
+  name: Xbox
+  release: 2003
+xbox360:
+  extensions:
+  - iso
+  - xex
+  - xbox360
+  - zar
+  hardware: console
+  manufacturer: Microsoft
+  name: Xbox 360
+  release: 2005
+xegs:
+  extensions:
+  - atr
+  - dsk
+  - xfd
+  - bin
+  - rom
+  - car
+  - zip
+  - 7z
+  group: atari8bit
+  hardware: computer
+  manufacturer: Atari
+  name: Atari XE Game System
+  release: 1987
+zxspectrum:
+  extensions:
+  - tzx
+  - tap
+  - z80
+  - rzx
+  - scl
+  - trd
+  - dsk
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Sinclair
+  name: ZX Spectrum
+  release: 1982
+cassettevision:
+  extensions:
+  - bin
+  - zip
+  hardware: console
+  manufacturer: Epoch
+  name: Cassette Vision
+  release: 1981
+flatpak:
+  extensions:
+  - flatpak
+  force: true
+  hardware: os
+  manufacturer: Flatpak Community
+  name: Flatpak
+  release: 2015
+gb2players:
+  extensions:
+  - gb
+  - gb2
+  - gbc2
+  - zip
+  - 7z
+  group: gameboy
+  hardware: portable
+  manufacturer: Nintendo
+  name: Game Boy (2 Players)
+  platform: gb
+  release: 1989
+gbc2players:
+  extensions:
+  - gbc
+  - gb2
+  - gbc2
+  - zip
+  - 7z
+  group: gameboy
+  hardware: portable
+  manufacturer: Nintendo
+  name: Game Boy Color (2 Players)
+  platform: gbc
+  release: 1998
+gx4000:
+  extensions:
+  - dsk
+  - m3u
+  - cpr
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Amstrad
+  name: Amstrad GX4000
+  release: 1990
+lowresnx:
+  extensions:
+  - nx
+  - zip
+  - 7z
+  hardware: engine
+  manufacturer: Tobia Lorenz
+  name: LowRes NX
+  release: 2018
+megacd:
+  extensions:
+  - cue
+  - iso
+  - chd
+  - m3u
+  group: megadrive
+  hardware: console
+  manufacturer: Sega
+  name: Mega-CD / Sega CD
+  platform: megacd
+  release: 1991
+megadrive-msu:
+  extensions:
+  - md
+  - zip
+  - 7z
+  - squashfs
+  group: megadrive
+  hardware: console
+  manufacturer: Sega
+  name: Mega Drive MSU-MD
+  platform: megadrive
+  release: 1988
+  theme: megadrive
+multivision:
+  extensions:
+  - bin
+  - sg
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Tsukuda Original
+  name: Othello Multivision
+  release: 1982
+neogeocd:
+  extensions:
+  - cue
+  - iso
+  - chd
+  hardware: console
+  manufacturer: SNK
+  name: Neo Geo CD
+  platform: neogeocd
+  release: 1994
+odyssey2:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Magnavox
+  name: Odyssey 2
+  release: 1978
+pc88:
+  extensions:
+  - cmt
+  - d88
+  - u88
+  - m3u
+  hardware: computer
+  manufacturer: NEC
+  name: PC-8800
+  release: 1981
+pc98:
+  extensions:
+  - d98
+  - zip
+  - 98d
+  - fdi
+  - fdd
+  - 2hd
+  - tfd
+  - d88
+  - 88d
+  - hdm
+  - xdf
+  - dup
+  - cmd
+  - hdi
+  - thd
+  - nhd
+  - hdd
+  - hdn
+  - m3u
+  hardware: computer
+  manufacturer: NEC
+  name: PC-9800
+  release: 1982
+pcengine:
+  extensions:
+  - pce
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: NEC / Hudson Soft
+  name: PC Engine
+  platform: pcengine
+  release: 1987
+pcfx:
+  extensions:
+  - cue
+  - ccd
+  - toc
+  - chd
+  - zip
+  - 7z
+  - m3u
+  hardware: console
+  manufacturer: NEC
+  name: PC-FX
+  release: 1994
+pokemini:
+  extensions:
+  - min
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: Nintendo
+  name: Pokémon Mini
+  release: 2001
+ports:
+  extensions:
+  - sh
+  - squashfs
+  force: true
+  hardware: engine
+  manufacturer: Various
+  name: Ports
+  release: 1990
+satellaview:
+  extensions:
+  - bs
+  - smc
+  - sfc
+  - zip
+  - 7z
+  - squashfs
+  group: snes
+  hardware: addon
+  manufacturer: Nintendo
+  name: BS-X Satellaview
+  platform: snes
+  release: 1995
+scv:
+  extensions:
+  - bin
+  - zip
+  hardware: console
+  manufacturer: Epoch
+  name: Super Cassette Vision
+  release: 1984
+sega32x:
+  extensions:
+  - 32x
+  - chd
+  - smd
+  - bin
+  - md
+  - zip
+  - 7z
+  group: megadrive
+  hardware: addon
+  manufacturer: Sega
+  name: Sega 32X
+  platform: sega32x
+  release: 1994
+sgb:
+  extensions:
+  - gb
+  - gbc
+  - zip
+  - 7z
+  group: gameboy
+  hardware: addon
+  manufacturer: Nintendo
+  name: Super Game Boy
+  platform: gb
+  release: 1994
+sgb-msu1:
+  extensions:
+  - gb
+  - gbc
+  - zip
+  - 7z
+  - squashfs
+  group: gameboy
+  hardware: addon
+  manufacturer: Nintendo
+  name: Super Game Boy MSU1
+  platform: gb
+  release: 1994
+snes-msu1:
+  extensions:
+  - smc
+  - sfc
+  - squashfs
+  group: snes
+  hardware: console
+  manufacturer: Nintendo
+  name: Super Nintendo MSU-1
+  platform: snes
+  release: 1990
+  theme: snes
+steam:
+  extensions:
+  - steam
+  force: true
+  hardware: os
+  manufacturer: Valve
+  name: Steam
+  release: 2003
+sufami:
+  extensions:
+  - st
+  - fig
+  - bs
+  - smc
+  - sfc
+  - zip
+  - 7z
+  group: snes
+  hardware: addon
+  manufacturer: Bandai
+  name: SuFami Turbo
+  platform: snes
+  release: 1996
+supervision:
+  extensions:
+  - sv
+  - zip
+  - 7z
+  hardware: portable
+  manufacturer: Watara
+  name: Watara Supervision
+  release: 1992
+thomson:
+  extensions:
+  - fd
+  - sap
+  - k7
+  - m7
+  - m5
+  - rom
+  - zip
+  hardware: computer
+  manufacturer: Thomson
+  name: Thomson MO/TO
+  release: 1982
+videopacplus:
+  extensions:
+  - bin
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Philips
+  name: Videopac+
+  platform: videopac
+  release: 1983
+vircon32:
+  extensions:
+  - v32
+  - zip
+  hardware: engine
+  manufacturer: Carra
+  name: Vircon32
+  release: 2021
+wasm4:
+  extensions:
+  - wasm
+  hardware: engine
+  manufacturer: Bruno Garcia
+  name: WASM-4
+  release: 2021
+windows:
+  extensions:
+  - pc
+  - exe
+  - wine
+  - wsquashfs
+  - wtgz
+  force: true
+  hardware: os
+  manufacturer: Microsoft
+  name: Windows Games
+  release: 1985
+windows_installers:
+  extensions:
+  - exe
+  - iso
+  - msi
+  force: true
+  hardware: os
+  manufacturer: Microsoft
+  name: Windows Installers
+  platform: windows
+  release: 1985
+x1:
+  extensions:
+  - dx1
+  - zip
+  - 2d
+  - 2hd
+  - tfd
+  - d88
+  - 88d
+  - hdm
+  - xdf
+  - dup
+  - cmd
+  - 7z
+  hardware: computer
+  manufacturer: Sharp
+  name: Sharp X1
+  release: 1982
+x68000:
+  extensions:
+  - dim
+  - img
+  - d88
+  - 88d
+  - hdm
+  - dup
+  - 2hd
+  - xdf
+  - hdf
+  - cmd
+  - m3u
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Sharp
+  name: Sharp X68000
+  release: 1987
+zx81:
+  extensions:
+  - tzx
+  - p
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Sinclair
+  name: Sinclair ZX81
+  release: 1981
+arcade:
+  extensions:
+  - zip
+  - 7z
+  - chd
+  hardware: arcade
+  manufacturer: Various
+  name: Arcade
+  platform: arcade
+  release: 1970
+voxatron:
+  extensions:
+  - vox
+  - png
+  - m3u
+  hardware: engine
+  manufacturer: Lexaloffle
+  name: Voxatron
+  release: 2011
+cannonball:
+  extensions:
+  - cannonball
+  hardware: engine
+  manufacturer: Chris White
+  name: Cannonball
+  release: 2012
+dice:
+  extensions:
+  - zip
+  - dmy
+  hardware: arcade
+  manufacturer: Various
+  name: DICE
+  release: 1970
+ecwolf:
+  extensions:
+  - ecwolf
+  - pk3
+  - squashfs
+  hardware: engine
+  manufacturer: id Software / Raven
+  name: ECWolf
+  release: 1992
+lutro:
+  extensions:
+  - lutro
+  - zip
+  - 7z
+  hardware: engine
+  manufacturer: Libretro
+  name: Lutro
+  release: 2014
+mrboom:
+  extensions:
+  - libretro
+  hardware: engine
+  manufacturer: Simon Lacroix
+  name: MrBoom
+  release: 2017
+pico:
+  extensions:
+  - bin
+  - md
+  - zip
+  - 7z
+  hardware: console
+  manufacturer: Sega
+  name: Sega Pico
+  release: 1993
+prboom:
+  extensions:
+  - wad
+  - iwad
+  - pwad
+  hardware: engine
+  manufacturer: id Software
+  name: PrBoom
+  release: 1993
+quake:
+  extensions:
+  - quake
+  hardware: engine
+  manufacturer: id Software
+  name: Quake
+  release: 1996
+reminiscence:
+  extensions:
+  - rem
+  hardware: engine
+  manufacturer: Gregory Montoir
+  name: REminiscence
+  release: 1992
+superbroswar:
+  extensions:
+  - game
+  hardware: engine
+  manufacturer: Various
+  name: Super Mario War
+  release: 2004
+vis:
+  extensions:
+  - chd
+  - cue
+  - toc
+  - nrg
+  - gdi
+  - iso
+  - cdr
+  hardware: console
+  manufacturer: Tandy
+  name: Tandy Video Information System
+  release: 1992
+xrick:
+  extensions:
+  - zip
+  hardware: engine
+  manufacturer: BigOrno
+  name: xrick
+  release: 2003

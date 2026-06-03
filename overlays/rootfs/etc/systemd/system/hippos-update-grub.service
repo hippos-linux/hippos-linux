@@ -1,0 +1,12 @@
+[Unit]
+Description=HippOS First-Boot GRUB Configuration
+After=local-fs.target
+ConditionPathExists=!/var/lib/hippos/grub-updated
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/hippos/update-grub-first-boot
+
+[Install]
+WantedBy=multi-user.target

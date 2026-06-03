@@ -1,0 +1,11 @@
+[Unit]
+Description=Mark boot as successful (clear GRUB boot counter)
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=-/usr/bin/grub-editenv /boot/efi/grub/grubenv unset boot_counter
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

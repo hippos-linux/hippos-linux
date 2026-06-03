@@ -1,0 +1,9 @@
+requireArtifact: openmsx
+systems:
+- msx1
+- msx2
+- msx2+
+- msxturbor
+- colecovision
+- spectravideo
+features: []

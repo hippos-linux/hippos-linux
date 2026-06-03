@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Amiberry
+GenericName=Amiga Emulator
+Comment=Amiberry Amiga emulator
+Exec=/usr/lib/hippos/emulators/launch-amiberry
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

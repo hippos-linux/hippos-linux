@@ -1,0 +1,13 @@
+[Unit]
+Description=Grow HippOS btrfs partition to fill available disk space
+DefaultDependencies=no
+After=systemd-udev-settle.service
+Before=local-fs.target
+ConditionPathExists=!/var/lib/hippos/userdata-grown
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/hippos-grow-userdata
+
+[Install]
+WantedBy=local-fs-pre.target

@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+# hippos-crt-setup — configure X11, switchres, and videomodes for CRT output.
+# Runs as root before X starts, called from hippos-display-setup when crt.enabled=true.
+# Idempotent — safe to call on every session start.
+
+set -euo pipefail
+
+LOG_TAG="[hippos-crt-setup]"
+log()  { printf '%s %s\n'         "${LOG_TAG}" "$*"; }
+warn() { printf '%s WARNING: %s\n' "${LOG_TAG}" "$*" >&2; }
+
+XORG_CONF_D="/etc/X11/xorg.conf.d"
+CRT_X11_DIR="/usr/share/hippos/crt/x11"
+SWITCHRES_INI="/etc/switchres.ini"
+SWITCHRES_TEMPLATE="/usr/share/hippos/crt/switchres.ini.template"
+VIDEOMODES_BASE="/usr/share/hippos/crt/videomodes"
+VIDEOMODES_DEST="/userdata/system/videomodes.conf"
+EDID_SRC_DIR="/usr/share/hippos/crt/edid"
+EDID_DEST_DIR="/lib/firmware/edid"
+GRUB_CRT_CONF="/etc/default/grub.d/50-crt.cfg"
+
+get() { hippos-settings get "$1" 2>/dev/null || true; }
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+_connected_outputs() {
+    # List X11 output names (e.g. VGA-1, DVI-I-1) for all connected DRM outputs.
+    local p status name
+    for p in /sys/class/drm/card[0-9]*-*; do
+        [[ -f "${p}/status" ]] || continue
+        status="$(< "${p}/status")"
+        [[ "${status}" == "connected" ]] || continue
+        name="${p##*/}"         # card0-VGA-1
+        name="${name#card*-}"   # VGA-1
+        echo "${name}"
+    done
+}
+
+_detect_gpu_driver() {
+    # Return kernel DRM driver name for the primary card.
+    local card drv
+    for card in /sys/class/drm/card[0-9]; do
+        drv="$(readlink "${card}/device/driver" 2>/dev/null \
+            | xargs basename 2>/dev/null || true)"
+        case "${drv}" in
+            amdgpu|radeon|i915|nvidia) echo "${drv}"; return ;;
+        esac
+    done
+    echo "modesetting"
+}
+
+_auto_crt_output() {
+    # Prefer VGA/DVI-I — the two connector types that carry 15kHz.
+    local preferred
+    preferred="$(_connected_outputs | grep -E '^(VGA|DVI-I)' | head -1 || true)"
+    if [[ -n "${preferred}" ]]; then
+        echo "${preferred}"
+        return
+    fi
+    _connected_outputs | head -1
+}
+
+# ── Read settings ─────────────────────────────────────────────────────────────
+
+MONITOR_PROFILE="$(get crt.monitor_profile)"; MONITOR_PROFILE="${MONITOR_PROFILE:-generic_15}"
+CRT_OUTPUT="$(get crt.output)"
+INTERLACE="$(get crt.interlace)";           INTERLACE="${INTERLACE:-true}"
+SUPER_WIDTH="$(get crt.super_width)";       SUPER_WIDTH="${SUPER_WIDTH:-2560}"
+DOTCLOCK_MIN="$(get crt.dotclock_min)";     DOTCLOCK_MIN="${DOTCLOCK_MIN:-0.0}"
+BOOT_RES="$(get crt.boot_resolution)";      BOOT_RES="${BOOT_RES:-640x480@60}"
+
+# ── Resolve output ────────────────────────────────────────────────────────────
+
+if [[ -z "${CRT_OUTPUT}" || "${CRT_OUTPUT}" == "auto" ]]; then
+    CRT_OUTPUT="$(_auto_crt_output)"
+    if [[ -z "${CRT_OUTPUT}" ]]; then
+        warn "No connected display detected. Cannot determine CRT output."
+        exit 1
+    fi
+    log "auto-detected output: ${CRT_OUTPUT}"
+fi
+
+log "profile=${MONITOR_PROFILE} output=${CRT_OUTPUT}"
+
+# ── GPU driver ────────────────────────────────────────────────────────────────
+
+GPU_DRIVER="$(_detect_gpu_driver)"
+log "GPU driver: ${GPU_DRIVER}"
+
+# amdgpu/radeon/nvidia-proprietary → full Switchres modeline set (75+ entries)
+# i915/nouveau/modesetting → limited VESA-style set (16 entries)
+case "${GPU_DRIVER}" in
+    amdgpu|radeon|nvidia) VIDEOMODES_DIR="${VIDEOMODES_BASE}/amd"   ;;
+    *)                    VIDEOMODES_DIR="${VIDEOMODES_BASE}/intel"  ;;
+esac
+
+# ── X11: disable TearFree / VariableRefresh for CRT ──────────────────────────
+# Priority 90 overrides the stock 20-amdgpu.conf / 20-radeon.conf (TearFree=true).
+# TearFree adds a shadow framebuffer blit path that kills direct KMS pageflips,
+# causing tearing on CRT and preventing correct modeline switching.
+
+mkdir -p "${XORG_CONF_D}"
+
+case "${GPU_DRIVER}" in
+    amdgpu) _gpu_conf="${CRT_X11_DIR}/90-crt-amdgpu.conf"     ;;
+    radeon) _gpu_conf="${CRT_X11_DIR}/90-crt-radeon.conf"      ;;
+    *)      _gpu_conf="${CRT_X11_DIR}/90-crt-modesetting.conf" ;;
+esac
+
+if [[ -f "${_gpu_conf}" ]]; then
+    cp "${_gpu_conf}" "${XORG_CONF_D}/90-crt-gpu.conf"
+    log "wrote ${XORG_CONF_D}/90-crt-gpu.conf (from $(basename "${_gpu_conf}"))"
+else
+    warn "GPU X11 template not found: ${_gpu_conf}"
+fi
+
+# ── X11: ignore all non-CRT outputs ──────────────────────────────────────────
+# Each connected output other than the CRT gets a Monitor section with
+# Ignore=true. Prevents X from driving LCD panels at CRT timings on boot.
+
+{
+    printf '# CRT mode — managed by hippos-crt-setup. Do not edit manually.\n'
+    while read -r output; do
+        [[ "${output}" == "${CRT_OUTPUT}" ]] && continue
+        printf 'Section "Monitor"\n'
+        printf '    Identifier "%s"\n' "${output}"
+        printf '    Option "Ignore" "true"\n'
+        printf 'EndSection\n\n'
+    done < <(_connected_outputs)
+} > "${XORG_CONF_D}/10-crt-ignore.conf"
+log "wrote ${XORG_CONF_D}/10-crt-ignore.conf"
+
+# ── /etc/switchres.ini ────────────────────────────────────────────────────────
+
+if [[ ! -f "${SWITCHRES_TEMPLATE}" ]]; then
+    warn "switchres.ini template missing: ${SWITCHRES_TEMPLATE}"
+else
+    INTERLACE_VAL=1
+    [[ "${INTERLACE}" == "false" || "${INTERLACE}" == "0" ]] && INTERLACE_VAL=0
+
+    sed \
+        -e "s/@MONITOR@/${MONITOR_PROFILE}/g" \
+        -e "s/@DISPLAY@/${CRT_OUTPUT}/g" \
+        -e "s/@INTERLACE@/${INTERLACE_VAL}/g" \
+        -e "s/@DOTCLOCK_MIN@/${DOTCLOCK_MIN}/g" \
+        -e "s/@SUPER_WIDTH@/${SUPER_WIDTH}/g" \
+        "${SWITCHRES_TEMPLATE}" > "${SWITCHRES_INI}"
+    log "wrote ${SWITCHRES_INI}"
+fi
+
+# ── videomodes.conf ───────────────────────────────────────────────────────────
+
+VIDEOMODES_SRC="${VIDEOMODES_DIR}/videomodes.conf_${MONITOR_PROFILE}"
+if [[ -f "${VIDEOMODES_SRC}" ]]; then
+    mkdir -p "$(dirname "${VIDEOMODES_DEST}")"
+    cp "${VIDEOMODES_SRC}" "${VIDEOMODES_DEST}"
+    chmod 644 "${VIDEOMODES_DEST}"
+    log "installed videomodes.conf for ${MONITOR_PROFILE}"
+else
+    warn "no videomodes.conf for profile '${MONITOR_PROFILE}' (${VIDEOMODES_SRC} not found)"
+fi
+
+# ── EDID firmware (optional) ──────────────────────────────────────────────────
+# Pre-compiled EDID binary tells the GPU to accept low-refresh-rate modelines
+# without locking out modes the monitor's own EDID would reject.
+# Only applies if a binary is available for this monitor profile.
+
+EDID_BIN="${EDID_SRC_DIR}/${MONITOR_PROFILE}.bin"
+EDID_INSTALLED=0
+
+if [[ -f "${EDID_BIN}" ]]; then
+    mkdir -p "${EDID_DEST_DIR}"
+    cp "${EDID_BIN}" "${EDID_DEST_DIR}/crt.bin"
+    chmod 644 "${EDID_DEST_DIR}/crt.bin"
+    EDID_INSTALLED=1
+    log "installed EDID: ${MONITOR_PROFILE}.bin → ${EDID_DEST_DIR}/crt.bin"
+else
+    log "no EDID binary for '${MONITOR_PROFILE}' — skipping firmware install"
+fi
+
+# ── GRUB kernel params ────────────────────────────────────────────────────────
+# video=<output>:<res>e  — sets KMS framebuffer to CRT boot resolution
+# drm.edid_firmware=...  — only added when EDID binary was installed above
+# update-grub is expensive; only run it when the dropin content changes.
+
+BOOT_RES_KRN="${BOOT_RES%%@*}"   # 640x480@60 → 640x480
+
+GRUB_CMDLINE="video=${CRT_OUTPUT}:${BOOT_RES_KRN}e"
+if [[ "${EDID_INSTALLED}" -eq 1 ]]; then
+    GRUB_CMDLINE+=" drm.edid_firmware=${CRT_OUTPUT}:edid/crt.bin"
+fi
+
+mkdir -p "$(dirname "${GRUB_CRT_CONF}")"
+_new_grub_conf="$(printf '# CRT mode — managed by hippos-crt-setup. Do not edit manually.\nGRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT %s"\n' "${GRUB_CMDLINE}")"
+_old_grub_conf="$(cat "${GRUB_CRT_CONF}" 2>/dev/null || true)"
+
+if [[ "${_new_grub_conf}" != "${_old_grub_conf}" ]]; then
+    printf '%s\n' "${_new_grub_conf}" > "${GRUB_CRT_CONF}"
+    if update-grub 2>/dev/null; then
+        log "GRUB updated: ${GRUB_CMDLINE}"
+    else
+        warn "update-grub failed — GRUB CRT params will apply after next manual update-grub"
+    fi
+else
+    log "GRUB dropin unchanged — skipping update-grub"
+fi
+
+log "CRT setup complete. X11 config changes take effect after X restart."

@@ -1,0 +1,5 @@
+Super Nintendo Entertainment System
+Manufacturer: Nintendo
+Released: 1990
+Hardware: console
+Extensions: .smc .fig .sfc .gd3 .gd7 .dx2 .bsx .swc .zip .7z

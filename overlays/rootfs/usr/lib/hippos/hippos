@@ -1,0 +1,1182 @@
+#!/usr/bin/env python3
+"""hippos — HippOS control center CLI."""
+
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+HIPPOS_CONF     = Path('/userdata/system/hippos.conf')
+DEFAULTS_CONF   = Path('/usr/share/hippos/hippos-defaults.conf')
+HIPPOS_SETTINGS = Path('/usr/lib/hippos/hippos-settings')
+
+_DEVICE_MAPPING_DIRS = [
+    Path('/userdata/system/configs/hippos-hotkeys/devices'),
+    Path('/usr/share/hippos/hotkeys/devices'),
+]
+
+_HIPPOS_SERVICES = [
+    'hippos-xserver.service',
+    'hippos-es.service',
+    'hippos-desktop.service',
+    'hippos-hotkeys.service',
+]
+
+_USAGE = """\
+Usage: hippos <command> [args]
+
+Commands:
+  status                         show system state
+  settings <args>                delegate to hippos-settings
+  switch es                      switch to EmulationStation
+  switch desktop [de]            switch to desktop (lxqt, plasma, xfce, gnome, mate, cinnamon)
+  restart es|desktop|xserver     restart a hippos service
+  logs [--lines N]               show recent hippos service logs (default: 50 lines)
+  info                           show OS and hardware info
+
+  shutdown                       power off (respects system.suspendmode)
+  reboot                         reboot the system
+  suspend                        suspend to RAM
+  hibernate                      hibernate to disk
+
+  timezone get                   show current timezone
+  timezone set <tz>              set timezone (e.g. Europe/London)
+  timezone detect                detect timezone from IP geolocation
+
+  brightness get                 show current brightness (0-100)
+  brightness set <0-100>         set brightness and save to settings
+
+  controller list                list connected gamepads with device info
+  controller map show [player]   show hotkey mapping for a gamepad
+  controller map set <p> <key> <action>  set one key binding in a mapping file
+  controller map del <p> <key>   remove one key binding
+  controller map list-actions    list valid hotkey action names
+
+  audio list                     list audio output devices
+  audio get                      show current default audio output
+  audio set <sink>               set default audio output and save to settings
+  audio volume                   show current volume
+  audio volume up|down           change volume ±5%
+  audio volume set <pct>         set volume (e.g. 70%)
+
+  display list                   list available display modes
+  display get                    show current output, resolution and rotation
+  display set <WxH[@R]>          set resolution and save to settings
+  display output <name>          set default output and save to settings
+  display rotate <0-3>           set rotation (0=normal 1=right 2=inverted 3=left)
+  screenshot [path]              take a screenshot (saved to /userdata/screenshots/)
+
+  wifi list                      scan for nearby Wi-Fi networks
+  wifi status                    show current connection
+  wifi connect <ssid> [--password <pass>]  connect and save credentials
+  wifi disconnect                disconnect and disable auto-connect
+  wifi forget <ssid>             remove a saved network
+  wifi on|off                    enable or disable Wi-Fi radio
+
+  bluetooth power on|off         toggle Bluetooth adapter
+  bluetooth list                 list paired devices
+  bluetooth scan [--time N]      scan for nearby Bluetooth devices (default 10s)
+  bluetooth pair <mac>           pair, trust, and connect a device
+  bluetooth connect <mac>        connect to a paired device
+  bluetooth disconnect <mac>     disconnect a device
+  bluetooth remove <mac>         remove a paired device
+
+  diag [--out path]              collect diagnostics bundle
+
+  content list [category]        list available content packages
+  content installed              list installed content packages
+  content info <id>              show content package details
+  content install <id>           download and install a content package
+  content remove <id>            remove an installed content package
+
+  update check                   check for available package updates
+  update apply                   snapshot root, then run apt dist-upgrade (requires root)
+  update rollback                list available pre-update snapshots
+
+  preflight                      check hardware/firmware readiness
+"""
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _run(cmd: list[str], *, capture: bool = False) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, capture_output=capture, text=True)
+
+
+def _delegate(script: str, args: list[str]) -> int:
+    return subprocess.run([script] + args).returncode
+
+
+def _setting(key: str) -> str:
+    r = subprocess.run([str(HIPPOS_SETTINGS), 'get', key],
+                       capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else ''
+
+
+def _service_active(name: str) -> bool:
+    r = subprocess.run(['systemctl', 'is-active', '--quiet', name])
+    return r.returncode == 0
+
+
+def _service_status(name: str) -> str:
+    return 'active' if _service_active(name) else 'inactive'
+
+
+# ── Commands ───────────────────────────────────────────────────────────────────
+
+def cmd_status() -> int:
+    session = _setting('system.session') or 'es'
+    desktop = _setting('system.desktop') or 'lxqt'
+
+    print('HippOS Status')
+    print(f'  Session:  {session}')
+    print(f'  Desktop:  {desktop}')
+    print()
+    print('  Services:')
+    for svc in _HIPPOS_SERVICES:
+        state = _service_status(svc)
+        short = svc.replace('.service', '')
+        print(f'    {short:<30} {state}')
+
+    # Controllers via /dev/input/event*
+    try:
+        controllers = _detect_controllers()
+        print()
+        print(f'  Controllers: {len(controllers)} connected')
+        for name in controllers:
+            print(f'    {name}')
+    except Exception:
+        pass
+
+    # Uptime
+    try:
+        r = subprocess.run(['uptime', '-p'], capture_output=True, text=True)
+        if r.returncode == 0:
+            print(f'\n  Uptime: {r.stdout.strip()}')
+    except Exception:
+        pass
+
+    return 0
+
+
+def _detect_controllers() -> list[str]:
+    """Read /proc/bus/input/devices for joystick/gamepad entries."""
+    devices = []
+    try:
+        text = Path('/proc/bus/input/devices').read_text()
+        current_name = ''
+        for line in text.splitlines():
+            if line.startswith('N: Name='):
+                current_name = line.split('"')[1] if '"' in line else ''
+            elif line.startswith('H: Handlers=') and 'js' in line:
+                if current_name:
+                    devices.append(current_name)
+                    current_name = ''
+    except OSError:
+        pass
+    return devices
+
+
+def cmd_settings(args: list[str]) -> int:
+    if not HIPPOS_SETTINGS.exists():
+        print('hippos-settings not found', file=sys.stderr)
+        return 1
+    result = subprocess.run([str(HIPPOS_SETTINGS)] + args)
+    return result.returncode
+
+
+def cmd_switch(args: list[str]) -> int:
+    if not args:
+        print('Usage: hippos switch es|desktop [de]', file=sys.stderr)
+        return 1
+    target = args[0]
+    if target == 'es':
+        return _run(['/usr/lib/hippos/switch-to-es']).returncode
+    if target == 'desktop':
+        cmd = ['/usr/lib/hippos/switch-to-desktop']
+        if len(args) > 1:
+            cmd.append(args[1])
+        return _run(cmd).returncode
+    print(f'Unknown target: {target}', file=sys.stderr)
+    return 1
+
+
+def cmd_restart(args: list[str]) -> int:
+    if not args:
+        print('Usage: hippos restart es|desktop|xserver', file=sys.stderr)
+        return 1
+    target = args[0]
+    svc_map = {
+        'es':       'hippos-es.service',
+        'desktop':  'hippos-desktop.service',
+        'xserver':  'hippos-xserver.service',
+    }
+    svc = svc_map.get(target)
+    if svc is None:
+        print(f'Unknown target: {target}', file=sys.stderr)
+        return 1
+    return _run(['systemctl', 'restart', svc]).returncode
+
+
+def cmd_logs(args: list[str]) -> int:
+    lines = '50'
+    if '--lines' in args:
+        i = args.index('--lines')
+        if i + 1 < len(args):
+            lines = args[i + 1]
+
+    units = []
+    for svc in _HIPPOS_SERVICES:
+        units += ['-u', svc]
+
+    return _run(['journalctl', '--no-pager', '-n', lines] + units).returncode
+
+
+def cmd_info() -> int:
+    cmds: list[tuple[str, list[str]]] = [
+        ('OS',       ['cat', '/etc/os-release']),
+        ('Kernel',   ['uname', '-r']),
+        ('CPU',      ['grep', '-m1', 'model name', '/proc/cpuinfo']),
+        ('Memory',   ['free', '-h']),
+        ('Disk',     ['df', '-h', '/userdata']),
+    ]
+    for label, cmd in cmds:
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode == 0 and r.stdout.strip():
+            val = r.stdout.strip().splitlines()[0]
+            # Trim "model name\t: " prefix from cpuinfo
+            if ': ' in val and label == 'CPU':
+                val = val.split(': ', 1)[1]
+            print(f'{label}: {val}')
+    return 0
+
+
+# ── Controller tools ───────────────────────────────────────────────────────────
+
+def _mapping_filename(name: str, vendor: int, product: int) -> str:
+    safe = re.sub(r'[^a-zA-Z0-9_]', '', name.replace(' ', '_'))
+    return f'{safe}-{vendor:x}-{product:x}.mapping'
+
+
+def _find_mapping(filename: str) -> str:
+    for d in _DEVICE_MAPPING_DIRS:
+        p = d / filename
+        if p.exists():
+            return str(p)
+    return '(none)'
+
+
+def _load_mapping(path: Path) -> dict:
+    import json
+    if path.exists():
+        try:
+            return json.loads(path.read_text())
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_mapping(path: Path, data: dict) -> None:
+    import json
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix('.tmp')
+    tmp.write_text(json.dumps(data, indent=4) + '\n')
+    tmp.replace(path)
+
+
+def _valid_actions() -> list[str]:
+    import json
+    default_map = Path('/usr/share/hippos/hotkeys/default_mapping.json')
+    if default_map.exists():
+        try:
+            data = json.loads(default_map.read_text())
+            return sorted(set(data.values()))
+        except Exception:
+            pass
+    return []
+
+
+def _evdev_gamepads() -> list:
+    try:
+        import evdev
+        from evdev import ecodes
+    except ImportError:
+        return []
+    _GAMEPAD_BUTTONS = {
+        ecodes.BTN_SOUTH, ecodes.BTN_EAST, ecodes.BTN_NORTH, ecodes.BTN_WEST,
+        ecodes.BTN_START, ecodes.BTN_SELECT, ecodes.BTN_MODE,
+    }
+    found = []
+    for path in sorted(Path('/dev/input').glob('event*')):
+        try:
+            dev = evdev.InputDevice(str(path))
+            caps = dev.capabilities()
+            keys = set(caps.get(ecodes.EV_KEY, []))
+            if keys & _GAMEPAD_BUTTONS:
+                found.append(dev)
+        except OSError:
+            continue
+    return found
+
+
+def cmd_controller(args: list[str]) -> int:
+    subcmd = args[0] if args else 'list'
+
+    if subcmd == 'map':
+        return cmd_controller_map(args[1:])
+
+    if subcmd != 'list':
+        print('Usage: hippos controller list|map', file=sys.stderr)
+        return 1
+
+    found = _evdev_gamepads()
+    if not found:
+        print('No gamepads detected.')
+        return 0
+
+    for i, dev in enumerate(found):
+        mf = _mapping_filename(dev.name, dev.info.vendor, dev.info.product)
+        mapping_path = _find_mapping(mf)
+        print(f'Player {i + 1}: {dev.name}')
+        print(f'  Device:  {dev.path}')
+        print(f'  VID:PID: {dev.info.vendor:04x}:{dev.info.product:04x}')
+        print(f'  Mapping: {mf}')
+        print(f'  File:    {mapping_path}')
+        print()
+
+    return 0
+
+
+def cmd_controller_map(args: list[str]) -> int:
+    import json
+    subcmd = args[0] if args else 'show'
+    user_mapping_dir = Path('/userdata/system/configs/hippos-hotkeys/devices')
+
+    if subcmd == 'list-actions':
+        actions = _valid_actions()
+        if not actions:
+            print('(no actions found in default_mapping.json)')
+            return 1
+        for a in actions:
+            print(a)
+        return 0
+
+    gamepads = _evdev_gamepads()
+
+    if subcmd == 'show':
+        player = int(args[1]) if len(args) > 1 else 1
+        if player < 1 or player > len(gamepads):
+            print(f'No gamepad at player {player}.', file=sys.stderr)
+            return 1
+        dev = gamepads[player - 1]
+        mf = _mapping_filename(dev.name, dev.info.vendor, dev.info.product)
+        # User mapping overrides OS mapping
+        user_path = user_mapping_dir / mf
+        os_path   = Path('/usr/share/hippos/hotkeys/devices') / mf
+        path = user_path if user_path.exists() else (os_path if os_path.exists() else None)
+        print(f'Player {player}: {dev.name}')
+        print(f'Mapping file: {path or "(none — using default_mapping.json)"}')
+        data = _load_mapping(path) if path else {}
+        if data:
+            for key, action in sorted(data.items()):
+                print(f'  {key:<30} -> {action}')
+        else:
+            print('  (no device-specific bindings)')
+        return 0
+
+    if subcmd == 'set':
+        if len(args) < 4:
+            print('Usage: hippos controller map set <player> <BTN_KEY> <action>', file=sys.stderr)
+            return 1
+        player, key, action = int(args[1]), args[2], args[3]
+        valid = _valid_actions()
+        if valid and action not in valid:
+            print(f'Unknown action: {action}', file=sys.stderr)
+            print(f'Valid: {", ".join(valid)}', file=sys.stderr)
+            return 1
+        if player < 1 or player > len(gamepads):
+            print(f'No gamepad at player {player}.', file=sys.stderr)
+            return 1
+        dev = gamepads[player - 1]
+        mf = _mapping_filename(dev.name, dev.info.vendor, dev.info.product)
+        path = user_mapping_dir / mf
+        # Start from OS mapping if no user copy yet
+        if not path.exists():
+            os_path = Path('/usr/share/hippos/hotkeys/devices') / mf
+            data = _load_mapping(os_path)
+        else:
+            data = _load_mapping(path)
+        data[key] = action
+        _save_mapping(path, data)
+        print(f'Set {key} -> {action} in {path}')
+        return 0
+
+    if subcmd == 'del':
+        if len(args) < 3:
+            print('Usage: hippos controller map del <player> <BTN_KEY>', file=sys.stderr)
+            return 1
+        player, key = int(args[1]), args[2]
+        if player < 1 or player > len(gamepads):
+            print(f'No gamepad at player {player}.', file=sys.stderr)
+            return 1
+        dev = gamepads[player - 1]
+        mf = _mapping_filename(dev.name, dev.info.vendor, dev.info.product)
+        path = user_mapping_dir / mf
+        if not path.exists():
+            print(f'No user mapping for player {player}.', file=sys.stderr)
+            return 1
+        data = _load_mapping(path)
+        if key not in data:
+            print(f'{key} not in mapping.')
+            return 0
+        del data[key]
+        _save_mapping(path, data)
+        print(f'Removed {key} from {path}')
+        return 0
+
+    print(f'Unknown map subcommand: {subcmd}', file=sys.stderr)
+    return 1
+
+
+# ── Audio tools ────────────────────────────────────────────────────────────────
+
+def _pipewire_env() -> dict[str, str]:
+    env = dict(os.environ)
+    xdg = env.get('XDG_RUNTIME_DIR', '/run/user/1000')
+    env.setdefault('XDG_RUNTIME_DIR', xdg)
+    env.setdefault('DBUS_SESSION_BUS_ADDRESS', f'unix:path={xdg}/bus')
+    env.setdefault('PIPEWIRE_RUNTIME_DIR', xdg)
+    return env
+
+
+def cmd_audio(args: list[str]) -> int:
+    subcmd = args[0] if args else 'list'
+    env = _pipewire_env()
+
+    if subcmd == 'list':
+        r = subprocess.run(['pactl', 'list', 'sinks', 'short'],
+                           capture_output=True, text=True, env=env)
+        if r.returncode != 0:
+            print('pactl failed — is PipeWire running?', file=sys.stderr)
+            return 1
+        lines = r.stdout.strip().splitlines()
+        if not lines:
+            print('No audio output devices found.')
+            return 0
+        for line in lines:
+            parts = line.split('\t')
+            idx  = parts[0] if len(parts) > 0 else '?'
+            name = parts[1] if len(parts) > 1 else '?'
+            state = parts[3] if len(parts) > 3 else ''
+            print(f'  [{idx}] {name}  {state}')
+        return 0
+
+    if subcmd == 'get':
+        r = subprocess.run(['pactl', 'get-default-sink'],
+                           capture_output=True, text=True, env=env)
+        live = r.stdout.strip() if r.returncode == 0 else '(unknown)'
+        saved = _setting('audio.device') or 'default'
+        print(f'Live:   {live}')
+        print(f'Saved:  {saved}')
+        return 0
+
+    if subcmd == 'set':
+        if len(args) < 2:
+            print('Usage: hippos audio set <sink>', file=sys.stderr)
+            return 1
+        sink = args[1]
+        r = subprocess.run(['pactl', 'set-default-sink', sink],
+                           capture_output=True, text=True, env=env)
+        if r.returncode != 0:
+            print(f'pactl error: {r.stderr.strip()}', file=sys.stderr)
+            return 1
+        subprocess.run([str(HIPPOS_SETTINGS), 'set', 'audio.device', sink])
+        print(f'Default audio output set to: {sink}')
+        return 0
+
+    if subcmd == 'volume':
+        vol_args = args[1:]
+        if not vol_args:
+            r = subprocess.run(['pactl', 'get-sink-volume', '@DEFAULT_SINK@'],
+                               capture_output=True, text=True, env=env)
+            if r.returncode != 0:
+                print('pactl failed — is PipeWire running?', file=sys.stderr)
+                return 1
+            print(r.stdout.strip())
+            return 0
+        action = vol_args[0]
+        if action == 'up':
+            delta = '+5%'
+        elif action == 'down':
+            delta = '-5%'
+        elif action == 'set':
+            if len(vol_args) < 2:
+                print('Usage: hippos audio volume set <pct>', file=sys.stderr)
+                return 1
+            delta = vol_args[1]
+            if not delta.endswith('%'):
+                delta += '%'
+        else:
+            print(f'Unknown volume action: {action}', file=sys.stderr)
+            return 1
+        r = subprocess.run(['pactl', 'set-sink-volume', '@DEFAULT_SINK@', delta],
+                           capture_output=True, text=True, env=env)
+        if r.returncode != 0:
+            print(f'pactl error: {r.stderr.strip()}', file=sys.stderr)
+            return 1
+        # Persist: read back actual volume and save
+        r2 = subprocess.run(['pactl', 'get-sink-volume', '@DEFAULT_SINK@'],
+                            capture_output=True, text=True, env=env)
+        if r2.returncode == 0:
+            import re as _re
+            m = _re.search(r'(\d+)%', r2.stdout)
+            if m:
+                subprocess.run([str(HIPPOS_SETTINGS), 'set', 'audio.volume', m.group(1)])
+        return 0
+
+    print(f'Unknown audio subcommand: {subcmd}', file=sys.stderr)
+    print('Usage: hippos audio list|get|set|volume', file=sys.stderr)
+    return 1
+
+
+# ── Display tools ──────────────────────────────────────────────────────────────
+
+def _xrandr_query() -> str:
+    r = subprocess.run(['xrandr', '--query'], capture_output=True, text=True,
+                       env={**os.environ, 'DISPLAY': os.environ.get('DISPLAY', ':0')})
+    return r.stdout if r.returncode == 0 else ''
+
+
+def cmd_display(args: list[str]) -> int:
+    subcmd = args[0] if args else 'list'
+    env = {**os.environ, 'DISPLAY': os.environ.get('DISPLAY', ':0')}
+
+    if subcmd == 'list':
+        out = _xrandr_query()
+        if not out:
+            print('xrandr failed — is an X server running?', file=sys.stderr)
+            return 1
+        print(out, end='')
+        return 0
+
+    if subcmd == 'get':
+        output = _setting('display.output') or '(auto)'
+        res    = _setting('display.resolution') or 'preferred'
+        _rot_map = {'0': 'normal', '1': 'right', '2': 'inverted', '3': 'left'}
+        rotate = _setting('display.rotate') or '0'
+        print(f'Output:     {output}')
+        print(f'Resolution: {res}')
+        print(f'Rotation:   {_rot_map.get(rotate, "normal")} ({rotate})')
+        for line in _xrandr_query().splitlines():
+            if '*' in line:
+                print(f'Active:     {line.strip()}')
+                break
+        return 0
+
+    if subcmd == 'set':
+        if len(args) < 2:
+            print('Usage: hippos display set <WxH[@R]>', file=sys.stderr)
+            return 1
+        mode = args[1]
+        subprocess.run([str(HIPPOS_SETTINGS), 'set', 'display.resolution', mode])
+        # Apply now if X is running
+        output = _setting('display.output')
+        if not output:
+            output = _xrandr_current_output()
+        if output:
+            r = subprocess.run(['xrandr', '--output', output, '--mode', mode],
+                               capture_output=True, text=True, env=env)
+            if r.returncode != 0:
+                print(f'xrandr: {r.stderr.strip()}', file=sys.stderr)
+                return 1
+        print(f'Resolution set to: {mode}')
+        return 0
+
+    if subcmd == 'output':
+        if len(args) < 2:
+            print('Usage: hippos display output <name>', file=sys.stderr)
+            return 1
+        subprocess.run([str(HIPPOS_SETTINGS), 'set', 'display.output', args[1]])
+        print(f'Default output set to: {args[1]}')
+        return 0
+
+    if subcmd == 'rotate':
+        if len(args) < 2:
+            print('Usage: hippos display rotate <0-3>', file=sys.stderr)
+            return 1
+        val = args[1]
+        if val not in ('0', '1', '2', '3'):
+            print('Rotation must be 0, 1, 2, or 3', file=sys.stderr)
+            return 1
+        _rot_map = {'0': 'normal', '1': 'right', '2': 'inverted', '3': 'left'}
+        rotation = _rot_map[val]
+        output = _setting('display.output') or _xrandr_current_output()
+        if output:
+            r = subprocess.run(['xrandr', '--output', output, '--rotate', rotation],
+                               capture_output=True, text=True, env=env)
+            if r.returncode != 0:
+                print(f'xrandr: {r.stderr.strip()}', file=sys.stderr)
+                return 1
+        subprocess.run([str(HIPPOS_SETTINGS), 'set', 'display.rotate', val])
+        print(f'Rotation set to: {rotation} ({val})')
+        return 0
+
+    print(f'Unknown display subcommand: {subcmd}', file=sys.stderr)
+    return 1
+
+
+def _xrandr_current_output() -> str:
+    for line in _xrandr_query().splitlines():
+        if ' connected' in line:
+            return line.split()[0]
+    return ''
+
+
+# ── Screenshot ──────────────────────────────────────────────────────────────────
+
+def cmd_screenshot(args: list[str]) -> int:
+    import time as _time
+    screenshots_dir = Path('/userdata/screenshots')
+    screenshots_dir.mkdir(parents=True, exist_ok=True)
+
+    if args:
+        out_path = args[0]
+    else:
+        ts = _time.strftime('%Y%m%d-%H%M%S')
+        out_path = str(screenshots_dir / f'hippos-{ts}.png')
+
+    env = {**os.environ, 'DISPLAY': os.environ.get('DISPLAY', ':0')}
+
+    # Try scrot first, then import (ImageMagick), then xwd+convert
+    for cmd in (
+        ['scrot', '-z', out_path],
+        ['import', '-window', 'root', out_path],
+    ):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, env=env)
+            if r.returncode == 0:
+                print(f'Screenshot saved: {out_path}')
+                return 0
+        except FileNotFoundError:
+            continue
+
+    print('No screenshot tool found (install scrot or imagemagick)', file=sys.stderr)
+    return 1
+
+
+# ── Wi-Fi ──────────────────────────────────────────────────────────────────────
+
+def _nmcli(*args: str, capture: bool = True) -> tuple[int, str]:
+    r = subprocess.run(['nmcli'] + list(args), capture_output=capture, text=True)
+    return r.returncode, (r.stdout + r.stderr).strip()
+
+
+def _wifi_device() -> str:
+    """Return first Wi-Fi device name from nmcli."""
+    rc, out = _nmcli('-t', '-f', 'DEVICE,TYPE', 'dev', 'status')
+    for line in out.splitlines():
+        parts = line.split(':')
+        if len(parts) >= 2 and parts[1] == 'wifi':
+            return parts[0]
+    return 'wlan0'
+
+
+def cmd_wifi(args: list[str]) -> int:
+    subcmd = args[0] if args else 'status'
+
+    if subcmd == 'list':
+        rc, out = _nmcli('-t', '-f', 'SSID,SIGNAL,SECURITY,IN-USE', 'dev', 'wifi', 'list')
+        if rc != 0:
+            print(f'nmcli error: {out}', file=sys.stderr)
+            return 1
+        if not out.strip():
+            print('No networks found.')
+            return 0
+        print(f'{"SSID":<35} {"Signal":>6}  {"Security":<12} In-use')
+        print('-' * 65)
+        for line in out.splitlines():
+            parts = line.split(':')
+            if len(parts) < 4:
+                continue
+            ssid, signal, security, inuse = parts[0], parts[1], parts[2], parts[3]
+            marker = '*' if inuse == '*' else ' '
+            print(f'{marker} {ssid:<33} {signal:>6}%  {security:<12}')
+        return 0
+
+    if subcmd == 'status':
+        rc, out = _nmcli('-t', '-f', 'DEVICE,STATE,CONNECTION', 'dev', 'status')
+        if rc != 0:
+            print(f'nmcli error: {out}', file=sys.stderr)
+            return 1
+        for line in out.splitlines():
+            parts = line.split(':')
+            if len(parts) >= 3 and parts[1] in ('connected', 'disconnected', 'unavailable'):
+                print(f'{parts[0]}: {parts[1]}  {parts[2]}')
+        return 0
+
+    if subcmd == 'connect':
+        if not args[1:]:
+            print('Usage: hippos wifi connect <ssid> [--password <pass>]', file=sys.stderr)
+            return 1
+        ssid = args[1]
+        password = ''
+        cmd = ['dev', 'wifi', 'connect', ssid]
+        if '--password' in args:
+            i = args.index('--password')
+            if i + 1 < len(args):
+                password = args[i + 1]
+                cmd += ['password', password]
+        rc, out = _nmcli(*cmd)
+        print(out)
+        if rc == 0:
+            subprocess.run([str(HIPPOS_SETTINGS), 'set', 'wifi.enabled', 'true'])
+            subprocess.run([str(HIPPOS_SETTINGS), 'set', 'wifi.ssid', ssid])
+            if password:
+                subprocess.run([str(HIPPOS_SETTINGS), 'set', 'wifi.key', password])
+        return rc
+
+    if subcmd == 'forget':
+        if len(args) < 2:
+            print('Usage: hippos wifi forget <ssid>', file=sys.stderr)
+            return 1
+        rc, out = _nmcli('con', 'delete', 'id', args[1])
+        print(out)
+        return rc
+
+    if subcmd in ('on', 'off'):
+        rc, out = _nmcli('radio', 'wifi', subcmd)
+        print(out or f'Wi-Fi radio {subcmd}')
+        if rc == 0:
+            subprocess.run([str(HIPPOS_SETTINGS), 'set', 'wifi.enabled',
+                            'true' if subcmd == 'on' else 'false'])
+        return rc
+
+    if subcmd == 'disconnect':
+        dev = _wifi_device()
+        rc, out = _nmcli('dev', 'disconnect', dev)
+        if rc == 0:
+            subprocess.run([str(HIPPOS_SETTINGS), 'set', 'wifi.enabled', 'false'])
+        print(out)
+        return rc
+
+    print(f'Unknown wifi subcommand: {subcmd}', file=sys.stderr)
+    return 1
+
+
+# ── Bluetooth ───────────────────────────────────────────────────────────────────
+
+def _btctl(*args: str) -> tuple[int, str]:
+    r = subprocess.run(['bluetoothctl', *args], capture_output=True, text=True)
+    return r.returncode, (r.stdout + r.stderr).strip()
+
+
+def cmd_bluetooth(args: list[str]) -> int:
+    subcmd = args[0] if args else 'list'
+
+    if subcmd == 'power':
+        state = args[1] if len(args) > 1 else 'on'
+        rc, out = _btctl('power', state)
+        print(out)
+        return rc
+
+    if subcmd == 'list':
+        rc, out = _btctl('paired-devices')
+        if not out:
+            print('No paired devices.')
+        else:
+            print(out)
+        return rc
+
+    if subcmd == 'scan':
+        secs = '10'
+        if '--time' in args:
+            i = args.index('--time')
+            if i + 1 < len(args):
+                secs = args[i + 1]
+        print(f'Scanning for {secs}s... (put device in pairing mode now)')
+        # Power on, then scan with timeout
+        _btctl('power', 'on')
+        r = subprocess.run(
+            ['timeout', secs, 'bluetoothctl', 'scan', 'on'],
+            capture_output=True, text=True,
+        )
+        # List devices found
+        _, devices = _btctl('devices')
+        if devices:
+            print('Discovered:')
+            print(devices)
+        else:
+            print('No devices found.')
+        return 0
+
+    if subcmd == 'pair':
+        if len(args) < 2:
+            print('Usage: hippos bluetooth pair <mac>', file=sys.stderr)
+            return 1
+        mac = args[1]
+        _btctl('power', 'on')
+        for cmd in ('pair', 'trust', 'connect'):
+            rc, out = _btctl(cmd, mac)
+            print(f'{cmd}: {out}')
+            if rc != 0 and cmd == 'pair':
+                return rc
+        return 0
+
+    if subcmd == 'connect':
+        if len(args) < 2:
+            print('Usage: hippos bluetooth connect <mac>', file=sys.stderr)
+            return 1
+        rc, out = _btctl('connect', args[1])
+        print(out)
+        return rc
+
+    if subcmd == 'disconnect':
+        if len(args) < 2:
+            print('Usage: hippos bluetooth disconnect <mac>', file=sys.stderr)
+            return 1
+        rc, out = _btctl('disconnect', args[1])
+        print(out)
+        return rc
+
+    if subcmd == 'remove':
+        if len(args) < 2:
+            print('Usage: hippos bluetooth remove <mac>', file=sys.stderr)
+            return 1
+        rc, out = _btctl('remove', args[1])
+        print(out)
+        return rc
+
+    print(f'Unknown bluetooth subcommand: {subcmd}', file=sys.stderr)
+    return 1
+
+
+# ── Shutdown / power ───────────────────────────────────────────────────────────
+
+def cmd_power(action: str) -> int:
+    return _run(['/usr/lib/hippos/hippos-shutdown', action]).returncode
+
+
+# ── Timezone ────────────────────────────────────────────────────────────────────
+
+def cmd_timezone(args: list[str]) -> int:
+    subcmd = args[0] if args else 'get'
+    if subcmd in ('get', 'detect'):
+        return _run(['/usr/lib/hippos/hippos-timezone', subcmd]).returncode
+    if subcmd == 'set':
+        if len(args) < 2:
+            print('Usage: hippos timezone set <tz>', file=sys.stderr)
+            return 1
+        return _run(['/usr/lib/hippos/hippos-timezone', 'set', args[1]]).returncode
+    print(f'Unknown timezone subcommand: {subcmd}', file=sys.stderr)
+    return 1
+
+
+# ── Brightness ──────────────────────────────────────────────────────────────────
+
+def cmd_brightness(args: list[str]) -> int:
+    subcmd = args[0] if args else 'get'
+    if subcmd == 'get':
+        return _run(['/usr/lib/hippos/hippos-brightness', 'get']).returncode
+    if subcmd == 'set':
+        if len(args) < 2:
+            print('Usage: hippos brightness set <0-100>', file=sys.stderr)
+            return 1
+        return _run(['/usr/lib/hippos/hippos-brightness', 'set', args[1]]).returncode
+    print(f'Unknown brightness subcommand: {subcmd}', file=sys.stderr)
+    return 1
+
+
+# ── Diagnostics ─────────────────────────────────────────────────────────────────
+
+def cmd_diag(args: list[str]) -> int:
+    import time as _time
+    import io
+
+    out_path = None
+    if '--out' in args:
+        i = args.index('--out')
+        if i + 1 < len(args):
+            out_path = args[i + 1]
+
+    if out_path is None:
+        ts = _time.strftime('%Y%m%d-%H%M%S')
+        out_path = f'/userdata/system/diag-{ts}.txt'
+
+    buf = io.StringIO()
+
+    def section(title: str) -> None:
+        buf.write(f'\n{"="*60}\n{title}\n{"="*60}\n')
+
+    def capture(*cmd: str) -> None:
+        try:
+            r = subprocess.run(list(cmd), capture_output=True, text=True,
+                               env={**os.environ, 'DISPLAY': os.environ.get('DISPLAY', ':0')})
+            buf.write(r.stdout or '(no output)\n')
+            if r.stderr:
+                buf.write(r.stderr)
+        except FileNotFoundError:
+            buf.write(f'(command not found: {cmd[0]})\n')
+
+    section('HippOS Settings')
+    capture(str(HIPPOS_SETTINGS), 'list')
+
+    section('Services')
+    capture('systemctl', 'status', '--no-pager', '--lines=5',
+            *[s for svc in _HIPPOS_SERVICES for s in [svc]])
+
+    section('OS Info')
+    capture('uname', '-a')
+    capture('cat', '/etc/os-release')
+
+    section('CPU / Memory')
+    capture('grep', '-m1', 'model name', '/proc/cpuinfo')
+    capture('free', '-h')
+
+    section('Disk')
+    capture('df', '-h')
+
+    section('Display')
+    capture('xrandr', '--query')
+
+    section('Audio')
+    xdg = os.environ.get('XDG_RUNTIME_DIR', '/run/user/1000')
+    env_pw = {**os.environ,
+              'XDG_RUNTIME_DIR': xdg,
+              'DBUS_SESSION_BUS_ADDRESS': f'unix:path={xdg}/bus'}
+    try:
+        r = subprocess.run(['pactl', 'list', 'sinks', 'short'],
+                           capture_output=True, text=True, env=env_pw)
+        buf.write(r.stdout or '(no output)\n')
+    except FileNotFoundError:
+        buf.write('(pactl not found)\n')
+
+    section('Controllers')
+    try:
+        import evdev
+        from evdev import ecodes
+        _GP = {ecodes.BTN_SOUTH, ecodes.BTN_EAST, ecodes.BTN_NORTH, ecodes.BTN_WEST}
+        for path in sorted(Path('/dev/input').glob('event*')):
+            try:
+                dev = evdev.InputDevice(str(path))
+                caps = dev.capabilities()
+                if ecodes.EV_KEY in caps:
+                    keys = set(caps.get(ecodes.EV_KEY, []))
+                    if keys & _GP:
+                        buf.write(f'{dev.path}: {dev.name} '
+                                  f'({dev.info.vendor:04x}:{dev.info.product:04x})\n')
+            except OSError:
+                pass
+    except ImportError:
+        buf.write('(evdev not available)\n')
+
+    section('Journal (hippos services, last 50 lines)')
+    units = []
+    for svc in _HIPPOS_SERVICES:
+        units += ['-u', svc]
+    capture('journalctl', '--no-pager', '-n', '50', *units)
+
+    report = buf.getvalue()
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(out_path).write_text(report)
+    print(report)
+    print(f'\nDiagnostics saved to: {out_path}')
+    return 0
+
+
+def cmd_update(args: list[str]) -> int:
+    import datetime
+    sub = args[0] if args else 'check'
+
+    if sub == 'check':
+        _run(['apt-get', 'update', '-qq'])
+        r = subprocess.run(['apt', 'list', '--upgradable'], capture_output=True, text=True)
+        lines = [l for l in r.stdout.splitlines() if '/' in l]
+        if lines:
+            print(f'{len(lines)} package(s) can be updated:')
+            for l in lines:
+                print(f'  {l}')
+        else:
+            print('System is up to date.')
+        return 0
+
+    if sub == 'apply':
+        if os.getuid() != 0:
+            print('hippos update apply requires root', file=sys.stderr)
+            return 1
+        ts       = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+        snap_dir = Path('/.snapshots')
+        snap_dir.mkdir(exist_ok=True)
+        snap     = snap_dir / f'pre-update-{ts}'
+        r = subprocess.run(['btrfs', 'subvolume', 'snapshot', '-r', '/', str(snap)])
+        if r.returncode == 0:
+            print(f'Snapshot: {snap}')
+        else:
+            print('Warning: btrfs snapshot failed — proceeding without snapshot')
+        subprocess.run(['apt-get', 'update'])
+        result = subprocess.run(['apt-get', 'dist-upgrade', '-y'])
+        if result.returncode == 0:
+            print('Update complete. Reboot to apply kernel/firmware changes.')
+        return result.returncode
+
+    if sub == 'rollback':
+        snap_dir = Path('/.snapshots')
+        snaps    = sorted(snap_dir.glob('pre-update-*'), reverse=True) if snap_dir.exists() else []
+        if not snaps:
+            print('No update snapshots found.', file=sys.stderr)
+            return 1
+        print('Available update snapshots:')
+        for i, s in enumerate(snaps[:10]):
+            print(f'  {i+1}. {s.name}')
+        print()
+        print('To rollback (run as root):')
+        print(f'  btrfs subvolume set-default {snaps[0]}')
+        print(f'  reboot')
+        return 0
+
+    print('Usage: hippos update check|apply|rollback', file=sys.stderr)
+    return 1
+
+
+def cmd_preflight(_args: list[str]) -> int:
+    passed = failed = warned = 0
+
+    def check(status: str, msg: str) -> None:
+        nonlocal passed, failed, warned
+        tag = {'pass': '[PASS]', 'fail': '[FAIL]', 'warn': '[WARN]'}[status]
+        print(f'{tag} {msg}')
+        if status == 'pass':   passed  += 1
+        elif status == 'fail': failed  += 1
+        else:                  warned  += 1
+
+    # UEFI
+    if Path('/sys/firmware/efi').exists():
+        check('pass', 'Boot mode: UEFI')
+    else:
+        check('fail', 'Boot mode: Legacy BIOS — HippOS requires UEFI')
+
+    # RAM
+    try:
+        mem_kb = int(next(
+            l for l in Path('/proc/meminfo').read_text().splitlines()
+            if l.startswith('MemTotal')
+        ).split()[1])
+        mem_gb = mem_kb // (1024 * 1024)
+        if mem_gb >= 8:
+            check('pass', f'RAM: {mem_gb} GB')
+        elif mem_gb >= 4:
+            check('warn', f'RAM: {mem_gb} GB (8 GB recommended for Steam/Proton)')
+        else:
+            check('fail', f'RAM: {mem_gb} GB — 4 GB minimum required')
+    except Exception:
+        check('warn', 'RAM: could not determine')
+
+    # Disk
+    try:
+        r = subprocess.run(['df', '-BG', '--output=avail', '/'], capture_output=True, text=True)
+        free_gb = int(r.stdout.splitlines()[-1].strip().rstrip('G'))
+        if free_gb >= 50:
+            check('pass', f'Disk free: {free_gb} GB')
+        elif free_gb >= 20:
+            check('warn', f'Disk free: {free_gb} GB (50 GB recommended)')
+        else:
+            check('fail', f'Disk free: {free_gb} GB — 20 GB minimum required')
+    except Exception:
+        check('warn', 'Disk: could not determine free space')
+
+    # GPU
+    try:
+        lspci_out = subprocess.run(['lspci'], capture_output=True, text=True).stdout.lower()
+        if 'nvidia' in lspci_out:
+            nv_loaded = Path('/proc/driver/nvidia').exists() or \
+                subprocess.run(['modinfo', 'nvidia'], capture_output=True).returncode == 0
+            if nv_loaded:
+                check('pass', 'GPU: NVIDIA — proprietary driver loaded')
+            else:
+                check('warn', 'GPU: NVIDIA detected — proprietary driver not loaded (install nvidia-driver)')
+        elif 'amd' in lspci_out or 'radeon' in lspci_out:
+            check('pass', 'GPU: AMD — amdgpu/radeon')
+        elif 'intel' in lspci_out:
+            check('pass', 'GPU: Intel — i915')
+        else:
+            check('warn', 'GPU: unknown — verify display driver is installed')
+    except Exception:
+        check('warn', 'GPU: could not query PCI devices')
+
+    # /userdata
+    try:
+        r = subprocess.run(['mountpoint', '-q', '/userdata'])
+        check('pass' if r.returncode == 0 else 'warn',
+              '/userdata is mounted' if r.returncode == 0 else '/userdata is not mounted (expected at runtime)')
+    except Exception:
+        check('warn', '/userdata: could not check mount status')
+
+    print()
+    print(f'Summary: {passed} pass, {warned} warn, {failed} fail')
+    return 0 if failed == 0 else 1
+
+
+# ── Entry point ────────────────────────────────────────────────────────────────
+
+def main() -> int:
+    args = sys.argv[1:]
+    if not args:
+        print(_USAGE)
+        return 0
+
+    cmd, *rest = args
+
+    if cmd == 'status':
+        return cmd_status()
+    if cmd == 'settings':
+        return cmd_settings(rest)
+    if cmd == 'switch':
+        return cmd_switch(rest)
+    if cmd == 'restart':
+        return cmd_restart(rest)
+    if cmd == 'logs':
+        return cmd_logs(rest)
+    if cmd == 'info':
+        return cmd_info()
+    if cmd in ('shutdown', 'poweroff'):
+        return cmd_power('shutdown')
+    if cmd == 'reboot':
+        return cmd_power('reboot')
+    if cmd == 'suspend':
+        return cmd_power('suspend')
+    if cmd == 'hibernate':
+        return cmd_power('hibernate')
+    if cmd == 'timezone':
+        return cmd_timezone(rest)
+    if cmd == 'brightness':
+        return cmd_brightness(rest)
+    if cmd == 'controller':
+        return cmd_controller(rest)
+    if cmd == 'audio':
+        return cmd_audio(rest)
+    if cmd == 'display':
+        return cmd_display(rest)
+    if cmd == 'screenshot':
+        return cmd_screenshot(rest)
+    if cmd == 'wifi':
+        return cmd_wifi(rest)
+    if cmd == 'bluetooth':
+        return cmd_bluetooth(rest)
+    if cmd == 'diag':
+        return cmd_diag(rest)
+    if cmd == 'content':
+        return _delegate('/usr/lib/hippos/hippos-content', rest)
+    if cmd == 'update':
+        return cmd_update(rest)
+    if cmd == 'preflight':
+        return cmd_preflight(rest)
+
+    print(f'Unknown command: {cmd}\n', file=sys.stderr)
+    print(_USAGE, file=sys.stderr)
+    return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

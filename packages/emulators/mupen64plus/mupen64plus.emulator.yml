@@ -1,0 +1,6 @@
+requireArtifact: mupen64plus
+systems:
+- n64
+- n64dd
+features:
+- internal_resolution

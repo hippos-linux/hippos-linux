@@ -1,0 +1,9 @@
+{
+  "name": "vpinball",
+  "keys": {
+    "exit": "KEY_Q",
+    "menu": "KEY_F4",
+    "save_state": "KEY_F6",
+    "restore_state": "KEY_F7"
+  }
+}

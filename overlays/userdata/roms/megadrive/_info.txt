@@ -1,0 +1,5 @@
+Mega Drive
+Manufacturer: Sega
+Released: 1988
+Hardware: console
+Extensions: .bin .gen .md .sg .smd .zip .7z

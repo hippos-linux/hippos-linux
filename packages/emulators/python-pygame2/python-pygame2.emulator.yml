@@ -1,0 +1,6 @@
+requireArtifact: python-pygame2
+systems:
+  pygame:
+    cores:
+    - pygame
+features: []

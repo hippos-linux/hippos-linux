@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ScummVM
+GenericName=Adventure Game Engine
+Comment=ScummVM adventure game engine
+Exec=/usr/lib/hippos/emulators/launch-scummvm
+Icon=scummvm
+Terminal=false
+Categories=Game;Emulator;

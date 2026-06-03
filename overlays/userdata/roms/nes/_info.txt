@@ -1,0 +1,5 @@
+Nintendo Entertainment System
+Manufacturer: Nintendo
+Released: 1983
+Hardware: console
+Extensions: .nes .unif .unf .zip .7z

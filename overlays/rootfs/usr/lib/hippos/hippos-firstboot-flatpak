@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Install flatpak apps on first boot as the hippos user.
+# Apps land in /userdata/.local/share/flatpak so they survive OS updates.
+# Creates a marker on success; subsequent boots are a no-op.
+# Waits for internet connectivity before attempting installation.
+set -uo pipefail
+
+MARKER="/userdata/.config/hippos/flatpak-apps-installed"
+
+log() { echo "[hippos-firstboot-flatpak] $*"; }
+
+if [[ -f "${MARKER}" ]]; then
+    log "Already installed — skipping"
+    exit 0
+fi
+
+if [[ ! -w /userdata ]]; then
+    log "/userdata not writable — skipping" >&2
+    exit 1
+fi
+
+log "Waiting for internet connectivity..."
+until curl -s --connect-timeout 5 --max-time 10 -o /dev/null https://flathub.org; do
+    sleep 30
+done
+log "Internet available — proceeding with install"
+
+APPS=(
+    com.github.joseexposito.touche
+    com.usebottles.bottles
+    com.heroicgameslauncher.hgl
+    com.vysp3r.ProtonPlus
+    io.github.kolunmi.Bazaar
+    com.github.tchx84.Flatseal
+    it.mijorus.gearlever
+    com.localsend.localsend
+    io.missioncenter.MissionCenter
+)
+
+log "Ensuring Flathub remote is configured"
+runuser -l hippos -c "flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo" \
+    || log "Warning: could not add Flathub remote — installs may fail"
+
+log "Fetching Flathub appstream data"
+runuser -l hippos -c "flatpak update --appstream --user flathub" \
+    || log "Warning: appstream update failed"
+
+log "Installing ${#APPS[@]} flatpak apps to /userdata"
+
+failed=0
+for app in "${APPS[@]}"; do
+    log "Installing ${app}"
+    runuser -l hippos -c "flatpak install --user --noninteractive --assumeyes flathub '${app}'" \
+        && log "  OK: ${app}" \
+        || { log "  Warning: failed to install ${app}"; failed=$(( failed + 1 )); }
+done
+
+mkdir -p "$(dirname "${MARKER}")"
+touch "${MARKER}"
+log "Done (${failed} failed)"

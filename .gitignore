@@ -1,0 +1,72 @@
+# Build outputs
+work/
+output/
+artifacts/
+dist/
+cache/
+tmp/
+
+# Not yet public
+build/
+scripts/
+
+# Rootfs/images
+/rootfs/
+*.img
+*.qcow2
+*.raw
+*.iso
+*.squashfs
+
+# Mount/build dirs
+mnt/
+staging/
+
+# Docker/build cache
+.ccache/
+*.tar
+*.tar.gz
+*.zst
+
+# Emulator source/build trees (managed as submodules, not ignored)
+# Do not ignore top-level build/: it contains this repo's source scripts.
+
+# ROMs (local only, not tracked)
+roms/
+!overlays/userdata/roms/
+!overlays/userdata/roms/steam/
+!overlays/userdata/roms/steam/Steam.steam
+
+# Logs
+*.log
+
+# Upload script (contains credentials)
+scripts/upload-image.sh
+
+# Local environment/editor state
+.env
+github-token.txt
+discord-webhook.txt
+.env.*
+!.env.example
+.direnv/
+.venv/
+venv/
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Python cache
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+cloudflare-token.txt
+cloudflare-r2-token.txt
+discord-announce-webhook.txt
+r2-access-key.txt
+r2-secret-key.txt

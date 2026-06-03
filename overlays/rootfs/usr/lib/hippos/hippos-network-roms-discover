@@ -1,0 +1,286 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import hashlib
+import re
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+
+SYSTEM = Path("/userdata/system")
+HIPPOS_CONFIG = SYSTEM / "configs" / "hippos"
+DISCOVERED = HIPPOS_CONFIG / "roms-discovered.conf"
+SOURCES = HIPPOS_CONFIG / "roms-sources.conf"
+SETTINGS_GET = "/usr/lib/hippos/hippos-settings"
+LIKELY_NAMES = {
+    "games",
+    "hippos",
+    "rom",
+    "roms",
+    "share",
+    "userdata",
+}
+
+
+@dataclass(frozen=True)
+class Candidate:
+    uri: str
+    name: str
+    source: str
+    comment: str = ""
+
+    @property
+    def ident(self) -> str:
+        return hashlib.sha1(self.uri.encode("utf-8")).hexdigest()[:12]
+
+    @property
+    def likely(self) -> bool:
+        parts = re.split(r"[/_. -]+", self.name.lower())
+        return any(part in LIKELY_NAMES for part in parts)
+
+
+def run(args: list[str], timeout: int = 8) -> str:
+    if not shutil.which(args[0]):
+        return ""
+    try:
+        result = subprocess.run(
+            args,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return result.stdout
+
+
+def setting(key: str, default: str = "") -> str:
+    output = run([SETTINGS_GET, "get", key], timeout=2).strip()
+    return output if output else default
+
+
+def is_true(value: str) -> bool:
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def safe_name(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_") or value
+
+
+def cifs_uri(host: str, share: str) -> str:
+    return f"cifs://{safe_name(host)}/{safe_name(share)}"
+
+
+def parse_smbclient_list(host: str, output: str, source: str) -> list[Candidate]:
+    candidates: list[Candidate] = []
+    in_table = False
+    for raw in output.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("Disk|"):
+            _, share, *rest = line.split("|")
+            candidates.append(Candidate(cifs_uri(host, share), share, source, "|".join(rest)))
+            continue
+        if re.match(r"^-+$", line):
+            in_table = True
+            continue
+        if in_table:
+            match = re.match(r"^(\S+)\s+Disk\s*(.*)$", line)
+            if match:
+                share, comment = match.groups()
+                candidates.append(Candidate(cifs_uri(host, share), share, source, comment.strip()))
+    return candidates
+
+
+def enumerate_smb_host(host: str, source: str) -> list[Candidate]:
+    output = run(["smbclient", "-L", f"//{host}", "-N", "-g", "-m", "SMB3", "-t", "3"])
+    if not output:
+        output = run(["smbclient", "-L", f"//{host}", "-N", "-t", "3"])
+    return parse_smbclient_list(host, output, source)
+
+
+def discover_smbtree() -> list[Candidate]:
+    output = run(["smbtree", "-N", "-b"], timeout=12)
+    candidates: list[Candidate] = []
+    hosts: set[str] = set()
+    for raw in output.splitlines():
+        line = raw.strip()
+        match = re.match(r"^\\\\([^\\\s]+)\\([^ \t]+)\s*(.*)$", line)
+        if match:
+            host, share, comment = match.groups()
+            candidates.append(Candidate(cifs_uri(host, share), share, "smbtree", comment.strip()))
+            continue
+        host_match = re.match(r"^\\\\([^\\\s]+)\s*$", line)
+        if host_match:
+            hosts.add(host_match.group(1))
+
+    for host in sorted(hosts):
+        candidates.extend(enumerate_smb_host(host, "smbtree"))
+    return candidates
+
+
+def discover_avahi_smb() -> list[Candidate]:
+    output = run(["avahi-browse", "-rtp", "_smb._tcp"], timeout=8)
+    candidates: list[Candidate] = []
+    hosts: set[str] = set()
+    for raw in output.splitlines():
+        if not raw.startswith("="):
+            continue
+        parts = raw.split(";")
+        if len(parts) < 8:
+            continue
+        host = parts[7] or parts[6].rstrip(".")
+        if host:
+            hosts.add(host)
+
+    for host in sorted(hosts):
+        candidates.extend(enumerate_smb_host(host, "avahi"))
+    return candidates
+
+
+def unique(candidates: list[Candidate]) -> list[Candidate]:
+    seen: set[str] = set()
+    result: list[Candidate] = []
+    for candidate in candidates:
+        if candidate.uri in seen:
+            continue
+        seen.add(candidate.uri)
+        result.append(candidate)
+    result.sort(key=lambda c: (not c.likely, c.uri))
+    return result
+
+
+def write_candidates(candidates: list[Candidate]) -> None:
+    HIPPOS_CONFIG.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# id\tlikely\turi\tname\tsource\tcomment\n",
+    ]
+    for candidate in candidates:
+        lines.append(
+            "\t".join(
+                [
+                    candidate.ident,
+                    "1" if candidate.likely else "0",
+                    candidate.uri,
+                    candidate.name,
+                    candidate.source,
+                    candidate.comment,
+                ]
+            )
+            + "\n"
+        )
+    tmp = DISCOVERED.with_suffix(".tmp")
+    tmp.write_text("".join(lines), encoding="utf-8")
+    tmp.replace(DISCOVERED)
+
+
+def read_candidates() -> list[Candidate]:
+    candidates: list[Candidate] = []
+    if not DISCOVERED.exists():
+        return candidates
+    for raw in DISCOVERED.read_text(encoding="utf-8").splitlines():
+        if not raw or raw.startswith("#"):
+            continue
+        parts = raw.split("\t")
+        if len(parts) < 5:
+            continue
+        _, _, uri, name, source, *comment = parts
+        candidates.append(Candidate(uri, name, source, "\t".join(comment)))
+    return candidates
+
+
+def cmd_discover() -> int:
+    if not is_true(setting("network.roms.discovery.enabled", "true")):
+        return 0
+    candidates = unique(discover_avahi_smb() + discover_smbtree())
+    write_candidates(candidates)
+    if is_true(setting("network.roms.discovery.auto_mount", "false")):
+        for candidate in candidates:
+            if candidate.likely:
+                append_source(candidate.uri)
+        subprocess.run(["systemctl", "start", "--no-block", "hippos-network-roms.service"], check=False)
+    for candidate in candidates:
+        print(
+            "\t".join(
+                [
+                    candidate.ident,
+                    "likely" if candidate.likely else "other",
+                    candidate.uri,
+                    candidate.name,
+                    candidate.source,
+                ]
+            )
+        )
+    return 0
+
+
+def append_source(uri: str) -> None:
+    HIPPOS_CONFIG.mkdir(parents=True, exist_ok=True)
+    existing = SOURCES.read_text(encoding="utf-8").splitlines() if SOURCES.exists() else []
+    if any(line.strip().split()[0] == uri for line in existing if line.strip() and not line.lstrip().startswith("#")):
+        return
+    with SOURCES.open("a", encoding="utf-8") as handle:
+        if existing and existing[-1].strip():
+            handle.write("\n")
+        handle.write(f"{uri}\n")
+
+
+def cmd_mount(selector: str) -> int:
+    if not is_true(setting("network.roms.enabled", "true")):
+        print("network ROM mounting is disabled by network.roms.enabled", file=sys.stderr)
+        return 1
+    candidates = read_candidates()
+    match = next((c for c in candidates if c.ident == selector or c.uri == selector), None)
+    if match is None and selector.startswith("cifs://"):
+        share = selector.removeprefix("cifs://").split("/", 1)[-1]
+        match = Candidate(selector, share, "manual")
+    if match is None:
+        print(f"unknown candidate: {selector}", file=sys.stderr)
+        return 1
+    append_source(match.uri)
+    subprocess.run(["systemctl", "start", "--no-block", "hippos-network-roms.service"], check=False)
+    print(match.uri)
+    return 0
+
+
+def usage() -> int:
+    print(
+        "Usage: hippos-network-roms-discover discover | list | mount <id-or-cifs-uri>",
+        file=sys.stderr,
+    )
+    return 1
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if not args:
+        return usage()
+    if args[0] == "discover" and len(args) == 1:
+        return cmd_discover()
+    if args[0] == "list" and len(args) == 1:
+        for candidate in read_candidates():
+            print(
+                "\t".join(
+                    [
+                        candidate.ident,
+                        "likely" if candidate.likely else "other",
+                        candidate.uri,
+                        candidate.name,
+                        candidate.source,
+                    ]
+                )
+            )
+        return 0
+    if args[0] == "mount" and len(args) == 2:
+        return cmd_mount(args[1])
+    return usage()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

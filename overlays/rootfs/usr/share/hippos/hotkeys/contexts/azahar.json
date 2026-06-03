@@ -1,0 +1,13 @@
+{
+  "name": "azahar",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "menu": "KEY_F2",
+    "save_state": "KEY_F5",
+    "restore_state": "KEY_F8",
+    "next_slot": "KEY_F6",
+    "previous_slot": "KEY_F7",
+    "swap_screen": "KEY_F9",
+    "screenshot": "KEY_F12"
+  }
+}

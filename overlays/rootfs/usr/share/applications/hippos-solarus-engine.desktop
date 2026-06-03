@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Solarus
+GenericName=Action-RPG Engine
+Comment=Solarus action-RPG game engine
+Exec=/usr/lib/hippos/emulators/launch-solarus-engine
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

@@ -1,0 +1,4 @@
+requireArtifact: sugarbox
+systems:
+- zxspectrum
+features: []

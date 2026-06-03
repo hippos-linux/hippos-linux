@@ -1,0 +1,210 @@
+#!/bin/sh
+# Generate a support tarball for HippOS diagnostics.
+# Usage: hippos-support [output_path]
+# Output defaults to /userdata/saves/hippos-support-<timestamp>.tar.gz
+
+GTMP="/tmp"
+DHOME="/userdata/system"
+V_ARCH=$(uname -m)
+
+if test $# -eq 1; then
+    REPORTNAME=$(basename "$1" | sed -e s+'^\([^.]*\)\..*$'+'\1'+)
+    OUTPUTFILE=$1
+else
+    REPORTNAME="hippos-support-$(date +%Y%m%d%H%M%S)"
+    OUTPUTFILE="/userdata/saves/${REPORTNAME}.tar.gz"
+fi
+
+TMPDIR="${GTMP}/${REPORTNAME}"
+
+f_cp() { test -e "$1" && cp "$1" "$2"; }
+d_cp() { test -d "$1" && cp -pr "$1" "$2"; }
+
+if ! mkdir -p "${TMPDIR}" \
+    "${TMPDIR}/system" \
+    "${TMPDIR}/audio" \
+    "${TMPDIR}/bluetooth" \
+    "${TMPDIR}/display" \
+    "${TMPDIR}/network" \
+    "${TMPDIR}/hardware" \
+    "${TMPDIR}/configs" \
+    "${TMPDIR}/logs" \
+    "${TMPDIR}/joysticks" \
+    "${TMPDIR}/coredumps"
+then
+    echo "Failed to create report directory" >&2
+    exit 1
+fi
+
+cd "${TMPDIR}" || { echo "Cannot cd to ${TMPDIR}" >&2; exit 1; }
+
+DSYSTEM="${TMPDIR}/system"
+DAUDIO="${TMPDIR}/audio"
+DBLUETOOTH="${TMPDIR}/bluetooth"
+DDISPLAY="${TMPDIR}/display"
+DNETWORK="${TMPDIR}/network"
+DHARDWARE="${TMPDIR}/hardware"
+DCONFIGS="${TMPDIR}/configs"
+DLOGS="${TMPDIR}/logs"
+DJOYS="${TMPDIR}/joysticks"
+
+if test -z "${DISPLAY:-}"; then
+    export DISPLAY=:0
+fi
+
+# -----------------------------------------------------------------------------
+# SYSTEM
+# -----------------------------------------------------------------------------
+dmesg                                   > "${DSYSTEM}/dmesg.txt"
+ps -ef                                  > "${DSYSTEM}/ps.txt"
+hippos-version                          > "${DSYSTEM}/hippos.version" 2>/dev/null
+hippos-info --full                      > "${DSYSTEM}/hippos.info" 2>/dev/null
+systemctl list-units --no-pager         > "${DSYSTEM}/services.txt" 2>/dev/null
+ldconfig -p                             > "${DSYSTEM}/ldcache.txt" 2>/dev/null
+top -b -n 1                             > "${DSYSTEM}/top_processes.txt" 2>/dev/null
+env                                     > "${DSYSTEM}/environment_variables.txt"
+
+if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
+    cat /sys/class/thermal/thermal_zone0/temp > "${DSYSTEM}/cpu_temp_raw.txt"
+fi
+
+if command -v libinput >/dev/null 2>&1; then
+    libinput list-devices > "${DJOYS}/libinput_list.txt" 2>/dev/null
+fi
+
+# -----------------------------------------------------------------------------
+# AUDIO
+# -----------------------------------------------------------------------------
+amixer                                  > "${DAUDIO}/amixer.txt" 2>/dev/null
+aplay -l                                > "${DAUDIO}/aplay-l.txt" 2>/dev/null
+aplay -L                                > "${DAUDIO}/aplay-L.txt" 2>/dev/null
+alsactl info                            > "${DAUDIO}/alsactl-info.txt" 2>/dev/null
+hippos-audio list                       > "${DAUDIO}/hippos-audio-list.txt" 2>/dev/null
+wpctl status                            > "${DAUDIO}/wireplumber.txt" 2>/dev/null
+command -v pw-dump >/dev/null 2>&1 && pw-dump > "${DAUDIO}/pipewire_dump.json" 2>/dev/null
+
+# -----------------------------------------------------------------------------
+# BLUETOOTH
+# -----------------------------------------------------------------------------
+hciconfig -a                            > "${DBLUETOOTH}/bt-capabilities.txt" 2>/dev/null
+command -v bluetoothctl >/dev/null 2>&1 && bluetoothctl show > "${DBLUETOOTH}/controller_info.txt" 2>/dev/null
+command -v bluetoothctl >/dev/null 2>&1 && bluetoothctl devices > "${DBLUETOOTH}/paired_devices.txt" 2>/dev/null
+rfkill list                             > "${DBLUETOOTH}/rfkill_status.txt" 2>/dev/null
+
+# -----------------------------------------------------------------------------
+# NETWORK
+# -----------------------------------------------------------------------------
+ss -tuan                                > "${DNETWORK}/ss.txt" 2>/dev/null
+ip a                                    > "${DNETWORK}/ip_addr.txt" 2>/dev/null
+ip r                                    > "${DNETWORK}/ip_routes.txt" 2>/dev/null
+nmcli general                           > "${DNETWORK}/nmcli-general.txt" 2>/dev/null
+nmcli device                            > "${DNETWORK}/nmcli-devices.txt" 2>/dev/null
+iw dev                                  > "${DNETWORK}/iw-dev.txt" 2>/dev/null
+iw phy phy0 info                        > "${DNETWORK}/iw-phy0-info.txt" 2>/dev/null
+
+# -----------------------------------------------------------------------------
+# HARDWARE
+# -----------------------------------------------------------------------------
+lsmod                                   > "${DHARDWARE}/lsmod.txt"
+df -h                                   > "${DHARDWARE}/df.txt"
+mount                                   > "${DHARDWARE}/mount_options.txt"
+lsusb                                   > "${DHARDWARE}/lsusb.txt" 2>/dev/null
+lsusb -v                                > "${DHARDWARE}/lsusb_v.txt" 2>/dev/null
+lspci                                   > "${DHARDWARE}/lspci.txt" 2>/dev/null
+lspci -v                                > "${DHARDWARE}/lspci_v.txt" 2>/dev/null
+blkid                                   > "${DHARDWARE}/disks.txt" 2>/dev/null
+
+if command -v smartctl >/dev/null 2>&1; then
+    for drive in /dev/sd? /dev/nvme?n?; do
+        if [ -e "$drive" ]; then
+            NAME=$(basename "$drive")
+            smartctl -H -A "$drive" > "${DHARDWARE}/smart_${NAME}.txt" 2>/dev/null
+        fi
+    done
+fi
+
+# -----------------------------------------------------------------------------
+# DISPLAY
+# -----------------------------------------------------------------------------
+if command -v glxinfo >/dev/null 2>&1; then
+    glxinfo > "${DDISPLAY}/glxinfo.txt" 2>/dev/null
+fi
+
+if [ "${V_ARCH}" = "x86_64" ] || [ "${V_ARCH}" = "x86" ]; then
+    if command -v xrandr >/dev/null 2>&1; then
+        xrandr                          > "${DDISPLAY}/xrandr.txt" 2>/dev/null
+        xrandr --listproviders          > "${DDISPLAY}/xrandr-providers.txt" 2>/dev/null
+    fi
+fi
+
+for card in /sys/class/drm/card*-*; do
+    if [ -e "$card/status" ]; then
+        echo "--- $card ---"            >> "${DDISPLAY}/drm_status.txt"
+        cat "$card/status"              >> "${DDISPLAY}/drm_status.txt" 2>/dev/null
+        cat "$card/enabled"             >> "${DDISPLAY}/drm_status.txt" 2>/dev/null
+        cat "$card/modes"               >> "${DDISPLAY}/drm_status.txt" 2>/dev/null
+    fi
+done
+
+if command -v vulkaninfo >/dev/null 2>&1; then
+    vulkaninfo --summary > "${DDISPLAY}/vulkan_summary.txt" 2>/dev/null
+    vulkaninfo > "${DDISPLAY}/vulkan_info.txt" 2>/dev/null
+fi
+
+f_cp /var/log/Xorg.0.log               "${DDISPLAY}"
+
+# -----------------------------------------------------------------------------
+# CONFIGS
+# -----------------------------------------------------------------------------
+f_cp /userdata/system/hippos.conf                                   "${DCONFIGS}"
+f_cp /userdata/system/configs/emulationstation/es_settings.cfg      "${DCONFIGS}"
+f_cp /userdata/system/configs/emulationstation/es_input.cfg         "${DCONFIGS}"
+hippos-systems                          > "${DCONFIGS}/bios.txt" 2>/dev/null
+
+# -----------------------------------------------------------------------------
+# LOGS
+# -----------------------------------------------------------------------------
+d_cp /userdata/system/logs              "${TMPDIR}"
+f_cp /userdata/system/configs/emulationstation/es_log.txt           "${DLOGS}"
+journalctl -b --no-pager -o short-precise > "${DLOGS}/journal_boot.txt" 2>/dev/null
+
+# -----------------------------------------------------------------------------
+# SANITIZE
+# -----------------------------------------------------------------------------
+sed -i -e s+"^.*password.*$"+""+gI "${DCONFIGS}/es_settings.cfg" 2>/dev/null
+sed -i -e s+"^.*pass.*$"+""+gI     "${DCONFIGS}/es_settings.cfg" 2>/dev/null
+sed -i -e s+"^.*wifi.*$"+""+gI     "${DCONFIGS}/hippos.conf" 2>/dev/null
+sed -i -e s+"^.*password.*$"+""+gI "${DCONFIGS}/hippos.conf" 2>/dev/null
+sed -i -e s+"^.*token.*$"+""+gI    "${DCONFIGS}/hippos.conf" 2>/dev/null
+sed -i -e s+"^.*retroachievements.*$"+""+gI "${DCONFIGS}/hippos.conf" 2>/dev/null
+
+# -----------------------------------------------------------------------------
+# JOYSTICKS
+# -----------------------------------------------------------------------------
+find /dev/input > "${DJOYS}/inputs.txt" 2>/dev/null
+for J in /dev/input/event*; do
+    N=$(basename "${J}")
+    evtest --info "${J}"            > "${DJOYS}/evtest.${N}.txt" 2>/dev/null
+    udevadm info -q all -n "${J}"  > "${DJOYS}/udevadm.${N}.txt" 2>/dev/null
+done
+sdl2-jstest -l > "${DJOYS}/sdl2-jstest.txt" 2>/dev/null
+
+# -----------------------------------------------------------------------------
+# CORE DUMPS
+# -----------------------------------------------------------------------------
+DCORE="${TMPDIR}/coredumps"
+for C in /userdata/system/logs/core.*; do
+    f_cp "${C}" "${DCORE}"
+done
+
+# -----------------------------------------------------------------------------
+# PACK
+# -----------------------------------------------------------------------------
+if ! (cd "${GTMP}" && tar cf - "${REPORTNAME}" | gzip -c > "${OUTPUTFILE}"); then
+    echo "Failed to create tarball" >&2
+    exit 1
+fi
+
+rm -rf "${TMPDIR}"
+echo "${OUTPUTFILE}"
+exit 0

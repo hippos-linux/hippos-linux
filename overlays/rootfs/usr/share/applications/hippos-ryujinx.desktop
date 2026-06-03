@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Ryujinx
+GenericName=Nintendo Switch Emulator
+Comment=Ryujinx Nintendo Switch emulator
+Exec=/usr/lib/hippos/emulators/launch-ryujinx
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

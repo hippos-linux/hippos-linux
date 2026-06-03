@@ -1,0 +1,8 @@
+{
+  "name": "ikemen",
+  "keys": {
+    "exit": "KEY_ESC",
+    "screenshot": "KEY_F12",
+    "pause": "KEY_P"
+  }
+}

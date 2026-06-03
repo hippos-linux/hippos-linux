@@ -1,0 +1,6 @@
+requireArtifact: ruffle
+systems:
+  flash:
+    cores:
+    - ruffle
+features: []

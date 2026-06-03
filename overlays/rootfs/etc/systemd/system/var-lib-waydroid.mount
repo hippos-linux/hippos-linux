@@ -1,0 +1,14 @@
+[Unit]
+Description=Bind mount Waydroid data from userdata
+After=userdata.mount
+Requires=userdata.mount
+Before=waydroid-container.service hippos-waydroid-init.service
+
+[Mount]
+What=/userdata/system/waydroid
+Where=/var/lib/waydroid
+Type=none
+Options=bind
+
+[Install]
+WantedBy=multi-user.target

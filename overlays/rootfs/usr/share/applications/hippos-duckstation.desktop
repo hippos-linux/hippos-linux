@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=DuckStation
+GenericName=PlayStation Emulator
+Comment=DuckStation PlayStation emulator
+Exec=/usr/lib/hippos/emulators/launch-duckstation
+Icon=duckstation
+Terminal=false
+Categories=Game;Emulator;

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Dispatch a single storage add/remove event then trigger a ROM pool rescan.
+
+ACTION="$1"   # mount | umount
+DEVNAME="$2"
+DEVTYPE="$3"
+
+log() { printf '[hippos-storage] %s\n' "$*"; }
+
+case "${ACTION}" in
+    mount)
+        /usr/lib/hippos/hippos-storage-manager mount "${DEVNAME}" && \
+            log "mount done: ${DEVNAME}" || \
+            log "mount skipped or failed: ${DEVNAME}"
+        ;;
+    umount)
+        /usr/lib/hippos/hippos-storage-manager unmount "/dev/${DEVNAME}" && \
+            log "umount done: ${DEVNAME}" || \
+            log "umount skipped or failed: ${DEVNAME}"
+        ;;
+    *)
+        printf '[hippos-storage] unknown action: %s\n' "${ACTION}" >&2
+        exit 1
+        ;;
+esac

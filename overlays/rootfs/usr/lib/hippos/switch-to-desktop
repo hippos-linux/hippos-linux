@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DESKTOP="${1:-$(hippos-settings get system.desktop)}"
+
+desktop_session_cmd() {
+    case "$1" in
+        lxqt)     echo "/usr/bin/startlxqt" ;;
+        plasma)   echo "/usr/bin/startplasma-x11" ;;
+        xfce)     echo "/usr/bin/startxfce4" ;;
+        gnome)    echo "/usr/bin/gnome-session" ;;
+        mate)     echo "/usr/bin/mate-session" ;;
+        cinnamon) echo "/usr/bin/cinnamon-session" ;;
+        *)        echo "/usr/bin/startlxqt" ;;
+    esac
+}
+
+SESSION_CMD="$(desktop_session_cmd "${DESKTOP}")"
+if [[ ! -x "${SESSION_CMD}" ]]; then
+    echo "Desktop '${DESKTOP}' is not installed (${SESSION_CMD} not found)" >&2
+    exit 1
+fi
+
+hippos-settings set system.desktop "$DESKTOP"
+hippos-settings set system.session desktop
+
+# Stop ES first so it releases VT1, then start desktop on VT1.
+# Run outside this cgroup so stopping ES doesn't kill this script.
+systemd-run --no-block --collect bash -c \
+    "systemctl stop hippos-es.service; systemctl start hippos-desktop.service"

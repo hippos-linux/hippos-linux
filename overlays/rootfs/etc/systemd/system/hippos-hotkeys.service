@@ -1,0 +1,15 @@
+[Unit]
+Description=HippOS Global Hotkeys
+After=local-fs.target userdata.mount hippos-xserver.service
+Wants=userdata.mount
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/hippos/hippos-hotkeys --permanent
+Restart=on-failure
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical.target

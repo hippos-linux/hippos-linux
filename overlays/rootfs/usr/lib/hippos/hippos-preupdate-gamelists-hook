@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Called by ES before applying an OS upgrade.
+# Opportunity to back up or clean gamelists before they may be overwritten.
+exit 0

@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# ES API: config canupdate/lsoutputs/getRootPassword/overscan/forgetBT/storage
+export DISPLAY="${DISPLAY:-:0}"
+
+case "${1:-}" in
+    canupdate)
+        hippos-upgrade check
+        exit $?
+        ;;
+    lsoutputs)
+        xrandr --query 2>/dev/null | awk '/connected/{print $1}'
+        ;;
+    getRootPassword)
+        echo ""
+        ;;
+    overscan)
+        exit 0
+        ;;
+    forgetBT)
+        bluetoothctl paired-devices 2>/dev/null | awk '{print $2}' | while read -r mac; do
+            bluetoothctl remove "$mac" 2>/dev/null || true
+        done
+        ;;
+    storage)
+        HIPPOS_CONFIG=/userdata/system/configs/hippos
+        STORAGE_CURRENT="${HIPPOS_CONFIG}/current-storage.conf"
+        storage_current() {
+            if [[ -s "${STORAGE_CURRENT}" ]]; then
+                read -r current < "${STORAGE_CURRENT}" || current=INTERNAL
+                printf '%s\n' "${current:-INTERNAL}"
+            else
+                printf 'INTERNAL\n'
+            fi
+        }
+
+        storage_list() {
+            printf 'INTERNAL\n'
+            if command -v hippos-storage-manager >/dev/null 2>&1; then
+                hippos-storage-manager list_drives 2>/dev/null | awk -F'|' 'NF >= 2 { print "DEV " $2 " " $1 }'
+            elif [[ -x /usr/lib/hippos/hippos-storage-manager ]]; then
+                /usr/lib/hippos/hippos-storage-manager list_drives 2>/dev/null | awk -F'|' 'NF >= 2 { print "DEV " $2 " " $1 }'
+            fi
+        }
+
+        case "${2:-}" in
+            list)
+                storage_list
+                ;;
+            current)
+                storage_current
+                ;;
+            INTERNAL|DEV|NET)
+                mkdir -p "${HIPPOS_CONFIG}"
+                if [[ "${2:-}" == "INTERNAL" ]]; then
+                    printf 'INTERNAL\n' > "${STORAGE_CURRENT}"
+                elif [[ -n "${3:-}" ]]; then
+                    printf '%s %s\n' "${2}" "${3}" > "${STORAGE_CURRENT}"
+                else
+                    exit 1
+                fi
+                ;;
+            *)
+                if [[ -n "${2:-}" ]]; then
+                    mkdir -p "${HIPPOS_CONFIG}"
+                    printf '%s\n' "${2}" > "${STORAGE_CURRENT}"
+                fi
+                ;;
+        esac
+        ;;
+    *)
+        exit 0
+        ;;
+esac

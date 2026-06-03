@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MARKER="/var/lib/hippos/userdata-grown"
+BTRFS_LABEL="HippOS"
+BTRFS_ROOT="/run/hippos-btrfs"
+
+log() {
+    printf '[hippos-grow-userdata] %s\n' "$*"
+}
+
+if [[ -e "${MARKER}" ]]; then
+    log "userdata already grown"
+    exit 0
+fi
+
+main_dev="$(blkid -L "${BTRFS_LABEL}" || true)"
+if [[ -z "${main_dev}" ]]; then
+    log "no ${BTRFS_LABEL} partition found"
+    exit 0
+fi
+
+parent_name="$(lsblk -no PKNAME "${main_dev}")"
+part_num="$(lsblk -no PARTN "${main_dev}" | tr -d '[:space:]')"
+
+if [[ -z "${parent_name}" || -z "${part_num}" ]]; then
+    log "could not determine parent disk for ${main_dev}"
+    exit 1
+fi
+
+parent_disk="/dev/${parent_name}"
+
+log "growing ${main_dev} on ${parent_disk} partition ${part_num}"
+growpart "${parent_disk}" "${part_num}" || true
+blockdev --rereadpt "${parent_disk}" || true
+udevadm settle || true
+btrfs filesystem resize max "${BTRFS_ROOT}"
+
+mkdir -p "$(dirname "${MARKER}")"
+touch "${MARKER}"
+log "grow complete"

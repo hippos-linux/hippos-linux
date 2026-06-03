@@ -1,0 +1,6 @@
+requireArtifact: xroar
+systems:
+- coco
+- dragon64
+- mc10
+features: []

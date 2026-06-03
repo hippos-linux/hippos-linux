@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# ES API: bluetooth enable/disable/list/trust/connect/disconnect/remove/live_devices
+_btctl() { bluetoothctl "$@" 2>&1; }
+
+case "${1:-}" in
+    enable)           _btctl power on ;;
+    disable)          _btctl power off ;;
+    list)             _btctl paired-devices | awk '{print $2, $3}' ;;
+    trust)
+        MAC="${2:-}"
+        _btctl power on; _btctl pair "$MAC"; _btctl trust "$MAC"; _btctl connect "$MAC"
+        ;;
+    connect)          _btctl connect "${2:-}" ;;
+    disconnect)       _btctl disconnect "${2:-}" ;;
+    remove)           _btctl remove "${2:-}" ;;
+    forgetBT|forget)
+        _btctl paired-devices | awk '{print $2}' | while read -r mac; do _btctl remove "$mac"; done
+        ;;
+    live_devices)
+        _btctl power on >/dev/null 2>&1
+        bluetoothctl scan on 2>/dev/null &
+        SCAN_PID=$!
+        trap "kill $SCAN_PID 2>/dev/null; bluetoothctl scan off 2>/dev/null" EXIT INT TERM
+        bluetoothctl 2>/dev/null | while IFS= read -r line; do
+            MAC=$(echo "$line" | grep -oE '([0-9A-F]{2}:){5}[0-9A-F]{2}')
+            NAME=$(echo "$line" | sed 's/.*Device [0-9A-F:]*[[:space:]]*//')
+            [[ -n "$MAC" ]] && echo "${MAC} ${NAME}"
+        done
+        ;;
+    stop_live_devices)
+        _btctl scan off 2>/dev/null || true
+        ;;
+    *)
+        echo "Usage: $0 enable|disable|list|trust <mac>|connect <mac>|disconnect <mac>|remove <mac>|live_devices|stop_live_devices" >&2
+        exit 1
+        ;;
+esac

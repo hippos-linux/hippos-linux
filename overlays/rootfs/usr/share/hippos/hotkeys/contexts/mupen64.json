@@ -1,0 +1,14 @@
+{
+  "name": "mupen64plus",
+  "keys": {
+    "exit": "KEY_ESC",
+    "save_state": "KEY_F5",
+    "restore_state": "KEY_F7",
+    "next_slot": "KEY_SLASH",
+    "previous_slot": "KEY_BACKSLASH",
+    "screenshot": "KEY_F12",
+    "pause": "KEY_P",
+    "fastforward": "KEY_F",
+    "reset": ["KEY_LEFTSHIFT", "KEY_R"]
+  }
+}

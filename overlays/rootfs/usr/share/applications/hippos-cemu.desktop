@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Cemu
+GenericName=Wii U Emulator
+Comment=Cemu Wii U emulator
+Exec=/usr/lib/hippos/emulators/launch-cemu
+Icon=cemu
+Terminal=false
+Categories=Game;Emulator;

@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# hippos-format — list and format external disks from ES.
+# Usage: hippos-format listDisks | listFstypes | format <disk> <fstype> [label]
+
+# Disks that must never be offered for formatting
+_system_disks() {
+    grep -E '^[^ ]+ (/|/userdata) ' /proc/mounts 2>/dev/null \
+        | awk '{print $1}' \
+        | sed 's/p\?[0-9]*$//' \
+        | sed 's|/dev/||' \
+        | sort -u
+}
+
+cmd_list_disks() {
+    local -A exclude
+    for d in $(_system_disks); do exclude["$d"]=1; done
+
+    lsblk -n -P -o NAME,SIZE,MODEL,TYPE 2>/dev/null \
+        | grep 'TYPE="disk"' \
+        | while read -r line; do
+            eval "$line"
+            [[ -n "${exclude[$NAME]:-}" ]] && continue
+            LABEL="${MODEL:-Unknown}"
+            LABEL="$(echo "${LABEL}" | xargs)"
+            echo "${NAME} ${LABEL} (${SIZE})"
+        done
+}
+
+cmd_list_fstypes() {
+    echo "fat32"
+    echo "exfat"
+    echo "ntfs"
+    echo "ext4"
+    echo "btrfs"
+}
+
+cmd_format() {
+    local disk="$1" fstype="$2" label="${3:-}"
+    [[ -z "${disk}" || -z "${fstype}" ]] && { echo "Usage: $0 format <disk> <fstype> [label]" >&2; exit 1; }
+
+    local dev="/dev/${disk}"
+    [[ ! -b "${dev}" ]] && { echo "Device not found: ${dev}" >&2; exit 1; }
+
+    # Safety: refuse to format system disks
+    for sys in $(_system_disks); do
+        [[ "${disk}" == "${sys}" ]] && { echo "Refusing to format system disk: ${disk}" >&2; exit 1; }
+    done
+
+    # Unmount any partitions on this disk
+    lsblk -n -o NAME "${dev}" 2>/dev/null | while read -r part; do
+        umount "/dev/${part}" 2>/dev/null || true
+    done
+
+    case "${fstype}" in
+        fat32)
+            local args=(-F 32)
+            [[ -n "${label}" ]] && args+=(-n "${label}")
+            mkfs.vfat "${args[@]}" "${dev}"
+            ;;
+        exfat)
+            local args=()
+            [[ -n "${label}" ]] && args+=(-L "${label}")
+            mkfs.exfat "${args[@]}" "${dev}"
+            ;;
+        ntfs)
+            local args=(-f)
+            [[ -n "${label}" ]] && args+=(-L "${label}")
+            mkntfs "${args[@]}" "${dev}"
+            ;;
+        ext4)
+            local args=(-F)
+            [[ -n "${label}" ]] && args+=(-L "${label}")
+            mkfs.ext4 "${args[@]}" "${dev}"
+            ;;
+        btrfs)
+            local args=(-f)
+            [[ -n "${label}" ]] && args+=(-L "${label}")
+            mkfs.btrfs "${args[@]}" "${dev}"
+            ;;
+        *)
+            echo "Unsupported filesystem: ${fstype}" >&2; exit 1
+            ;;
+    esac
+}
+
+case "${1:-}" in
+    listDisks)  cmd_list_disks ;;
+    listFstypes) cmd_list_fstypes ;;
+    format)     shift; cmd_format "$@" ;;
+    *)          echo "Usage: $0 listDisks | listFstypes | format <disk> <fstype> [label]" >&2; exit 1 ;;
+esac

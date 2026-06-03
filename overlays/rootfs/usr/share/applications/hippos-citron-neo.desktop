@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Citron Neo
+GenericName=Nintendo Switch Emulator
+Comment=Citron Neo Nintendo Switch emulator
+Exec=/usr/lib/hippos/emulators/launch-citron-neo
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

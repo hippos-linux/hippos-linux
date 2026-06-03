@@ -1,0 +1,7 @@
+{
+  "name": "waydroid",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "screenshot": "KEY_SYSRQ"
+  }
+}

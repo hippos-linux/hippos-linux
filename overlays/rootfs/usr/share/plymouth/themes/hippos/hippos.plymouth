@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=HippOS
+Description=HippOS boot splash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/hippos
+ScriptFile=/usr/share/plymouth/themes/hippos/hippos.script

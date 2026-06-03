@@ -1,0 +1,210 @@
+requireArtifact: mame
+systems:
+  mame:
+    cores:
+    - mame
+  adam:
+    cores:
+    - mame
+  advision:
+    cores:
+    - mame
+  apfm1000:
+    cores:
+    - mame
+  arcadia:
+    cores:
+    - mame
+  archimedes:
+    cores:
+    - mame
+  astrocade:
+    cores:
+    - mame
+  atom:
+    cores:
+    - mame
+  bbcmicro:
+    cores:
+    - mame
+  beena:
+    cores:
+    - mame
+  bk:
+    cores:
+    - mame
+  camplynx:
+    cores:
+    - mame
+  cave3rd:
+    cores:
+    - mame
+  cdi:
+    cores:
+    - mame
+  cgenie:
+    cores:
+    - mame
+  coco:
+    cores:
+    - mame
+  crvision:
+    cores:
+    - mame
+  ctvboy:
+    cores:
+    - mame
+  dragon64:
+    cores:
+    - mame
+  electron:
+    cores:
+    - mame
+  enterprise:
+    cores:
+    - mame
+  fm7:
+    cores:
+    - mame
+  fmtowns:
+    cores:
+    - mame
+  gaelco:
+    cores:
+    - mame
+  gamate:
+    cores:
+    - mame
+  gameandwatch:
+    cores:
+    - mame
+  gamecom:
+    cores:
+    - mame
+  gamepock:
+    cores:
+    - mame
+  gmaster:
+    cores:
+    - mame
+  gp32:
+    cores:
+    - mame
+  laser310:
+    cores:
+    - mame
+  lcdgames:
+    cores:
+    - mame
+  loopy:
+    cores:
+    - mame
+  macintosh:
+    cores:
+    - mame
+  mc10:
+    cores:
+    - mame
+  megaduck:
+    cores:
+    - mame
+  model2:
+    cores:
+    - mame
+  mz2000:
+    cores:
+    - mame
+  mz2500:
+    cores:
+    - mame
+  mz700:
+    cores:
+    - mame
+  mz800:
+    cores:
+    - mame
+  mz80k:
+    cores:
+    - mame
+  namco22:
+    cores:
+    - mame
+  neogeo:
+    cores:
+    - mame
+  oricatmos:
+    cores:
+    - mame
+  pc60:
+    cores:
+    - mame
+  pc80:
+    cores:
+    - mame
+  pcw:
+    cores:
+    - mame
+  pdp1:
+    cores:
+    - mame
+  pv1000:
+    cores:
+    - mame
+  pv2000:
+    cores:
+    - mame
+  rx78:
+    cores:
+    - mame
+  samcoupe:
+    cores:
+    - mame
+  sc3000:
+    cores:
+    - mame
+  segaai:
+    cores:
+    - mame
+  socrates:
+    cores:
+    - mame
+  supracan:
+    cores:
+    - mame
+  sv8000:
+    cores:
+    - mame
+  ti99:
+    cores:
+    - mame
+  trs80:
+    cores:
+    - mame
+  tutor:
+    cores:
+    - mame
+  tvc:
+    cores:
+    - mame
+  tvgames:
+    cores:
+    - mame
+  uzebox:
+    cores:
+    - mame
+  vc4000:
+    cores:
+    - mame
+  vectrex:
+    cores:
+    - mame
+  vgmplay:
+    cores:
+    - mame
+  vsmile:
+    cores:
+    - mame
+  xegs:
+    cores:
+    - mame
+features: []

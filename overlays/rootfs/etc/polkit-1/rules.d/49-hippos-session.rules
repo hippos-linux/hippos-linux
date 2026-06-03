@@ -1,0 +1,36 @@
+// Allow the hippos user to create transient systemd units (for emulator launching)
+polkit.addRule(function(action, subject) {
+    if ((action.id == "org.freedesktop.systemd1.manage-units" ||
+         action.id == "org.freedesktop.systemd1.manage-unit-files" ||
+         action.id == "org.freedesktop.systemd1.reload-daemon") &&
+        subject.user == "hippos") {
+        return polkit.Result.YES;
+    }
+});
+
+// Allow hippos to manage NetworkManager (wifi connect/disconnect/scan)
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("org.freedesktop.NetworkManager.") === 0 &&
+        subject.user == "hippos") {
+        return polkit.Result.YES;
+    }
+});
+
+// Allow hippos to power off, reboot, suspend, and hibernate without a logind session
+polkit.addRule(function(action, subject) {
+    var powerActions = [
+        "org.freedesktop.login1.power-off",
+        "org.freedesktop.login1.power-off-multiple-sessions",
+        "org.freedesktop.login1.power-off-ignore-inhibit",
+        "org.freedesktop.login1.reboot",
+        "org.freedesktop.login1.reboot-multiple-sessions",
+        "org.freedesktop.login1.reboot-ignore-inhibit",
+        "org.freedesktop.login1.suspend",
+        "org.freedesktop.login1.suspend-multiple-sessions",
+        "org.freedesktop.login1.hibernate",
+        "org.freedesktop.login1.hibernate-multiple-sessions"
+    ];
+    if (powerActions.indexOf(action.id) >= 0 && subject.user === "hippos") {
+        return polkit.Result.YES;
+    }
+});

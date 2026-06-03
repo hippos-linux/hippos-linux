@@ -1,0 +1,4 @@
+Steam
+Manufacturer: Valve
+Hardware: None
+Extensions: .steam

@@ -1,0 +1,8 @@
+requireArtifact: duckstation
+systems:
+- psx
+features:
+- ratio
+- rewind
+- autosave
+- internal_resolution

@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROM="$1"
+CACHE_DIR="/userdata/system/cache/waydroid-launcher"
+PKG_CACHE="${CACHE_DIR}/packages.tsv"
+SESSION_TIMEOUT=30
+WESTON_TIMEOUT=30
+WAYLAND_SOCKET="wayland-waydroid"
+WESTON_PID=""
+
+die() { printf '[waydroid-launcher] error: %s\n' "$*" >&2; exit 1; }
+log() { printf '[waydroid-launcher] %s\n' "$*"; }
+
+HOTKEYS_BIN="/usr/lib/hippos/hippos-hotkeys"
+
+cleanup() {
+    [[ -n "${WESTON_PID}" ]] && kill "${WESTON_PID}" 2>/dev/null || true
+    "${HOTKEYS_BIN}" --default-context 2>/dev/null || true
+}
+trap cleanup EXIT
+
+[[ -f "${ROM}" ]] || die "file not found: ${ROM}"
+
+mkdir -p "${CACHE_DIR}"
+touch "${PKG_CACHE}"
+
+# Ensure bind mount is active
+if ! systemctl is-active --quiet var-lib-waydroid.mount; then
+    systemctl start var-lib-waydroid.mount || die "Could not mount /var/lib/waydroid"
+fi
+
+# Ensure waydroid is initialised
+if [[ ! -f /var/lib/waydroid/waydroid.cfg ]]; then
+    die "Waydroid not initialised — hippos-waydroid-init.service should handle this on first boot"
+fi
+
+start_weston() {
+    local runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    log "Starting Weston (X11 nested)..."
+    local res
+    res="$(DISPLAY="${DISPLAY:-:0}" xrandr 2>/dev/null | awk '/ \*/{print $1; exit}')"
+    local w="${res%%x*}"
+    local h="${res##*x}"
+    unset WAYLAND_DISPLAY
+    DISPLAY="${DISPLAY:-:0}" weston \
+        --backend=x11 \
+        --socket="${WAYLAND_SOCKET}" \
+        ${w:+--width="${w}"} ${h:+--height="${h}"} \
+        &>/dev/null &
+    WESTON_PID=$!
+    for i in $(seq 1 "$((WESTON_TIMEOUT * 2))"); do
+        [[ -S "${runtime_dir}/${WAYLAND_SOCKET}" ]] && {
+            export WAYLAND_DISPLAY="${WAYLAND_SOCKET}"
+            log "Weston ready"
+            "${HOTKEYS_BIN}" --new-context waydroid "$(cat /usr/share/hippos/hotkeys/contexts/waydroid.json)" 2>/dev/null || true
+            return 0
+        }
+        sleep 0.5
+    done
+    kill "${WESTON_PID}" 2>/dev/null
+    WESTON_PID=""
+    die "Weston did not start within ${WESTON_TIMEOUT}s"
+}
+
+# Weston must be running before session start (session needs a Wayland socket)
+start_weston
+
+# Start session if not running
+if ! waydroid status 2>/dev/null | grep -q "Session.*RUNNING"; then
+    log "Starting Waydroid session..."
+    nohup waydroid session start &>/dev/null &
+    for i in $(seq 1 "${SESSION_TIMEOUT}"); do
+        waydroid status 2>/dev/null | grep -q "Session.*RUNNING" && break
+        [[ "${i}" -eq "${SESSION_TIMEOUT}" ]] && die "Session did not start within ${SESSION_TIMEOUT}s"
+        sleep 1
+    done
+    log "Session ready"
+fi
+
+# .waydroid launcher file — read command from file contents
+if [[ "${ROM}" == *.waydroid ]]; then
+    CMD="$(tr -d '[:space:]' < "${ROM}")"
+    case "${CMD}" in
+        show-full-ui)
+            log "Launching Waydroid full UI..."
+            waydroid show-full-ui
+            wait "${WESTON_PID}" 2>/dev/null || true
+            ;;
+        *)
+            die "Unknown waydroid command in launcher file: ${CMD}"
+            ;;
+    esac
+    exit 0
+fi
+
+# APK path — resolve package name from cache or aapt
+ROM_KEY="$(realpath "${ROM}")"
+PKG_NAME="$(awk -F'\t' -v k="${ROM_KEY}" '$1==k {print $2}' "${PKG_CACHE}")"
+
+if [[ -z "${PKG_NAME}" ]]; then
+    log "Extracting package name from APK..."
+    PKG_NAME="$(aapt dump badging "${ROM}" 2>/dev/null \
+        | grep "^package:" \
+        | grep -oP "name='[^']+'" \
+        | cut -d"'" -f2)"
+    [[ -n "${PKG_NAME}" ]] || die "Could not extract package name from: ${ROM}"
+    printf '%s\t%s\n' "${ROM_KEY}" "${PKG_NAME}" >> "${PKG_CACHE}"
+    log "Package: ${PKG_NAME}"
+fi
+
+# Install if not already present
+if ! waydroid app list 2>/dev/null | grep -q "^${PKG_NAME}$"; then
+    log "Installing ${PKG_NAME}..."
+    waydroid app install "${ROM}" || die "Install failed"
+fi
+
+log "Launching ${PKG_NAME}..."
+waydroid app launch "${PKG_NAME}"
+wait "${WESTON_PID}" 2>/dev/null || true

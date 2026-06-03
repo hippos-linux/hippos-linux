@@ -1,0 +1,9 @@
+id: steam-deck
+dmi:
+  sys_vendor: "Valve"
+  product_name: "Jupiter"
+defaults:
+  display.rotate: "90"
+  system.suspendmode: "suspend"
+  global.tdp: "15"
+  steam.deckmode: "true"

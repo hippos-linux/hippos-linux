@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Ruffle
+GenericName=Flash Emulator
+Comment=Ruffle Flash emulator
+Exec=/usr/lib/hippos/emulators/launch-ruffle
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

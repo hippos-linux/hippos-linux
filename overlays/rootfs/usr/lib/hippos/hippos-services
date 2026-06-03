@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# hippos-services — manage user-defined services from /userdata/system/services/.
+# Usage: hippos-services list [all|system|user]
+#        hippos-services enable|disable|start|stop|restart|status <name>
+
+SYSTEM_SERVICES_DIR="/usr/share/hippos/services"
+USER_SERVICES_DIR="/userdata/system/services"
+SETTINGS_KEY="system.services"
+
+_enabled_list() {
+    hippos-settings get "${SETTINGS_KEY}" 2>/dev/null || true
+}
+
+_is_enabled() {
+    local name="$1"
+    for s in $(_enabled_list); do
+        [[ "${s}" == "${name}" ]] && return 0
+    done
+    return 1
+}
+
+_service_script() {
+    local name="$1"
+    if [[ -f "${USER_SERVICES_DIR}/${name}" ]]; then
+        echo "${USER_SERVICES_DIR}/${name}"
+    elif [[ -f "${SYSTEM_SERVICES_DIR}/${name}" ]]; then
+        echo "${SYSTEM_SERVICES_DIR}/${name}"
+    fi
+}
+
+_valid_name() {
+    [[ "$1" =~ ^[_[:alpha:]][_[:alpha:][:digit:]]*$ ]]
+}
+
+cmd_list() {
+    local filter="${1:-all}"
+    local dirs=()
+    case "${filter}" in
+        system) dirs=("${SYSTEM_SERVICES_DIR}") ;;
+        user)   dirs=("${USER_SERVICES_DIR}") ;;
+        *)      dirs=("${USER_SERVICES_DIR}" "${SYSTEM_SERVICES_DIR}") ;;
+    esac
+
+    local seen=()
+    for dir in "${dirs[@]}"; do
+        [[ -d "${dir}" ]] || continue
+        for sfile in "${dir}"/*; do
+            [[ -f "${sfile}" ]] || continue
+            local name
+            name="$(basename "${sfile}")"
+            _valid_name "${name}" || continue
+            # Deduplicate (user overrides system)
+            local dup=0
+            for s in "${seen[@]}"; do [[ "$s" == "$name" ]] && dup=1 && break; done
+            [[ "${dup}" -eq 1 ]] && continue
+            seen+=("${name}")
+            if _is_enabled "${name}"; then
+                printf '%s;*\n' "${name}"
+            else
+                printf '%s;-\n' "${name}"
+            fi
+        done
+    done
+}
+
+cmd_enable() {
+    local name="$1"
+    _valid_name "${name}" || { echo "Invalid service name: ${name}" >&2; exit 1; }
+    local current
+    current="$(_enabled_list)"
+    for s in ${current}; do [[ "$s" == "$name" ]] && return 0; done
+    hippos-settings set "${SETTINGS_KEY}" "${current:+${current} }${name}" 2>/dev/null || true
+}
+
+cmd_disable() {
+    local name="$1"
+    _valid_name "${name}" || { echo "Invalid service name: ${name}" >&2; exit 1; }
+    local current new=()
+    current="$(_enabled_list)"
+    for s in ${current}; do [[ "$s" != "$name" ]] && new+=("$s"); done
+    hippos-settings set "${SETTINGS_KEY}" "${new[*]}" 2>/dev/null || true
+}
+
+cmd_call() {
+    local name="$1" action="$2"
+    local script
+    script="$(_service_script "${name}")"
+    [[ -z "${script}" ]] && { echo "Service not found: ${name}" >&2; exit 1; }
+    if [[ -x "${script}" ]]; then
+        "${script}" "${action}"
+    else
+        bash "${script}" "${action}"
+    fi
+}
+
+case "${1:-}" in
+    list)    shift; cmd_list "$@" ;;
+    enable)  cmd_enable "${2:-}" ;;
+    disable) cmd_disable "${2:-}" ;;
+    start)   cmd_call "${2:-}" start ;;
+    stop)    cmd_call "${2:-}" stop ;;
+    restart) cmd_call "${2:-}" stop; cmd_call "${2:-}" start ;;
+    status)  cmd_call "${2:-}" status ;;
+    *)
+        echo "Usage: $0 list [all|system|user]" >&2
+        echo "       $0 enable|disable|start|stop|restart|status <name>" >&2
+        exit 1
+        ;;
+esac

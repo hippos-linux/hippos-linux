@@ -1,0 +1,5 @@
+Android Apps
+Manufacturer: Google
+Released: 2008
+Hardware: os
+Extensions: .apk .waydroid

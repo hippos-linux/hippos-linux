@@ -1,0 +1,5 @@
+Game Gear
+Manufacturer: Sega
+Released: 1990
+Hardware: portable
+Extensions: .bin .gg .zip .7z

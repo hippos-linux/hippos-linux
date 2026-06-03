@@ -1,0 +1,8 @@
+{
+  "name": "xemu",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "menu": "KEY_F1",
+    "screenshot": "KEY_F2"
+  }
+}

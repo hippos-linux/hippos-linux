@@ -1,0 +1,401 @@
+#!/usr/bin/env python3
+"""HippOS content store — packages from catalog + wine runners from GitHub."""
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+import urllib.request
+import xml.etree.ElementTree as ET
+
+_DEFAULT_CATALOG_URL = "https://hippos-linux.org/store/content-catalog.json"
+
+def _read_sysconf(key):
+    path = "/userdata/system/hippos.conf"
+    try:
+        for line in open(path):
+            k, _, v = line.strip().partition("=")
+            if k.strip() == key:
+                return v.strip()
+    except FileNotFoundError:
+        pass
+    return None
+
+CATALOG_URL = _read_sysconf("content.catalog_url") or _DEFAULT_CATALOG_URL
+STATE_DIR      = "/userdata/system/hippos-store"
+STATE_FILE     = os.path.join(STATE_DIR, "installed.json")
+CACHE_DIR      = os.path.join(STATE_DIR, "cache")
+WINE_CACHE     = os.path.join(STATE_DIR, "wine-runners.json")
+WINE_CACHE_TTL = 3600          # 1 hour
+WINE_RUNNERS_DIR = "/userdata/system/wine-runners"
+
+INSTALL_ROOTS = {
+    "shaders":   "/userdata/shaders",
+    "bezels":    "/userdata/decorations",
+    "cheats":    "/userdata/cheats",
+    "themes":    "/userdata/themes",
+    "ports":     "/userdata/ports",
+    "wine-ge":   WINE_RUNNERS_DIR,
+    "wine-tkg":  WINE_RUNNERS_DIR,
+    "proton-ge": WINE_RUNNERS_DIR,
+}
+
+WINE_SOURCES = [
+    {
+        "id":    "wine-ge",
+        "label": "Wine-GE",
+        "api":   "https://api.github.com/repos/GloriousEggroll/wine-ge-custom/releases?per_page=100",
+        "pick":  lambda a: a["name"].endswith((".tar.xz", ".tar.gz"))
+                           and "x86_64" in a["name"]
+                           and not a["name"].endswith(".sha512sum"),
+    },
+    {
+        "id":    "wine-tkg",
+        "label": "Wine-TKG",
+        "api":   "https://api.github.com/repos/Kron4ek/Wine-Builds/releases?per_page=100",
+        "pick":  lambda a: a["name"].endswith(".tar.xz")
+                           and "amd64" in a["name"]
+                           and "staging" not in a["name"],
+    },
+    {
+        "id":    "proton-ge",
+        "label": "Proton-GE",
+        "api":   "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases?per_page=100",
+        "pick":  lambda a: a["name"].endswith((".tar.gz",))
+                           and not a["name"].endswith(".sha512sum"),
+    },
+]
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _gh_get(url):
+    req = urllib.request.Request(url, headers={
+        "User-Agent":  "hippos-store/1.0",
+        "Accept":      "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    })
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.loads(r.read())
+
+
+def load_catalog():
+    req = urllib.request.Request(CATALOG_URL, headers={"User-Agent": "hippos-store/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read().decode("utf-8"))["packages"]
+    except Exception as exc:
+        print(f"Error: could not fetch catalog: {exc}", file=sys.stderr)
+        return []
+
+
+def load_state():
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE) as f:
+            return json.load(f)
+    return {}
+
+
+def save_state(state):
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Wine runner catalog — fetched from GitHub, cached on disk
+# ---------------------------------------------------------------------------
+
+def _runner_id(source_id, asset_name):
+    stem = asset_name
+    for ext in (".tar.xz", ".tar.gz", ".tar.bz2"):
+        stem = stem.removesuffix(ext)
+    return f"wine::{source_id}::{stem}"
+
+
+def _runner_install_dir(runner_id):
+    stem = runner_id.split("::", 2)[-1]
+    return os.path.join(WINE_RUNNERS_DIR, stem)
+
+
+def load_wine_runners(force_refresh=False):
+    if not force_refresh and os.path.exists(WINE_CACHE):
+        age = time.time() - os.path.getmtime(WINE_CACHE)
+        if age < WINE_CACHE_TTL:
+            with open(WINE_CACHE) as f:
+                return json.load(f)
+
+    runners = []
+    for src in WINE_SOURCES:
+        try:
+            releases = _gh_get(src["api"])
+            for rel in releases:
+                for asset in rel.get("assets", []):
+                    if not src["pick"](asset):
+                        continue
+                    rid = _runner_id(src["id"], asset["name"])
+                    runners.append({
+                        "id":          rid,
+                        "name":        asset["name"].removesuffix(".tar.xz").removesuffix(".tar.gz"),
+                        "description": f"{src['label']} — {rel.get('tag_name', '')}",
+                        "category":    src["id"],
+                        "version":     rel.get("tag_name", "unknown"),
+                        "download_size": asset.get("size", 0),
+                        "url":         asset["browser_download_url"],
+                    })
+        except Exception as e:
+            print(f"WARNING: Could not fetch {src['label']}: {e}", file=sys.stderr)
+
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(WINE_CACHE, "w") as f:
+        json.dump(runners, f)
+
+    return runners
+
+
+# ---------------------------------------------------------------------------
+# list
+# ---------------------------------------------------------------------------
+
+def cmd_list():
+    catalog = load_catalog()
+    state   = load_state()
+
+    root = ET.Element("packages")
+
+    for pkg in catalog:
+        pkg_id = pkg["id"]
+        installed = pkg_id in state
+        node = ET.SubElement(root, "package")
+        ET.SubElement(node, "name").text             = pkg_id
+        ET.SubElement(node, "repository").text       = "hippos"
+        ET.SubElement(node, "available_version").text = pkg.get("version", "latest")
+        ET.SubElement(node, "description").text      = pkg.get("description", "")
+        ET.SubElement(node, "group").text            = pkg.get("category", "")
+        ET.SubElement(node, "status").text           = "installed" if installed else "available"
+        ET.SubElement(node, "url").text              = pkg.get("url", "")
+        ET.SubElement(node, "download_size").text    = str(pkg.get("download_size", 0))
+        ET.SubElement(node, "installed_size").text   = str(pkg.get("download_size", 0))
+        ET.SubElement(node, "preview_url").text      = pkg.get("preview_url", "")
+
+    print("<packages>", flush=True)
+    for pkg_node in root:
+        print(ET.tostring(pkg_node, encoding="unicode"), flush=True)
+    print("</packages>", flush=True)
+
+
+# ---------------------------------------------------------------------------
+# install helpers
+# ---------------------------------------------------------------------------
+
+def _download(url, dest_path, label):
+    req = urllib.request.Request(url, headers={"User-Agent": "hippos-store/1.0"})
+    print(f"Downloading {label}...", flush=True)
+    with urllib.request.urlopen(req) as resp, open(dest_path, "wb") as out:
+        total = int(resp.headers.get("Content-Length", 0))
+        done  = 0
+        while chunk := resp.read(131072):
+            out.write(chunk)
+            done += len(chunk)
+            if total:
+                print(f"Downloading {label}... {done * 100 // total}%", flush=True)
+
+
+def _extract_tarball(archive, dest, strip_components, source_subdir):
+    print("Extracting...", flush=True)
+    os.makedirs(dest, exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        try:
+            with tarfile.open(archive) as tf:
+                members = []
+                for m in tf.getmembers():
+                    parts = m.name.split("/")
+                    if len(parts) <= strip_components:
+                        continue
+                    m.name = "/".join(parts[strip_components:])
+                    if m.name:
+                        members.append(m)
+                tf.extractall(tmpdir, members=members)
+        except tarfile.CompressionError:
+            # xz archives — fall back to system tar
+            subprocess.run(["tar", "-xf", archive, "-C", tmpdir], check=True)
+
+        src = os.path.join(tmpdir, source_subdir) if source_subdir else tmpdir
+        if not os.path.isdir(src):
+            src = tmpdir
+
+        for item in os.listdir(src):
+            s, d = os.path.join(src, item), os.path.join(dest, item)
+            if os.path.isdir(s):
+                if os.path.exists(d):
+                    shutil.rmtree(d)
+                shutil.copytree(s, d)
+            else:
+                shutil.copy2(s, d)
+
+
+def _install_wine_runner(pkg):
+    dest = _runner_install_dir(pkg["id"])
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    url  = pkg["url"]
+    ext  = ".tar.xz" if url.endswith(".tar.xz") else ".tar.gz"
+    archive = os.path.join(CACHE_DIR, pkg["id"].replace("::", "_") + ext)
+    _download(url, archive, pkg["name"])
+    # Wine runner tarballs have a top-level directory — strip it
+    _extract_tarball(archive, dest, strip_components=1, source_subdir="")
+    try:
+        os.remove(archive)
+    except Exception:
+        pass
+
+
+def _install_catalog_tarball(pkg):
+    category     = pkg.get("category", "")
+    dest_root    = INSTALL_ROOTS.get(category, "/userdata/ports")
+    install_path = pkg.get("install_path", "")
+    dest         = os.path.join(dest_root, install_path) if install_path else dest_root
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    archive = os.path.join(CACHE_DIR, pkg["id"] + ".tar.gz")
+    _download(pkg["url"], archive, pkg["name"])
+    _extract_tarball(archive, dest, pkg.get("strip_components", 1), pkg.get("source_subdir", ""))
+
+
+def _install_apt(pkg):
+    apt_pkgs     = pkg.get("apt_packages", [])
+    launcher_cmd = pkg.get("launcher_command", "")
+    print(f"Installing {pkg['name']} via apt...", flush=True)
+    env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive"}
+    ret = subprocess.call(["apt-get", "install", "-y", "--no-install-recommends"] + apt_pkgs, env=env)
+    if ret != 0:
+        print(f"ERROR: apt install failed (exit {ret})", flush=True)
+        sys.exit(1)
+    if launcher_cmd:
+        os.makedirs("/userdata/ports", exist_ok=True)
+        launcher = f"/userdata/ports/{pkg['id']}.sh"
+        with open(launcher, "w") as f:
+            f.write(f"#!/usr/bin/env bash\nexec {launcher_cmd}\n")
+        os.chmod(launcher, 0o755)
+
+
+# ---------------------------------------------------------------------------
+# install / remove
+# ---------------------------------------------------------------------------
+
+def cmd_install(name):
+    state = load_state()
+
+    # Wine runner?
+    if name.startswith("wine::"):
+        runners = load_wine_runners()
+        pkg = next((r for r in runners if r["id"] == name), None)
+        if pkg is None:
+            print(f"ERROR: Wine runner '{name}' not found", flush=True)
+            sys.exit(1)
+        _install_wine_runner(pkg)
+        state[name] = {"version": pkg.get("version", "unknown")}
+        save_state(state)
+        print(f"Done: {pkg['name']} installed to {_runner_install_dir(name)}", flush=True)
+        return
+
+    # Catalog package
+    catalog = load_catalog()
+    pkg = next((p for p in catalog if p["id"] == name), None)
+    if pkg is None:
+        print(f"ERROR: Package '{name}' not found", flush=True)
+        sys.exit(1)
+
+    if pkg.get("type") == "apt":
+        _install_apt(pkg)
+    else:
+        _install_catalog_tarball(pkg)
+
+    state[name] = {"version": pkg.get("version", "latest")}
+    save_state(state)
+    print(f"Done: {pkg['name']} installed.", flush=True)
+
+
+def cmd_remove(name):
+    state = load_state()
+
+    if name.startswith("wine::"):
+        dest = _runner_install_dir(name)
+        if os.path.isdir(dest):
+            print(f"Removing {dest}...", flush=True)
+            shutil.rmtree(dest)
+        state.pop(name, None)
+        save_state(state)
+        print("Done.", flush=True)
+        return
+
+    catalog = load_catalog()
+    pkg = next((p for p in catalog if p["id"] == name), None)
+    if pkg is None:
+        print(f"ERROR: Package '{name}' not found", flush=True)
+        sys.exit(1)
+
+    if pkg.get("type") == "apt":
+        subprocess.call(["apt-get", "remove", "-y"] + pkg.get("apt_packages", []))
+        launcher = f"/userdata/ports/{name}.sh"
+        if os.path.exists(launcher):
+            os.remove(launcher)
+    else:
+        dest_root    = INSTALL_ROOTS.get(pkg.get("category", ""), "/userdata/ports")
+        install_path = pkg.get("install_path", "")
+        if install_path:
+            target = os.path.join(dest_root, install_path)
+            if os.path.isdir(target):
+                print(f"Removing {target}...", flush=True)
+                shutil.rmtree(target)
+
+    state.pop(name, None)
+    save_state(state)
+    print(f"Done: {pkg['name']} removed.", flush=True)
+
+
+# ---------------------------------------------------------------------------
+# refresh / clean-all / update
+# ---------------------------------------------------------------------------
+
+def cmd_refresh():
+    load_wine_runners(force_refresh=True)
+
+
+def cmd_clean_all():
+    if os.path.isdir(CACHE_DIR):
+        shutil.rmtree(CACHE_DIR)
+    if os.path.exists(WINE_CACHE):
+        os.remove(WINE_CACHE)
+
+
+def cmd_update():
+    state = load_state()
+    for name in list(state.keys()):
+        print(f"Updating {name}...", flush=True)
+        cmd_install(name)
+
+
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "list":
+        cmd_list()
+    elif cmd == "install" and len(sys.argv) >= 3:
+        cmd_install(sys.argv[2])
+    elif cmd == "remove" and len(sys.argv) >= 3:
+        cmd_remove(sys.argv[2])
+    elif cmd == "refresh":
+        cmd_refresh()
+    elif cmd == "clean-all":
+        cmd_clean_all()
+    elif cmd == "update":
+        cmd_update()
+    else:
+        print("Usage: hippos-store <list|install NAME|remove NAME|refresh|clean-all|update>")
+        sys.exit(1)

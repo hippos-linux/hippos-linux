@@ -1,0 +1,5 @@
+requireArtifact: play
+systems:
+- ps2
+- namco2x6
+features: []

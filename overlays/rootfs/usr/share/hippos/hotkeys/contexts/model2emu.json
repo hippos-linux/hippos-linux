@@ -1,0 +1,9 @@
+{
+  "name": "model2emu",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "coin": "KEY_5",
+    "reset": "KEY_F3",
+    "screenshot": "KEY_F12"
+  }
+}

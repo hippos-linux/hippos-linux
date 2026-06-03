@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=EKA2L1
+GenericName=Nokia/Symbian Emulator
+Comment=EKA2L1 Nokia and Symbian emulator
+Exec=/usr/lib/hippos/emulators/launch-eka2l1
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

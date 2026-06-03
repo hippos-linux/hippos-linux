@@ -1,0 +1,99 @@
+#!/bin/bash
+# HippOS Swiss Knife for EmulationStation
+# EC: 20-SIGTERM ok, 22-SIGKILL fallback, 21-no emulator found
+#     10-poweroff, 11-reboot, 1-general error, 0-okay
+
+waitTimer=5
+
+function getcpid() {
+    local cpids
+    cpids="$(pgrep -P "$1")"
+    for cpid in $cpids; do
+        pidarray+=("$cpid")
+        getcpid "$cpid"
+    done
+}
+
+function check_emurun() {
+    echo "$(pgrep -f -n emulatorlauncher || echo 0)"
+}
+
+function check_esrun() {
+    echo "$(pidof /usr/bin/emulationstation || echo 0)"
+}
+
+function emu_kill() {
+    RC_PID=$(check_emurun)
+    if [[ $RC_PID -ne 0 ]]; then
+        # Graceful exit: inject the context-appropriate key combo
+        /usr/lib/hippos/hippos-hotkeys --send exit &
+        ret=20
+        timeout "${waitTimer}" tail -q --pid="${RC_PID}" -f /dev/null 2>/dev/null && return $ret
+        # Graceful exit timed out — walk and SIGKILL process tree
+        getcpid "$RC_PID"
+        for ((z=${#pidarray[*]}-1; z>-1; z--)); do
+            kill -9 "${pidarray[z]}" 2>/dev/null; sleep 1
+        done
+        unset pidarray
+        ret=22
+    else
+        ret=21
+    fi
+    return $ret
+}
+
+case "${1,,}" in
+    --restart)
+        ES_PID=$(check_esrun)
+        [[ ${ES_PID} -ne 0 ]] && kill -9 "${ES_PID}" && ret=0 || ret=1
+    ;;
+
+    --espid)
+        ES_PID=$(check_esrun); echo "${ES_PID}"
+        [[ ${ES_PID} -ne 0 ]] && ret=0 || ret=1
+    ;;
+
+    --emupid)
+        RC_PID=$(check_emurun); echo "${RC_PID}"
+        if [[ ${RC_PID} -ne 0 ]]; then
+            getcpid "${RC_PID}"; echo "${pidarray[@]}"
+            unset pidarray
+            ret=0
+        else
+            ret=21
+        fi
+    ;;
+
+    --emukill|--shutdown|--reboot)
+        [[ $2 =~ ^[0-9]*[.]?[0-9]+$ ]] && waitTimer="$2"
+        emu_kill; ret=$?
+
+        ES_PID=$(check_esrun)
+        if [[ "${1,,}" == "--shutdown" && ${ES_PID} -ne 0 ]]; then
+            systemctl stop hippos-es.service 2>/dev/null || true
+            systemctl poweroff; ret=11
+        elif [[ "${1,,}" == "--reboot" && ${ES_PID} -ne 0 ]]; then
+            systemctl stop hippos-es.service 2>/dev/null || true
+            systemctl reboot; ret=10
+        fi
+    ;;
+
+    *)
+        cat <<-_EOF_
+		HippOS Swiss Knife for EmulationStation
+		  usage: $(basename "${0}") [Option] [timeout_secs]
+		  --restart        restart EmulationStation
+		  --reboot   [s]   reboot system (kill emulator first, wait s seconds)
+		  --shutdown [s]   power off system (kill emulator first, wait s seconds)
+		  --emukill  [s]   exit any running emulator
+		  --espid          print EmulationStation PID (0 if not running)
+		  --emupid         print emulator launcher PID tree (0 if not running)
+
+		EC: 20-SIGTERM ok, 22-SIGKILL fallback, 21-no emulator found
+		    10-poweroff, 11-reboot, 1-general error, 0-okay
+		_EOF_
+        ret=0
+    ;;
+esac
+
+exit $ret

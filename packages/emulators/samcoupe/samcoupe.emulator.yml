@@ -1,0 +1,6 @@
+requireArtifact: samcoupe
+systems:
+  samcoupe:
+    cores:
+    - simcoupe
+features: []

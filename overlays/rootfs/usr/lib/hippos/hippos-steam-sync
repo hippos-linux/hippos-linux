@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+"""Generate EmulationStation .steam launchers from installed Steam manifests."""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import sys
+from pathlib import Path
+from typing import Any
+
+
+USERDATA = Path("/userdata")
+ROMS_DIR = USERDATA / "roms" / "steam"
+STATE_FILE = USERDATA / "system" / "steam-launchers.json"
+STEAM_ROOTS = [
+    USERDATA / ".steam" / "steam",
+    USERDATA / ".local" / "share" / "Steam",
+    USERDATA / "Steam",
+]
+
+
+def log(message: str) -> None:
+    print(f"[hippos-steam-sync] {message}")
+
+
+def tokenize_vdf(text: str) -> list[str]:
+    return re.findall(r'"((?:\\.|[^"\\])*)"|([{}])', text)
+
+
+def unescape_vdf(value: str) -> str:
+    return value.replace(r"\"", '"').replace(r"\\", "\\")
+
+
+def parse_vdf(path: Path) -> dict[str, Any]:
+    try:
+        tokens = tokenize_vdf(path.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return {}
+
+    flat = [unescape_vdf(value) if value else brace for value, brace in tokens]
+    index = 0
+
+    def parse_object() -> dict[str, Any]:
+        nonlocal index
+        result: dict[str, Any] = {}
+        while index < len(flat):
+            token = flat[index]
+            index += 1
+            if token == "}":
+                break
+            if token == "{":
+                continue
+            if index < len(flat) and flat[index] == "{":
+                index += 1
+                result[token] = parse_object()
+            elif index < len(flat):
+                result[token] = flat[index]
+                index += 1
+            else:
+                result[token] = ""
+        return result
+
+    return parse_object()
+
+
+def unwrap_single_root(data: dict[str, Any], root_name: str) -> dict[str, Any]:
+    if set(data.keys()) == {root_name} and isinstance(data[root_name], dict):
+        return data[root_name]
+    return data
+
+
+def steamapps_dirs() -> list[Path]:
+    roots: list[Path] = []
+    for steam_root in STEAM_ROOTS:
+        steamapps = steam_root / "steamapps"
+        if steamapps.is_dir():
+            roots.append(steamapps)
+
+        libraryfolders = steamapps / "libraryfolders.vdf"
+        data = unwrap_single_root(parse_vdf(libraryfolders), "libraryfolders")
+        for key, value in data.items():
+            library_path = ""
+            if isinstance(value, dict):
+                path_value = value.get("path")
+                if isinstance(path_value, str):
+                    library_path = path_value
+            elif key.isdigit() and isinstance(value, str):
+                library_path = value
+
+            if library_path:
+                candidate = Path(library_path) / "steamapps"
+                if candidate.is_dir():
+                    roots.append(candidate)
+
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        resolved = str(root.resolve())
+        if resolved not in seen:
+            seen.add(resolved)
+            unique.append(root)
+    return unique
+
+
+def installed_apps() -> dict[str, str]:
+    apps: dict[str, str] = {}
+    for steamapps in steamapps_dirs():
+        for manifest in sorted(steamapps.glob("appmanifest_*.acf")):
+            data = unwrap_single_root(parse_vdf(manifest), "AppState")
+            appid = str(data.get("appid", "")).strip()
+            name = str(data.get("name", "")).strip()
+            if appid and name:
+                apps[appid] = name
+    return apps
+
+
+def safe_filename(name: str) -> str:
+    cleaned = re.sub(r'[\\/:*?"<>|]+', " ", name)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
+    return cleaned or "Steam Game"
+
+
+def read_state() -> dict[str, str]:
+    try:
+        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): str(v) for k, v in data.items()}
+
+
+def write_state(state: dict[str, str]) -> None:
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = STATE_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tmp.replace(STATE_FILE)
+
+
+def launcher_path(appid: str, name: str) -> Path:
+    base = safe_filename(name)
+    candidate = ROMS_DIR / f"{base}.steam"
+    if candidate.name == "Steam.steam":
+        candidate = ROMS_DIR / f"{base} ({appid}).steam"
+    if not candidate.exists() or candidate.read_text(encoding="utf-8", errors="replace").strip() == appid:
+        return candidate
+    return ROMS_DIR / f"{base} ({appid}).steam"
+
+
+def sync() -> int:
+    apps = installed_apps()
+    ROMS_DIR.mkdir(parents=True, exist_ok=True)
+
+    old_state = read_state()
+    new_state: dict[str, str] = {}
+    created = 0
+    updated = 0
+    removed = 0
+
+    for appid, name in sorted(apps.items(), key=lambda item: safe_filename(item[1]).lower()):
+        previous = Path(old_state.get(appid, ""))
+        if previous.name and previous.parent == ROMS_DIR:
+            path = previous
+        else:
+            path = launcher_path(appid, name)
+
+        if path.name == "Steam.steam":
+            path = launcher_path(appid, name)
+        before = path.read_text(encoding="utf-8", errors="replace").strip() if path.exists() else None
+        if before != appid:
+            path.write_text(appid + "\n", encoding="utf-8")
+            if before is None:
+                created += 1
+            else:
+                updated += 1
+        new_state[appid] = str(path)
+
+    for appid, old_path_text in old_state.items():
+        if appid in new_state:
+            continue
+        old_path = Path(old_path_text)
+        if old_path.parent == ROMS_DIR and old_path.exists():
+            try:
+                if old_path.read_text(encoding="utf-8", errors="replace").strip() == appid:
+                    old_path.unlink()
+                    removed += 1
+            except OSError:
+                pass
+
+    write_state(new_state)
+    try:
+        os.chown(ROMS_DIR, 1000, 100)
+        os.chown(STATE_FILE, 1000, 100)
+        for path_text in new_state.values():
+            os.chown(path_text, 1000, 100)
+    except OSError:
+        pass
+
+    log(f"found={len(apps)} created={created} updated={updated} removed={removed}")
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) > 1 and argv[1] not in {"sync"}:
+        print("usage: hippos-steam-sync [sync]", file=sys.stderr)
+        return 2
+    return sync()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

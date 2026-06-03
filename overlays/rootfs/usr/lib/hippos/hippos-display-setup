@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Apply saved display settings (output, resolution) via xrandr.
+# Called from session-es and session-desktop after DISPLAY is set.
+
+export DISPLAY="${DISPLAY:-:0}"
+
+_CRT_ENABLED="$(hippos-settings get crt.enabled 2>/dev/null || true)"
+_CRT_ACTIVE="$(test -f /etc/X11/xorg.conf.d/90-crt-gpu.conf && echo true || echo false)"
+
+if [[ "${_CRT_ENABLED}" == "true" ]]; then
+    sudo /usr/lib/hippos/hippos-crt-setup 2>&1 || true
+elif [[ "${_CRT_ACTIVE}" == "true" ]]; then
+    sudo /usr/lib/hippos/hippos-crt-teardown 2>&1 || true
+fi
+
+OUTPUT=$(hippos-settings get display.output 2>/dev/null || true)
+RES=$(hippos-settings get display.resolution 2>/dev/null || true)
+ROTATE=$(hippos-settings get display.rotate 2>/dev/null || true)
+
+# Map rotate value to xrandr rotation name (accepts degrees or 1/2/3)
+case "${ROTATE}" in
+    90|1)  ROTATION="right"    ;;
+    180|2) ROTATION="inverted" ;;
+    270|3) ROTATION="left"     ;;
+    *)     ROTATION="normal"   ;;
+esac
+
+# Nothing configured — fall back to preferred on all connected outputs
+if [[ -z "$OUTPUT" && ( -z "$RES" || "$RES" == "preferred" ) && "$ROTATION" == "normal" ]]; then
+    xrandr --auto 2>/dev/null || true
+    exit 0
+fi
+
+OUTPUT="${OUTPUT:-$(xrandr 2>/dev/null | awk '/ connected/ {print $1; exit}')}"
+RES="${RES:-preferred}"
+
+if [[ "$RES" == "preferred" ]]; then
+    xrandr --output "$OUTPUT" --preferred --rotate "$ROTATION" 2>/dev/null \
+        && echo "[hippos-display-setup] $OUTPUT preferred rotate=$ROTATION" \
+        || echo "[hippos-display-setup] xrandr failed for $OUTPUT" >&2
+else
+    xrandr --output "$OUTPUT" --mode "$RES" --rotate "$ROTATION" 2>/dev/null \
+        && echo "[hippos-display-setup] $OUTPUT $RES rotate=$ROTATION" \
+        || echo "[hippos-display-setup] mode '$RES' not available for $OUTPUT" >&2
+fi
+
+# Bind touchscreen to the configured output and apply rotation matrix
+case "$ROTATION" in
+    right)    TOUCH_MATRIX="0 1 0 -1 0 1 0 0 1"  ;;
+    left)     TOUCH_MATRIX="0 -1 1 1 0 0 0 0 1"  ;;
+    inverted) TOUCH_MATRIX="-1 0 1 0 -1 1 0 0 1" ;;
+    *)        TOUCH_MATRIX=""                      ;;
+esac
+
+while IFS= read -r dev; do
+    if xinput list-props "$dev" 2>/dev/null | grep -q "Coordinate Transformation Matrix"; then
+        xinput --map-to-output "$dev" "$OUTPUT" 2>/dev/null \
+            && echo "[hippos-display-setup] mapped $dev → $OUTPUT" || true
+        if [[ -n "$TOUCH_MATRIX" ]]; then
+            xinput set-prop "$dev" "Coordinate Transformation Matrix" $TOUCH_MATRIX 2>/dev/null \
+                && echo "[hippos-display-setup] touchscreen transform $ROTATION: $dev" || true
+        fi
+    fi
+done < <(xinput list --name-only 2>/dev/null)
+
+# Apply saved brightness after display is configured
+/usr/lib/hippos/hippos-brightness boot 2>/dev/null || true

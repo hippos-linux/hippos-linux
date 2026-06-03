@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# hippos-battery — battery monitor daemon
+# Polls sysfs every 5s. Switches power mode on AC plug/unplug.
+# Shows low-battery OSD via zenity when discharging below thresholds.
+
+LOG="/userdata/system/logs/hippos-battery.log"
+mkdir -p "$(dirname "${LOG}")"
+exec >> "${LOG}" 2>&1
+
+log() { echo "$(date '+%H:%M:%S') [hippos-battery] $*"; }
+
+battery_level() {
+    local cap
+    cap=$(cat /sys/class/power_supply/*[Bb][Aa][Tt]*/uevent 2>/dev/null \
+        | grep -E '^POWER_SUPPLY_CAPACITY=' | sed 's/^POWER_SUPPLY_CAPACITY=//' \
+        | sort -rn | head -1)
+    if [[ -z "${cap}" ]]; then
+        local now max
+        now=$(cat /sys/class/power_supply/*[Ff][Uu][Ee][Ll]*/uevent 2>/dev/null \
+            | grep -E '^POWER_SUPPLY_CHARGE_NOW=' | sed 's/^POWER_SUPPLY_CHARGE_NOW=//' \
+            | sort -rn | head -1)
+        max=$(cat /sys/class/power_supply/*[Ff][Uu][Ee][Ll]*/uevent 2>/dev/null \
+            | grep -E '^POWER_SUPPLY_CHARGE_FULL=' | sed 's/^POWER_SUPPLY_CHARGE_FULL=//' \
+            | sort -rn | head -1)
+        [[ -n "${now}" && -n "${max}" && "${max}" != 0 ]] && \
+            cap=$(( (200 * now / max % 2) + (100 * now / max) ))
+    fi
+    echo "${cap}"
+}
+
+ac_connected() {
+    grep -ql '^1$' /sys/class/power_supply/*/online 2>/dev/null && echo 1 || echo 0
+}
+
+osd_warn() {
+    local msg="$1"
+    DISPLAY=:0 zenity --warning --no-wrap --timeout=8 \
+        --title="HippOS Battery" --text="${msg}" &>/dev/null &
+}
+
+# No battery → nothing to do
+if [[ -z "$(battery_level)" ]]; then
+    log "No battery detected — exiting"
+    exit 0
+fi
+
+log "Starting"
+
+ac="$(ac_connected)"
+if [[ "${ac}" == 0 ]]; then
+    hippos-power-mode battery
+else
+    hippos-power-mode ac
+fi
+
+last_level=100
+
+while true; do
+    level="$(battery_level)"
+    new_ac="$(ac_connected)"
+
+    # AC plug/unplug
+    if [[ "${new_ac}" != "${ac}" ]]; then
+        if [[ "${new_ac}" == 0 ]]; then
+            log "AC disconnected — switching to battery power mode"
+            hippos-power-mode battery
+        else
+            log "AC connected — switching to AC power mode"
+            hippos-power-mode ac
+        fi
+        ac="${new_ac}"
+    fi
+
+    # Low battery warnings (only when discharging)
+    if [[ "${new_ac}" == 0 && -n "${level}" && "${level}" != "${last_level}" ]]; then
+        if [[ "${level}" -le 5 && "${level}" -lt "${last_level}" ]]; then
+            log "Critical battery: ${level}%"
+            osd_warn "⚠ Critical battery: ${level}%\nPlug in now or your device will shut down."
+        elif [[ "${level}" -le 10 && $(( level / 5 )) -lt $(( last_level / 5 )) ]]; then
+            log "Low battery: ${level}%"
+            osd_warn "⚠ Low battery: ${level}%"
+        elif [[ "${level}" -le 30 && $(( level / 10 )) -lt $(( last_level / 10 )) ]]; then
+            log "Battery at ${level}%"
+            osd_warn "Battery at ${level}%"
+        fi
+    fi
+
+    last_level="${level:-${last_level}}"
+    sleep 5
+done

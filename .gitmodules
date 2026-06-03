@@ -1,0 +1,8 @@
+[submodule "src/frontend/emulationstation"]
+	path = src/frontend/emulationstation
+	url = https://github.com/hippos-linux/hippos-emulationstation.git
+	branch = hippos
+[submodule "src/site"]
+	path = src/site
+	url = https://github.com/hippos-linux/hippos-site.git
+	branch = main

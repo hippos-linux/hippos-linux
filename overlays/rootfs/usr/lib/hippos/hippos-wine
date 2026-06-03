@@ -1,0 +1,285 @@
+#!/usr/bin/env bash
+# hippos-wine — unified Windows game launcher
+# Usage:
+#   hippos-wine <system> play    <game>.exe|wine|pc|msi
+#   hippos-wine <system> install <game>.exe|msi|iso
+#   hippos-wine <system> stop
+
+SYSTEM="${1,,}"
+ACTION="${2,,}"
+GAMENAME="${3:-}"
+
+ROMGAMENAME="$(basename "${GAMENAME}")"
+GAMEEXT="${GAMENAME##*.}"
+
+WINE_BOTTLE_DIR="/userdata/wine-bottles/${SYSTEM}"
+WINE_RUNNERS_DIR="/userdata/system/wine-runners"
+WINE_BASE="/opt/wine-builds"
+SECONDS=0
+
+# ── Runner selection ───────────────────────────────────────────────────────
+
+init_wine() {
+    local runner="${HIPPOS_RUNNER:-}"
+    # Priority: env var > global setting > default
+    [[ -z "${runner}" ]] && runner="$(hippos-settings get "windows.wine-runner" 2>/dev/null || true)"
+    [[ -z "${runner}" ]] && runner="wine-tkg"
+
+    # Resolve runner directory: user-downloaded runners take priority
+    local runner_dir=""
+    if [[ -d "${WINE_RUNNERS_DIR}/${runner}" ]]; then
+        runner_dir="${WINE_RUNNERS_DIR}/${runner}"
+    elif [[ -d "${WINE_BASE}/${runner}" ]]; then
+        runner_dir="${WINE_BASE}/${runner}"
+    fi
+
+    case "${runner}" in
+        umu)
+            USE_UMU=1
+            ;;
+        *)
+            if [[ -z "${runner_dir}" ]]; then
+                printf '[hippos-wine] runner not found: %s, falling back to wine-tkg\n' "${runner}" >&2
+                runner="wine-tkg"
+                init_wine
+                return
+            fi
+            WINE="${runner_dir}/bin/wine"
+            WINE64="${runner_dir}/bin/wine64"
+            WINESERVER="${runner_dir}/bin/wineserver"
+            MSIEXEC="${runner_dir}/bin/msiexec"
+            USE_UMU=0
+            export LD_LIBRARY_PATH="${runner_dir}/lib:${runner_dir}/lib32${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+            export WINEDLLPATH="${runner_dir}/lib/wine/i386-windows:${runner_dir}/lib/wine/x86_64-windows"
+            export PATH="${runner_dir}/bin:${PATH}"
+            ;;
+    esac
+
+    RUNNER="${runner}"
+    export WINEDEBUG="-all"
+    export WINEARCH=win64
+    ulimit -n 524288 2>/dev/null || true
+
+    # ── Wine performance flags ─────────────────────────────────────────────
+    local fsync esync dxvk
+    fsync="$(hippos-settings get windows.fsync 2>/dev/null || true)"
+    esync="$(hippos-settings get windows.esync 2>/dev/null || true)"
+    dxvk="$(hippos-settings get windows.dxvk 2>/dev/null || true)"
+
+    # fsync takes priority over esync
+    if [[ "${fsync}" == "true" ]]; then
+        export WINEFSYNC=1
+        export WINEESYNC=0
+    elif [[ "${esync}" == "true" ]]; then
+        export WINEESYNC=1
+    fi
+
+    if [[ "${dxvk}" == "false" ]]; then
+        # Disable DXVK overrides so Wine's built-in D3D is used
+        export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:+${WINEDLLOVERRIDES};}d3d9,d3d10core,d3d11,dxgi=b"
+    fi
+
+    local vdesk res
+    vdesk="$(hippos-settings get windows.virtual_desktop 2>/dev/null || true)"
+    WINE_VIRTUAL_DESKTOP="${vdesk}"
+    res="$(hippos-settings get windows.desktop_resolution 2>/dev/null || true)"
+    WINE_RESOLUTION="${res}"
+}
+
+# ── Display resolution ────────────────────────────────────────────────────
+
+XRANDR_ORIGINAL_MODE=""
+XRANDR_OUTPUT=""
+
+xrandr_set_resolution() {
+    local res="${1:-}"
+    [[ -z "${res}" ]] && return 0
+    command -v xrandr >/dev/null 2>&1 || { printf '[hippos-wine] xrandr not found, skipping resolution change\n' >&2; return 0; }
+    XRANDR_OUTPUT="$(xrandr --query 2>/dev/null | awk '/ connected/{print $1; exit}')"
+    [[ -z "${XRANDR_OUTPUT}" ]] && return 0
+    XRANDR_ORIGINAL_MODE="$(xrandr --query 2>/dev/null | awk '/\*/{print $1; exit}')"
+    if xrandr --output "${XRANDR_OUTPUT}" --mode "${res}" 2>/dev/null; then
+        printf '[hippos-wine] resolution -> %s\n' "${res}" >&2
+    else
+        printf '[hippos-wine] xrandr mode %s unavailable, keeping current resolution\n' "${res}" >&2
+        XRANDR_ORIGINAL_MODE=""
+    fi
+}
+
+xrandr_restore_resolution() {
+    [[ -z "${XRANDR_ORIGINAL_MODE}" ]] && return 0
+    xrandr --output "${XRANDR_OUTPUT}" --mode "${XRANDR_ORIGINAL_MODE}" 2>/dev/null || true
+    printf '[hippos-wine] resolution restored to %s\n' "${XRANDR_ORIGINAL_MODE}" >&2
+    XRANDR_ORIGINAL_MODE=""
+}
+
+# ── Wineserver ─────────────────────────────────────────────────────────────
+
+wait_wineserver() {
+    [[ "${USE_UMU:-0}" == "1" ]] && return 0
+    local pid
+    pid="$(pgrep -o -f "${WINESERVER}" 2>/dev/null || true)"
+    [[ -z "${pid}" ]] && return 0
+    timeout "${1:-30}" tail -q --pid="${pid}" -f /dev/null 2>/dev/null || true
+}
+
+stop_wine() {
+    [[ -z "${WINESERVER:-}" || -z "${WINEPOINT:-}" ]] && return
+    WINEPREFIX="${WINEPOINT}" "${WINESERVER}" -k 2>/dev/null || true
+    wait_wineserver 10
+    xrandr_restore_resolution
+}
+
+# ── Bottle helpers ─────────────────────────────────────────────────────────
+
+create_bottle() {
+    local prefix="$1"
+    [[ -d "${prefix}" ]] && return 0
+    mkdir -p "${prefix}" || return 1
+    export WINEDLLOVERRIDES="winegstreamer="
+    WINEPREFIX="${prefix}" "${WINE}" hostname &>/dev/null || { rm -rf "${prefix}"; return 1; }
+}
+
+sandboxing() {
+    local prefix="$1"
+    local user="ark"
+    [[ -d "${prefix}/drive_c/users/steamuser" ]] && user="steamuser"
+    for dir in Downloads Documents "My Documents" Music "My Music" Pictures "My Pictures" Videos "My Videos"; do
+        if [[ -L "${prefix}/drive_c/users/${user}/${dir}" ]]; then
+            unlink "${prefix}/drive_c/users/${user}/${dir}"
+            mkdir -p "${prefix}/drive_c/users/${user}/${dir}"
+        fi
+    done
+}
+
+get_wine_var() {
+    local prefix="$1" key="$2" default="$3"
+    if [[ -f "${prefix}/autorun.cmd" ]]; then
+        local val
+        val="$(dos2unix < "${prefix}/autorun.cmd" 2>/dev/null \
+            | grep "^${key}=" | sed "s/^${key}=//" | head -1 || true)"
+        printf '%s' "${val:-${default}}"
+    else
+        printf '%s' "${default}"
+    fi
+}
+
+# ── Launch helpers ─────────────────────────────────────────────────────────
+
+do_launch() {
+    local prefix="$1" game="$2"
+    if [[ "${USE_UMU:-0}" == "1" ]]; then
+        GAMEID=0 WINEPREFIX="${prefix}" umu-run "${game}"
+    elif [[ -n "${WINE_VIRTUAL_DESKTOP:-}" ]]; then
+        WINEPREFIX="${prefix}" "${WINE}" explorer "/desktop=hippos,${WINE_VIRTUAL_DESKTOP}" "${game}"
+        wait_wineserver
+    else
+        WINEPREFIX="${prefix}" "${WINE}" "${game}"
+        wait_wineserver
+    fi
+}
+
+play_exe() {
+    WINEPOINT="${WINE_BOTTLE_DIR}/${RUNNER}/${ROMGAMENAME}.wine"
+    create_bottle "${WINEPOINT}" || return 1
+    sandboxing "${WINEPOINT}"
+    do_launch "${WINEPOINT}" "${GAMENAME}"
+}
+
+play_wine() {
+    WINEPOINT="${GAMENAME}"
+    local cmd dir env
+    cmd="$(get_wine_var "${GAMENAME}" "CMD" "explorer")"
+    dir="$(get_wine_var "${GAMENAME}" "DIR" "")"
+    env="$(get_wine_var "${GAMENAME}" "ENV" "")"
+    sandboxing "${WINEPOINT}"
+    if [[ "${USE_UMU:-0}" == "1" ]]; then
+        (cd "${GAMENAME}/${dir}" && GAMEID=0 WINEPREFIX="${GAMENAME}" eval "${env}" umu-run ${cmd})
+    else
+        (cd "${GAMENAME}/${dir}" && WINEPREFIX="${GAMENAME}" eval "${env}" "${WINE}" ${cmd})
+        wait_wineserver
+    fi
+}
+
+play_pc() {
+    WINEPOINT="${WINE_BOTTLE_DIR}/${RUNNER}/${ROMGAMENAME}.wine"
+    local cmd dir env
+    cmd="$(get_wine_var "${GAMENAME}" "CMD" "explorer")"
+    dir="$(get_wine_var "${GAMENAME}" "DIR" "")"
+    env="$(get_wine_var "${GAMENAME}" "ENV" "")"
+    create_bottle "${WINEPOINT}" || return 1
+    sandboxing "${WINEPOINT}"
+    if [[ "${USE_UMU:-0}" == "1" ]]; then
+        (cd "${GAMENAME}/${dir}" && GAMEID=0 WINEPREFIX="${WINEPOINT}" eval "${env}" umu-run ${cmd})
+    else
+        (cd "${GAMENAME}/${dir}" && WINEPREFIX="${WINEPOINT}" eval "${env}" "${WINE}" ${cmd})
+        wait_wineserver
+    fi
+}
+
+install_exe_msi() {
+    local ext="$1"
+    WINEPOINT="${WINE_BOTTLE_DIR}/${RUNNER}/$(date +%y%m%d-%H%M%S)_${ROMGAMENAME%.*}.wine"
+    create_bottle "${WINEPOINT}" || return 1
+    [[ "${ext}" == "exe" ]] && WINEPREFIX="${WINEPOINT}" "${WINE}" "${GAMENAME}"
+    [[ "${ext}" == "msi" ]] && WINEPREFIX="${WINEPOINT}" "${MSIEXEC}" -i "${GAMENAME}"
+    wait_wineserver
+}
+
+install_iso() {
+    local mnt="/run/hippos-wine/${ROMGAMENAME}.cdrom"
+    mkdir -p "${mnt}"
+    mount -t iso9660 "${GAMENAME}" "${mnt}" 2>/dev/null \
+        || mount -t udf "${GAMENAME}" "${mnt}" \
+        || { rmdir "${mnt}"; return 1; }
+    WINEPOINT="${WINE_BOTTLE_DIR}/${RUNNER}/$(date +%y%m%d-%H%M%S)_${ROMGAMENAME%.*}.wine"
+    create_bottle "${WINEPOINT}"
+    mkdir -p "${WINEPOINT}/dosdevices"
+    ln -sf "${mnt}" "${WINEPOINT}/dosdevices/d:"
+    WINEPREFIX="${WINEPOINT}" "${WINE}" explorer "d:"
+    rm -f "${WINEPOINT}/dosdevices/d:"
+    wait_wineserver
+    umount "${mnt}" && rmdir "${mnt}" || true
+}
+
+# ── Main ───────────────────────────────────────────────────────────────────
+
+trap stop_wine SIGHUP SIGINT SIGTERM
+
+case "${ACTION}" in
+    stop)
+        pkill -f "$(basename "$0")" 2>/dev/null || true
+        exit 0
+        ;;
+    play)
+        init_wine
+        xrandr_set_resolution "${WINE_RESOLUTION:-}"
+        case "${GAMEEXT,,}" in
+            exe)   play_exe ;;
+            wine)  play_wine ;;
+            pc)    play_pc ;;
+            msi)   WINEPOINT="${WINE_BOTTLE_DIR}/${RUNNER}/${ROMGAMENAME}.wine"
+                   WINEPREFIX="${WINEPOINT}" "${MSIEXEC}" -i "${GAMENAME}"
+                   wait_wineserver ;;
+            *)     printf '[hippos-wine] unknown extension: %s\n' "${GAMEEXT}" >&2; exit 1 ;;
+        esac
+        xrandr_restore_resolution
+        ;;
+    install)
+        init_wine
+        mkdir -p /run/hippos-wine
+        case "${GAMEEXT,,}" in
+            exe|msi) install_exe_msi "${GAMEEXT,,}" ;;
+            iso)     install_iso ;;
+            *)       printf '[hippos-wine] unknown extension: %s\n' "${GAMEEXT}" >&2; exit 1 ;;
+        esac
+        ;;
+    *)
+        printf 'Usage:\n  %s <system> play    <game>.exe|wine|pc|msi\n' "$0" >&2
+        printf '  %s <system> install <game>.exe|msi|iso\n' "$0" >&2
+        printf '  %s <system> stop\n' "$0" >&2
+        exit 1
+        ;;
+esac
+
+printf '[hippos-wine] session: %ds\n' "${SECONDS}" >&2

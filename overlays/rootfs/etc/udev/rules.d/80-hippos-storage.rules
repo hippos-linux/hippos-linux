@@ -1,0 +1,16 @@
+# HippOS general storage automount
+# Covers USB drives, SD cards, and NVMe/SATA partitions.
+# hippos-storage-udev queues events during boot and dispatches after ready.
+
+SUBSYSTEM!="block", GOTO="hippos_storage_end"
+ENV{ID_FS_TYPE}=="", GOTO="hippos_storage_end"
+
+KERNEL=="sd[a-z]*",    ACTION=="add",    RUN+="/usr/lib/hippos/hippos-storage-udev add %k %E{DEVTYPE}"
+KERNEL=="mmcblk[0-9]*",ACTION=="add",    RUN+="/usr/lib/hippos/hippos-storage-udev add %k %E{DEVTYPE}"
+KERNEL=="nvme[0-9]*",  ACTION=="add",    RUN+="/usr/lib/hippos/hippos-storage-udev add %k %E{DEVTYPE}"
+
+KERNEL=="sd[a-z]*",    ACTION=="remove", RUN+="/usr/lib/hippos/hippos-storage-udev remove %k %E{DEVTYPE}"
+KERNEL=="mmcblk[0-9]*",ACTION=="remove", RUN+="/usr/lib/hippos/hippos-storage-udev remove %k %E{DEVTYPE}"
+KERNEL=="nvme[0-9]*",  ACTION=="remove", RUN+="/usr/lib/hippos/hippos-storage-udev remove %k %E{DEVTYPE}"
+
+LABEL="hippos_storage_end"

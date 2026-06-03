@@ -1,0 +1,3 @@
+# Allow the hippos user to install/remove apt packages for the content downloader
+hippos ALL=(ALL) NOPASSWD: /usr/bin/apt-get install *
+hippos ALL=(ALL) NOPASSWD: /usr/bin/apt-get remove *

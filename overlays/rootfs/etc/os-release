@@ -1,0 +1,8 @@
+NAME="HippOS"
+VERSION="0.1.12"
+ID=hippos
+ID_LIKE=debian
+PRETTY_NAME="HippOS 0.1.12"
+VERSION_ID="0.1.12"
+HOME_URL="https://github.com/danielweatherall/hippos"
+BUG_REPORT_URL="https://github.com/danielweatherall/hippos/issues"

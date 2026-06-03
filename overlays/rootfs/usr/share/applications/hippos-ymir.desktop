@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Ymir
+GenericName=Sega Saturn Emulator
+Comment=Ymir Sega Saturn emulator
+Exec=/usr/lib/hippos/emulators/launch-ymir
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

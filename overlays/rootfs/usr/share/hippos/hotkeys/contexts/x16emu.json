@@ -1,0 +1,9 @@
+{
+  "name": "x16emu",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "menu": "KEY_F1",
+    "reset": "KEY_F5",
+    "screenshot": "KEY_F9"
+  }
+}

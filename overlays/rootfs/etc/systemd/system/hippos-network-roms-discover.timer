@@ -1,0 +1,12 @@
+[Unit]
+Description=HippOS network ROM discovery timer
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=5min
+AccuracySec=1min
+Unit=hippos-network-roms-discover.service
+
+[Install]
+WantedBy=timers.target
+

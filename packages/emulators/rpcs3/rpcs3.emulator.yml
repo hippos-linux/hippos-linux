@@ -1,0 +1,4 @@
+requireArtifact: rpcs3
+systems:
+- ps3
+features: []

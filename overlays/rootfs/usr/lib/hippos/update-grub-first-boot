@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MARKER="/var/lib/hippos/grub-updated"
+
+log() { echo "hippos-update-grub: $*"; }
+
+setting() {
+    /usr/lib/hippos/hippos-settings get "$1" 2>/dev/null || printf '%s\n' "${2:-}"
+}
+
+is_true() {
+    case "$1" in
+        1|true|yes|on) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+mkdir -p /var/lib/hippos
+
+if ! is_true "$(setting enable_bootloader true)"; then
+    log "enable_bootloader=false — skipping grub update"
+    touch "${MARKER}"
+    exit 0
+fi
+
+log "Regenerating grub.cfg with os-prober scan"
+/usr/lib/hippos/hippos-upgrade update-grub
+
+touch "${MARKER}"
+log "Done"

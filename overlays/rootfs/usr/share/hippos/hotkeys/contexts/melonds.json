@@ -1,0 +1,13 @@
+{
+  "name": "melonds",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "save_state": "KEY_F5",
+    "restore_state": "KEY_F8",
+    "next_slot": "KEY_PAGEUP",
+    "previous_slot": "KEY_PAGEDOWN",
+    "screenshot": "KEY_F9",
+    "swap_screen": "KEY_F3",
+    "pause": "KEY_F4"
+  }
+}

@@ -1,0 +1,20 @@
+requireArtifact: vice
+systems:
+  c64:
+    cores:
+    - x64
+    - x64dtv
+    - xscpu64
+  c128:
+    cores:
+    - x128
+  c20:
+    cores:
+    - xvic
+  cplus4:
+    cores:
+    - xplus4
+  pet:
+    cores:
+    - xpet
+features: []

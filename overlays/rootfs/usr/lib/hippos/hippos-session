@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+BOOT=$(hippos-settings get system.boot_session 2>/dev/null || echo es)
+if [[ "$BOOT" == "desktop" ]]; then
+    systemctl start hippos-desktop.service
+else
+    systemctl start hippos-es.service
+fi

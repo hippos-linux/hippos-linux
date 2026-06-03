@@ -1,0 +1,10 @@
+// Prevent udisks2 from automounting Btrfs drives.
+// btrfs-automount handles them instead (mounts with subvolid=5
+// so all subvolumes are visible, which udisks2 does not do by default).
+
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.udisks2.filesystem-mount" &&
+        action.lookup("fstype") == "btrfs") {
+        return polkit.Result.NO;
+    }
+});

@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# hippos-system-init — apply boot-time system settings from hippos.conf.
+# Runs after hippos-userdata-init so hippos.conf is readable.
+set -euo pipefail
+
+log() { printf '[hippos-system-init] %s\n' "$*"; }
+get() { hippos-settings get "$1" 2>/dev/null || true; }
+
+# ── Timezone ─────────────────────────────────────────────────────────────────
+TIMEZONE="$(get system.timezone)"
+if [[ -n "${TIMEZONE}" ]]; then
+    timedatectl set-timezone "${TIMEZONE}" 2>/dev/null || true
+    log "timezone: ${TIMEZONE}"
+fi
+
+# ── Hostname ──────────────────────────────────────────────────────────────────
+HOSTNAME="$(get system.hostname)"
+if [[ -n "${HOSTNAME}" ]]; then
+    hostnamectl set-hostname "${HOSTNAME}" 2>/dev/null || true
+    log "hostname: ${HOSTNAME}"
+fi
+
+# ── Locale / language ─────────────────────────────────────────────────────────
+LANGUAGE="$(get system.language)"
+if [[ -n "${LANGUAGE}" ]]; then
+    localectl set-locale "LANG=${LANGUAGE}" 2>/dev/null || true
+    log "locale: ${LANGUAGE}"
+fi
+
+# ── Keyboard layout ───────────────────────────────────────────────────────────
+KBLAYOUT="$(get system.kblayout)"
+KBVARIANT="$(get system.kbvariant)"
+if [[ -n "${KBLAYOUT}" ]]; then
+    localectl set-keymap "${KBLAYOUT}" 2>/dev/null || true
+    cat > /etc/default/keyboard <<EOF
+XKBMODEL="pc105"
+XKBLAYOUT="${KBLAYOUT}"
+XKBVARIANT="${KBVARIANT}"
+XKBOPTIONS=""
+BACKSPACE="guess"
+EOF
+    log "keyboard: ${KBLAYOUT}${KBVARIANT:+/${KBVARIANT}}"
+fi
+
+# ── SSH ───────────────────────────────────────────────────────────────────────
+SSH_ENABLED="$(get system.ssh.enabled)"
+if [[ "${SSH_ENABLED}" == "false" ]]; then
+    systemctl disable --now ssh 2>/dev/null || true
+    log "ssh: disabled"
+else
+    systemctl enable --now ssh 2>/dev/null || true
+    log "ssh: enabled"
+fi
+
+# ── CPU governor ──────────────────────────────────────────────────────────────
+GOVERNOR="$(get system.cpu.governor)"
+if [[ -n "${GOVERNOR}" ]]; then
+    for gov_file in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_governor; do
+        [[ -f "${gov_file}" ]] && printf '%s' "${GOVERNOR}" > "${gov_file}" 2>/dev/null || true
+    done
+    log "cpu governor: ${GOVERNOR}"
+fi
+
+# ── WiFi auto-connect ─────────────────────────────────────────────────────────
+WIFI_ENABLED="$(get wifi.enabled)"
+WIFI_SSID="$(get wifi.ssid)"
+WIFI_KEY="$(get wifi.key)"
+WIFI_COUNTRY="$(get wifi.country)"
+
+if [[ -n "${WIFI_COUNTRY}" ]]; then
+    iw reg set "${WIFI_COUNTRY}" 2>/dev/null || true
+fi
+
+if [[ ("${WIFI_ENABLED}" == "true" || "${WIFI_ENABLED}" == "1") && -n "${WIFI_SSID}" ]]; then
+    log "wifi: connecting to '${WIFI_SSID}'"
+    nmcli radio wifi on 2>/dev/null || true
+    if [[ -n "${WIFI_KEY}" ]]; then
+        nmcli dev wifi connect "${WIFI_SSID}" password "${WIFI_KEY}" 2>/dev/null \
+            || nmcli connection up "${WIFI_SSID}" 2>/dev/null || true
+    else
+        nmcli dev wifi connect "${WIFI_SSID}" 2>/dev/null \
+            || nmcli connection up "${WIFI_SSID}" 2>/dev/null || true
+    fi
+elif [[ "${WIFI_ENABLED}" == "false" || "${WIFI_ENABLED}" == "0" ]]; then
+    nmcli radio wifi off 2>/dev/null || true
+    log "wifi: disabled"
+fi
+
+# ── Power button behaviour ────────────────────────────────────────────────────
+SUSPENDMODE="$(get system.suspendmode)"
+case "${SUSPENDMODE}" in
+    shutdown) LOGIND_ACTION="poweroff"     ;;
+    hybrid)   LOGIND_ACTION="hybrid-sleep" ;;
+    *)        LOGIND_ACTION="suspend"      ;;
+esac
+mkdir -p /etc/systemd/logind.conf.d
+cat > /etc/systemd/logind.conf.d/hippos-power.conf <<EOF
+[Login]
+HandlePowerKey=${LOGIND_ACTION}
+HandlePowerKeyLongPress=poweroff
+HandleLidSwitch=suspend
+HandleLidSwitchExternalPower=ignore
+EOF
+systemctl kill -s HUP systemd-logind 2>/dev/null || true
+log "power button: ${LOGIND_ACTION}"
+
+log "done"

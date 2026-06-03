@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=OpenBOR
+GenericName=Beat-em-up Engine
+Comment=OpenBOR beat-em-up game engine
+Exec=/usr/lib/hippos/emulators/launch-openbor
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

@@ -1,0 +1,10 @@
+{
+  "name": "bigpemu",
+  "keys": {
+    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "menu": "KEY_F1",
+    "save_state": "KEY_F5",
+    "restore_state": "KEY_F8",
+    "screenshot": "KEY_F12"
+  }
+}

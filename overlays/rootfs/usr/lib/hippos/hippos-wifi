@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# ES API: wifi list/scanlist/enable/disable
+set -euo pipefail
+
+case "${1:-}" in
+    list)
+        nmcli -t -f SSID dev wifi list 2>/dev/null | sort -u | grep -v '^$'
+        ;;
+    scanlist)
+        nmcli dev wifi rescan 2>/dev/null || true
+        nmcli -t -f SSID dev wifi list 2>/dev/null | sort -u | grep -v '^$'
+        ;;
+    enable)
+        SSID="${2:-}"
+        KEY="${3:-}"
+        if [[ -n "$KEY" ]]; then
+            nmcli dev wifi connect "$SSID" password "$KEY"
+        else
+            nmcli dev wifi connect "$SSID"
+        fi
+        ;;
+    disable)
+        DEV=$(nmcli -t -f DEVICE,TYPE dev status 2>/dev/null | awk -F: '$2=="wifi"{print $1; exit}')
+        nmcli dev disconnect "${DEV:-wlan0}" 2>/dev/null || true
+        ;;
+    *)
+        echo "Usage: $0 list|scanlist|enable <ssid> [key]|disable" >&2
+        exit 1
+        ;;
+esac

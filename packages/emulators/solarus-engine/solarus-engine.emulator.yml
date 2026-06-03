@@ -1,0 +1,6 @@
+requireArtifact: solarus-engine
+systems:
+  solarus:
+    cores:
+    - solarus
+features: []

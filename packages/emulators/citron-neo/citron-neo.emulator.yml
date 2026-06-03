@@ -1,0 +1,4 @@
+requireArtifact: citron-neo
+systems:
+- switch
+features: []

@@ -1,0 +1,9 @@
+requireArtifact: flycast
+systems:
+- dreamcast
+- naomi
+- naomi2
+- atomiswave
+- systemsp
+features:
+- cheevos

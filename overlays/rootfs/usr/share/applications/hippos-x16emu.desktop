@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=X16 Emulator
+GenericName=Commander X16 Emulator
+Comment=Commander X16 emulator
+Exec=/usr/lib/hippos/emulators/launch-x16emu
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

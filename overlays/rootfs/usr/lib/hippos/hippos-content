@@ -1,0 +1,386 @@
+#!/usr/bin/env python3
+"""hippos-content — HippOS content downloader.
+
+Downloads bezels, shaders, cheats, themes and extra cores from the HippOS
+content catalog into /userdata.
+
+Progress lines on stdout use the ES-compatible format:  >>>N  (N = 0-100)
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import urllib.request
+import urllib.error
+from pathlib import Path
+from typing import Optional
+
+# ── Paths ──────────────────────────────────────────────────────────────────────
+
+USERDATA        = Path('/userdata')
+CONTENT_CACHE   = USERDATA / 'system' / 'content-cache'
+INSTALLED_FILE  = CONTENT_CACHE / 'installed.json'
+HIPPOS_SETTINGS = Path('/usr/lib/hippos/hippos-settings')
+
+DEFAULT_CATALOG_URL = 'http://hippos-linux.org/store/content-catalog.json'
+
+INSTALL_ROOTS: dict[str, Path] = {
+    'shaders':   USERDATA / 'shaders',
+    'bezels':    USERDATA / 'decorations',
+    'cheats':    USERDATA / 'cheats',
+    'themes':    USERDATA / 'themes',
+    'cores':     USERDATA / 'system' / 'emulators' / 'retroarch' / 'current' / 'cores',
+    'ports':     USERDATA / 'roms' / 'ports',
+}
+
+_PORT_LAUNCHER_TEMPLATE = """\
+#!/bin/bash
+# HippOS port: {name}
+export HOME=/userdata
+export XDG_CONFIG_HOME=/userdata/system/.config
+export XDG_DATA_HOME=/userdata/system/.local/share
+exec {command}
+"""
+
+_USAGE = """\
+Usage: hippos-content <command> [args]
+
+Commands:
+  list [category]        list available packages (category: shaders bezels cheats themes cores)
+  installed              list installed packages
+  info <id>              show package details
+  install <id>           download and install a package
+  remove <id>            remove an installed package
+"""
+
+
+# ── Progress ───────────────────────────────────────────────────────────────────
+
+def _progress(pct: int) -> None:
+    print(f'>>>{min(100, max(0, pct))}', flush=True)
+
+
+# ── Catalog / installed state ──────────────────────────────────────────────────
+
+def _load_catalog() -> dict:
+    url = DEFAULT_CATALOG_URL
+    req = urllib.request.Request(url, headers={'User-Agent': 'hippos-content/1.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read().decode('utf-8'))
+    except Exception as exc:
+        print(f'Warning: could not fetch catalog: {exc}', file=sys.stderr)
+        return {'packages': []}
+
+
+def _load_installed() -> dict[str, str]:
+    if INSTALLED_FILE.exists():
+        try:
+            return json.loads(INSTALLED_FILE.read_text(encoding='utf-8'))
+        except Exception:
+            pass
+    return {}
+
+
+def _save_installed(installed: dict[str, str]) -> None:
+    INSTALLED_FILE.parent.mkdir(parents=True, exist_ok=True)
+    INSTALLED_FILE.write_text(json.dumps(installed, indent=2, sort_keys=True), encoding='utf-8')
+
+
+def _find_pkg(catalog: dict, pkg_id: str) -> Optional[dict]:
+    for pkg in catalog.get('packages', []):
+        if pkg.get('id') == pkg_id:
+            return pkg
+    return None
+
+
+# ── Network ────────────────────────────────────────────────────────────────────
+
+def _download(url: str, dest: Path, expected_size: int = 0) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    req = urllib.request.Request(url, headers={'User-Agent': 'hippos-content/1.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            total    = int(resp.headers.get('Content-Length') or expected_size or 0)
+            received = 0
+            _progress(0)
+            with dest.open('wb') as fh:
+                while True:
+                    chunk = resp.read(65536)
+                    if not chunk:
+                        break
+                    fh.write(chunk)
+                    received += len(chunk)
+                    if total:
+                        _progress(received * 99 // total)
+            _progress(100)
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f'Download failed: {exc}') from exc
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open('rb') as fh:
+        for chunk in iter(lambda: fh.read(65536), b''):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+# ── Extraction ─────────────────────────────────────────────────────────────────
+
+def _extract(archive: Path, dest: Path, strip: int = 0, source_subdir: str = '') -> None:
+    """Extract archive into dest.
+
+    strip:         number of leading path components to remove from each member.
+    source_subdir: if set, only extract members under this subdir (after strip),
+                   and strip the subdir prefix too.
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    subdir_prefix = (source_subdir.strip('/') + '/') if source_subdir else ''
+
+    with tarfile.open(archive) as tf:
+        for member in tf.getmembers():
+            parts = Path(member.name).parts
+            if strip:
+                if len(parts) <= strip:
+                    continue
+                parts = parts[strip:]
+
+            rel = '/'.join(parts)
+
+            if subdir_prefix:
+                if not rel.startswith(subdir_prefix):
+                    continue
+                rel = rel[len(subdir_prefix):]
+                if not rel:
+                    continue
+
+            member.name = rel
+            try:
+                tf.extract(member, dest, filter='data')
+            except Exception:
+                tf.extract(member, dest)
+
+
+# ── APT helpers ───────────────────────────────────────────────────────────────
+
+def _apt(action: str, packages: list[str]) -> int:
+    cmd = ['apt-get', action, '-y', '--no-install-recommends'] + packages
+    if os.getuid() != 0:
+        cmd = ['sudo'] + cmd
+    print(f'Running: {" ".join(cmd)}')
+    return subprocess.run(cmd).returncode
+
+
+def _create_port_launcher(pkg: dict) -> Path:
+    name    = pkg.get('name', pkg['id'])
+    command = pkg.get('launcher_command', '')
+    args    = pkg.get('launcher_args', [])
+    if args:
+        command = command + ' ' + ' '.join(str(a) for a in args)
+    ports_dir = INSTALL_ROOTS['ports']
+    ports_dir.mkdir(parents=True, exist_ok=True)
+    script = ports_dir / f"{pkg['id']}.sh"
+    script.write_text(
+        _PORT_LAUNCHER_TEMPLATE.format(name=name, command=command),
+        encoding='utf-8',
+    )
+    script.chmod(0o755)
+    return script
+
+
+# ── Commands ───────────────────────────────────────────────────────────────────
+
+def cmd_list(args: list[str]) -> int:
+    catalog   = _load_catalog()
+    installed = _load_installed()
+    category  = args[0].lower() if args else None
+    pkgs      = catalog.get('packages', [])
+    if category:
+        pkgs = [p for p in pkgs if p.get('category', '').lower() == category]
+    if not pkgs:
+        print('No packages found.')
+        return 0
+    for pkg in sorted(pkgs, key=lambda p: (p.get('category', ''), p.get('id', ''))):
+        mb     = pkg.get('download_size', 0) // (1024 * 1024)
+        status = '  [installed]' if pkg['id'] in installed else ''
+        print(f"{pkg['id']:<40}  {pkg.get('category',''):<8}  {mb:>5} MB  {pkg.get('name','')}{status}")
+    return 0
+
+
+def cmd_installed(_args: list[str]) -> int:
+    installed = _load_installed()
+    if not installed:
+        print('No packages installed.')
+        return 0
+    for pkg_id, version in sorted(installed.items()):
+        print(f'{pkg_id}  (v{version})')
+    return 0
+
+
+def cmd_info(args: list[str]) -> int:
+    if not args:
+        print('Usage: hippos-content info <id>', file=sys.stderr)
+        return 1
+    catalog   = _load_catalog()
+    installed = _load_installed()
+    pkg       = _find_pkg(catalog, args[0])
+    if not pkg:
+        print(f'Package not found: {args[0]}', file=sys.stderr)
+        return 1
+    print(f"  id:          {pkg.get('id')}")
+    print(f"  name:        {pkg.get('name')}")
+    print(f"  category:    {pkg.get('category')}")
+    print(f"  version:     {pkg.get('version')}")
+    print(f"  description: {pkg.get('description')}")
+    mb = pkg.get('download_size', 0) // (1024 * 1024)
+    print(f"  size:        {mb} MB")
+    print(f"  installed:   {'yes (v' + installed[pkg['id']] + ')' if pkg['id'] in installed else 'no'}")
+    return 0
+
+
+def cmd_install(args: list[str]) -> int:
+    if not args:
+        print('Usage: hippos-content install <id>', file=sys.stderr)
+        return 1
+    pkg_id  = args[0]
+    catalog = _load_catalog()
+    pkg     = _find_pkg(catalog, pkg_id)
+    if not pkg:
+        print(f'Package not found: {pkg_id}', file=sys.stderr)
+        return 1
+
+    pkg_type = pkg.get('type', 'tarball')
+
+    # ── apt-installed port ────────────────────────────────────────────────────
+    if pkg_type == 'apt':
+        apt_packages = pkg.get('apt_packages', [])
+        if not apt_packages:
+            print(f'No apt_packages defined for {pkg_id}', file=sys.stderr)
+            return 1
+        print(f"Installing {pkg.get('name', pkg_id)} via apt...")
+        ret = _apt('install', apt_packages)
+        if ret != 0:
+            print(f'apt install failed (exit {ret})', file=sys.stderr)
+            return ret
+        script = _create_port_launcher(pkg)
+        print(f'Created launcher: {script}')
+        installed         = _load_installed()
+        installed[pkg_id] = pkg.get('version', 'latest')
+        _save_installed(installed)
+        print(f'Installed: {pkg_id}')
+        return 0
+
+    # ── tarball download ──────────────────────────────────────────────────────
+    url = pkg.get('url', '')
+    if not url:
+        print(f'No download URL for {pkg_id}', file=sys.stderr)
+        return 1
+
+    category   = pkg.get('category', 'misc')
+    root       = INSTALL_ROOTS.get(category, USERDATA / category)
+    install_to = pkg.get('install_path', pkg_id)
+    dest_dir   = root / install_to if install_to else root
+
+    print(f"Downloading {pkg.get('name', pkg_id)} ({pkg.get('download_size', 0) // (1024*1024)} MB)...")
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = Path(tmp) / f'{pkg_id}.tar.gz'
+        try:
+            _download(url, archive, pkg.get('download_size', 0))
+        except RuntimeError as exc:
+            print(f'Error: {exc}', file=sys.stderr)
+            return 1
+
+        expected_sha = pkg.get('sha256', '')
+        if expected_sha and _sha256(archive) != expected_sha:
+            print('Error: checksum mismatch — aborting install', file=sys.stderr)
+            return 1
+
+        print(f'Installing to {dest_dir}...')
+        if dest_dir.exists():
+            shutil.rmtree(dest_dir)
+        try:
+            _extract(
+                archive, dest_dir,
+                strip=pkg.get('strip_components', 0),
+                source_subdir=pkg.get('source_subdir', ''),
+            )
+        except Exception as exc:
+            print(f'Extraction failed: {exc}', file=sys.stderr)
+            return 1
+
+    installed         = _load_installed()
+    installed[pkg_id] = pkg.get('version', '1.0')
+    _save_installed(installed)
+    print(f'Installed: {pkg_id}')
+    return 0
+
+
+def cmd_remove(args: list[str]) -> int:
+    if not args:
+        print('Usage: hippos-content remove <id>', file=sys.stderr)
+        return 1
+    pkg_id    = args[0]
+    installed = _load_installed()
+    if pkg_id not in installed:
+        print(f'{pkg_id} is not installed', file=sys.stderr)
+        return 1
+
+    catalog = _load_catalog()
+    pkg     = _find_pkg(catalog, pkg_id)
+    if pkg:
+        pkg_type = pkg.get('type', 'tarball')
+        if pkg_type == 'apt':
+            apt_packages = pkg.get('apt_packages', [])
+            if apt_packages:
+                _apt('remove', apt_packages)
+            launcher = INSTALL_ROOTS['ports'] / f'{pkg_id}.sh'
+            if launcher.exists():
+                launcher.unlink()
+                print(f'Removed launcher: {launcher}')
+        else:
+            category = pkg.get('category', 'misc')
+            root     = INSTALL_ROOTS.get(category, USERDATA / category)
+            install_to = pkg.get('install_path', pkg_id)
+            dest_dir = root / install_to if install_to else root
+            if dest_dir.exists():
+                shutil.rmtree(dest_dir)
+                print(f'Removed: {dest_dir}')
+
+    del installed[pkg_id]
+    _save_installed(installed)
+    print(f'Uninstalled: {pkg_id}')
+    return 0
+
+
+# ── Entry point ────────────────────────────────────────────────────────────────
+
+def main() -> int:
+    args = sys.argv[1:]
+    if not args:
+        print(_USAGE)
+        return 0
+    cmd, *rest = args
+    dispatch = {
+        'list':      cmd_list,
+        'installed': cmd_installed,
+        'info':      cmd_info,
+        'install':   cmd_install,
+        'remove':    cmd_remove,
+    }
+    fn = dispatch.get(cmd)
+    if fn is None:
+        print(f'Unknown command: {cmd}', file=sys.stderr)
+        print(_USAGE, file=sys.stderr)
+        return 1
+    return fn(rest)
+
+
+if __name__ == '__main__':
+    sys.exit(main())

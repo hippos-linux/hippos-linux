@@ -1,0 +1,205 @@
+# Core OS
+systemd
+systemd-sysv
+dbus
+udev
+sudo
+login
+locales
+tzdata
+
+# Network
+network-manager
+wpasupplicant
+rfkill
+wireless-tools
+iputils-ping
+
+# WiFi & audio firmware (non-free — broad hardware coverage)
+firmware-linux
+firmware-linux-nonfree
+intel-microcode
+amd64-microcode
+firmware-iwlwifi
+firmware-realtek
+firmware-brcm80211
+broadcom-sta-dkms
+firmware-mediatek
+firmware-sof-signed
+firmware-amd-graphics
+firmware-misc-nonfree
+firmware-samsung
+
+# Thunderbolt
+thunderbolt-tools
+
+# Input
+xserver-xorg-input-evdev
+
+# NVIDIA (proprietary driver — GL libs pulled in as nvidia-driver dependencies)
+nvidia-driver
+nvidia-settings
+nvidia-smi
+nvidia-kernel-dkms
+libnvidia-ml1
+openssh-server
+ca-certificates
+curl
+wget
+gnupg
+
+# Boot
+linux-image-amd64
+linux-headers-amd64
+dkms
+build-essential
+grub-efi-amd64
+
+# Storage
+btrfs-progs
+cloud-guest-utils
+e2fsprogs
+exfatprogs
+ntfs-3g
+mergerfs
+fuse3
+rsync
+udisks2
+udisks2-btrfs
+
+# Compression / archives
+zstd
+p7zip-full
+unrar
+unzip
+zip
+
+# System info
+fastfetch
+os-prober
+
+# ACPI events
+acpid
+
+# Firmware updates
+fwupd
+
+# Performance
+irqbalance
+power-profiles-daemon
+thermald
+switcheroo-control
+zram-tools
+
+# Python runtime (hippos tools, emulatorlauncher, hotkey daemon)
+python3
+python3-pip
+python3-yaml
+python3-evdev
+python3-xdg
+python3-pygame
+
+# X11 session
+openbox
+xserver-xorg-core
+xserver-xorg-input-libinput
+libeis1
+onboard
+xinput-calibrator
+xdotool
+xinit
+x11-xserver-utils
+xfonts-base
+
+# GPU base (required for X11 hardware acceleration)
+libgl1-mesa-dri
+libgles2
+
+# GPU Xorg drivers (modesetting is default but DDX drivers improve compatibility)
+xserver-xorg-video-amdgpu
+xserver-xorg-video-intel
+xserver-xorg-video-fbdev
+
+# Intel VA-API (free tier; non-free tier installed by configure-rootfs.sh)
+intel-media-va-driver
+
+# Audio
+pipewire
+pipewire-pulse
+pipewire-alsa
+wireplumber
+rtkit
+alsa-utils
+brightnessctl
+
+# Bluetooth
+bluez
+blueman
+
+# Controllers
+joystick
+
+# HHD (Handheld Daemon) runtime dependencies
+libhidapi-hidraw0
+python3-gi
+python3-venv
+
+# Boot splash
+plymouth
+plymouth-themes
+
+# EmulationStation runtime dependencies
+libsdl2-2.0-0
+libsdl2-mixer-2.0-0
+libsdl3-0
+libfreeimage3
+libfreetype6
+libcurl4t64
+libpugixml1v5
+libvlc5
+vlc-plugin-base
+libasound2t64
+libpulse0
+libudev1
+libboost-locale1.83.0
+libboost-system1.83.0
+libboost-date-time1.83.0
+
+# Emulator runtime libraries
+libslirp0
+libenet7
+libglew2.2
+libzip5
+libmpeg2-4
+libphysfs1
+libtcl8.6
+libsdl2-net-2.0-0
+libcubeb0
+libsdl3-0:i386
+
+# Media
+ffmpeg
+
+# Scripting utilities
+jq
+libxml2-utils
+sqlite3
+
+# Wine support
+cabextract
+
+# Disk health
+smartmontools
+
+# Debug tools
+binutils
+strace
+evtest
+xinput
+mesa-utils
+usbutils
+pciutils
+hwdata
+nano
+htop
+psmisc

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Azahar
+GenericName=Nintendo 3DS Emulator
+Comment=Azahar Nintendo 3DS emulator
+Exec=/usr/lib/hippos/emulators/launch-azahar
+Icon=azahar
+Terminal=false
+Categories=Game;Emulator;

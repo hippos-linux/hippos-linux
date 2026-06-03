@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+POOL=/userdata/saves
+BIND=/run/hippos/saves-internal
+OPTS="cache.files=off,dropcacheonclose=true,allow_other,use_ino,moveonenospc=false"
+MEDIA=/media
+
+log() { printf '[hippos-saves-pool] %s\n' "$*"; }
+
+add_branch() {
+    local branch="$1"
+    [[ -d "${branch}" ]] || return 0
+    [[ "${branch}" == "${BIND}" || "${branch}" == "${POOL}" ]] && return 0
+    [[ ":${branches}:" == *":${branch}=RO:"* ]] && return 0
+    branches="${branches}:${branch}=RO"
+}
+
+if findmnt "${POOL}" >/dev/null 2>&1; then
+    log "already mounted at ${POOL}"
+    exit 0
+fi
+
+mkdir -p "${POOL}" "${BIND}"
+
+mount --bind "${POOL}" "${BIND}"
+
+branches="${BIND}=RW"
+for dir in "${MEDIA}"/*/; do
+    [[ -d "${dir}" ]] || continue
+    add_branch "${dir%/}/saves"
+    add_branch "${dir%/}/userdata/saves"
+    while IFS= read -r -d '' saves_dir; do
+        add_branch "${saves_dir}"
+    done < <(find "${dir%/}" -mindepth 1 -maxdepth 4 -type d -iname saves -print0 2>/dev/null)
+done
+
+log "branches: ${branches}"
+
+if [[ "${branches}" == "${BIND}=RW" ]]; then
+    log "no external media — using ${POOL} directly"
+    umount "${BIND}"
+    exit 0
+fi
+
+if mergerfs -o "${OPTS}" "${branches}" "${POOL}"; then
+    log "mergerfs saves pool mounted at ${POOL}"
+else
+    log "mergerfs failed — using ${POOL} directly"
+    umount "${BIND}" 2>/dev/null || true
+fi

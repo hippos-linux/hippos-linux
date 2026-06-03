@@ -1,0 +1,8 @@
+id: legion-go
+dmi:
+  sys_vendor: "LENOVO"
+  product_name: "83E1"
+defaults:
+  display.rotate: "270"
+  system.suspendmode: "suspend"
+  global.tdp: "20"

@@ -1,0 +1,73 @@
+screen_w = Window.GetWidth();
+screen_h = Window.GetHeight();
+
+// Background
+wallpaper = Image("wallpaper.png");
+bg = Sprite(wallpaper.Scale(screen_w, screen_h));
+bg.SetZ(-100);
+
+// Progress bar — 55% width, near bottom
+bar_w   = Math.Int(screen_w * 0.55);
+bar_h   = 4;
+bar_x   = Math.Int((screen_w - bar_w) / 2);
+bar_y   = Math.Int(screen_h * 0.87);
+
+fill_src  = Image("progress_fill.png");
+track_src = Image("progress_bg.png");
+
+bar_track = Sprite(track_src.Scale(bar_w, bar_h));
+bar_track.SetX(bar_x);
+bar_track.SetY(bar_y);
+bar_track.SetZ(5);
+
+bar_fill = Sprite(fill_src.Scale(1, bar_h));
+bar_fill.SetX(bar_x);
+bar_fill.SetY(bar_y);
+bar_fill.SetZ(6);
+
+fun progress_callback(duration, progress) {
+    fill_w = Math.Int(bar_w * progress);
+    if (fill_w < 1) { fill_w = 1; }
+    bar_fill.SetImage(fill_src.Scale(fill_w, bar_h));
+}
+Plymouth.SetBootProgressFunction(progress_callback);
+
+// Spinner — 8 dots in circle above progress bar
+num_dots = 8;
+dot_src  = Image("dot.png");
+dot_hw   = Math.Int(dot_src.GetWidth()  / 2);
+dot_hh   = Math.Int(dot_src.GetHeight() / 2);
+spin_r   = 18;
+spin_cx  = Math.Int(screen_w / 2);
+spin_cy  = Math.Int(screen_h * 0.80);
+
+for (i = 0; i < num_dots; i++) {
+    angle = (i / num_dots) * 2 * Math.Pi;
+    dot_spr[i] = Sprite(dot_src);
+    dot_spr[i].SetX(Math.Int(spin_cx + spin_r * Math.Cos(angle)) - dot_hw);
+    dot_spr[i].SetY(Math.Int(spin_cy + spin_r * Math.Sin(angle)) - dot_hh);
+    dot_spr[i].SetZ(10);
+}
+
+// Opacity steps for 8 dots (avoids integer division)
+opacity_step[0] = 1.0;
+opacity_step[1] = 0.875;
+opacity_step[2] = 0.75;
+opacity_step[3] = 0.625;
+opacity_step[4] = 0.5;
+opacity_step[5] = 0.375;
+opacity_step[6] = 0.25;
+opacity_step[7] = 0.125;
+
+spin_speed = 4;
+spin_frame = 0;
+
+fun refresh_callback() {
+    spin_frame = (spin_frame + 1) % (num_dots * spin_speed);
+    active = Math.Int(spin_frame / spin_speed);
+    for (i = 0; i < num_dots; i++) {
+        offset = (active - i + num_dots) % num_dots;
+        dot_spr[i].SetOpacity(opacity_step[offset]);
+    }
+}
+Plymouth.SetRefreshFunction(refresh_callback);

@@ -1,0 +1,9 @@
+requireArtifact: hypseus-singe
+systems:
+  daphne:
+    cores:
+    - hypseus-singe
+  singe:
+    cores:
+    - hypseus-singe
+features: []

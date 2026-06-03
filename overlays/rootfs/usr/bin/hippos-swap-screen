@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export DISPLAY="${DISPLAY:-:0}"
+
+# Get all connected outputs
+mapfile -t OUTPUTS < <(xrandr --query | awk '/ connected/ {print $1}')
+
+if [[ ${#OUTPUTS[@]} -lt 2 ]]; then
+    echo "Only one display connected, nothing to swap." >&2
+    exit 0
+fi
+
+# Get current primary
+CURRENT=$(xrandr --query | awk '/ connected primary/ {print $1; exit}')
+[[ -z "$CURRENT" ]] && CURRENT="${OUTPUTS[0]}"
+
+# Pick the next output in the list
+NEXT=""
+for i in "${!OUTPUTS[@]}"; do
+    if [[ "${OUTPUTS[$i]}" == "$CURRENT" ]]; then
+        NEXT="${OUTPUTS[$(( (i + 1) % ${#OUTPUTS[@]} ))]}"
+        break
+    fi
+done
+[[ -z "$NEXT" ]] && NEXT="${OUTPUTS[0]}"
+
+xrandr --output "$NEXT" --primary
+hippos-settings set display.output "$NEXT" 2>/dev/null || true

@@ -1,0 +1,4 @@
+requireArtifact: pcsx2
+systems:
+- ps2
+features: []

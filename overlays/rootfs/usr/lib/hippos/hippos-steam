@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# hippos-steam — launch Steam with HippOS settings applied.
+set -euo pipefail
+
+get() { hippos-settings get "$1" 2>/dev/null || true; }
+
+mkdir -p /userdata/system/logs
+
+# Deck / GamepadUI mode
+declare -a STEAM_FLAGS=()
+BIG_PICTURE=false
+if [[ "${1:-}" == "--big-picture" ]]; then
+    BIG_PICTURE=true
+    shift
+fi
+if [[ "$(get steam.deckmode)" == "true" || "${BIG_PICTURE}" == "true" ]]; then
+    STEAM_FLAGS+=(-steamos3 -steampal -gamepadui)
+fi
+
+# Overlay injection
+declare -a ENV_PREFIX=()
+[[ "$(get global.mangohud)" == "true" ]] && ENV_PREFIX+=(MANGOHUD=1)
+[[ "$(get global.vkbasalt)" == "true" ]] && ENV_PREFIX+=(ENABLE_VKBASALT=1)
+
+steam_running() {
+    pgrep -u hippos -f '(^|/)(steam|steamwebhelper)( |$)' >/dev/null 2>&1
+}
+
+set +e
+# SDL_JOYSTICK_HIDAPI=0: prevent double-detection of controllers via HIDAPI+evdev,
+# which causes Steam Input's desktop config to intercept mouse clicks on UI elements.
+# XDG_SESSION_TYPE=x11: ensures Steam uses X11 input handling, not Wayland fallback.
+ENV_PREFIX+=(
+    SDL_JOYSTICK_HIDAPI=0
+    XDG_SESSION_TYPE=x11
+)
+env "${ENV_PREFIX[@]}" steam "${STEAM_FLAGS[@]}" "$@"
+status=$?
+set -e
+
+for _ in {1..30}; do
+    steam_running && break
+    sleep 1
+done
+
+while steam_running; do
+    sleep 5
+done
+
+/usr/lib/hippos/hippos-steam-sync sync >/userdata/system/logs/steam-sync.log 2>&1 || true
+exit "${status}"

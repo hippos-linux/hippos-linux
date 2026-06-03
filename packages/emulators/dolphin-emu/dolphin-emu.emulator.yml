@@ -1,0 +1,7 @@
+requireArtifact: dolphin-emu
+systems:
+- gamecube
+- wii
+- triforce
+features:
+- internal_resolution

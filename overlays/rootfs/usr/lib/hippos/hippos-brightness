@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# hippos-brightness — get/set/boot display brightness.
+# Usage:
+#   hippos-brightness get            print current brightness as 0-100
+#   hippos-brightness set <0-100>    set brightness and save to hippos.conf
+#   hippos-brightness boot           apply saved display.brightness on startup
+
+case "${1:-boot}" in
+    get)
+        val="$(brightnessctl -q get 2>/dev/null || true)"
+        max="$(brightnessctl -q max 2>/dev/null || true)"
+        if [[ -n "${val}" && -n "${max}" && "${max}" -gt 0 ]]; then
+            printf '%d\n' $(( val * 100 / max ))
+        else
+            echo ""
+        fi
+        ;;
+    set)
+        PCT="${2:-}"
+        if [[ -z "${PCT}" ]]; then
+            printf 'Usage: %s set <0-100>\n' "$0" >&2; exit 1
+        fi
+        brightnessctl -q set "${PCT}%" 2>/dev/null || true
+        hippos-settings set display.brightness "${PCT}" 2>/dev/null || true
+        ;;
+    boot)
+        PCT="$(hippos-settings get display.brightness 2>/dev/null || true)"
+        if [[ -n "${PCT}" ]]; then
+            brightnessctl -q set "${PCT}%" 2>/dev/null || true
+        fi
+        ;;
+    *)
+        printf 'Usage: %s get|set <0-100>|boot\n' "$0" >&2; exit 1
+        ;;
+esac

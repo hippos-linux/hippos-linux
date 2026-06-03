@@ -1,0 +1,20 @@
+requireArtifact: fsuae
+systems:
+  amiga500:
+    cores:
+    - A500
+    - A500+
+    - A600
+    - A1000
+    - A3000
+  amiga1200:
+    cores:
+    - A1200
+    - A4000
+  amigacd32:
+    cores:
+    - CD32
+  amigacdtv:
+    cores:
+    - CDTV
+features: []

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Called on audio device removal. If the saved sink is gone, fall back to
+# PipeWire's automatic default so audio doesn't go silent.
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
+export PIPEWIRE_RUNTIME_DIR="${XDG_RUNTIME_DIR}"
+
+log() { printf '[hippos-audio-recover] %s\n' "$*"; }
+
+SAVED=$(hippos-settings get audio.device 2>/dev/null || true)
+SAVED="${SAVED:-default}"
+
+if [[ "$SAVED" == "default" ]]; then
+    exit 0
+fi
+
+# Give PipeWire a moment to process the removal
+sleep 1
+
+if pactl list sinks short 2>/dev/null | grep -q $'\t'"${SAVED}"$'\t'; then
+    exit 0
+fi
+
+log "sink '$SAVED' gone — falling back to system default"
+pactl set-default-sink @DEFAULT_SINK@ 2>/dev/null || true

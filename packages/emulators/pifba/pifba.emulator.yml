@@ -1,0 +1,6 @@
+requireArtifact: pifba
+systems:
+  fbneo:
+    cores:
+    - pifba
+features: []

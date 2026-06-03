@@ -1,0 +1,573 @@
+#!/usr/bin/env python3
+"""HippOS global hotkey daemon — full keyboard and controller hotkey support."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import select
+import signal
+import subprocess
+import time
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+import errno
+
+import evdev
+import pyudev
+from evdev import ecodes
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+DEVICE_NAME = "hippos hotkeys"
+
+SYSTEM_DIR              = Path('/usr/share/hippos/hotkeys/devices')
+USER_DIR                = Path('/userdata/system/configs/hippos-hotkeys')
+DEFAULT_MAPPING_FILE    = Path('/usr/share/hippos/hotkeys/default_mapping.json')
+USER_MAPPING_FILE       = USER_DIR / 'default_mapping.json'
+HOTKEYS_FILE            = Path('/usr/share/hippos/hotkeys/hotkeys.json')
+USER_HOTKEYS_FILE       = USER_DIR / 'hotkeys.json'
+DEFAULT_CONTEXT_FILE    = Path('/usr/share/hippos/hotkeys/contexts/emulationstation.json')
+COMMON_CONTEXT_FILE     = Path('/usr/share/hippos/hotkeys/common_context.json')
+USER_COMMON_CONTEXT_FILE = USER_DIR / 'common_context.json'
+CONTEXT_FILE            = Path('/run/hippos/hotkeys.context')
+PID_FILE                = Path('/run/hippos/hotkeys.pid')
+
+ES_INPUT_FILES = [
+    Path('/userdata/system/configs/emulationstation/es_input.cfg'),
+    Path('/usr/share/emulationstation/es_input.cfg'),
+]
+
+FALLBACK_GAMEPAD_BUTTONS = {
+    ecodes.BTN_MODE:   'hotkey',
+    ecodes.BTN_START:  'start',
+    ecodes.BTN_SELECT: 'select',
+    ecodes.BTN_EAST:   'a',
+    ecodes.BTN_SOUTH:  'b',
+    ecodes.BTN_WEST:   'x',
+    ecodes.BTN_NORTH:  'y',
+    ecodes.BTN_TL:     'pageup',
+    ecodes.BTN_TR:     'pagedown',
+    ecodes.BTN_TL2:    'l2',
+    ecodes.BTN_TR2:    'r2',
+    ecodes.BTN_THUMBL: 'l3',
+    ecodes.BTN_THUMBR: 'r3',
+}
+
+ECODES_NAMES: dict[int, str] = {
+    code: name
+    for name, code in ecodes.ecodes.items()
+    if name.startswith('KEY_') or name.startswith('BTN_')
+}
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def log(msg: str) -> None:
+    print(f'[hippos-hotkeys] {msg}', flush=True)
+
+def load_json(path: Path, default: Any = None) -> Any:
+    if default is None:
+        default = {}
+    try:
+        return json.loads(path.read_text())
+    except FileNotFoundError:
+        return default
+    except Exception as exc:
+        log(f'could not load {path}: {exc}')
+        return default
+
+def device_mapping_name(device: evdev.InputDevice) -> str:
+    name = re.sub(r'[^a-zA-Z0-9_]', '', device.name.replace(' ', '_'))
+    return f'{name}-{device.info.vendor:02x}-{device.info.product:02x}.mapping'
+
+# ---------------------------------------------------------------------------
+# Context helpers
+# ---------------------------------------------------------------------------
+
+def _resolve_keys(raw: dict[str, Any]) -> dict[str, Any]:
+    """Convert KEY_* string names to ecodes; leave command strings as-is."""
+    result: dict[str, Any] = {}
+    for action, target in raw.items():
+        if isinstance(target, list):
+            codes = []
+            for t in target:
+                code = ecodes.ecodes.get(t)
+                if code is None:
+                    log(f'unknown key {t!r} in context')
+                    continue
+                codes.append(code)
+            result[action] = codes
+        elif isinstance(target, str) and target.startswith('KEY_'):
+            code = ecodes.ecodes.get(target)
+            if code is not None:
+                result[action] = code
+            else:
+                log(f'unknown key {target!r} in context')
+        else:
+            result[action] = target  # command string
+    return result
+
+def load_context() -> dict[str, Any]:
+    path = CONTEXT_FILE if CONTEXT_FILE.exists() else DEFAULT_CONTEXT_FILE
+    data = load_json(path, {})
+    if not data and path != DEFAULT_CONTEXT_FILE:
+        data = load_json(DEFAULT_CONTEXT_FILE, {})
+    return {
+        'name': data.get('name', 'emulationstation'),
+        'keys': _resolve_keys(data.get('keys', {})),
+    }
+
+def load_common_context() -> dict[str, Any]:
+    """System-wide commands (screenshot, volume, brightness…) always active."""
+    src = USER_COMMON_CONTEXT_FILE if USER_COMMON_CONTEXT_FILE.exists() else COMMON_CONTEXT_FILE
+    data = load_json(src, {})
+    raw = data.get('keys', data) if isinstance(data, dict) else {}
+    return _resolve_keys(raw)
+
+def load_default_mapping() -> dict[int, str]:
+    """Load default_mapping.json as evdev-code → action-name."""
+    src = USER_MAPPING_FILE if USER_MAPPING_FILE.exists() else DEFAULT_MAPPING_FILE
+    data = load_json(src, {})
+    result: dict[int, str] = {}
+    for key_name, action_name in data.items():
+        code = ecodes.ecodes.get(str(key_name))
+        if code is not None:
+            result[int(code)] = str(action_name)
+    return result
+
+def load_device_action_map(device: evdev.InputDevice) -> dict[int, str]:
+    mapping_name = device_mapping_name(device)
+    for directory in (USER_DIR / 'devices', SYSTEM_DIR):
+        path = directory / mapping_name
+        if not path.exists():
+            continue
+        data = load_json(path, {})
+        result: dict[int, str] = {}
+        for key_name, action_name in data.items():
+            code = ecodes.ecodes.get(str(key_name))
+            if code is not None:
+                result[int(code)] = str(action_name)
+        log(f'device mapping {path}')
+        return result
+    return {}
+
+def load_es_button_maps() -> dict[str, dict[int, str]]:
+    for path in ES_INPUT_FILES:
+        if path.exists():
+            break
+    else:
+        return {}
+    try:
+        root = ET.parse(path).getroot()
+    except Exception as exc:
+        log(f'could not parse {path}: {exc}')
+        return {}
+    maps: dict[str, dict[int, str]] = {}
+    for config in root.findall('inputConfig'):
+        if config.attrib.get('type') != 'joystick':
+            continue
+        device_name = config.attrib.get('deviceName', '')
+        by_code: dict[int, str] = {}
+        for node in config.findall('input'):
+            if node.attrib.get('type') != 'button':
+                continue
+            name = node.attrib.get('name')
+            code = node.attrib.get('id') or node.attrib.get('code')
+            if not name or code is None:
+                continue
+            try:
+                by_code[int(code)] = name
+            except ValueError:
+                continue
+        if device_name and by_code:
+            maps[device_name] = by_code
+    return maps
+
+def load_combo_actions() -> list[dict[str, Any]]:
+    src = USER_HOTKEYS_FILE if USER_HOTKEYS_FILE.exists() else HOTKEYS_FILE
+    data = load_json(src, {})
+    actions = data.get('actions_player1', []) if isinstance(data, dict) else []
+    return [a for a in actions if isinstance(a, dict)]
+
+# ---------------------------------------------------------------------------
+# UInput / key sending
+# ---------------------------------------------------------------------------
+
+def make_uinput() -> evdev.UInput:
+    key_codes = [
+        c for c in range(ecodes.KEY_MAX)
+        if c in ECODES_NAMES and ECODES_NAMES[c].startswith('KEY_')
+    ]
+    key_codes.append(ecodes.BTN_LEFT)
+    return evdev.UInput(
+        name=DEVICE_NAME,
+        events={
+            ecodes.EV_KEY: key_codes,
+            ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y],
+        },
+    )
+
+def send_keys(uinput: evdev.UInput, keys: int | list[int], begin: bool) -> None:
+    value = 1 if begin else 0
+    targets = keys if isinstance(keys, list) else [keys]
+    for code in targets:
+        uinput.write(ecodes.EV_KEY, code, value)
+        uinput.syn()
+
+def send_key_combo(uinput: evdev.UInput, keys: int | list[int]) -> None:
+    """Press-and-release a combo (used for gamepad hotkeys)."""
+    targets = keys if isinstance(keys, list) else [keys]
+    for code in targets:
+        uinput.write(ecodes.EV_KEY, code, 1)
+        uinput.syn()
+    time.sleep(0.08)
+    for code in reversed(targets):
+        uinput.write(ecodes.EV_KEY, code, 0)
+        uinput.syn()
+
+def send_mouse_reset(uinput: evdev.UInput) -> None:
+    """Move cursor to corner to unblock the UI after exiting an emulator."""
+    uinput.write(ecodes.EV_REL, ecodes.REL_X, -10000)
+    uinput.write(ecodes.EV_REL, ecodes.REL_Y, -10000)
+    uinput.syn()
+    time.sleep(0.10)
+
+# ---------------------------------------------------------------------------
+# Device state
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class DeviceState:
+    device:     evdev.InputDevice
+    button_map: dict[int, str]  # evdev code → logical name (gamepads)
+    action_map: dict[int, str]  # evdev code → action name (all devices)
+    pressed:    set[str] = field(default_factory=set)
+
+# ---------------------------------------------------------------------------
+# Daemon
+# ---------------------------------------------------------------------------
+
+class HotkeyDaemon:
+    def __init__(self, permanent: bool = False) -> None:
+        self.permanent = permanent
+        self.uinput = make_uinput()
+        self.udev_ctx = pyudev.Context()
+        self.monitor = pyudev.Monitor.from_netlink(self.udev_ctx)
+        self.monitor.filter_by(subsystem='input')
+        self.poll = select.poll()
+        self.devices: dict[str, DeviceState] = {}    # path → state
+        self.fd_to_path: dict[int, str] = {}
+        self.context: dict[str, Any] = {}
+        self.common_keys: dict[str, Any] = {}
+        self.default_map: dict[int, str] = {}
+        self.es_button_maps: dict[str, dict[int, str]] = {}
+        self.combo_actions: list[dict[str, Any]] = []
+        self.require_reconfig = False
+        self._reload_all()
+
+    # --- config reload -------------------------------------------------------
+
+    def _reload_all(self) -> None:
+        self.context = load_context()
+        self.common_keys = load_common_context()
+        self.default_map = load_default_mapping()
+        self.es_button_maps = load_es_button_maps()
+        self.combo_actions = load_combo_actions()
+        log(f'context={self.context.get("name", "")}')
+
+    def _handle_sighup(self, signum: int, frame: Any) -> None:
+        self.require_reconfig = True
+
+    def _do_reconfig(self) -> None:
+        self._reload_all()
+        # Re-add all devices so mappings refresh
+        for path in list(self.devices):
+            self._remove_device(path)
+        for dev_path in sorted(Path('/dev/input').glob('event*')):
+            self._add_device(str(dev_path))
+
+    # --- action execution ----------------------------------------------------
+
+    def _resolve_action(self, action: str) -> Any:
+        """Look up action in context, then common context."""
+        return self.context.get('keys', {}).get(action) or self.common_keys.get(action)
+
+    def execute_action(self, action: str, begin: bool) -> None:
+        target = self._resolve_action(action)
+        if target is None:
+            return
+        # Special: reset cursor position when exiting an emulator
+        if action == 'exit' and not begin:
+            send_mouse_reset(self.uinput)
+        if isinstance(target, str):
+            # command — execute on key release only
+            if not begin:
+                log(f'cmd {action}')
+                subprocess.Popen(target, shell=True, start_new_session=True)
+        else:
+            # key(s) — send down on press, up on release
+            log(f'key {action} {"dn" if begin else "up"}')
+            send_keys(self.uinput, target, begin)
+
+    def execute_combo_target(self, target: str | list[str]) -> None:
+        """Execute the target of a gamepad combo (synthetic key or action)."""
+        if isinstance(target, list):
+            if len(target) == 1:
+                target = target[0]
+            else:
+                codes = [ecodes.ecodes[t] for t in target if t in ecodes.ecodes]
+                if codes:
+                    send_key_combo(self.uinput, codes)
+                return
+
+        # Single KEY_* name: look up in default_map to find its action,
+        # then resolve through the current context.
+        code = ecodes.ecodes.get(target)
+        if code is not None:
+            action = self.default_map.get(code)
+            if action:
+                ctx_target = self._resolve_action(action)
+                if ctx_target is not None and not isinstance(ctx_target, str):
+                    send_key_combo(self.uinput, ctx_target)
+                    return
+                elif ctx_target is not None:
+                    subprocess.Popen(ctx_target, shell=True, start_new_session=True)
+                    return
+            send_key_combo(self.uinput, code)
+
+    # --- device management ---------------------------------------------------
+
+    def _add_device(self, path: str) -> None:
+        if path in self.devices:
+            return
+        try:
+            device = evdev.InputDevice(path)
+            caps = device.capabilities()
+        except OSError:
+            return
+        if ecodes.EV_KEY not in caps or device.name == DEVICE_NAME:
+            return
+
+        action_map = load_device_action_map(device)
+        keys = set(caps.get(ecodes.EV_KEY, []))
+
+        # Gamepad button map
+        button_map = {c: n for c, n in FALLBACK_GAMEPAD_BUTTONS.items() if c in keys}
+        for sdl_idx, action_name in self.es_button_maps.get(device.name, {}).items():
+            evdev_code = ecodes.BTN_GAMEPAD + sdl_idx
+            if evdev_code in keys:
+                button_map[evdev_code] = action_name
+
+        # Keyboard fallback: use default_mapping so media keys trigger actions
+        if not action_map and not button_map:
+            action_map = dict(self.default_map)
+
+        self.devices[path] = DeviceState(device, button_map, action_map)
+        self.fd_to_path[device.fileno()] = path
+        self.poll.register(device, select.POLLIN)
+        log(f'listening {path} {device.name}')
+
+    def _remove_device(self, path: str) -> None:
+        state = self.devices.pop(path, None)
+        if state is None:
+            return
+        fd = state.device.fileno()
+        self.fd_to_path.pop(fd, None)
+        try:
+            self.poll.unregister(state.device)
+            state.device.close()
+        except Exception:
+            pass
+
+    # --- event handling ------------------------------------------------------
+
+    def _handle_controller_button(self, state: DeviceState, event: evdev.InputEvent) -> None:
+        name = state.button_map.get(event.code)
+        if not name:
+            return
+        if event.value == 1:
+            state.pressed.add(name)
+            for combo in self.combo_actions:
+                trigger = combo.get('trigger')
+                target  = combo.get('target')
+                if not isinstance(trigger, list) or target is None:
+                    continue
+                if all(b in state.pressed for b in trigger):
+                    self.execute_combo_target(target)
+        elif event.value == 0:
+            state.pressed.discard(name)
+
+    def _handle_device(self, path: str) -> None:
+        state = self.devices.get(path)
+        if state is None:
+            return
+        try:
+            for event in state.device.read():
+                if event.type != ecodes.EV_KEY:
+                    continue
+                if event.code in state.action_map and event.value in (0, 1):
+                    self.execute_action(state.action_map[event.code], event.value == 1)
+                elif state.button_map:
+                    self._handle_controller_button(state, event)
+        except OSError:
+            self._remove_device(path)
+
+    # --- main loop -----------------------------------------------------------
+
+    def run(self) -> None:
+        Path('/run/hippos').mkdir(parents=True, exist_ok=True)
+        if self.permanent:
+            PID_FILE.write_text(str(os.getpid()))
+        signal.signal(signal.SIGHUP, self._handle_sighup)
+
+        self.monitor.start()
+        self.poll.register(self.monitor, select.POLLIN)
+        for dev_path in sorted(Path('/dev/input').glob('event*')):
+            self._add_device(str(dev_path))
+
+        log('started')
+        while True:
+            if self.require_reconfig:
+                self.require_reconfig = False
+                self._do_reconfig()
+
+            try:
+                events = self.poll.poll(1000)
+            except select.error:
+                continue
+
+            for fd, _ in events:
+                try:
+                    if fd == self.monitor.fileno():
+                        action, udev_device = self.monitor.receive_device()
+                        node = udev_device.device_node
+                        if node and node.startswith('/dev/input/event'):
+                            if action == 'add':
+                                self._add_device(node)
+                            elif action == 'remove':
+                                self._remove_device(node)
+                    else:
+                        path = self.fd_to_path.get(fd)
+                        if path:
+                            self._handle_device(path)
+                except Exception as exc:
+                    if fd != self.monitor.fileno():
+                        log(f'event error fd={fd}: {exc}')
+
+# ---------------------------------------------------------------------------
+# CLI subcommands
+# ---------------------------------------------------------------------------
+
+def _read_pid() -> int:
+    return int(PID_FILE.read_text().strip())
+
+def _signal_daemon(sig: int = signal.SIGHUP) -> None:
+    try:
+        os.kill(_read_pid(), sig)
+    except (FileNotFoundError, ValueError, ProcessLookupError):
+        pass
+
+def cmd_send(action: str) -> None:
+    """Inject a named action into the currently active context."""
+    ctx_data = load_json(CONTEXT_FILE if CONTEXT_FILE.exists() else DEFAULT_CONTEXT_FILE, {})
+    all_keys = {
+        **_resolve_keys(ctx_data.get('keys', {})),
+        **load_common_context(),
+    }
+    target = all_keys.get(action)
+    if target is None:
+        log(f'send: action {action!r} not in current context')
+        return
+    if isinstance(target, str):
+        subprocess.run(target, shell=True)
+        return
+    uinput = make_uinput()
+    time.sleep(0.1)
+    send_key_combo(uinput, target)
+    time.sleep(0.3)
+    uinput.close()
+
+def cmd_new_context(name: str, json_str: str) -> None:
+    Path('/run/hippos').mkdir(parents=True, exist_ok=True)
+    data = {'name': name, 'keys': json.loads(json_str)}
+    CONTEXT_FILE.write_text(json.dumps(data))
+    _signal_daemon()
+
+def cmd_default_context() -> None:
+    if CONTEXT_FILE.exists():
+        CONTEXT_FILE.unlink()
+    _signal_daemon()
+
+def cmd_reload() -> None:
+    _signal_daemon()
+
+def cmd_list() -> None:
+    context = load_context()
+    common  = load_common_context()
+    print(f"Context [{context.get('name', '')}]:")
+    for action, target in {**context.get('keys', {}), **common}.items():
+        if isinstance(target, list):
+            print(f'  {action:<22} -> {[ECODES_NAMES.get(c, str(c)) for c in target]}')
+        elif isinstance(target, int):
+            print(f'  {action:<22} -> {ECODES_NAMES.get(target, str(target))}')
+        else:
+            print(f'  {action:<22} -> [{target}]')
+
+    for dev_path in sorted(Path('/dev/input').glob('event*')):
+        try:
+            dev = evdev.InputDevice(str(dev_path))
+            caps = dev.capabilities()
+        except OSError:
+            continue
+        if dev.name == DEVICE_NAME or ecodes.EV_KEY not in caps:
+            continue
+        action_map = load_device_action_map(dev)
+        keys = set(caps.get(ecodes.EV_KEY, []))
+        button_map = {c: n for c, n in FALLBACK_GAMEPAD_BUTTONS.items() if c in keys}
+        if not action_map and not button_map:
+            action_map = load_default_mapping()
+        if action_map or button_map:
+            print(f'\n# {dev_path} [{dev.name}]')
+            for code, act in sorted(action_map.items()):
+                print(f'  {ECODES_NAMES.get(code, str(code)):<22} -> {act}')
+            for code, btn in sorted(button_map.items()):
+                print(f'  {ECODES_NAMES.get(code, str(code)):<22} -> button:{btn}')
+
+# ---------------------------------------------------------------------------
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(prog='hippos-hotkeys')
+    parser.add_argument('--permanent', action='store_true',
+                        help='Write PID file for context switching via SIGHUP')
+    parser.add_argument('--send', metavar='ACTION',
+                        help='Send a named action and exit')
+    parser.add_argument('--new-context', nargs=2, metavar=('NAME', 'JSON'),
+                        help='Switch to a new hotkey context')
+    parser.add_argument('--default-context', action='store_true',
+                        help='Reset to the default emulationstation context')
+    parser.add_argument('--reload', action='store_true',
+                        help='Signal the daemon to reload its config')
+    parser.add_argument('--list', action='store_true',
+                        help='List devices and action mappings')
+    args = parser.parse_args()
+
+    if args.send:
+        cmd_send(args.send)
+    elif args.new_context:
+        cmd_new_context(args.new_context[0], args.new_context[1])
+    elif args.default_context:
+        cmd_default_context()
+    elif args.reload:
+        cmd_reload()
+    elif args.list:
+        cmd_list()
+    else:
+        HotkeyDaemon(permanent=args.permanent).run()

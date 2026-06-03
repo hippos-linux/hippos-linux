@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Model 2 Emulator
+GenericName=Sega Model 2 Emulator
+Comment=Sega Model 2 arcade emulator
+Exec=/usr/lib/hippos/emulators/launch-model2emu
+Icon=model2emu
+Terminal=false
+Categories=Game;Emulator;

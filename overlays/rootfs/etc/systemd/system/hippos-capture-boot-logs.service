@@ -1,0 +1,11 @@
+[Unit]
+Description=Capture HippOS boot diagnostics
+After=hippos-es.service hippos-xserver.service userdata.mount
+Wants=userdata.mount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/hippos/capture-boot-logs
+
+[Install]
+WantedBy=multi-user.target

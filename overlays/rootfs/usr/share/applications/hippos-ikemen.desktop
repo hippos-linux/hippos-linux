@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Ikemen GO
+GenericName=Fighting Game Engine
+Comment=Ikemen GO fighting game engine
+Exec=/usr/lib/hippos/emulators/launch-ikemen
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;
