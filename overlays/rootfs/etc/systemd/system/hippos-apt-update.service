@@ -1,0 +1,14 @@
+[Unit]
+Description=HippOS apt cache refresh
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/apt/lists/deb.debian.org_debian_dists_trixie_InRelease
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/apt-get update -qq
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

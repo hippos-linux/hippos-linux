@@ -11,7 +11,4 @@ if findmnt "${POOL}" >/dev/null 2>&1; then
 fi
 
 /usr/lib/hippos/mount-roms-pool
-if command -v /usr/lib/hippos/hippos-storage-manager >/dev/null 2>&1; then
-    /usr/lib/hippos/hippos-storage-manager scan --roots /userdata/roms /userdata/saves /userdata/system/cache >/dev/null 2>&1 || true
-fi
 log "pool rebuilt"

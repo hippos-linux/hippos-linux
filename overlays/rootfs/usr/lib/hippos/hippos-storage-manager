@@ -304,6 +304,11 @@ def get_existing(conn: sqlite3.Connection, path: str) -> Optional[sqlite3.Row]:
     ).fetchone()
 
 
+def _s64(v: int) -> int:
+    """Reinterpret unsigned 64-bit int as signed so it fits SQLite INTEGER."""
+    return v if v < (1 << 63) else v - (1 << 64)
+
+
 def store_file(conn: sqlite3.Connection, scan_id: int, rec: FileRecord) -> int:
     existing = get_existing(conn, rec.path)
     if existing is None:
@@ -392,8 +397,8 @@ def scan_roots(conn: sqlite3.Connection, roots: list[tuple[Path, str]], hash_thr
         rec = FileRecord(
             path=str(path),
             root=str(root),
-            filesystem_id=getattr(st, "st_dev", 0),
-            inode=int(getattr(st, "st_ino", 0)),
+            filesystem_id=_s64(getattr(st, "st_dev", 0)),
+            inode=_s64(getattr(st, "st_ino", 0)),
             size=int(st.st_size),
             mtime=int(st.st_mtime_ns),
             ctime=int(st.st_ctime_ns),
