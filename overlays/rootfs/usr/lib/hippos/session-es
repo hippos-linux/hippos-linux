@@ -11,6 +11,7 @@ export HOME=/userdata
 export XDG_RUNTIME_DIR=/run/user/1000
 export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus"
 export DISPLAY=:0
+export SDL_JOYSTICK_HIDAPI_STEAM=1
 unset XAUTHORITY
 
 # shellcheck disable=SC1091

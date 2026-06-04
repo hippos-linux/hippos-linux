@@ -11,6 +11,7 @@ tzdata
 # Network
 network-manager
 wpasupplicant
+systemd-timesyncd
 rfkill
 wireless-tools
 iputils-ping
@@ -36,12 +37,8 @@ thunderbolt-tools
 # Input
 xserver-xorg-input-evdev
 
-# NVIDIA (proprietary driver — GL libs pulled in as nvidia-driver dependencies)
-nvidia-driver
-nvidia-settings
-nvidia-smi
-nvidia-kernel-dkms
-libnvidia-ml1
+# NVIDIA: installed from NVIDIA's own Debian 13 repo in configure-rootfs.sh
+# (575 required for Blackwell/RTX 5060; not available from Debian Trixie)
 openssh-server
 ca-certificates
 curl

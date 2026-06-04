@@ -3,7 +3,7 @@
 # Apps land in /userdata/.local/share/flatpak so they survive OS updates.
 # Creates a marker on success; subsequent boots are a no-op.
 # Waits for internet connectivity before attempting installation.
-set -uo pipefail
+set -euo pipefail
 
 MARKER="/userdata/.config/hippos/flatpak-apps-installed"
 
@@ -55,6 +55,11 @@ for app in "${APPS[@]}"; do
         || { log "  Warning: failed to install ${app}"; failed=$(( failed + 1 )); }
 done
 
-mkdir -p "$(dirname "${MARKER}")"
-touch "${MARKER}"
-log "Done (${failed} failed)"
+if [[ "${failed}" -eq 0 ]]; then
+    mkdir -p "$(dirname "${MARKER}")"
+    touch "${MARKER}"
+    log "Done"
+else
+    log "Done with ${failed} failure(s) — marker not written, will retry next boot"
+    exit 1
+fi

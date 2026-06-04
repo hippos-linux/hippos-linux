@@ -9,25 +9,25 @@ license: creative commons CC-BY-NC-SA
   <formatVersion>4</formatVersion>
   <view name="menu">
     <menuText name="menutitle">
-      <fontPath>./art/noto.ttf</fontPath>
-      <fontSize>0.044</fontSize>
+      <fontPath>./../assets/noto.ttf</fontPath>
+      <fontSize>0.034</fontSize>
       <color>ffffff</color>
     </menuText>
     <menuText name="menufooter">
-      <fontPath>./art/SST.ttf</fontPath>
+      <fontPath>./../assets/SST.ttf</fontPath>
       <fontSize>0.02</fontSize>
     </menuText>
     <menuText name="menutext">
-      <fontPath>./art/SST.ttf</fontPath>
-      <fontSize>0.038</fontSize>
+      <fontPath>./../assets/SST.ttf</fontPath>
+      <fontSize>0.022</fontSize>
       <color>A8A0C8</color>
       <selectorColor>7B3FFF</selectorColor>
       <selectedColor>ffffff</selectedColor>
       <separatorColor>3D1A6B</separatorColor>
     </menuText>
     <menuTextSmall name="menutextsmall">
-      <fontPath>./art/SST.ttf</fontPath>
-      <fontSize>0.02</fontSize>
+      <fontPath>./../assets/SST.ttf</fontPath>
+      <fontSize>0.016</fontSize>
     </menuTextSmall>
     <menuBackground name="menubg">
       <color>130826</color>
@@ -106,7 +106,7 @@ license: creative commons CC-BY-NC-SA
       <alignment>left</alignment>
       <horizontalMargin>0.01</horizontalMargin>
       <origin>0 0</origin>
-      <lineSpacing>2.27</lineSpacing>
+      <lineSpacing>1.5</lineSpacing>
       <selectorImagePath>./../assets/box.png</selectorImagePath>
       <selectorOffsetY>-0.01</selectorOffsetY>
       <selectorHeight>0.0675</selectorHeight>

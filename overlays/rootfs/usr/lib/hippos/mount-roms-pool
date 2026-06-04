@@ -2,7 +2,7 @@
 set -euo pipefail
 
 POOL=/userdata/roms
-BIND=/run/hippos/roms-internal
+RW=/userdata/.roms-rw
 OPTS="cache.files=off,dropcacheonclose=true,allow_other,use_ino,moveonenospc=false"
 MEDIA=/media
 
@@ -28,7 +28,7 @@ is_rom_root() {
 add_branch() {
     local branch="$1"
     [[ -d "${branch}" ]] || return 0
-    [[ "${branch}" == "${BIND}" || "${branch}" == "${POOL}" ]] && return 0
+    [[ "${branch}" == "${RW}" || "${branch}" == "${POOL}" ]] && return 0
     [[ ":${branches}:" == *":${branch}=RO:"* ]] && return 0
     branches="${branches}:${branch}=RO"
 }
@@ -38,14 +38,19 @@ if findmnt "${POOL}" >/dev/null 2>&1; then
     exit 0
 fi
 
-mkdir -p "${POOL}" "${BIND}"
+# Migrate existing roms content into the RW branch on first run.
+mkdir -p "${RW}"
+chown 1000:1000 "${RW}"
+if [[ -d "${POOL}" && -n "$(ls -A "${POOL}" 2>/dev/null)" && -z "$(ls -A "${RW}" 2>/dev/null)" ]]; then
+    log "migrating ${POOL} content to ${RW}"
+    find "${POOL}" -mindepth 1 -maxdepth 1 -exec mv -t "${RW}" -- {} +
+    chown -R 1000:1000 "${RW}"
+fi
+
+mkdir -p "${POOL}"
 chown 1000:1000 "${POOL}"
 
-# Bind-mount the storage dir so mergerfs can use it as the RW branch
-# while mounting over the same path.
-mount --bind "${POOL}" "${BIND}"
-
-branches="${BIND}=RW"
+branches="${RW}=RW"
 for dir in "${MEDIA}"/*/; do
     [[ -d "${dir}" ]] || continue
 
@@ -67,15 +72,10 @@ done
 
 log "branches: ${branches}"
 
-if [[ "${branches}" == "${BIND}=RW" ]]; then
-    log "no external media — using ${POOL} directly"
-    umount "${BIND}"
-    exit 0
-fi
-
 if mergerfs -o "${OPTS}" "${branches}" "${POOL}"; then
     log "mergerfs pool mounted at ${POOL}"
+    /usr/lib/hippos/hippos-merge-gamelists || true
 else
-    log "mergerfs failed — using ${POOL} directly"
-    umount "${BIND}" 2>/dev/null || true
+    log "mergerfs failed — bind-mounting ${RW} directly"
+    mount --bind "${RW}" "${POOL}" || true
 fi

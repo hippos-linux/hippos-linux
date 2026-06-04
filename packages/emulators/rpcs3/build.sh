@@ -18,9 +18,35 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
+PATCH_DIR="${REPO_ROOT}/packages/emulators/${NAME}"
+for patch in 001-sdl3-haptic-effect-id.patch; do
+    if git -C "${SRC}" apply --reverse --check "${PATCH_DIR}/${patch}" >/dev/null 2>&1; then
+        log "Patch already applied: ${patch}"
+    else
+        git -C "${SRC}" apply "${PATCH_DIR}/${patch}"
+    fi
+done
+
 if ! grep -q '^#include <QJsonDocument>' "${SRC}/rpcs3/rpcs3qt/downloader.cpp"; then
     sed -i '/^#include <QJsonObject>/a #include <QJsonDocument>' "${SRC}/rpcs3/rpcs3qt/downloader.cpp"
 fi
+
+if ! grep -q '^#include <QJsonDocument>' "${SRC}/rpcs3/rpcs3qt/config_database.cpp"; then
+    sed -i '1s|^|#include <QJsonDocument>\n#include <QJsonParseError>\n|' "${SRC}/rpcs3/rpcs3qt/config_database.cpp"
+fi
+
+if ! grep -q '^#include <unordered_set>' "${SRC}/rpcs3/rpcs3qt/game_list_frame.h"; then
+    sed -i '/^#include <set>/a #include <unordered_set>' "${SRC}/rpcs3/rpcs3qt/game_list_frame.h"
+fi
+
+# SDL3 < 3.2.12: no SDL_CameraPermissionState enum; SDL_GetCameraPermissionState returns int.
+# Replace scoped enum usage and substitute constants with their integer values (-1, 0, 1).
+sed -i \
+    -e 's/SDL_CameraPermissionState:://g' \
+    -e 's/SDL_CAMERA_PERMISSION_STATE_DENIED/-1/g' \
+    -e 's/SDL_CAMERA_PERMISSION_STATE_PENDING/0/g' \
+    -e 's/SDL_CAMERA_PERMISSION_STATE_APPROVED/1/g' \
+    "${SRC}/rpcs3/Input/sdl_camera_handler.cpp"
 
 # Clang 19 doesn't always prove fmt::throw_exception [[noreturn]] through all paths.
 # Drop the three -Werror flags that fire as a result rather than patching every callsite.

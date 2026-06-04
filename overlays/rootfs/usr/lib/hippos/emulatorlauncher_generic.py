@@ -3,6 +3,7 @@ from __future__ import annotations
 from emulatorlauncher_impl import (
     RETROARCH_BIN,
     SAVES,
+    USERDATA,
     LaunchContext,
     _build_game_env,
     _load_hippos_conf,
@@ -38,6 +39,8 @@ def launch_libretro(ctx: LaunchContext) -> int:
 
     cmd = [
         str(RETROARCH_BIN),
+        '--verbose',
+        '--log-file', str(USERDATA / 'system' / 'logs' / 'retroarch.log'),
         '-L', str(core_path),
         '--config', str(ra_cfg),
     ]

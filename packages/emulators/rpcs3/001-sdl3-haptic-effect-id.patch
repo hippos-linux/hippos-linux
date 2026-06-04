@@ -1,0 +1,11 @@
+--- a/rpcs3/Emu/Io/LogitechG27.h
++++ b/rpcs3/Emu/Io/LogitechG27.h
+@@ -38,7 +38,7 @@
+ 	logitech_g27_ffb_state state = logitech_g27_ffb_state::inactive;
+ 	u64 last_update = 0;
+ 	SDL_HapticEffect last_effect {};
+-	SDL_HapticEffectID effect_id = -1;
++	int effect_id = -1;
+ };
+ 
+ struct sdl_mapping

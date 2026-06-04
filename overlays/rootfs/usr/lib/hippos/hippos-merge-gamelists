@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+"""Merge gamelist.xml files from all mergerfs ROM pool branches into the RW branch.
+
+Called after mount-roms-pool completes. Reads /proc/mounts to locate the
+mergerfs roms pool, then for each system directory merges gamelist.xml entries
+from all RO branches into the RW (first) branch. RW branch entries win on
+path conflicts so user-scraped metadata is never overwritten by external media.
+"""
+
+from __future__ import annotations
+
+import logging
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+logging.basicConfig(level=logging.INFO, format='[hippos-merge-gamelists] %(message)s')
+_log = logging.getLogger(__name__)
+
+ROMS_POOL = Path('/userdata/roms')
+
+
+def _mergerfs_branches(pool: Path) -> list[Path]:
+    """Return the ordered branch list for a fuse.mergerfs mount, or []."""
+    pool_str = str(pool)
+    try:
+        with open('/proc/mounts') as fh:
+            for line in fh:
+                parts = line.split()
+                if len(parts) < 3 or parts[2] != 'fuse.mergerfs':
+                    continue
+                if parts[1] != pool_str:
+                    continue
+                branches = []
+                for b in parts[0].split(':'):
+                    b = b.strip().lstrip('/')
+                    if b:
+                        branches.append(Path('/' + b))
+                return branches
+    except OSError as exc:
+        _log.warning("could not read /proc/mounts: %s", exc)
+    return []
+
+
+def _normalise_path(raw: str, system_pool_path: Path, branch_system_path: Path) -> str:
+    """Return a normalised relative path for a gamelist <path> value."""
+    p = raw.strip()
+    # Already relative
+    if p.startswith('./') or not p.startswith('/'):
+        return p if p.startswith('./') else './' + p
+
+    path = Path(p)
+    # Absolute under the pool mount (e.g. /userdata/roms/ps3/game.iso)
+    try:
+        rel = path.relative_to(system_pool_path)
+        return './' + str(rel)
+    except ValueError:
+        pass
+    # Absolute under this branch's system dir (e.g. /userdata/.roms-rw/ps3/game.iso)
+    try:
+        rel = path.relative_to(branch_system_path)
+        return './' + str(rel)
+    except ValueError:
+        pass
+    # Fallback: keep as-is
+    return p
+
+
+def _key(path_str: str) -> str:
+    return path_str.strip().lstrip('./').lower()
+
+
+def _parse_gamelist(xml_path: Path, system_pool_path: Path,
+                    branch_system_path: Path) -> dict[str, ET.Element]:
+    """Parse a gamelist.xml and return {normalised_path_key: game_element}."""
+    try:
+        tree = ET.parse(xml_path)
+    except ET.ParseError as exc:
+        _log.warning("skipping malformed %s: %s", xml_path, exc)
+        return {}
+    root = tree.getroot()
+    entries: dict[str, ET.Element] = {}
+    for game in root:
+        path_elem = game.find('path')
+        if path_elem is None or not path_elem.text:
+            continue
+        normalised = _normalise_path(path_elem.text, system_pool_path, branch_system_path)
+        path_elem.text = normalised
+        entries[_key(normalised)] = game
+    return entries
+
+
+def _write_gamelist(entries: dict[str, ET.Element], dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    root = ET.Element('gameList')
+    for game in entries.values():
+        root.append(game)
+    tree = ET.ElementTree(root)
+    ET.indent(tree, space='  ')
+    tree.write(str(dest), encoding='utf-8', xml_declaration=True)
+
+
+def merge_system(system: str, rw_branch: Path, ro_branches: list[Path]) -> int:
+    """Merge gamelists for one system. Returns count of entries added from RO branches."""
+    system_pool_path = ROMS_POOL / system
+    rw_system = rw_branch / system
+    rw_xml = rw_system / 'gamelist.xml'
+
+    # Load RW gamelist (authoritative)
+    rw_entries: dict[str, ET.Element] = {}
+    if rw_xml.exists():
+        rw_entries = _parse_gamelist(rw_xml, system_pool_path, rw_system)
+
+    added = 0
+    for ro_branch in ro_branches:
+        ro_system = ro_branch / system
+        ro_xml = ro_system / 'gamelist.xml'
+        if not ro_xml.exists():
+            continue
+        ro_entries = _parse_gamelist(ro_xml, system_pool_path, ro_system)
+        for key, elem in ro_entries.items():
+            if key not in rw_entries:
+                rw_entries[key] = elem
+                added += 1
+
+    if added > 0:
+        _write_gamelist(rw_entries, rw_xml)
+        _log.info("%s: merged %d entries from external media", system, added)
+
+    return added
+
+
+def main() -> int:
+    branches = _mergerfs_branches(ROMS_POOL)
+    if not branches:
+        _log.debug("roms pool is not a mergerfs mount — nothing to merge")
+        return 0
+
+    rw_branch = branches[0]
+    ro_branches = branches[1:]
+
+    if not ro_branches:
+        _log.debug("no RO branches — nothing to merge")
+        return 0
+
+    # Collect all system names that appear in any RO branch
+    systems: set[str] = set()
+    for ro in ro_branches:
+        if not ro.exists():
+            continue
+        for entry in ro.iterdir():
+            if entry.is_dir() and (entry / 'gamelist.xml').exists():
+                systems.add(entry.name)
+
+    if not systems:
+        _log.debug("no gamelists found in RO branches")
+        return 0
+
+    total = 0
+    for system in sorted(systems):
+        total += merge_system(system, rw_branch, ro_branches)
+
+    if total > 0:
+        _log.info("merge complete: %d total entries added across %d systems", total, len(systems))
+    else:
+        _log.debug("merge complete: nothing new")
+
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
