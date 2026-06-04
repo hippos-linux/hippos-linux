@@ -32,4 +32,7 @@ fi
 pkill -x unclutter 2>/dev/null || true
 unclutter -idle 3 -root &
 
+# Pre-warm NVIDIA PRIME context so openbox doesn't pay 18s init cost on first GL connection
+[[ -f /run/hippos/prime.env ]] && timeout 5 glxinfo -B >/dev/null 2>&1 || true
+
 exec openbox --sm-disable --startup /usr/bin/emulationstation
