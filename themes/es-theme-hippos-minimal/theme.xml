@@ -162,7 +162,7 @@ License: creative commons CC-BY-NC-SA
       <alignment>left</alignment>
       <horizontalMargin>0.01</horizontalMargin>
       <origin>0 0</origin>
-      <lineSpacing>2.1</lineSpacing>
+      <lineSpacing>1.5</lineSpacing>
       <selectorImagePath>./assets/box.png</selectorImagePath>
       <selectorOffsetY>-0.01</selectorOffsetY>
       <selectorHeight>0.0675</selectorHeight>

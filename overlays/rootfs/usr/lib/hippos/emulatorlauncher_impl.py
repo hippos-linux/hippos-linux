@@ -983,6 +983,40 @@ def _ensure_section(parser: configparser.ConfigParser, section: str) -> None:
         parser.add_section(section)
 
 
+def _resolve_mergerfs_path(path: Path) -> Path:
+    """Resolve a path that sits under a mergerfs mount to its real branch path.
+
+    mergerfs presents a unified view across multiple branches. Some emulators
+    need the actual physical path (e.g. to resolve symlinks or use inotify).
+    Reads /proc/mounts, finds the matching fuse.mergerfs entry, then walks the
+    colon-separated branch list until it finds one where the path exists.
+    """
+    try:
+        path_str = str(path)
+        with open('/proc/mounts') as fh:
+            for line in fh:
+                parts = line.split()
+                if len(parts) < 3 or parts[2] != 'fuse.mergerfs':
+                    continue
+                mount_point = parts[1]
+                if not (path_str.startswith(mount_point + '/') or path_str == mount_point):
+                    continue
+                relative = path_str[len(mount_point):]
+                for branch in parts[0].split(':'):
+                    branch = branch.strip()
+                    if not branch:
+                        continue
+                    if not branch.startswith('/'):
+                        branch = '/' + branch
+                    candidate = Path(branch.rstrip('/') + relative)
+                    if candidate.exists():
+                        _log.debug("mergerfs: resolved %s -> %s", path, candidate)
+                        return candidate
+    except Exception as exc:
+        _log.debug("mergerfs path resolution failed: %s", exc)
+    return path
+
+
 def _lindbergh_short_rom_name(rom: Path) -> str:
     return rom.stem.lower()
 
@@ -2052,8 +2086,14 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
         cfg.set('video_shader_enable', '"false"')
 
     # Input
-    cfg.set('input_autodetect_enable',  '"true"')
-    cfg.set('input_joypad_driver',      '"sdl2"')
+    # Autodetect disabled: we write complete explicit per-player bindings from ES
+    # profiles. Enabling autodetect causes RetroArch to load its own autoconfig
+    # profiles after the config is applied, which overrides our bindings.
+    cfg.set('input_autodetect_enable',  '"false"')
+    # udev driver reads /dev/input/event* directly — more reliable than sdl2
+    # on Debian where SDL2 HIDAPI conflicts with xpad claiming the USB device.
+    # Button indices are identical (both enumerate evdev BTN_* codes in order).
+    cfg.set('input_joypad_driver',      '"udev"')
     cfg.set('input_enable_hotkey',      '"shift"')
     cfg.set('input_exit_emulator',      '"escape"')
     cfg.set('input_menu_toggle',        '"f1"')
@@ -2105,6 +2145,9 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
 
     # Save behaviour
     cfg.set('config_save_on_exit',      '"false"')
+    cfg.set('log_to_file',              '"true"')
+    cfg.set('log_dir',                  f'"{USERDATA / "system" / "logs"}"')
+    cfg.set('log_to_file_timestamp',    '"false"')
     cfg.set('savestate_auto_save',      '"true"' if _conf_bool(conf, 'global.autosave') else '"false"')
     cfg.set('savestate_auto_load',      '"true"' if _conf_bool(conf, 'global.autosave') else '"false"')
 
@@ -2410,6 +2453,14 @@ def _build_game_env(conf: dict[str, str], ctx: Optional[LaunchContext] = None) -
             env[f'{prefix}NBAXES'] = str(ctrl.nb_axes)
     if ctx is not None and ctx.controllers:
         env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
+    # Enable SDL2 HIDAPI Steam Controller support (works natively without steamd)
+    env.setdefault('SDL_JOYSTICK_HIDAPI_STEAM', '1')
+    # Force Xbox controllers to use the kernel xpad driver, not SDL2 HIDAPI.
+    # xpad claims the USB device so HIDAPI has no hidraw node to open; SDL2 then
+    # tries /dev/bus/usb which hippos cannot write to, silently drops the pad.
+    env.setdefault('SDL_JOYSTICK_HIDAPI_XBOX_360', '0')
+    env.setdefault('SDL_JOYSTICK_HIDAPI_XBOX_ONE', '0')
+    env.setdefault('SDL_JOYSTICK_HIDAPI_XBOX', '0')
     hud_cfg = _hud_config_path()
     if hud_cfg is not None and (ctx is None or _hud_supported(ctx.system)):
         env['MANGOHUD_CONFIGFILE'] = str(hud_cfg)
@@ -3497,10 +3548,11 @@ def _launch_cemu(ctx: LaunchContext) -> int:
     return result.returncode
 
 
-def _write_pcsx2_config(conf: dict[str, str]) -> None:
+def _write_pcsx2_config(conf: dict[str, str], ctx: Optional['LaunchContext'] = None) -> None:
     """Write PCSX2 INI config from hippos.conf values."""
     PCSX2_INI.parent.mkdir(parents=True, exist_ok=True)
-    (SAVES / 'ps2').mkdir(parents=True, exist_ok=True)
+    (SAVES / 'ps2' / 'pcsx2' / 'sstates').mkdir(parents=True, exist_ok=True)
+    (SAVES / 'ps2' / 'pcsx2').mkdir(parents=True, exist_ok=True)
     (CACHE / 'ps2').mkdir(parents=True, exist_ok=True)
 
     parser = _new_ini_parser()
@@ -3522,14 +3574,14 @@ def _write_pcsx2_config(conf: dict[str, str]) -> None:
     parser.set('UI', 'HideMainWindowWhenRunning', 'true')
     parser.set('UI', 'DoubleClickTogglesFullscreen', 'false')
 
-    # Folders
-    parser.set('Folders', 'Bios',        '../../../bios/ps2')
-    parser.set('Folders', 'Snapshots',   '../../../screenshots')
-    parser.set('Folders', 'Savestates',  '../../../saves/ps2/pcsx2/sstates')
-    parser.set('Folders', 'MemoryCards', '../../../saves/ps2/pcsx2')
-    parser.set('Folders', 'Logs',        '../../logs')
-    parser.set('Folders', 'Cache',       '../../cache/ps2')
-    parser.set('Folders', 'Textures',    'textures')
+    # Folders — absolute paths; relative paths resolve from inis/ subdir and land wrong
+    parser.set('Folders', 'Bios',        str(BIOS / 'ps2'))
+    parser.set('Folders', 'Snapshots',   str(SCREENSHOTS))
+    parser.set('Folders', 'Savestates',  str(SAVES / 'ps2' / 'pcsx2' / 'sstates'))
+    parser.set('Folders', 'MemoryCards', str(SAVES / 'ps2' / 'pcsx2'))
+    parser.set('Folders', 'Logs',        str(USERDATA / 'system' / 'logs'))
+    parser.set('Folders', 'Cache',       str(CACHE / 'ps2'))
+    parser.set('Folders', 'Textures',    str(PCSX2_CONFIG_DIR / 'textures'))
 
     # EmuCore
     parser.set('EmuCore', 'EnableDiscordPresence',       'false')
@@ -3580,6 +3632,60 @@ def _write_pcsx2_config(conf: dict[str, str]) -> None:
     parser.set('Hotkeys', 'OpenPauseMenu',     'Keyboard/Escape')
     parser.set('Hotkeys', 'TogglePause',       'Keyboard/Space')
 
+    # Pad / Multitap
+    _ensure_section(parser, 'Pad')
+    parser.set('Pad', 'MultitapPort1', 'false')
+    parser.set('Pad', 'MultitapPort2', 'false')
+
+    # Clear stale Pad1-Pad8 sections then rebuild from connected controllers
+    for i in range(1, 9):
+        if parser.has_section(f'Pad{i}'):
+            parser.remove_section(f'Pad{i}')
+
+    if ctx is not None:
+        for nplayer, ctrl in enumerate(ctx.controllers[:8], start=1):
+            pad = f'Pad{nplayer}'
+            sdl  = f'SDL-{ctrl.index}'
+            _ensure_section(parser, pad)
+            parser.set(pad, 'Type',            'DualShock2')
+            parser.set(pad, 'InvertL',         '0')
+            parser.set(pad, 'InvertR',         '0')
+            parser.set(pad, 'Deadzone',        '0')
+            parser.set(pad, 'AxisScale',       '1.33')
+            parser.set(pad, 'TriggerDeadzone', '0')
+            parser.set(pad, 'TriggerScale',    '1')
+            parser.set(pad, 'LargeMotorScale', '1')
+            parser.set(pad, 'SmallMotorScale', '1')
+            parser.set(pad, 'ButtonDeadzone',  '0')
+            parser.set(pad, 'PressureModifier','0.5')
+            parser.set(pad, 'Up',       f'{sdl}/DPadUp')
+            parser.set(pad, 'Down',     f'{sdl}/DPadDown')
+            parser.set(pad, 'Left',     f'{sdl}/DPadLeft')
+            parser.set(pad, 'Right',    f'{sdl}/DPadRight')
+            parser.set(pad, 'Triangle', f'{sdl}/FaceNorth')
+            parser.set(pad, 'Circle',   f'{sdl}/FaceEast')
+            parser.set(pad, 'Cross',    f'{sdl}/FaceSouth')
+            parser.set(pad, 'Square',   f'{sdl}/FaceWest')
+            parser.set(pad, 'Select',   f'{sdl}/Back')
+            parser.set(pad, 'Start',    f'{sdl}/Start')
+            parser.set(pad, 'L1',       f'{sdl}/LeftShoulder')
+            parser.set(pad, 'R1',       f'{sdl}/RightShoulder')
+            parser.set(pad, 'L2',       f'{sdl}/+LeftTrigger')
+            parser.set(pad, 'R2',       f'{sdl}/+RightTrigger')
+            parser.set(pad, 'L3',       f'{sdl}/LeftStick')
+            parser.set(pad, 'R3',       f'{sdl}/RightStick')
+            parser.set(pad, 'LUp',      f'{sdl}/-LeftY')
+            parser.set(pad, 'LDown',    f'{sdl}/+LeftY')
+            parser.set(pad, 'LLeft',    f'{sdl}/-LeftX')
+            parser.set(pad, 'LRight',   f'{sdl}/+LeftX')
+            parser.set(pad, 'RUp',      f'{sdl}/-RightY')
+            parser.set(pad, 'RDown',    f'{sdl}/+RightY')
+            parser.set(pad, 'RLeft',    f'{sdl}/-RightX')
+            parser.set(pad, 'RRight',   f'{sdl}/+RightX')
+            parser.set(pad, 'Analog',   f'{sdl}/Guide')
+            parser.set(pad, 'LargeMotor', f'{sdl}/LargeMotor')
+            parser.set(pad, 'SmallMotor', f'{sdl}/SmallMotor')
+
     with PCSX2_INI.open('w', encoding='utf-8') as fh:
         parser.write(fh)
     _log.info("Wrote PCSX2 config: %s", PCSX2_INI)
@@ -3592,13 +3698,13 @@ def _launch_pcsx2(ctx: LaunchContext) -> int:
         return 1
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
     conf = _load_hippos_conf()
-    _write_pcsx2_config(conf)
+    _write_pcsx2_config(conf, ctx)
     # Write SDL controller DB
     pcsx2_db = PCSX2_INI.parent / 'game_controller_db.txt'
     pcsx2_db.parent.mkdir(parents=True, exist_ok=True)
     pcsx2_db.write_text(generate_sdl_game_controller_config(ctx.controllers))
 
-    cmd = [str(bin_path), '-nogui', str(ctx.rom)]
+    cmd = [str(bin_path), '-nogui', '-fullscreen', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
     # Wheels break with SDL_GAMECONTROLLERCONFIG — exclude if wheel is active
@@ -4067,6 +4173,7 @@ def main() -> int:
         wheel=args.wheel,
         controllers=controllers,
     )
+    ctx.rom         = _resolve_mergerfs_path(ctx.rom)
     ctx.game_wheel  = _load_game_wheel_metadata(ctx.gameinfoxml)
     ctx.game_gun    = _load_game_gun_metadata(ctx.gameinfoxml)
     ctx.netplay_mode = getattr(args, 'netplaymode', '') or ''

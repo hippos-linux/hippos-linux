@@ -2,7 +2,7 @@
 set -euo pipefail
 
 POOL=/userdata/bios
-BIND=/run/hippos/bios-internal
+RW=/userdata/.bios-rw
 OPTS="cache.files=off,dropcacheonclose=true,allow_other,use_ino,moveonenospc=false"
 MEDIA=/media
 
@@ -11,7 +11,7 @@ log() { printf '[hippos-bios-pool] %s\n' "$*"; }
 add_branch() {
     local branch="$1"
     [[ -d "${branch}" ]] || return 0
-    [[ "${branch}" == "${BIND}" || "${branch}" == "${POOL}" ]] && return 0
+    [[ "${branch}" == "${RW}" || "${branch}" == "${POOL}" ]] && return 0
     [[ ":${branches}:" == *":${branch}=RO:"* ]] && return 0
     branches="${branches}:${branch}=RO"
 }
@@ -21,11 +21,18 @@ if findmnt "${POOL}" >/dev/null 2>&1; then
     exit 0
 fi
 
-mkdir -p "${POOL}" "${BIND}"
+# Migrate existing bios content into the RW branch on first run.
+mkdir -p "${RW}"
+chown 1000:1000 "${RW}"
+if [[ -d "${POOL}" && -n "$(ls -A "${POOL}" 2>/dev/null)" && -z "$(ls -A "${RW}" 2>/dev/null)" ]]; then
+    log "migrating ${POOL} content to ${RW}"
+    find "${POOL}" -mindepth 1 -maxdepth 1 -exec mv -t "${RW}" -- {} +
+fi
 
-mount --bind "${POOL}" "${BIND}"
+mkdir -p "${POOL}"
+chown 1000:1000 "${POOL}"
 
-branches="${BIND}=RW"
+branches="${RW}=RW"
 for dir in "${MEDIA}"/*/; do
     [[ -d "${dir}" ]] || continue
     add_branch "${dir%/}/bios"
@@ -37,15 +44,9 @@ done
 
 log "branches: ${branches}"
 
-if [[ "${branches}" == "${BIND}=RW" ]]; then
-    log "no external media — using ${POOL} directly"
-    umount "${BIND}"
-    exit 0
-fi
-
 if mergerfs -o "${OPTS}" "${branches}" "${POOL}"; then
     log "mergerfs bios pool mounted at ${POOL}"
 else
-    log "mergerfs failed — using ${POOL} directly"
-    umount "${BIND}" 2>/dev/null || true
+    log "mergerfs failed — bind-mounting ${RW} directly"
+    mount --bind "${RW}" "${POOL}" || true
 fi

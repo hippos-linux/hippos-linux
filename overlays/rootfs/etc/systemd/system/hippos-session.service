@@ -1,7 +1,7 @@
 [Unit]
 Description=HippOS Session Dispatcher
-After=local-fs.target hippos-xserver.service user@1000.service
-Wants=hippos-xserver.service
+After=local-fs.target hippos-xserver.service user@1000.service time-sync.target
+Wants=hippos-xserver.service time-sync.target
 
 [Service]
 Type=oneshot

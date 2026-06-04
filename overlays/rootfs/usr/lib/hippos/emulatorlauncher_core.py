@@ -7,6 +7,7 @@ from emulatorlauncher_impl import (
     _log,
     BIOS,
     CACHE,
+    CONFIGS,
     DOLPHIN_CONFIG_DIR,
     DOLPHIN_GFX_INI,
     DOLPHIN_INI,
@@ -37,6 +38,8 @@ from emulatorlauncher_impl import (
     _ensure_section,
     generate_sdl_game_controller_config,
     _gun_type,
+    _load_es_input_configs,
+    _pick_es_profile,
 )
 
 
@@ -593,6 +596,113 @@ def _launch_duckstation(ctx: LaunchContext) -> int:
     return result.returncode
 
 
+_FLYCAST_MAPPING_DIR = CONFIGS / 'flycast' / 'mappings'
+
+_FLYCAST_HAT_CODES = {1: 256, 2: 259, 4: 257, 8: 258}  # ES hat value → Flycast code
+
+_FLYCAST_DREAMCAST_MAP = {
+    'up':            {'button': 'btn_dpad1_up',       'hat': 'btn_dpad1_up',       'axis': 'btn_dpad1_up'},
+    'down':          {'button': 'btn_dpad1_down',     'hat': 'btn_dpad1_down'},
+    'left':          {'button': 'btn_dpad1_left',     'hat': 'btn_dpad1_left',     'axis': 'btn_dpad1_left'},
+    'right':         {'button': 'btn_dpad1_right',    'hat': 'btn_dpad1_right'},
+    'joystick1left': {'axis': 'btn_analog_left'},
+    'joystick1up':   {'axis': 'btn_analog_up'},
+    'joystick2left': {'axis': 'axis2_left'},
+    'joystick2up':   {'axis': 'axis2_up'},
+    'b':             {'button': 'btn_a'},
+    'a':             {'button': 'btn_b'},
+    'y':             {'button': 'btn_x'},
+    'x':             {'button': 'btn_y'},
+    'l2':            {'axis': 'axis_trigger_left',    'button': 'btn_trigger_left'},
+    'r2':            {'axis': 'axis_trigger_right',   'button': 'btn_trigger_right'},
+    'start':         {'button': 'btn_start'},
+}
+
+_FLYCAST_ARCADE_MAP = {
+    **_FLYCAST_DREAMCAST_MAP,
+    'y':       {'button': 'btn_c'},
+    'x':       {'button': 'btn_x'},
+    'pageup':  {'button': 'btn_y'},
+    'pagedown':{'button': 'btn_z'},
+    'l3':      {'button': 'btn_dpad2_up'},
+    'r3':      {'button': 'btn_dpad2_down'},
+    'select':  {'button': 'btn_d'},
+}
+
+_FLYCAST_AXIS_OPPOSITE = {
+    'joystick1left': 'btn_analog_right',
+    'joystick1up':   'btn_analog_down',
+    'joystick2left': 'axis2_right',
+    'joystick2up':   'axis2_down',
+    'up':            'btn_dpad1_down',
+    'left':          'btn_dpad1_right',
+}
+
+
+def _write_flycast_controller_mapping(ctx: LaunchContext) -> None:
+    """Write per-controller SDL_<name>.cfg mapping files for Flycast."""
+    arcade_systems = {'naomi', 'naomi2', 'atomiswave', 'hikaru'}
+    mapping = _FLYCAST_ARCADE_MAP if ctx.system in arcade_systems else _FLYCAST_DREAMCAST_MAP
+    suffix = '_arcade' if ctx.system in arcade_systems else ''
+
+    profiles = _load_es_input_configs()
+    _FLYCAST_MAPPING_DIR.mkdir(parents=True, exist_ok=True)
+
+    for ctrl in ctx.controllers:
+        profile = _pick_es_profile(profiles, ctrl)
+        if profile is None:
+            continue
+
+        cfg = configparser.ConfigParser(interpolation=None)
+        for section in ('analog', 'digital', 'emulator'):
+            cfg.add_section(section)
+
+        analog_bind = 0
+        digital_bind = 0
+
+        for es_name, type_map in mapping.items():
+            binding = profile.inputs.get(es_name)
+            if binding is None:
+                continue
+            btype = binding.type
+            if btype not in type_map:
+                continue
+            action = type_map[btype]
+
+            if btype == 'hat':
+                code = _FLYCAST_HAT_CODES.get(abs(binding.value), 256)
+                cfg.set('digital', f'bind{digital_bind}', f'{code}:{action}')
+                digital_bind += 1
+
+            elif btype == 'button':
+                cfg.set('digital', f'bind{digital_bind}', f'{binding.code}:{action}')
+                digital_bind += 1
+
+            elif btype == 'axis':
+                # triggers use positive axis, sticks use negative (primary direction)
+                sign = '+' if es_name in ('l2', 'r2') else '-'
+                code = f'{binding.code}{sign}'
+                cfg.set('analog', f'bind{analog_bind}', f'{code}:{action}')
+                analog_bind += 1
+                # write the opposite direction too
+                opposite = _FLYCAST_AXIS_OPPOSITE.get(es_name)
+                if opposite:
+                    opp_sign = '+' if sign == '-' else '-'
+                    cfg.set('analog', f'bind{analog_bind}', f'{binding.code}{opp_sign}:{opposite}')
+                    analog_bind += 1
+
+        cfg.set('emulator', 'dead_zone',     '10')
+        cfg.set('emulator', 'mapping_name',  'Default')
+        cfg.set('emulator', 'rumble_power',  '100')
+        cfg.set('emulator', 'version',       '3')
+
+        name = ctrl.name.replace('/', '_')
+        cfg_path = _FLYCAST_MAPPING_DIR / f'SDL_{name}{suffix}.cfg'
+        with cfg_path.open('w') as fh:
+            cfg.write(fh)
+        _log.info("Wrote Flycast controller mapping: %s", cfg_path)
+
+
 def _write_flycast_config(ctx: LaunchContext) -> None:
     conf = _load_effective_hippos_conf()
     FLYCAST_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -661,6 +771,7 @@ def _launch_flycast(ctx: LaunchContext) -> int:
 
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
     _write_flycast_config(ctx)
+    _write_flycast_controller_mapping(ctx)
 
     conf = _load_hippos_conf()
     cmd = [str(bin_path), str(ctx.rom)]

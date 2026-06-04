@@ -109,7 +109,12 @@ def launch_sh(ctx: LaunchContext) -> int:
     script = (rom / 'run.sh') if rom.is_dir() and (rom / 'run.sh').exists() else rom
     if not script.exists():
         return 1
-    script.chmod(script.stat().st_mode | 0o111)
+    mode = script.stat().st_mode
+    if not (mode & 0o111):
+        try:
+            script.chmod(mode | 0o111)
+        except PermissionError:
+            pass  # already executable or on a filesystem that doesn't support chmod
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)

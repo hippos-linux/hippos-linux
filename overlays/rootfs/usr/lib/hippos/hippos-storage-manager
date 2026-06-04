@@ -1203,6 +1203,7 @@ def cmd_merge(mount_path: str) -> int:
         EXTERNAL_ROM_CONFIG.parent.mkdir(parents=True, exist_ok=True)
         EXTERNAL_ROM_CONFIG.write_text("\n".join(lines) + "\n", encoding="utf-8")
     rebuild_and_reload()
+    subprocess.run(["/usr/lib/hippos/hippos-merge-gamelists"], check=False)
     return 0
 
 
