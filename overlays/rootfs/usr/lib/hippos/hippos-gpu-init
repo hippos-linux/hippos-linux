@@ -90,8 +90,36 @@ find_connected_gpu() {
     done
 }
 
+# Convert lspci PCI address to Xorg BusID.
+# Input:  "00:02.0" or "0000:00:02.0"
+# Output: "PCI:0:2:0"
+pci_to_xorg_busid() {
+    local addr="$1"
+    # Strip domain prefix if present ("0000:00:02.0" → "00:02.0")
+    [[ "${addr}" == *:*:* ]] && addr="${addr#*:}"
+    local bus dev fn
+    bus="$(printf '%d' "0x${addr%%:*}")"
+    local rest="${addr#*:}"
+    dev="$(printf '%d' "0x${rest%.*}")"
+    fn="$(printf '%d' "0x${rest#*.}")"
+    printf 'PCI:%d:%d:%d\n' "${bus}" "${dev}" "${fn}"
+}
+
+# Returns 0 if the PCI device at the given address is Thunderbolt-connected.
+# Thunderbolt downstream PCIe devices have sysfs paths passing through a
+# Thunderbolt domain hierarchy (contains "/domain[0-9]").
+is_thunderbolt_device() {
+    local addr="$1"
+    [[ "${addr}" != *:*:* ]] && addr="0000:${addr}"
+    local dev_path
+    dev_path="$(readlink -f "/sys/bus/pci/devices/${addr}" 2>/dev/null || true)"
+    [[ "${dev_path}" == */domain[0-9]* ]]
+}
+
 prime_init() {
-    rm -f /var/tmp/hippos-nvidia.prime /var/tmp/hippos-amd.prime /var/tmp/hippos-intel.prime
+    rm -f /var/tmp/hippos-nvidia.prime /var/tmp/hippos-amd.prime \
+          /var/tmp/hippos-intel.prime /var/tmp/hippos-prime-primary.pci \
+          /var/tmp/hippos-nvidia-egpu
 
     local gpu_count
     gpu_count="$(lspci -nn 2>/dev/null | grep -cE "(VGA|3D|Display controller)" || true)"
@@ -104,8 +132,45 @@ prime_init() {
         local ngpu
         ngpu="$(lspci -nn 2>/dev/null | grep -iE "nvidia" | grep -iE "VGA|3D|Display controller" | head -1 || true)"
         if [[ -n "${ngpu}" ]]; then
+            log "NVIDIA GPU: ${ngpu}"
+
+            # Check if this NVIDIA GPU is a Thunderbolt eGPU
+            if is_thunderbolt_device "${ngpu%% *}"; then
+                touch /var/tmp/hippos-nvidia-egpu
+                log "NVIDIA GPU is Thunderbolt eGPU"
+            fi
+
+            # Find all non-NVIDIA display GPUs
+            mapfile -t other_gpus < <(lspci -nn 2>/dev/null \
+                | grep -iE "VGA|3D|Display controller" \
+                | grep -viE "nvidia" || true)
+
+            local primary_pci=""
+
+            # Check which non-NVIDIA GPU has a connected display output
+            if [[ "${#other_gpus[@]}" -gt 0 ]]; then
+                primary_pci="$(find_connected_gpu "${other_gpus[@]}" || true)"
+            fi
+
+            if [[ -z "${primary_pci}" ]]; then
+                # Check if NVIDIA itself drives the display
+                local nvidia_connected
+                nvidia_connected="$(find_connected_gpu "${ngpu}" || true)"
+                if [[ -n "${nvidia_connected}" ]]; then
+                    log "NVIDIA drives display directly — no PRIME offload configured"
+                    return
+                fi
+                # No connected display detected — assume first non-NVIDIA GPU is primary
+                if [[ "${#other_gpus[@]}" -gt 0 ]]; then
+                    primary_pci="${other_gpus[0]%% *}"
+                    log "NVIDIA PRIME: no connected display detected — defaulting primary to ${primary_pci}"
+                fi
+            else
+                log "NVIDIA PRIME: ${ngpu} (offload), primary display GPU: ${primary_pci}"
+            fi
+
             touch /var/tmp/hippos-nvidia.prime
-            log "NVIDIA PRIME: ${ngpu}"
+            [[ -n "${primary_pci}" ]] && printf '%s\n' "${primary_pci}" > /var/tmp/hippos-prime-primary.pci
             return
         fi
     fi
@@ -161,7 +226,7 @@ prime_init() {
 # Generates:
 #   /run/hippos/prime.env        — sourced by sessions (DRI_PRIME / NV offload vars)
 #   /run/hippos/prime-xrandr     — run after Xorg starts for NVIDIA PRIME sync
-#   /etc/X11/xorg.conf.d/90-hippos-prime.conf — Xorg layout option for NVIDIA
+#   /etc/X11/xorg.conf.d/90-hippos-prime.conf — Xorg layout for NVIDIA PRIME
 
 prime_configure() {
     local prime_env="/run/hippos/prime.env"
@@ -170,22 +235,59 @@ prime_configure() {
     rm -f "${prime_env}" "${xorg_prime}"
 
     if [[ -f /var/tmp/hippos-nvidia.prime ]]; then
-        # NVIDIA PRIME (Optimus): with nvidia-drm modeset=1, the iGPU drives
-        # the display and NVIDIA handles render offload via env vars.
-        # AllowNVIDIAPrime tells Xorg to enable PRIME support.
-        cat > "${xorg_prime}" <<'EOF'
+        local primary_pci=""
+        [[ -f /var/tmp/hippos-prime-primary.pci ]] && \
+            primary_pci="$(cat /var/tmp/hippos-prime-primary.pci)"
+
+        if [[ -n "${primary_pci}" ]]; then
+            # Explicitly set the display GPU as screen 0 so NVIDIA doesn't win
+            # screen assignment via OutputClass autoconfiguration priority.
+            local busid
+            busid="$(pci_to_xorg_busid "${primary_pci}")"
+            cat > "${xorg_prime}" <<EOF
+Section "Device"
+    Identifier  "Primary GPU"
+    Driver      "modesetting"
+    BusID       "${busid}"
+EndSection
+
+Section "Screen"
+    Identifier  "Primary Screen"
+    Device      "Primary GPU"
+EndSection
+
+Section "ServerLayout"
+    Identifier  "Prime"
+    Screen 0    "Primary Screen"
+    Option      "AllowNVIDIAPrime" "1"
+EndSection
+EOF
+        else
+            cat > "${xorg_prime}" <<'EOF'
 Section "ServerLayout"
     Identifier  "Prime"
     Option      "AllowNVIDIAPrime" "1"
 EndSection
 EOF
+        fi
+
+        if [[ -f /var/tmp/hippos-nvidia-egpu ]]; then
+            cat >> "${xorg_prime}" <<'EOF'
+
+Section "Device"
+    Identifier  "NVIDIA eGPU"
+    Option      "AllowExternalGpus" "True"
+EndSection
+EOF
+        fi
+
         cat > "${prime_env}" <<'EOF'
 export __NV_PRIME_RENDER_OFFLOAD=1
 export __NV_PRIME_RENDER_OFFLOAD_PROVIDER=NVIDIA-G0
 export __GLX_VENDOR_LIBRARY_NAME=nvidia
 export __VK_LAYER_NV_optimus=NVIDIA_only
 EOF
-        log "PRIME: NVIDIA — AllowNVIDIAPrime Xorg conf + render offload env written"
+        log "PRIME: NVIDIA — Xorg conf written (primary: ${primary_pci:-unknown}) + render offload env"
 
     elif [[ -f /var/tmp/hippos-amd.prime ]]; then
         local pci_id

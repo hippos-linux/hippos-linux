@@ -7,7 +7,7 @@ Conflicts=hippos-desktop.service
 [Service]
 Type=simple
 User=hippos
-ExecStartPre=/bin/sh -c 'until DISPLAY=:0 xrandr --current 2>/dev/null | grep -q " connected"; do sleep 0.5; done'
+ExecStartPre=/bin/sh -c 'until [ -S /tmp/.X11-unix/X0 ]; do sleep 0.5; done'
 ExecStart=/usr/lib/hippos/hippos-es
 Restart=on-failure
 RestartSec=3

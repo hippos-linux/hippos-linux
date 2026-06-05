@@ -4,12 +4,20 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        bc \
+        bison \
         btrfs-progs \
+        build-essential \
         ca-certificates \
+        cpio \
         curl \
+        debhelper \
         dosfstools \
+        dwarves \
         e2fsprogs \
+        fakeroot \
         fdisk \
+        flex \
         git \
         gnupg \
         grub2-common \
@@ -17,6 +25,8 @@ RUN apt-get update \
         grub-pc-bin \
         kmod \
         kpartx \
+        libelf-dev \
+        libssl-dev \
         mmdebstrap \
         parted \
         python3 \

@@ -46,8 +46,9 @@ wget
 gnupg
 
 # Boot
-linux-image-amd64
-linux-headers-amd64
+# linux-image-amd64 and linux-headers-amd64 are NOT installed from Debian.
+# The patched 15kHz kernel is built by build/build-kernel.sh and installed
+# via configure-rootfs.sh.
 dkms
 build-essential
 grub-efi-amd64
