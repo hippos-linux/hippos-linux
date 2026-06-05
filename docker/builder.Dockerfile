@@ -25,8 +25,11 @@ RUN apt-get update \
         grub-pc-bin \
         kmod \
         kpartx \
+        libdw-dev \
         libelf-dev \
         libssl-dev \
+        linux-image-amd64 \
+        lsb-release \
         mmdebstrap \
         parted \
         python3 \
