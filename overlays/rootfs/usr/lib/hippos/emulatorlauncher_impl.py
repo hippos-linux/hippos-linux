@@ -3562,6 +3562,11 @@ def _write_pcsx2_config(conf: dict[str, str], ctx: Optional['LaunchContext'] = N
     for section in ('UI', 'Folders', 'EmuCore', 'EmuCore/GS', 'Achievements', 'InputSources', 'Hotkeys'):
         _ensure_section(parser, section)
 
+    # Clear saved window geometry — a crashed session can leave a tiny/corrupt position
+    for key in ('MainWindowGeometry', 'MainWindowState'):
+        if parser.has_option('UI', key):
+            parser.remove_option('UI', key)
+
     # UI
     parser.set('UI', 'SettingsVersion',         '1')
     parser.set('UI', 'InhibitScreensaver',       'true')
@@ -3704,7 +3709,7 @@ def _launch_pcsx2(ctx: LaunchContext) -> int:
     pcsx2_db.parent.mkdir(parents=True, exist_ok=True)
     pcsx2_db.write_text(generate_sdl_game_controller_config(ctx.controllers))
 
-    cmd = [str(bin_path), '-nogui', '-fullscreen', str(ctx.rom)]
+    cmd = [str(bin_path), '-nogui', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
     # Wheels break with SDL_GAMECONTROLLERCONFIG — exclude if wheel is active

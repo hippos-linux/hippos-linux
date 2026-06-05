@@ -39,13 +39,15 @@ start_weston() {
     local runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
     log "Starting Weston (X11 nested)..."
     local res
-    res="$(DISPLAY="${DISPLAY:-:0}" xrandr 2>/dev/null | awk '/ \*/{print $1; exit}')"
+    res="$(DISPLAY="${DISPLAY:-:0}" xrandr 2>/dev/null | awk '/\*/{print $1; exit}')"
     local w="${res%%x*}"
     local h="${res##*x}"
     unset WAYLAND_DISPLAY
     DISPLAY="${DISPLAY:-:0}" weston \
         --backend=x11 \
         --socket="${WAYLAND_SOCKET}" \
+        --shell=kiosk-shell.so \
+        --fullscreen \
         ${w:+--width="${w}"} ${h:+--height="${h}"} \
         &>/dev/null &
     WESTON_PID=$!
@@ -84,7 +86,7 @@ if [[ "${ROM}" == *.waydroid ]]; then
     case "${CMD}" in
         show-full-ui)
             log "Launching Waydroid full UI..."
-            waydroid show-full-ui
+            waydroid show-full-ui || true
             wait "${WESTON_PID}" 2>/dev/null || true
             ;;
         *)

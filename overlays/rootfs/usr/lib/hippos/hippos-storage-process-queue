@@ -12,10 +12,16 @@ touch "${READY_FLAG}"
 
 [[ -d "${DELAY_DIR}" ]] || exit 0
 
+pids=()
 for queued in "${DELAY_DIR}"/*.add; do
     [[ -f "${queued}" ]] || continue
     IFS=: read -r devname devtype < "${queued}"
     log "replaying queued add: ${devname}"
-    /usr/lib/hippos/hippos-storage-event mount "${devname}" "${devtype}" || true
     rm -f "${queued}"
+    ( /usr/lib/hippos/hippos-storage-event mount "${devname}" "${devtype}" || true ) &
+    pids+=($!)
+done
+
+for pid in "${pids[@]+"${pids[@]}"}"; do
+    wait "$pid" || true
 done
