@@ -5,7 +5,7 @@ SUBSYSTEM!="sound", GOTO="hippos_audio_hotplug_end"
 
 # New card appeared — re-apply saved audio.device setting
 ACTION=="add", KERNEL=="card*", \
-    RUN+="/bin/systemd-run --no-block --unit=hippos-audio-hotplug /usr/lib/hippos/hippos-audio-setup"
+    RUN+="/bin/systemd-run --no-block --replace --unit=hippos-audio-hotplug /usr/lib/hippos/hippos-audio-setup"
 
 # Card removed — recover if saved sink is gone
 ACTION=="remove", KERNEL=="card*", \

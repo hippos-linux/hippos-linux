@@ -64,10 +64,10 @@ for dir in "${MEDIA}"/*/; do
         add_branch "${dir%/}"
     fi
 
-    # Bounded discovery for nested layouts such as /media/USB/foo/userdata/roms.
+    # Bounded discovery for nested layouts such as /media/USB/userdata/roms.
     while IFS= read -r -d '' roms_dir; do
         add_branch "${roms_dir}"
-    done < <(find "${dir%/}" -mindepth 1 -maxdepth 4 -type d -iname roms -print0 2>/dev/null)
+    done < <(find "${dir%/}" -mindepth 1 -maxdepth 2 -type d -iname roms -print0 2>/dev/null)
 done
 
 log "branches: ${branches}"
