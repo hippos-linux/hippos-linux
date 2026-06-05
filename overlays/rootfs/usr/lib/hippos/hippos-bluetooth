@@ -1,30 +1,60 @@
 #!/usr/bin/env bash
 # ES API: bluetooth enable/disable/list/trust/connect/disconnect/remove/live_devices
+# list and live_devices output XML compatible with Batocera EmulationStation
+
 _btctl() { bluetoothctl "$@" 2>&1; }
 
+_list_xml() {
+    find /var/lib/bluetooth/ -type f -name info 2>/dev/null | while read -r FILE; do
+        grep -qE '^Trusted=true$' "${FILE}" || continue
+        DEVNAME=$(grep -E '^Name=' "${FILE}" | sed 's/^Name=//')
+        DEVCLASS=$(grep -E '^Class=' "${FILE}" | sed 's/^Class=//')
+        DEVADDR=$(basename "$(dirname "${FILE}")")
+        DEVTYPE=""
+        [ "${DEVCLASS}" = "0x002508" ] && DEVTYPE="joystick"
+        [ "${DEVCLASS}" = "0x000508" ] && DEVTYPE="joystick"
+        if bluetoothctl -- info "${DEVADDR}" 2>/dev/null | grep -q "Connected: yes"; then
+            CONNECTED="yes"
+        else
+            CONNECTED="no"
+        fi
+        echo "<device id=\"${DEVADDR}\" name=\"${DEVNAME}\" type=\"${DEVTYPE}\" connected=\"${CONNECTED}\" />"
+    done
+}
+
 case "${1:-}" in
-    enable)           _btctl power on ;;
-    disable)          _btctl power off ;;
-    list)             _btctl paired-devices | awk '{print $2, $3}' ;;
+    enable)  _btctl power on ;;
+    disable) _btctl power off ;;
+    list)    _list_xml ;;
     trust)
         MAC="${2:-}"
-        _btctl power on; _btctl pair "$MAC"; _btctl trust "$MAC"; _btctl connect "$MAC"
+        _btctl power on
+        _btctl pair "$MAC"
+        _btctl trust "$MAC"
+        _btctl connect "$MAC"
         ;;
-    connect)          _btctl connect "${2:-}" ;;
-    disconnect)       _btctl disconnect "${2:-}" ;;
-    remove)           _btctl remove "${2:-}" ;;
+    connect)    _btctl connect "${2:-}" ;;
+    disconnect) _btctl disconnect "${2:-}" ;;
+    remove)     _btctl remove "${2:-}" ;;
     forgetBT|forget)
-        _btctl paired-devices | awk '{print $2}' | while read -r mac; do _btctl remove "$mac"; done
+        find /var/lib/bluetooth/ -type f -name info 2>/dev/null | while read -r FILE; do
+            DEVADDR=$(basename "$(dirname "${FILE}")")
+            _btctl remove "$DEVADDR"
+        done
         ;;
-    live_devices)
+    live_devices|start_live_devices)
         _btctl power on >/dev/null 2>&1
-        bluetoothctl scan on 2>/dev/null &
-        SCAN_PID=$!
-        trap "kill $SCAN_PID 2>/dev/null; bluetoothctl scan off 2>/dev/null" EXIT INT TERM
-        bluetoothctl 2>/dev/null | while IFS= read -r line; do
-            MAC=$(echo "$line" | grep -oE '([0-9A-F]{2}:){5}[0-9A-F]{2}')
-            NAME=$(echo "$line" | sed 's/.*Device [0-9A-F:]*[[:space:]]*//')
-            [[ -n "$MAC" ]] && echo "${MAC} ${NAME}"
+        { echo "scan on"; sleep infinity; } | bluetoothctl 2>/dev/null | \
+        while IFS= read -r line; do
+            if echo "$line" | grep -qE '^\[NEW\] Device'; then
+                MAC=$(echo "$line" | grep -oE '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}' | head -1)
+                NAME=$(echo "$line" | sed 's/.*Device [0-9A-Fa-f:]*[[:space:]]*//')
+                [ -n "$MAC" ] && echo "<device id=\"${MAC}\" name=\"${NAME}\" status=\"added\" type=\"unknown\" />"
+            elif echo "$line" | grep -qE '^\[DEL\] Device'; then
+                MAC=$(echo "$line" | grep -oE '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}' | head -1)
+                NAME=$(echo "$line" | sed 's/.*Device [0-9A-Fa-f:]*[[:space:]]*//')
+                [ -n "$MAC" ] && echo "<device id=\"${MAC}\" name=\"${NAME}\" status=\"removed\" type=\"unknown\" />"
+            fi
         done
         ;;
     stop_live_devices)
