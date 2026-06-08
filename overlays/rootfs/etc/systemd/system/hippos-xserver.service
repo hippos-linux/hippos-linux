@@ -1,10 +1,13 @@
 [Unit]
 Description=HippOS Persistent X Server
-After=local-fs.target systemd-user-sessions.service
+After=local-fs.target systemd-user-sessions.service udev.target
 Conflicts=getty@tty1.service
 
 [Service]
 Type=simple
+# Wait for a DRM device to be probed before starting X — avoids "failed to create screen resources" at boot
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 40); do ls /dev/dri/card* >/dev/null 2>&1 && exit 0; sleep 0.25; done; exit 0'
+ExecStartPre=/usr/lib/hippos/hippos-xorg-setup
 ExecStartPre=/bin/rm -f /tmp/.X0-lock /tmp/.X11-unix/X0
 ExecStart=/usr/lib/xorg/Xorg :0 vt1 -nolisten tcp -logfile /tmp/Xorg.0.log -ac
 ExecStartPost=/bin/sh -c 'for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do sleep 0.25; DISPLAY=:0 timeout 3 xrandr --auto 2>/dev/null && break; done; true'

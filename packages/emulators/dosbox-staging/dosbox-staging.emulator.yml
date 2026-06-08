@@ -1,6 +1,28 @@
 requireArtifact: dosbox-staging
+features:
+  - padtokeyboard
+shared_features:
+  - powermode
+  - tdp
+  - videomode
+  - ratio
+  - bezel
+  - bezel_stretch
+  - hud
+  - hud_corner
+  - bezel.tattoo
+  - bezel.tattoo_corner
+  - bezel.tattoo_file
+  - bezel.resize_tattoo
+custom_features:
+  dosbox_staging_writes_to_rom:
+    prompt: Enable writable overlay for squashfs ROMs
+    description: Writes are saved per-game in saves/dos/game-rom-name
+    choices:
+      Enabled: true
+      Disabled: false
 systems:
-  dos:
-    cores:
-    - dosbox_staging
-features: []
+  - name: dos
+    as_core: dosbox_staging
+    exclude_extensions:
+      - zip

@@ -37,12 +37,11 @@ from hippos_controller_monitor import start_controller_monitor
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
-USERDATA     = Path('/userdata')
-CONFIGS      = USERDATA / 'system' / 'configs'
-SAVES        = USERDATA / 'saves'
-BIOS         = USERDATA / 'bios'
-SCREENSHOTS  = USERDATA / 'screenshots'
-CACHE        = USERDATA / 'cache'
+from HipposPaths import (  # noqa: E402
+    USERDATA, HOME, CONFIGS, SAVES, BIOS, SCREENSHOTS, CACHE, LOGS,
+    HIPPOS_CONF, HIPPOS_SHARE_DIR, DEFAULTS_DIR, HIPPOS_SHADERS,
+    USER_ES_DIR,
+)
 
 RA_CONFIG_DIR = CONFIGS / 'retroarch'
 RA_CUSTOM_CFG = RA_CONFIG_DIR / 'retroarchcustom.cfg'
@@ -63,10 +62,10 @@ AMIBERRY_OVERLAY_CFG = AMIBERRY_RETROARCH_DIR / 'overlay.cfg'
 AMIBERRY_INPUTS_DIR = AMIBERRY_RETROARCH_DIR / 'inputs'
 AMIBERRY_PLUGINS_DIR = AMIBERRY_CONFIG_DIR / 'plugins'
 AMIBERRY_WHDBOOT_DIR = AMIBERRY_CONFIG_DIR / 'whdboot'
-AMIBERRY_SAVES_DIR = USERDATA / 'saves' / 'amiga'
+AMIBERRY_SAVES_DIR = SAVES / 'amiga'
 AMIBERRY_SCREENSHOTS_DIR = SCREENSHOTS
 AMIBERRY_BIOS_DIR = BIOS / 'amiga'
-AMIBERRY_LOG_FILE = USERDATA / 'system' / 'logs' / 'amiberry.log'
+AMIBERRY_LOG_FILE = LOGS / 'amiberry.log'
 AMIBERRY_DATA_DIR = Path('/usr/share/amiberry/data')
 
 GSPLUS_CONFIG_DIR = CONFIGS / 'GSplus'
@@ -249,14 +248,13 @@ LIBRETRO_CORE_ALIASES: dict[str, tuple[str, ...]] = {
     'vba-m': ('vbam',),
 }
 
-DEFAULTS_FILE     = Path('/usr/share/hippos/configgen/configgen-defaults.yml')
-HIPPOS_CONF       = Path('/userdata/system/hippos.conf')
-HIPPOS_DEFAULTS   = Path('/usr/share/hippos/hippos-defaults.conf')
+DEFAULTS_FILE      = DEFAULTS_DIR / 'configgen-defaults.yml'
+HIPPOS_DEFAULTS    = HIPPOS_SHARE_DIR / 'hippos-defaults.conf'
 HIPPOS_HW_DEFAULTS = Path('/run/hippos/hardware-defaults.conf')
-HOTKEY_CONTEXT_DIR  = Path('/usr/share/hippos/hotkeys/contexts')
+HOTKEY_CONTEXT_DIR  = HIPPOS_SHARE_DIR / 'hotkeys' / 'contexts'
 WHEEL_PROXY_BIN     = Path('/usr/lib/hippos/hippos-wheel-proxy')
 ES_INPUT_FILES = (
-    Path('/userdata/system/configs/emulationstation/es_input.cfg'),
+    USER_ES_DIR / 'es_input.cfg',
     Path('/usr/share/emulationstation/es_input.cfg'),
 )
 
@@ -276,6 +274,7 @@ BUILTIN_DEFAULTS: dict[str, dict[str, str]] = {
     'openbor':      {'emulator': 'openbor', 'core': 'openbor6412'},
     'xbox':         {'emulator': 'xemu', 'core': 'xemu'},
     'chihiro':      {'emulator': 'xemu', 'core': 'xemu'},
+    'ps3':          {'emulator': 'rpcs3', 'core': 'rpcs3'},
 }
 
 MUPEN_VALID_N64_CONTROLLER_GUIDS = {
@@ -1783,7 +1782,7 @@ def _write_retroarch_netplay(cfg: _KVConfig, ctx: LaunchContext) -> None:
 
 # ── Per-system input remapping ─────────────────────────────────────────────────
 
-_REMAPS_DIR = Path('/userdata/system/configs/retroarch/remaps')
+_REMAPS_DIR = RA_CONFIG_DIR / 'remaps'
 
 
 def _write_retroarch_remapping(cfg: _KVConfig, ctx: LaunchContext) -> None:
@@ -2036,7 +2035,7 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
     cfg.set('system_directory',         f'"{BIOS}"')
     cfg.set('core_options_path',        f'"{RA_CORES_CFG}"')
     cfg.set('assets_directory',         '"/usr/share/libretro/assets"')
-    cfg.set('video_shader_dir',         '"/usr/share/libretro/shaders"')
+    cfg.set('video_shader_dir',         f'"{HIPPOS_SHADERS}"')
 
     # Video
     cfg.set('video_fullscreen',         '"true"')
@@ -2081,7 +2080,7 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
         cfg.set('video_shader',        f'"{SHADER_BEZEL}"')
     elif shaderset and shaderset != 'none':
         cfg.set('video_shader_enable', '"true"')
-        cfg.set('video_shader', f'"/usr/share/libretro/shaders/{shaderset}.{shader_ext}"')
+        cfg.set('video_shader', f'"{HIPPOS_SHADERS}/{shaderset}.{shader_ext}"')
     else:
         cfg.set('video_shader_enable', '"false"')
 
@@ -2473,7 +2472,7 @@ def _build_game_env(conf: dict[str, str], ctx: Optional[LaunchContext] = None) -
 # ── MangoHUD config generator ─────────────────────────────────────────────────
 
 _HUD_CONFIG_PATH = Path('/var/run/hippos/hud.config')
-_USER_HUD_CONFIG = Path('/userdata/system/hud.config')
+_USER_HUD_CONFIG = HOME / 'hud.config'
 
 # Emulators that cannot use DLSYM injection — need `mangohud` prepended to cmd.
 _HUD_NEEDS_WRAPPER: frozenset[str] = frozenset({'wine', 'sh', 'flatpak'})
@@ -2817,7 +2816,7 @@ VITA3K_CONFIG_FILE = VITA3K_CONFIG_DIR / 'config.yml'
 AZAHAR_CONFIG_DIR  = CONFIGS / 'azahar-emu'
 AZAHAR_INI         = AZAHAR_CONFIG_DIR / 'qt-config.ini'
 
-CEMU_CONFIG_DIR         = CONFIGS / 'cemu'
+CEMU_CONFIG_DIR         = USERDATA / '.config' / 'cemu'
 CEMU_SETTINGS_XML       = CEMU_CONFIG_DIR / 'settings.xml'
 CEMU_CONTROLLER_PROFILES = CEMU_CONFIG_DIR / 'controllerProfiles'
 
@@ -3542,7 +3541,7 @@ def _launch_cemu(ctx: LaunchContext) -> int:
     _write_cemu_controller_profiles(ctx)
     cmd = [str(bin_path), '-f', '-g', str(ctx.rom), '--force-no-menubar']
     env = _build_game_env(conf, ctx)
-    env['XDG_CONFIG_HOME'] = str(CONFIGS)
+    env['XDG_CONFIG_HOME'] = str(USERDATA / '.config')
     env['SDL_JOYSTICK_HIDAPI'] = '0'
     result = _run_game_command(ctx, 'cemu', cmd, env)
     return result.returncode
@@ -3950,6 +3949,16 @@ def _launch_rpcs3(ctx: LaunchContext) -> int:
     _write_rpcs3_controller_config(ctx)
     # Determine ROM path
     rom = ctx.rom
+    if rom.suffix.lower() == '.ink':
+        # .ink shortcut: text file containing path to PS3 game directory
+        try:
+            target = Path(rom.read_text().strip())
+            if target.is_dir():
+                rom = target / 'PS3_GAME' / 'USRDIR' / 'EBOOT.BIN'
+            else:
+                rom = target
+        except Exception:
+            pass
     if rom.suffix == '.psn':
         game_id = None
         try:

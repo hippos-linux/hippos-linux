@@ -10,9 +10,16 @@ path conflicts so user-scraped metadata is never overwritten by external media.
 from __future__ import annotations
 
 import logging
+import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+try:
+    from lxml import etree as _lxml_etree
+    _LXML = True
+except ImportError:
+    _LXML = False
 
 logging.basicConfig(level=logging.INFO, format='[hippos-merge-gamelists] %(message)s')
 _log = logging.getLogger(__name__)
@@ -70,15 +77,84 @@ def _key(path_str: str) -> str:
     return path_str.strip().lstrip('./').lower()
 
 
+_AMP_RE = re.compile(r'&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#[0-9]+|#x[0-9a-fA-F]+);)')
+_XML_DECL_RE = re.compile(rb'<\?xml[^?]*\?>', re.IGNORECASE)
+_INVALID_XML_CHARS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]')
+
+_UTF8_DECL = b"<?xml version='1.0' encoding='utf-8'?>\n"
+
+
+def _normalise_xml_bytes(text: str) -> bytes:
+    """Strip all XML declarations, escape bare &, strip invalid chars, re-encode as UTF-8."""
+    text = _AMP_RE.sub('&amp;', text)
+    text = _INVALID_XML_CHARS.sub('', text)
+    raw_out = text.encode('utf-8')
+    # Remove ALL <?xml...?> occurrences (duplicates inside content corrupt the doc)
+    raw_out = _XML_DECL_RE.sub(b'', raw_out)
+    return _UTF8_DECL + raw_out.lstrip()
+
+
+def _normalise(raw: bytes) -> bytes:
+    return _normalise_xml_bytes(raw.decode('latin-1'))
+
+
+def _try_parse_xml(raw: bytes) -> ET.Element | None:
+    """Try multiple strategies to parse a potentially malformed gamelist.xml."""
+    # Pass 1: direct parse (well-formed UTF-8)
+    try:
+        return ET.fromstring(raw)
+    except ET.ParseError:
+        pass
+
+    # Pass 2: cp1252 → UTF-8 (handles Windows-encoded files, errors='replace' for undefined bytes)
+    try:
+        text = raw.decode('cp1252', errors='replace')
+        return ET.fromstring(_normalise_xml_bytes(text))
+    except ET.ParseError:
+        pass
+
+    # Pass 3: latin-1 (always succeeds) → UTF-8 with full sanitisation
+    try:
+        return ET.fromstring(_normalise(raw))
+    except ET.ParseError:
+        pass
+
+    # Pass 4: lxml recovery — handles files with binary blobs inside elements.
+    # Parse each <game> child individually; corrupt elements are skipped.
+    if _LXML:
+        try:
+            fixed = _normalise(raw)
+            parser = _lxml_etree.XMLParser(recover=True, encoding='utf-8')
+            lxml_root = _lxml_etree.fromstring(fixed, parser=parser)
+            root = ET.Element('gameList')
+            skipped = 0
+            for child in lxml_root:
+                if child.tag != 'game':
+                    continue
+                try:
+                    et_elem = ET.fromstring(
+                        _normalise(_lxml_etree.tostring(child, encoding='utf-8'))
+                    )
+                    root.append(et_elem)
+                except ET.ParseError:
+                    skipped += 1
+            if skipped:
+                _log.debug("lxml recovery skipped %d corrupt game element(s)", skipped)
+            return root
+        except Exception as exc:
+            _log.debug("lxml recovery failed: %s", exc)
+
+    return None
+
+
 def _parse_gamelist(xml_path: Path, system_pool_path: Path,
                     branch_system_path: Path) -> dict[str, ET.Element]:
     """Parse a gamelist.xml and return {normalised_path_key: game_element}."""
-    try:
-        tree = ET.parse(xml_path)
-    except ET.ParseError as exc:
-        _log.warning("skipping malformed %s: %s", xml_path, exc)
+    raw = xml_path.read_bytes()
+    root = _try_parse_xml(raw)
+    if root is None:
+        _log.warning("skipping unparseable %s", xml_path)
         return {}
-    root = tree.getroot()
     entries: dict[str, ET.Element] = {}
     for game in root:
         path_elem = game.find('path')

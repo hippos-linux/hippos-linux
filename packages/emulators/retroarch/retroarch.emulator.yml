@@ -1,320 +1,329 @@
 requireArtifact: retroarch
-systems:
-  3do:
-    cores:
-    - opera
-  arduboy:
-    cores:
-    - arduous
-  atari2600:
-    cores:
-    - stella
-    - stella2014
-  atari5200:
-    cores:
-    - atari800
-    - a5200
-  atari7800:
-    cores:
-    - prosystem
-  atari800:
-    cores:
-    - atari800
-  cassettevision:
-    cores:
-    - pd777
-  cavestory:
-    cores:
-    - nxengine
-  channelf:
-    cores:
-    - freechaf
-  dos:
-    cores:
-    - dosbox_pure
-  dreamcast:
-    cores:
-    - flycast
-  easyrpg:
-    cores:
-    - easyrpg
-  fbneo:
-    cores:
-    - fbneo
-    - fbalpha
-  fds:
-    cores:
-    - fceumm
-    - nestopia
-    - mesen
-  gb:
-    cores:
-    - gambatte
-    - mgba
-    - vba-m
-  gb2players:
-    cores:
-    - tgbdual
-  gba:
-    cores:
-    - mgba
-    - vba-m
-    - gpsp
-  gbc:
-    cores:
-    - gambatte
-    - mgba
-    - vba-m
-  gbc2players:
-    cores:
-    - tgbdual
-  gamecube:
-    cores:
-    - dolphin
-  gamegear:
-    cores:
-    - genesis_plus_gx
-    - picodrive
-    - gearsystem
-  gx4000:
-    cores:
-    - cap32
-  intellivision:
-    cores:
-    - freeintv
-  lowresnx:
-    cores:
-    - lowresnx
-  lynx:
-    cores:
-    - handy
-    - mednafen_lynx
-  mame:
-    cores:
-    - mame
-  mastersystem:
-    cores:
-    - genesis_plus_gx
-    - picodrive
-    - smsplus
-  megacd:
-    cores:
-    - genesis_plus_gx
-    - picodrive
-  megadrive:
-    cores:
-    - genesis_plus_gx
-    - picodrive
-    - blastem
-  megadrive-msu:
-    cores:
-    - genesis_plus_gx
-    - genesis_plus_gx-wide
-  multivision:
-    cores:
-    - gearsystem
-  n64:
-    cores:
-    - mupen64plus_next
-    - parallel_n64
-  nds:
-    cores:
-    - melonds
-    - desmume
-  neogeo:
-    cores:
-    - fbneo
-    - fbalpha
-  neogeocd:
-    cores:
-    - neocd
-  nes:
-    cores:
-    - fceumm
-    - nestopia
-    - mesen
-  ngp:
-    cores:
-    - mednafen_ngp
-  ngpc:
-    cores:
-    - mednafen_ngp
-  odyssey2:
-    cores:
-    - o2em
-  pc88:
-    cores:
-    - quasi88
-  pc98:
-    cores:
-    - np2kai
-  pce:
-    cores:
-    - pce
-    - pce_fast
-  pcengine:
-    cores:
-    - pce
-    - pce_fast
-  pcenginecd:
-    cores:
-    - pce
-    - pce_fast
-  pcfx:
-    cores:
-    - pcfx
-  pico8:
-    cores:
-    - retro8
-  pokemini:
-    cores:
-    - pokemini
-  psp:
-    cores:
-    - ppsspp
-  psx:
-    cores:
-    - swanstation
-    - mednafen_psx_hw
-  satellaview:
-    cores:
-    - snes9x
-    - mesen-s
-  saturn:
-    cores:
-    - mednafen_saturn
-  scv:
-    cores:
-    - mame
-  sega32x:
-    cores:
-    - picodrive
-  sg1000:
-    cores:
-    - genesis_plus_gx
-  sgb:
-    cores:
-    - mgba
-    - mesen-s
-  sgb-msu1:
-    cores:
-    - bsnes
-    - bsnes_hd
-  snes:
-    cores:
-    - snes9x
-    - bsnes
-    - mesen-s
-  snes-msu1:
-    cores:
-    - bsnes_mercury_balanced
-    - bsnes_hd
-    - snes9x
-  sufami:
-    cores:
-    - snes9x
-  supergrafx:
-    cores:
-    - mednafen_supergrafx
-  supervision:
-    cores:
-    - potator
-  thomson:
-    cores:
-    - theodore
-  videopac:
-    cores:
-    - o2em
-  videopacplus:
-    cores:
-    - o2em
-  vircon32:
-    cores:
-    - vircon32
-  virtualboy:
-    cores:
-    - vb
-  wasm4:
-    cores:
-    - wasm4
-  wii:
-    cores:
-    - dolphin
-  wswan:
-    cores:
-    - mednafen_wswan
-  wswanc:
-    cores:
-    - mednafen_wswan
-  x1:
-    cores:
-    - x1
-  x68000:
-    cores:
-    - px68k
-  zx81:
-    cores:
-    - 81
-  arcade:
-    cores:
-    - fbneo
-    - mame
-  cannonball:
-    cores:
-    - cannonball
-  dice:
-    cores:
-    - dice
-  ecwolf:
-    cores:
-    - ecwolf
-  lutro:
-    cores:
-    - lutro
-  mrboom:
-    cores:
-    - mrboom
-  pico:
-    cores:
-    - genesis_plus_gx
-    - genesis_plus_gx-wide
-    - picodrive
-  prboom:
-    cores:
-    - prboom
-  quake:
-    cores:
-    - tyrquake
-  reminiscence:
-    cores:
-    - reminiscence
-  superbroswar:
-    cores:
-    - superbroswar
-  vis:
-    cores:
-    - mame
-  xrick:
-    cores:
-    - xrick
 features:
-- ratio
-- rewind
-- smooth
-- shaders
-- pixel_perfect
-- decoration
-- latency_reduction
-- game_translation
-- autosave
-- netplay
-- fullboot
-- emulated_wiimotes
-- screen_layout
-- internal_resolution
-- videomode
-- colorization
-- padTokeyboard
-- cheevos
-- autocontrollers
-- videofilters
+  - ratio
+  - rewind
+  - smooth
+  - shaders
+  - pixel_perfect
+  - decoration
+  - latency_reduction
+  - game_translation
+  - autosave
+  - netplay
+  - fullboot
+  - emulated_wiimotes
+  - screen_layout
+  - internal_resolution
+  - videomode
+  - colorization
+  - padTokeyboard
+  - cheevos
+  - autocontrollers
+  - videofilters
+shared_features:
+  - powermode
+  - tdp
+  - videomode
+  - ratio
+  - shaderset
+  - smooth
+  - integerscale
+  - bezel
+  - bezel_stretch
+  - hud
+  - hud_corner
+  - bezel.tattoo
+  - bezel.tattoo_corner
+  - bezel.tattoo_file
+  - bezel.resize_tattoo
+  - ai_service_enabled
+  - ai_target_lang
+  - ai_service_url
+  - ai_service_pause
+  - runahead
+  - preemptiveframes
+  - secondinstance
+  - video_frame_delay_auto
+  - vrr_runloop_enable
+  - video_threaded
+  - rumble_gain
+  - audio_volume
+  - bordersmode
+custom_features:
+  audio_driver:
+    group: ADVANCED OPTIONS
+    prompt: AUDIO DRIVER
+    description: Changing driver can improve audio performance and reduce distortion. Alsathread is recommended for 
+      low-end systems.
+    choices:
+      ALSA: alsa
+      ALSAThread: alsathread
+      TinyALSA: tinyalsa
+      SDL2: sdl2
+      Pulse (Default): pulse
+  audio_latency:
+    group: ADVANCED OPTIONS
+    prompt: AUDIO LATENCY
+    description: In milliseconds. Can reduce crackling/cutting out.
+    choices:
+      '256': 256
+      '192': 192
+      '128': 128
+      '64': 64
+      '32': 32
+      '16': 16
+      '8': 8
+  video_allow_rotate:
+    group: ADVANCED OPTIONS
+    prompt: ALLOW ROTATION
+    description: Allow cores to set rotation.
+    choices:
+      On: 'true'
+      Off: 'false'
+  lightgun_map:
+    group: ADVANCED OPTIONS
+    prompt: CONTROLLER TO LIGHT GUN
+    description: Map controller inputs to light gun inputs.
+    choices:
+      On: 'true'
+      Off: 'false'
+systems:
+  - name: 3do
+    as_core: opera
+  - name: arduboy
+    as_core: arduous
+  - name: atari2600
+    as_core:
+      - stella
+      - stella2014
+  - name: atari5200
+    as_core:
+      - atari800
+      - a5200
+  - name: atari7800
+    as_core: prosystem
+  - name: atari800
+    as_core: atari800
+  - name: cassettevision
+    as_core: pd777
+  - name: cavestory
+    as_core: nxengine
+  - name: channelf
+    as_core: freechaf
+  - name: dos
+    as_core: dosbox_pure
+  - name: dreamcast
+    as_core: flycast
+  - name: easyrpg
+    as_core: easyrpg
+  - name: fbneo
+    as_core:
+      - fbneo
+      - fbalpha
+  - name: fds
+    as_core:
+      - fceumm
+      - nestopia
+      - mesen
+  - name: gb
+    as_core:
+      - gambatte
+      - mgba
+      - vba-m
+  - name: gb2players
+    as_core: tgbdual
+  - name: gba
+    as_core:
+      - mgba
+      - vba-m
+      - gpsp
+  - name: gbc
+    as_core:
+      - gambatte
+      - mgba
+      - vba-m
+  - name: gbc2players
+    as_core: tgbdual
+  - name: gamecube
+    as_core: dolphin
+  - name: gamegear
+    as_core:
+      - genesis_plus_gx
+      - picodrive
+      - gearsystem
+  - name: gx4000
+    as_core: cap32
+  - name: intellivision
+    as_core: freeintv
+  - name: lowresnx
+    as_core: lowresnx
+  - name: lynx
+    as_core:
+      - handy
+      - mednafen_lynx
+  - name: mame
+    as_core: mame
+  - name: mastersystem
+    as_core:
+      - genesis_plus_gx
+      - picodrive
+      - smsplus
+  - name: megacd
+    as_core:
+      - genesis_plus_gx
+      - picodrive
+  - name: megadrive
+    as_core:
+      - genesis_plus_gx
+      - picodrive
+      - blastem
+  - name: megadrive-msu
+    as_core:
+      - genesis_plus_gx
+      - genesis_plus_gx-wide
+  - name: multivision
+    as_core: gearsystem
+  - name: n64
+    as_core:
+      - mupen64plus_next
+      - parallel_n64
+  - name: nds
+    as_core:
+      - melonds
+      - desmume
+  - name: neogeo
+    as_core:
+      - fbneo
+      - fbalpha
+  - name: neogeocd
+    as_core: neocd
+  - name: nes
+    as_core:
+      - fceumm
+      - nestopia
+      - mesen
+  - name: ngp
+    as_core: mednafen_ngp
+  - name: ngpc
+    as_core: mednafen_ngp
+  - name: odyssey2
+    as_core: o2em
+  - name: pc88
+    as_core: quasi88
+  - name: pc98
+    as_core: np2kai
+  - name: pce
+    as_core:
+      - pce
+      - pce_fast
+  - name: pcengine
+    as_core:
+      - pce
+      - pce_fast
+  - name: pcenginecd
+    as_core:
+      - pce
+      - pce_fast
+  - name: pcfx
+    as_core: pcfx
+  - name: pico8
+    as_core: retro8
+  - name: pokemini
+    as_core: pokemini
+  - name: psp
+    as_core: ppsspp
+  - name: psx
+    as_core:
+      - swanstation
+      - mednafen_psx_hw
+  - name: satellaview
+    as_core:
+      - snes9x
+      - mesen-s
+  - name: saturn
+    as_core: mednafen_saturn
+  - name: scv
+    as_core: mame
+  - name: sega32x
+    as_core: picodrive
+  - name: sg1000
+    as_core: genesis_plus_gx
+  - name: sgb
+    as_core:
+      - mgba
+      - mesen-s
+  - name: sgb-msu1
+    as_core:
+      - bsnes
+      - bsnes_hd
+  - name: snes
+    as_core:
+      - snes9x
+      - bsnes
+      - mesen-s
+  - name: snes-msu1
+    as_core:
+      - bsnes_mercury_balanced
+      - bsnes_hd
+      - snes9x
+  - name: sufami
+    as_core: snes9x
+  - name: supergrafx
+    as_core: mednafen_supergrafx
+  - name: supervision
+    as_core: potator
+  - name: thomson
+    as_core: theodore
+  - name: videopac
+    as_core: o2em
+  - name: videopacplus
+    as_core: o2em
+  - name: vircon32
+    as_core: vircon32
+  - name: virtualboy
+    as_core: vb
+  - name: wasm4
+    as_core: wasm4
+  - name: wii
+    as_core: dolphin
+  - name: wswan
+    as_core: mednafen_wswan
+  - name: wswanc
+    as_core: mednafen_wswan
+  - name: x1
+    as_core: x1
+  - name: x68000
+    as_core: px68k
+  - name: zx81
+    as_core: 81
+  - name: arcade
+    as_core:
+      - fbneo
+      - mame
+  - name: cannonball
+    as_core: cannonball
+  - name: dice
+    as_core: dice
+  - name: ecwolf
+    as_core: ecwolf
+  - name: lutro
+    as_core: lutro
+  - name: mrboom
+    as_core: mrboom
+  - name: pico
+    as_core:
+      - genesis_plus_gx
+      - genesis_plus_gx-wide
+      - picodrive
+  - name: prboom
+    as_core: prboom
+  - name: quake
+    as_core: tyrquake
+  - name: reminiscence
+    as_core: reminiscence
+  - name: superbroswar
+    as_core: superbroswar
+  - name: vis
+    as_core: mame
+  - name: xrick
+    as_core: xrick

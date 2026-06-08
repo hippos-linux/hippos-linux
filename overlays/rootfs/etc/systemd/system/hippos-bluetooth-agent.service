@@ -1,0 +1,13 @@
+[Unit]
+Description=HippOS Bluetooth Agent
+After=bluetooth.service dbus.service
+Requires=bluetooth.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/hippos/hippos-bluetooth-agent
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

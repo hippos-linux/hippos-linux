@@ -93,8 +93,8 @@
     {
       "trigger": ["hotkey", "select"],
       "type": "key",
-      "target": ["KEY_EURO"],
-      "description": "Coin / insert credit"
+      "target": ["KEY_FILE"],
+      "description": "Switch to desktop"
     },
     {
       "trigger": ["hotkey", "pageup", "pagedown"],

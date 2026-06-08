@@ -1,6 +1,18 @@
 requireArtifact: lightspark
+features:
+  - padtokeyboard
+shared_features:
+  - powermode
+  - tdp
+  - videomode
+  - bezel
+  - bezel_stretch
+  - hud
+  - hud_corner
+  - bezel.tattoo
+  - bezel.tattoo_corner
+  - bezel.tattoo_file
+  - bezel.resize_tattoo
 systems:
-  flash:
-    cores:
-    - lightspark
-features: []
+  - name: flash
+    as_core: lightspark

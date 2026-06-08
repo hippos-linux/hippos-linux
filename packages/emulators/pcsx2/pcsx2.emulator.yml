@@ -1,4 +1,5 @@
 requireArtifact: pcsx2
 systems:
-- ps2
-features: []
+  - name: ps2
+    exclude_extensions:
+      - m3u

@@ -18,6 +18,7 @@ lbzip2
 
 # Archive manager (GUI + right-click integration)
 xarchiver
+ark
 
 # Privilege escalation for desktop tools
 pkexec

@@ -5,6 +5,7 @@ from typing import Optional
 
 from emulatorlauncher_impl import (
     CACHE,
+    HOME,
     LaunchContext,
     SHADPS4_BUNDLE_DIR,
     SHADPS4_CONFIG_DIR,
@@ -200,7 +201,7 @@ def launch_shadps4(ctx: LaunchContext) -> int:
 
     env = _build_game_env(conf, ctx)
     env['SDL_JOYSTICK_HIDAPI'] = '0'
-    env['HOME'] = str(Path('/userdata/system'))
+    env['HOME'] = str(HOME)
     env['XDG_CONFIG_HOME'] = str(SHADPS4_CONFIG_DIR)
     env['XDG_DATA_HOME'] = str(SHADPS4_RUNTIME_DIR)
     env['XDG_CACHE_HOME'] = str(CACHE / 'shadps4')

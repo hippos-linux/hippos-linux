@@ -1774,6 +1774,7 @@ ps3:
   - psn
   - iso
   - squashfs
+  - ink
   hardware: console
   manufacturer: Sony
   name: PlayStation 3

@@ -44,20 +44,33 @@ case "${1:-}" in
         ;;
     live_devices|start_live_devices)
         _btctl power on >/dev/null 2>&1
-        { echo "scan on"; sleep infinity; } | bluetoothctl 2>/dev/null | \
-        while IFS= read -r line; do
-            if echo "$line" | grep -qE '^\[NEW\] Device'; then
-                MAC=$(echo "$line" | grep -oE '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}' | head -1)
-                NAME=$(echo "$line" | sed 's/.*Device [0-9A-Fa-f:]*[[:space:]]*//')
-                [ -n "$MAC" ] && echo "<device id=\"${MAC}\" name=\"${NAME}\" status=\"added\" type=\"unknown\" />"
-            elif echo "$line" | grep -qE '^\[DEL\] Device'; then
-                MAC=$(echo "$line" | grep -oE '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}' | head -1)
-                NAME=$(echo "$line" | sed 's/.*Device [0-9A-Fa-f:]*[[:space:]]*//')
-                [ -n "$MAC" ] && echo "<device id=\"${MAC}\" name=\"${NAME}\" status=\"removed\" type=\"unknown\" />"
-            fi
-        done
+        AGENT_PID=$(pgrep -f hippos-bluetooth-agent 2>/dev/null | head -1)
+        if [ -n "${AGENT_PID}" ]; then
+            # Agent running: use file-based listing so the agent drives discovery
+            rm -f /var/run/bt_listing
+            touch /var/run/bt_listing
+            kill -USR1 "${AGENT_PID}"
+            tail -n +0 -f /var/run/bt_listing 2>/dev/null
+        else
+            # Fallback: direct bluetoothctl scan (no agent)
+            { echo "scan on"; sleep infinity; } | bluetoothctl 2>/dev/null | \
+            while IFS= read -r line; do
+                if echo "$line" | grep -qE '^\[NEW\] Device'; then
+                    MAC=$(echo "$line" | grep -oE '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}' | head -1)
+                    NAME=$(echo "$line" | sed 's/.*Device [0-9A-Fa-f:]*[[:space:]]*//')
+                    [ -n "$MAC" ] && echo "<device id=\"${MAC}\" name=\"${NAME}\" status=\"added\" type=\"unknown\" />"
+                elif echo "$line" | grep -qE '^\[DEL\] Device'; then
+                    MAC=$(echo "$line" | grep -oE '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}' | head -1)
+                    NAME=$(echo "$line" | sed 's/.*Device [0-9A-Fa-f:]*[[:space:]]*//')
+                    [ -n "$MAC" ] && echo "<device id=\"${MAC}\" name=\"${NAME}\" status=\"removed\" type=\"unknown\" />"
+                fi
+            done
+        fi
         ;;
     stop_live_devices)
+        AGENT_PID=$(pgrep -f hippos-bluetooth-agent 2>/dev/null | head -1)
+        [ -n "${AGENT_PID}" ] && kill -USR2 "${AGENT_PID}"
+        rm -f /var/run/bt_listing
         _btctl scan off 2>/dev/null || true
         ;;
     *)
