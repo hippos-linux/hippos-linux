@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import urllib.error
 import urllib.request
 from datetime import datetime
 
@@ -80,14 +81,38 @@ def get_channel():
     return "stable"
 
 
+def get_beta_token():
+    try:
+        for line in open(SYSCONF):
+            k, _, v = line.strip().partition("=")
+            if k.strip() == "updates.token":
+                return v.strip().strip('"')
+    except FileNotFoundError:
+        pass
+    return None
+
+
+def _make_request(url: str) -> urllib.request.Request:
+    headers = {"User-Agent": "hippos-upgrade/1.0"}
+    token = get_beta_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return urllib.request.Request(url, headers=headers)
+
+
 def fetch_manifest(channel):
     urls = MANIFEST_URLS[:]
     urls.insert(1, f"https://updates.hippos.org/{channel}/manifest.json")
     for url in urls:
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "hippos-upgrade/1.0"})
+            req = _make_request(url)
             with urllib.request.urlopen(req, timeout=15) as r:
                 return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                die("Beta access token is invalid or has been revoked. "
+                    "Contact the HippOS team to renew your access.")
+            continue
         except Exception:
             continue
     return None
@@ -279,7 +304,10 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
         lines += [
             f'menuentry "{label}" {{',
             f'    insmod btrfs',
-            f'    search --no-floppy --set=root --fs-uuid {uuid}',
+            f'    insmod part_gpt',
+            f'    if ! search --no-floppy --set=root --fs-uuid {uuid} ; then',
+            f'        search --no-floppy --set=root --label HippOS',
+            f'    fi',
             f'    linux /{subvol}/boot/{kernel} {cmdline}',
             f'    initrd /{subvol}/boot/{initrd}',
             f'}}',
@@ -406,7 +434,7 @@ def cmd_apply():
 
     if not os.path.exists(archive):
         log("Downloading rootfs payload...")
-        req = urllib.request.Request(url, headers={"User-Agent": "hippos-upgrade/1.0"})
+        req = _make_request(url)
         with urllib.request.urlopen(req) as resp, open(archive, "wb") as f:
             total = int(resp.headers.get("Content-Length", 0))
             done = 0
@@ -562,7 +590,7 @@ def cmd_update_emulator(name, force=False):
 
     if not os.path.exists(archive):
         log(f"Downloading {name} {remote}...")
-        req = urllib.request.Request(url, headers={"User-Agent": "hippos-upgrade/1.0"})
+        req = _make_request(url)
         with urllib.request.urlopen(req) as resp, open(archive, "wb") as f:
             total = int(resp.headers.get("Content-Length", 0))
             done = 0
@@ -657,7 +685,7 @@ def cmd_update_frontend(name):
 
     if not os.path.exists(archive):
         log(f"Downloading {name} {remote}...")
-        req = urllib.request.Request(url, headers={"User-Agent": "hippos-upgrade/1.0"})
+        req = _make_request(url)
         with urllib.request.urlopen(req) as resp, open(archive, "wb") as f:
             total = int(resp.headers.get("Content-Length", 0))
             done = 0
