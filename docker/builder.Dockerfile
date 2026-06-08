@@ -33,6 +33,7 @@ RUN apt-get update \
         mmdebstrap \
         parted \
         python3 \
+        python3-ruamel.yaml \
         python3-yaml \
         rsync \
         squashfs-tools \
