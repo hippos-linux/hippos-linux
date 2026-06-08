@@ -1,4 +1,5 @@
 requireArtifact: applewin
 systems:
-- apple2
-features: []
+  - name: apple2
+    exclude_extensions:
+      - chd

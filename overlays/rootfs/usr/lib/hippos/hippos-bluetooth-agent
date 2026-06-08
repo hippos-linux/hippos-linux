@@ -1,0 +1,447 @@
+#!/usr/bin/env python3
+# HippOS Bluetooth Agent — D-Bus BlueZ agent for controller/audio pairing.
+# Ported from Batocera's batocera-bluetooth-agent; adapted for Python 3,
+# systemd, and PipeWire.
+
+import dbus
+import dbus.service
+import dbus.mainloop.glib
+import sys
+import os
+
+sys.path.insert(0, '/usr/lib/hippos')
+import bluezutils
+
+import time
+import logging
+import signal
+import subprocess
+from gi.repository import GLib
+from optparse import OptionParser, make_option
+
+AGENT_INTERFACE = 'org.bluez.Agent1'
+AGENT_PATH      = '/hippos/agent'
+BT_LISTING_FILE = '/var/run/bt_listing'
+BT_DEVICE_FILE  = '/var/run/bt_device'
+BT_STATUS_FILE  = '/var/run/bt_status'
+LOG_FILE        = '/var/log/hippos-bluetooth-agent.log'
+# UID of the hippos user — for pactl PipeWire socket
+HIPPOS_UID      = 1000
+
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.DEBUG,
+    format='%(asctime)s %(message)s',
+)
+
+bus          = None
+gadapter     = None
+gdiscovering = False
+gdevices     = {}
+glisting_mode = False
+glisting_devs = {}
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def prop2str(p):
+    if isinstance(p, dbus.String):
+        return str(p)
+    if isinstance(p, bytes):
+        return p.decode('utf-8', errors='replace')
+    return str(p) if not isinstance(p, str) else p
+
+
+def logging_status(msg):
+    try:
+        with open(BT_STATUS_FILE, 'w') as f:
+            f.write(msg + '\n')
+    except Exception:
+        pass
+
+
+def get_dev_name(props):
+    name = prop2str(props.get('Name', ''))
+    addr = prop2str(props.get('Address', ''))
+    icon = prop2str(props.get('Icon', ''))
+    if name and addr and icon:
+        return f'{name} ({addr}, {icon})'
+    if name and addr:
+        return f'{name} ({addr})'
+    return name or addr or icon or 'unknown'
+
+
+def get_short_name(props):
+    return prop2str(
+        props.get('Name') or props.get('Address') or props.get('Icon') or 'unknown'
+    )
+
+
+def get_addr_name_type(props):
+    addr = prop2str(props['Address']) if 'Address' in props else None
+    name = prop2str(props['Name'])    if 'Name'    in props else None
+    icon = prop2str(props['Icon'])    if 'Icon'    in props else None
+    return addr, name, icon
+
+
+def icon2type(icon):
+    if not icon:
+        return 'unknown'
+    if icon == 'input-gaming':
+        return 'joystick'
+    if icon.startswith('audio-'):
+        return 'audio'
+    return icon
+
+
+def merge(d1, d2):
+    res = d1.copy()
+    res.update(d2)
+    return res
+
+
+def get_wanted_addr():
+    try:
+        with open(BT_DEVICE_FILE) as f:
+            addr = f.read().strip()
+            return addr or None
+    except FileNotFoundError:
+        return None
+
+
+# ── Pairing / connection ──────────────────────────────────────────────────────
+
+def do_pair(address, dev_name, short_name):
+    logging_status(f'Pairing {short_name}...')
+    try:
+        device = bluezutils.find_device(address)
+        device.Pair()
+        logging.info(f'Paired {dev_name}')
+    except Exception as e:
+        logging.info(f'Pairing failed ({dev_name}): {e}')
+        logging_status(f'Pairing failed ({short_name})')
+
+
+def do_connect(address, dev_name, short_name):
+    global gadapter, gdiscovering
+    try:
+        if gdiscovering:
+            try:
+                gadapter.StopDiscovery()
+            except Exception:
+                pass
+        device = bluezutils.find_device(address)
+        for _ in range(5):
+            try:
+                logging_status(f'Connecting {short_name}...')
+                device.Connect()
+                logging_status(f'Connected {short_name}')
+                logging.info(f'Connected {dev_name}')
+                return
+            except dbus.exceptions.DBusException as e:
+                logging.info(f'DBus error: {e.get_dbus_message()}')
+                time.sleep(1)
+            except Exception as e:
+                logging.info(f'Connect error: {e}')
+                time.sleep(1)
+        logging_status(f'Connection failed ({short_name})')
+        logging.info(f'Connection failed after retries ({dev_name})')
+    finally:
+        if gdiscovering:
+            try:
+                gadapter.StartDiscovery()
+            except Exception:
+                pass
+
+
+def connect_device(path, address, props, force_connect, wanted):
+    global gdiscovering
+
+    if wanted is None:
+        return
+    if 'Trusted' not in props or 'Connected' not in props:
+        return
+    if 'Icon' not in props:
+        return
+
+    trusted   = bool(props['Trusted'])
+    paired    = bool(props.get('Paired', False))
+    connected = bool(props['Connected'])
+    icon      = prop2str(props['Icon'])
+    addr      = prop2str(props.get('Address', ''))
+    dev_name  = get_dev_name(props)
+    short_name = get_short_name(props)
+
+    if not (wanted == addr or (wanted == 'input' and icon.startswith('input'))):
+        return
+
+    logging.info(f'{dev_name}: paired={paired} trusted={trusted} connected={connected}')
+
+    if paired and trusted and connected:
+        return
+
+    if not paired and not connected and gdiscovering:
+        do_pair(address, dev_name, short_name)
+
+    if not trusted and (gdiscovering or force_connect):
+        logging.info(f'Trusting {dev_name}')
+        logging_status(f'Trusting {short_name}...')
+        try:
+            iface = dbus.Interface(
+                bus.get_object('org.bluez', path),
+                'org.freedesktop.DBus.Properties',
+            )
+            iface.Set('org.bluez.Device1', 'Trusted', dbus.Boolean(True))
+        except Exception as e:
+            logging.warning(f'Trust failed: {e}')
+
+    if not connected or force_connect:
+        do_connect(address, dev_name, short_name)
+
+
+# ── Live listing IPC ──────────────────────────────────────────────────────────
+
+def listing_dev_event(path, props, adding):
+    global glisting_devs
+
+    if adding and path in glisting_devs:
+        return
+    if not adding and path not in glisting_devs:
+        return
+
+    if adding:
+        glisting_devs[path] = True
+    else:
+        del glisting_devs[path]
+
+    status = 'added' if adding else 'removed'
+    addr, name, icon = get_addr_name_type(props)
+    line = f'<device id="{addr}" name="{name}" status="{status}" type="{icon2type(icon)}" />\n'
+    try:
+        with open(BT_LISTING_FILE, 'a') as f:
+            f.write(line)
+    except Exception:
+        pass
+
+
+# ── D-Bus signal handlers ─────────────────────────────────────────────────────
+
+def interfaces_added(path, interfaces):
+    global gdevices, glisting_mode
+    if 'org.bluez.Device1' not in interfaces or not interfaces['org.bluez.Device1']:
+        return
+    props = interfaces['org.bluez.Device1']
+    gdevices[path] = merge(gdevices.get(path, {}), props)
+    logging.info(f'Device appeared: {path}')
+    if glisting_mode:
+        listing_dev_event(path, gdevices[path], True)
+    if 'Address' in gdevices[path]:
+        connect_device(path, prop2str(props['Address']), gdevices[path], False, get_wanted_addr())
+
+
+def interfaces_removed(path, interfaces):
+    global gdevices
+    if 'org.bluez.Device1' in interfaces and path in gdevices:
+        listing_dev_event(path, gdevices[path], False)
+        del gdevices[path]
+
+
+def properties_changed(interface, changed, invalidated, path):
+    global gdevices, glisting_mode
+    if interface != 'org.bluez.Device1':
+        return
+    gdevices[path] = merge(gdevices.get(path, {}), changed)
+    if glisting_mode:
+        listing_dev_event(path, gdevices[path], True)
+    if changed:
+        logging.info(f'Props changed {path}: {list(changed.keys())}')
+
+    if 'Paired' in changed and bool(changed['Paired']):
+        connect_device(path, prop2str(gdevices[path]['Address']), gdevices[path], True, get_wanted_addr())
+        refresh_audio_on_connect(gdevices[path])
+        return
+
+    if 'Connected' in changed:
+        if bool(changed['Connected']):
+            refresh_audio_on_connect(gdevices[path])
+        else:
+            refresh_audio_on_disconnect()
+        return
+
+    if 'Address' in gdevices[path]:
+        connect_device(path, prop2str(gdevices[path]['Address']), gdevices[path], False, get_wanted_addr())
+
+
+# ── Audio refresh (PipeWire via PulseAudio protocol) ─────────────────────────
+
+def _pactl_env():
+    env = os.environ.copy()
+    env['XDG_RUNTIME_DIR'] = f'/run/user/{HIPPOS_UID}'
+    return env
+
+
+def refresh_audio_on_connect(props):
+    if 'Icon' not in props or not prop2str(props['Icon']).startswith('audio-'):
+        return
+    logging.info('BT audio connected — waiting for PipeWire sink...')
+    env = _pactl_env()
+    for _ in range(100):
+        try:
+            out = subprocess.check_output(['pactl', 'list', 'short', 'sinks'], encoding='utf-8', env=env)
+            sinks = [l.split()[1] for l in out.splitlines() if 'bluez_' in l]
+            if sinks:
+                subprocess.run(['pactl', 'set-default-sink', sinks[0]], env=env)
+                logging.info(f'BT audio: default sink → {sinks[0]}')
+                return
+        except Exception:
+            pass
+        time.sleep(0.1)
+    logging.warning('BT audio: no bluez sink within timeout')
+
+
+def refresh_audio_on_disconnect():
+    env = _pactl_env()
+    try:
+        out = subprocess.check_output(['pactl', 'list', 'short', 'sinks'], encoding='utf-8', env=env)
+        sinks = [l.split()[1] for l in out.splitlines() if 'bluez_' not in l and len(l.split()) > 1]
+        if sinks:
+            subprocess.run(['pactl', 'set-default-sink', sinks[0]], env=env)
+            logging.info(f'BT audio: default sink restored → {sinks[0]}')
+    except Exception as e:
+        logging.warning(f'BT audio disconnect refresh failed: {e}')
+
+
+# ── Signal handlers (SIGUSR1/2 from hippos-bluetooth live_devices) ────────────
+
+def signal_start_discovery(signum, frame):
+    global gdiscovering, gadapter, glisting_mode, glisting_devs
+    if os.path.isfile(BT_LISTING_FILE):
+        glisting_mode = True
+        glisting_devs = {}
+        logging.info('Listing mode enabled')
+        for path in gdevices:
+            listing_dev_event(path, gdevices[path], True)
+    if not gdiscovering:
+        try:
+            gdiscovering = True
+            gadapter.StartDiscovery()
+            logging.info('Discovery started (SIGUSR1)')
+        except Exception as e:
+            logging.warning(f'StartDiscovery failed: {e}')
+
+
+def signal_stop_discovery(signum, frame):
+    global gdiscovering, gadapter, glisting_mode
+    glisting_mode = False
+    if gdiscovering:
+        try:
+            gdiscovering = False
+            gadapter.StopDiscovery()
+            logging.info('Discovery stopped (SIGUSR2)')
+        except Exception as e:
+            logging.warning(f'StopDiscovery failed: {e}')
+
+
+# ── BlueZ Agent D-Bus object ──────────────────────────────────────────────────
+
+class Agent(dbus.service.Object):
+    @dbus.service.method(AGENT_INTERFACE, in_signature='', out_signature='')
+    def Release(self):
+        logging.info('agent: Release')
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature='os', out_signature='')
+    def AuthorizeService(self, device, uuid):
+        logging.info(f'agent: AuthorizeService uuid={uuid}')
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature='o', out_signature='s')
+    def RequestPinCode(self, device):
+        logging.info('agent: RequestPinCode → 0000')
+        return '0000'
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature='o', out_signature='u')
+    def RequestPasskey(self, device):
+        logging.info('agent: RequestPasskey → 0')
+        return dbus.UInt32(0)
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature='ouq', out_signature='')
+    def DisplayPasskey(self, device, passkey, entered):
+        logging.info(f'agent: DisplayPasskey {passkey:06d} entered={entered}')
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature='os', out_signature='')
+    def DisplayPinCode(self, device, pincode):
+        logging.info(f'agent: DisplayPinCode {pincode}')
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature='ou', out_signature='')
+    def RequestConfirmation(self, device, passkey):
+        logging.info('agent: RequestConfirmation — auto-accepting')
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature='o', out_signature='')
+    def RequestAuthorization(self, device):
+        logging.info('agent: RequestAuthorization — auto-accepting')
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature='', out_signature='')
+    def Cancel(self):
+        logging.info('agent: Cancel')
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+if __name__ == '__main__':
+    option_list = [make_option('-i', '--device', action='store', type='string', dest='dev_id')]
+    parser = OptionParser(option_list=option_list)
+    (options, args) = parser.parse_args()
+
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SystemBus()
+
+    # Register D-Bus signal receivers
+    bus.add_signal_receiver(
+        interfaces_added,
+        dbus_interface='org.freedesktop.DBus.ObjectManager',
+        signal_name='InterfacesAdded',
+    )
+    bus.add_signal_receiver(
+        interfaces_removed,
+        dbus_interface='org.freedesktop.DBus.ObjectManager',
+        signal_name='InterfacesRemoved',
+    )
+    bus.add_signal_receiver(
+        properties_changed,
+        dbus_interface='org.freedesktop.DBus.Properties',
+        signal_name='PropertiesChanged',
+        arg0='org.bluez.Device1',
+        path_keyword='path',
+    )
+
+    # Register BlueZ agent
+    obj     = bus.get_object('org.bluez', '/org/bluez')
+    manager = dbus.Interface(obj, 'org.bluez.AgentManager1')
+    manager.RegisterAgent(AGENT_PATH, 'NoInputNoOutput')
+    manager.RequestDefaultAgent(AGENT_PATH)
+    Agent(bus, AGENT_PATH)
+    logging.info('HippOS Bluetooth agent registered')
+
+    # Unix signal handlers for live_devices IPC
+    signal.signal(signal.SIGUSR1, signal_start_discovery)
+    signal.signal(signal.SIGUSR2, signal_stop_discovery)
+
+    # Allow BT hardware to settle
+    time.sleep(5)
+
+    # Find adapter and snapshot existing devices
+    try:
+        gadapter = bluezutils.find_adapter(options.dev_id)
+    except Exception:
+        gadapter = bluezutils.find_adapter(None)
+
+    om = dbus.Interface(bus.get_object('org.bluez', '/'), 'org.freedesktop.DBus.ObjectManager')
+    for path, interfaces in om.GetManagedObjects().items():
+        if 'org.bluez.Device1' in interfaces:
+            gdevices[path] = interfaces['org.bluez.Device1']
+
+    logging.info('Starting main loop')
+    try:
+        GLib.MainLoop().run()
+    except Exception as e:
+        logging.error(f'Main loop error: {e}')
+        raise

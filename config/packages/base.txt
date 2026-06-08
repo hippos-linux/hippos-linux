@@ -96,6 +96,7 @@ python3-yaml
 python3-evdev
 python3-xdg
 python3-pygame
+python3-dbus
 
 # X11 session
 openbox

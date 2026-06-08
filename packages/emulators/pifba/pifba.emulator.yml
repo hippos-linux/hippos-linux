@@ -1,6 +1,10 @@
 requireArtifact: pifba
+shared_features:
+  - videomode
+  - use_wheels
+  - wheel_rotation
+  - wheel_deadzone
+  - wheel_midzone
 systems:
-  fbneo:
-    cores:
-    - pifba
-features: []
+  - name: fbneo
+    as_core: pifba

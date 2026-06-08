@@ -1,20 +1,32 @@
 requireArtifact: fsuae
+features:
+  - padtokeyboard
+shared_features:
+  - powermode
+  - tdp
+  - videomode
+  - ratio
+  - bezel
+  - bezel_stretch
+  - hud
+  - hud_corner
+  - bezel.tattoo
+  - bezel.tattoo_corner
+  - bezel.tattoo_file
+  - bezel.resize_tattoo
 systems:
-  amiga500:
-    cores:
-    - A500
-    - A500+
-    - A600
-    - A1000
-    - A3000
-  amiga1200:
-    cores:
-    - A1200
-    - A4000
-  amigacd32:
-    cores:
-    - CD32
-  amigacdtv:
-    cores:
-    - CDTV
-features: []
+  - name: amiga500
+    as_core:
+      - A500
+      - A500+
+      - A600
+      - A1000
+      - A3000
+  - name: amiga1200
+    as_core:
+      - A1200
+      - A4000
+  - name: amigacd32
+    as_core: CD32
+  - name: amigacdtv
+    as_core: CDTV

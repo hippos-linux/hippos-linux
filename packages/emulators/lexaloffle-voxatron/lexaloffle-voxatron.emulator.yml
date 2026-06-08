@@ -1,6 +1,5 @@
 requireArtifact: lexaloffle-voxatron
 systems:
-  voxatron:
-    cores:
-    - voxatron
+- name: voxatron
+  as_core: voxatron
 features: []

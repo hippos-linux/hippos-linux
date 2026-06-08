@@ -6,6 +6,7 @@ from typing import Optional
 
 from emulatorlauncher_impl import (
     LaunchContext,
+    HOME,
     configure_emulator,
     XENIA_BUNDLE_DIR,
     XENIA_CACHE_DIR,
@@ -199,7 +200,7 @@ def launch_xenia(ctx: LaunchContext) -> int:
         cmd.append(f'z:{rom}')
 
     env = _build_game_env(conf, ctx)
-    env['HOME'] = str(Path('/userdata/system'))
+    env['HOME'] = str(HOME)
     env['XENIA_HOME'] = str(runtime_dir)
     env['XENIA_PREFIX'] = str(prefix_dir)
     env['WINEPREFIX'] = str(prefix_dir)
@@ -211,7 +212,7 @@ def launch_xenia(ctx: LaunchContext) -> int:
     env['LIBGL_DRIVERS_PATH'] = '/usr/lib/dri'
     env['XENIA_EXE'] = str(config_dir / ('xenia_canary.exe' if ctx.core == 'xenia-canary' else 'xenia.exe'))
 
-    if Path('/var/tmp/nvidia.prime').exists():
+    if Path('/var/tmp/hippos-nvidia.prime').exists():
         env.pop('__NV_PRIME_RENDER_OFFLOAD', None)
         env.pop('__VK_LAYER_NV_optimus', None)
         env.pop('__GLX_VENDOR_LIBRARY_NAME', None)

@@ -1,6 +1,10 @@
 requireArtifact: ruffle
+features:
+  - padtokeyboard
+shared_features:
+  - powermode
+  - tdp
+  - videomode
 systems:
-  flash:
-    cores:
-    - ruffle
-features: []
+  - name: flash
+    as_core: ruffle

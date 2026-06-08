@@ -1,6 +1,5 @@
 requireArtifact: lexaloffle-pico8
 systems:
-  pico8:
-    cores:
-    - pico8
+- name: pico8
+  as_core: pico8
 features: []

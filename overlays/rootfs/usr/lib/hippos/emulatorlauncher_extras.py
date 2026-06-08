@@ -91,6 +91,37 @@ def launch_xenia_edge(ctx: LaunchContext) -> int:
 
 # ── Switch emulators (citron-neo, eden) ────────────────────────────────────────
 
+def _write_switch_qt_config(cfg_dir: Path, emu_name: str) -> None:
+    cfg_file = cfg_dir / 'qt-config.ini'
+    cfg = configparser.RawConfigParser()
+    cfg.optionxform = str
+    if cfg_file.exists():
+        cfg.read(cfg_file)
+    if not cfg.has_section('UI'):
+        cfg.add_section('UI')
+
+    cfg.set('UI', 'fullscreen', 'true')
+    cfg.set('UI', r'fullscreen\default', 'false')
+    cfg.set('UI', 'confirmClose', 'false')
+    cfg.set('UI', r'confirmClose\default', 'false')
+    cfg.set('UI', 'firstStart', 'false')
+    cfg.set('UI', r'firstStart\default', 'false')
+    cfg.set('UI', 'enable_discord_presence', 'false')
+    cfg.set('UI', r'enable_discord_presence\default', 'false')
+
+    # Bind Hotkey+Start (Home+Plus) to exit; clear fullscreen from that combo.
+    # Set both the emu-specific name and the upstream yuzu name so forks that
+    # haven't renamed the action still get the right binding.
+    for action in (emu_name, 'yuzu'):
+        exit_key = rf'Shortcuts\Main%20Window\Exit%20{action.replace("-", "%20")}\Controller_KeySeq'
+        cfg.set('UI', exit_key, 'Home+Plus')
+    cfg.set('UI', r'Shortcuts\Main%20Window\Fullscreen\Controller_KeySeq', '')
+
+    cfg_file.parent.mkdir(parents=True, exist_ok=True)
+    with cfg_file.open('w') as fh:
+        cfg.write(fh)
+
+
 def _launch_switch(ctx: LaunchContext, emu_name: str) -> int:
     conf = _load_hippos_conf()
     saves_dir = SAVES / 'switch'
@@ -104,6 +135,8 @@ def _launch_switch(ctx: LaunchContext, emu_name: str) -> int:
     if bin_path is None:
         _log.error("%s: binary not found", emu_name)
         return 1
+
+    _write_switch_qt_config(cfg_dir, emu_name)
 
     cmd = [str(bin_path), '-f', '-g', str(ctx.rom)]
     env = _build_game_env(conf, ctx)

@@ -50,6 +50,7 @@ sed -i \
 
 # Clang 19 doesn't always prove fmt::throw_exception [[noreturn]] through all paths.
 # Drop the three -Werror flags that fire as a result rather than patching every callsite.
+# Drop the three -Werror flags that fire as a result rather than patching every callsite.
 sed -i \
     -e '/add_compile_options(-Werror=return-type)/d' \
     -e '/add_compile_options(-Werror=missing-noreturn)/d' \

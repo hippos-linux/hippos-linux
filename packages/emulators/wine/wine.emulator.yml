@@ -1,11 +1,11 @@
 systems:
-  windows:
-    cores:
-    - wine-tkg
-    - wine-proton
-    - umu
-  windows_installers:
-    cores:
-    - wine-tkg
-    - wine-proton
-    - umu
+- name: windows
+  as_core:
+  - wine-tkg
+  - wine-proton
+  - umu
+- name: windows_installers
+  as_core:
+  - wine-tkg
+  - wine-proton
+  - umu

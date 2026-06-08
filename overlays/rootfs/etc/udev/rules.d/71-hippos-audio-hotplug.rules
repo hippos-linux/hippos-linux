@@ -3,12 +3,14 @@
 
 SUBSYSTEM!="sound", GOTO="hippos_audio_hotplug_end"
 
-# New card appeared — re-apply saved audio.device setting
-ACTION=="add", KERNEL=="card*", \
+# New card appeared — re-apply saved audio.device setting.
+# Guard with user session socket check so this is silent at early boot (session not ready yet;
+# hippos-audio-setup is called again when the session starts).
+ACTION=="add", KERNEL=="card*", TEST=="/run/user/1000/bus", \
     RUN+="/bin/systemd-run --no-block --replace --unit=hippos-audio-hotplug /usr/lib/hippos/hippos-audio-setup"
 
 # Card removed — recover if saved sink is gone
-ACTION=="remove", KERNEL=="card*", \
+ACTION=="remove", KERNEL=="card*", TEST=="/run/user/1000/bus", \
     RUN+="/bin/systemd-run --no-block --unit=hippos-audio-recover /usr/lib/hippos/hippos-audio-recover"
 
 LABEL="hippos_audio_hotplug_end"

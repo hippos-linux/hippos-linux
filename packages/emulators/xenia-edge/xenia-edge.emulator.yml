@@ -1,6 +1,5 @@
 requireArtifact: xenia-edge
 systems:
-  xbox360:
-    cores:
-    - xenia_edge
+- name: xbox360
+  as_core: xenia_edge
 features: []

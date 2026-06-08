@@ -11,6 +11,7 @@ ExecStartPre=/bin/sh -c 'until [ -S /tmp/.X11-unix/X0 ]; do sleep 0.5; done'
 ExecStart=/usr/lib/hippos/hippos-es
 Restart=on-failure
 RestartSec=3
+TimeoutStopSec=10
 StandardOutput=journal
 StandardError=journal
 

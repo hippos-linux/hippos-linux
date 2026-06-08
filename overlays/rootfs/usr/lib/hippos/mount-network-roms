@@ -61,8 +61,10 @@ while IFS= read -r line; do
             log "already mounted: //${share_path}"
             continue
         fi
-        mount_opts="ro,noatime,vers=3.0"
+        mount_opts="ro,noatime,soft,vers=3.0"
         [[ -n "${opts}" ]] && mount_opts="${mount_opts},${opts}"
+        # If no username supplied, use guest auth so mount.cifs won't prompt interactively
+        [[ "${mount_opts}" != *username=* ]] && mount_opts="${mount_opts},guest"
         if mount -t cifs "//${share_path}" "${mnt}" -o "${mount_opts}"; then
             log "mounted CIFS //${share_path} at ${mnt}"
             changed=1
@@ -75,8 +77,18 @@ done < "${CONFIG}"
 
 # If any new shares mounted, rebuild the pool
 if [[ "${changed}" -eq 1 ]]; then
+    es_was_active=0
+    systemctl is-active --quiet hippos-es.service 2>/dev/null && es_was_active=1 || true
     if findmnt /userdata/roms >/dev/null 2>&1; then
         umount /userdata/roms 2>/dev/null || true
     fi
     /usr/lib/hippos/mount-roms-pool
+    # ES-DE may have exited cleanly when the pool disappeared; revive it
+    if [[ "${es_was_active}" -eq 1 ]]; then
+        if systemctl is-active --quiet hippos-es.service 2>/dev/null; then
+            curl -sf http://127.0.0.1:1234/reloadgames >/dev/null 2>&1 || true
+        else
+            systemctl start hippos-es.service 2>/dev/null || true
+        fi
+    fi
 fi

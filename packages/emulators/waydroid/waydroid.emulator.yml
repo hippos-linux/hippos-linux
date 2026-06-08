@@ -1,8 +1,6 @@
 systems:
-  androidapps:
-    cores:
-    - waydroid
-  androidgames:
-    cores:
-    - waydroid
+- name: androidapps
+  as_core: waydroid
+- name: androidgames
+  as_core: waydroid
 features: []

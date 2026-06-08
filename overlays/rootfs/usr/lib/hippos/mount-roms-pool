@@ -74,6 +74,18 @@ log "branches: ${branches}"
 
 if mergerfs -o "${OPTS}" "${branches}" "${POOL}"; then
     log "mergerfs pool mounted at ${POOL}"
+    # Mirror top-level directories from RO branches into the RW branch.
+    # mergerfs create policy (epmfs) requires the parent dir to exist in a
+    # writable branch; without this, writes into dirs that came only from a
+    # Batocera/external RO branch fail with EROFS even though the pool appears
+    # writable.  Creating the dir in RW shadows the RO copy for new files.
+    find "${POOL}" -mindepth 1 -maxdepth 1 -type d | while read -r d; do
+        rw_dir="${RW}/$(basename "${d}")"
+        if [[ ! -d "${rw_dir}" ]]; then
+            mkdir -p "${rw_dir}"
+            chown 1000:1000 "${rw_dir}"
+        fi
+    done
     /usr/lib/hippos/hippos-merge-gamelists || true
 else
     log "mergerfs failed — bind-mounting ${RW} directly"

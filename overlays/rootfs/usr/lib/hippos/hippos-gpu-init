@@ -82,7 +82,14 @@ find_connected_gpu() {
             readlink -f "${card_path}device" 2>/dev/null | grep -q "${pci_id}" || continue
             local card; card="$(basename "${card_path}")"
             for status_file in /sys/class/drm/"${card}"/*-*/status; do
-                [[ -f "${status_file}" ]] && [[ "$(cat "${status_file}")" == "connected" ]] && {
+                [[ -f "${status_file}" ]] && [[ "$(cat "${status_file}")" == "connected" ]] || continue
+                # Require a non-empty EDID to confirm a real monitor is attached.
+                # status=connected without EDID is common on DP ports with no display
+                # (Arrow Lake iGPU, some mux-switched HDMI ports) and causes false-positive
+                # PRIME primary-display detection.  The "no display found" fallback in
+                # prime_init() handles the sleeping-monitor case.
+                local edid_file="${status_file%/status}/edid"
+                [[ -f "${edid_file}" ]] && [[ -s "${edid_file}" ]] && {
                     printf '%s\n' "${pci_id}"; return 0
                 }
             done
@@ -119,7 +126,8 @@ is_thunderbolt_device() {
 prime_init() {
     rm -f /var/tmp/hippos-nvidia.prime /var/tmp/hippos-amd.prime \
           /var/tmp/hippos-intel.prime /var/tmp/hippos-prime-primary.pci \
-          /var/tmp/hippos-nvidia-egpu
+          /var/tmp/hippos-nvidia-egpu /var/tmp/hippos-nvidia-primary \
+          /var/tmp/hippos-nvidia-prime.pci
 
     local gpu_count
     gpu_count="$(lspci -nn 2>/dev/null | grep -cE "(VGA|3D|Display controller)" || true)"
@@ -157,7 +165,8 @@ prime_init() {
                 local nvidia_connected
                 nvidia_connected="$(find_connected_gpu "${ngpu}" || true)"
                 if [[ -n "${nvidia_connected}" ]]; then
-                    log "NVIDIA drives display directly — no PRIME offload configured"
+                    log "NVIDIA drives display directly — marking as primary, no PRIME offload"
+                    printf '%s\n' "${ngpu%% *}" > /var/tmp/hippos-nvidia-primary
                     return
                 fi
                 # No connected display detected — assume first non-NVIDIA GPU is primary
@@ -170,6 +179,7 @@ prime_init() {
             fi
 
             touch /var/tmp/hippos-nvidia.prime
+            printf '%s\n' "${ngpu%% *}" > /var/tmp/hippos-nvidia-prime.pci
             [[ -n "${primary_pci}" ]] && printf '%s\n' "${primary_pci}" > /var/tmp/hippos-prime-primary.pci
             return
         fi
@@ -239,6 +249,11 @@ prime_configure() {
         [[ -f /var/tmp/hippos-prime-primary.pci ]] && \
             primary_pci="$(cat /var/tmp/hippos-prime-primary.pci)"
 
+        local nvidia_pci="" nvidia_busid=""
+        [[ -f /var/tmp/hippos-nvidia-prime.pci ]] && \
+            nvidia_pci="$(cat /var/tmp/hippos-nvidia-prime.pci)"
+        [[ -n "${nvidia_pci}" ]] && nvidia_busid="$(pci_to_xorg_busid "${nvidia_pci}")"
+
         if [[ -n "${primary_pci}" ]]; then
             # Explicitly set the display GPU as screen 0 so NVIDIA doesn't win
             # screen assignment via OutputClass autoconfiguration priority.
@@ -259,6 +274,7 @@ EndSection
 Section "ServerLayout"
     Identifier  "Prime"
     Screen 0    "Primary Screen"
+    $([ -n "${nvidia_busid}" ] && printf 'Inactive    "NVIDIA GPU"')
     Option      "AllowNVIDIAPrime" "1"
 EndSection
 EOF
@@ -267,6 +283,21 @@ EOF
 Section "ServerLayout"
     Identifier  "Prime"
     Option      "AllowNVIDIAPrime" "1"
+EndSection
+EOF
+        fi
+
+        # Explicit NVIDIA device section prevents Xorg from auto-binding the GPU
+        # with modesetting (modeset(G0)), which fails against an active nvidia-drm
+        # device and causes "failed to create screen resources".
+        if [[ -n "${nvidia_busid}" ]]; then
+            cat >> "${xorg_prime}" <<EOF
+
+Section "Device"
+    Identifier  "NVIDIA GPU"
+    Driver      "nvidia"
+    BusID       "${nvidia_busid}"
+    Option      "AllowEmptyInitialConfiguration" "1"
 EndSection
 EOF
         fi
@@ -288,6 +319,29 @@ export __GLX_VENDOR_LIBRARY_NAME=nvidia
 export __VK_LAYER_NV_optimus=NVIDIA_only
 EOF
         log "PRIME: NVIDIA — Xorg conf written (primary: ${primary_pci:-unknown}) + render offload env"
+
+    elif [[ -f /var/tmp/hippos-nvidia-primary ]]; then
+        local nvidia_pci busid
+        nvidia_pci="$(cat /var/tmp/hippos-nvidia-primary)"
+        busid="$(pci_to_xorg_busid "${nvidia_pci}")"
+        cat > "${xorg_prime}" <<EOF
+Section "Device"
+    Identifier  "Primary GPU"
+    Driver      "modesetting"
+    BusID       "${busid}"
+EndSection
+
+Section "Screen"
+    Identifier  "Primary Screen"
+    Device      "Primary GPU"
+EndSection
+
+Section "ServerLayout"
+    Identifier  "HippOS"
+    Screen 0    "Primary Screen"
+EndSection
+EOF
+        log "NVIDIA primary display: Xorg conf written (BusID ${busid})"
 
     elif [[ -f /var/tmp/hippos-amd.prime ]]; then
         local pci_id
