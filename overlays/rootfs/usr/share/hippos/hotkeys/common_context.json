@@ -1,8 +1,11 @@
 {
-  "screenshot":      "/usr/bin/hippos-screenshot",
-  "volumeup":        "/usr/lib/hippos/hippos-audio setSystemVolume +5",
-  "volumedown":      "/usr/lib/hippos/hippos-audio setSystemVolume -5",
-  "volumemute":      "/usr/lib/hippos/hippos-audio setSystemVolume mute-toggle",
-  "brightness-up":   "brightnessctl set +10%",
-  "brightness-down": "brightnessctl set 10%-"
+  "screenshot":       "/usr/bin/hippos-screenshot",
+  "volumeup":         "/usr/lib/hippos/hippos-audio setSystemVolume +5",
+  "volumedown":       "/usr/lib/hippos/hippos-audio setSystemVolume -5",
+  "volumemute":       "/usr/lib/hippos/hippos-audio setSystemVolume mute-toggle",
+  "brightness-up":    "brightnessctl set +10%",
+  "brightness-down":  "brightnessctl set 10%-",
+  "brightness-cycle": "brightnessctl set +10%",
+  "power":            "systemctl poweroff",
+  "swap_screen":      "hippos-swap-screen"
 }

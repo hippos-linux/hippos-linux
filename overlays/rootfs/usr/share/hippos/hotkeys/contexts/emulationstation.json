@@ -1,17 +1,8 @@
 {
   "name": "emulationstation",
   "keys": {
-    "exit":            "KEY_ESC",
-    "menu":            "KEY_SPACE",
-    "files":           "/usr/lib/hippos/switch-to-desktop",
-    "screenshot":      "hippos-screenshot",
-    "brightness-up":   "brightnessctl set +10% 2>/dev/null || true",
-    "brightness-down": "brightnessctl set 10%- 2>/dev/null || true",
-    "brightness-cycle":"brightnessctl set +10% 2>/dev/null || true",
-    "volumeup":        "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+ 2>/dev/null || true",
-    "volumedown":      "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%- 2>/dev/null || true",
-    "volumemute":      "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle 2>/dev/null || true",
-    "power":           "systemctl poweroff",
-    "swap_screen":     "hippos-swap-screen"
+    "exit":  "KEY_ESC",
+    "menu":  "KEY_SPACE",
+    "files": "/usr/lib/hippos/switch-to-desktop"
   }
 }

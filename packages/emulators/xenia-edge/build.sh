@@ -22,6 +22,7 @@ mkdir -p "${STAGING}/bin" "${STAGING}/lib"
 cd "${SRC}"
 export CC=clang-21
 export CXX=clang++-21
+export LDFLAGS="-fuse-ld=lld-21"
 
 log "Running xb setup"
 python3 xb setup
