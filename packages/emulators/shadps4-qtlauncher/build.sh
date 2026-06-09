@@ -27,8 +27,7 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER=clang \
     -DCMAKE_CXX_COMPILER=clang++ \
-    -DCMAKE_CXX_FLAGS="-stdlib=libc++ -fexperimental-library" \
-    -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld -stdlib=libc++" \
+    -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld" \
     -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld" \
     -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld" \
     -DCMAKE_PREFIX_PATH="${QT_ROOT}" \
