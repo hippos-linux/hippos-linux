@@ -28,7 +28,6 @@ RUN apt-get update \
         libdw-dev \
         libelf-dev \
         libssl-dev \
-        linux-image-amd64 \
         lsb-release \
         mmdebstrap \
         parted \
