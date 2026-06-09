@@ -582,12 +582,10 @@ def _launch_duckstation(ctx: LaunchContext) -> int:
     db_path = DUCKSTATION_CONFIG_DIR / 'game_controller_db.txt'
     db_path.write_text(generate_sdl_game_controller_config(ctx.controllers))
 
-    if bin_path.name == 'duckstation-qt':
-        cmd = [str(bin_path), '-batch', '-nogui', '--', str(ctx.rom)]
-    elif bin_path.name == 'duckstation-nogui':
+    if bin_path.name == 'duckstation-nogui':
         cmd = [str(bin_path), '-batch', '-fullscreen', '--', str(ctx.rom)]
     else:
-        cmd = [str(bin_path), str(ctx.rom)]
+        cmd = [str(bin_path), '-batch', '-nogui', '--', str(ctx.rom)]
     _log.info("Launching DuckStation: %s", ' '.join(cmd))
 
     env = _build_game_env(conf, ctx)
@@ -786,6 +784,15 @@ def _launch_flycast(ctx: LaunchContext) -> int:
 def _sync_tree(source: Path, destination: Path) -> None:
     if not source.exists():
         return
+    try:
+        destination.resolve().relative_to(source.resolve())
+        __import__('logging').getLogger('hippos.emulatorlauncher').error(
+            "_sync_tree: destination %s is inside source %s — refusing to sync",
+            destination, source,
+        )
+        return
+    except ValueError:
+        pass
     destination.mkdir(parents=True, exist_ok=True)
     cmp = filecmp.dircmp(source, destination)
     for name in cmp.left_only + cmp.diff_files:

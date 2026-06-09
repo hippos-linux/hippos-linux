@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 . /usr/lib/hippos/emulator-env
 export QT_QPA_PLATFORM=xcb
-exec /opt/emulators/shadps4/bin/shadps4 "$@"
+exec /opt/emulators/shadps4-qtlauncher/bin/shadps4-qtlauncher "$@"

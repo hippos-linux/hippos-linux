@@ -1,9 +1,9 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Dolphin (No GUI)
+Name=Dolphin
 GenericName=GameCube/Wii Emulator
-Comment=Dolphin GameCube and Wii emulator (nogui)
+Comment=Dolphin GameCube and Wii emulator
 Exec=/usr/lib/hippos/emulators/launch-dolphin-emu
 Icon=dolphin-emu
 Terminal=false

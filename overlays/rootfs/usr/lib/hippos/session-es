@@ -5,6 +5,11 @@ if [[ ! -x /usr/bin/emulationstation ]]; then
     exit 0
 fi
 
+if ! mountpoint -q /userdata; then
+    echo "hippos-session: WARNING: /userdata is not mounted — settings will not persist across reboots" >&2
+    journalctl -k --no-pager | grep -i "btrfs\|userdata" | tail -5 >&2 || true
+fi
+
 mkdir -p /userdata/system/configs/emulationstation
 
 export HOME=/userdata

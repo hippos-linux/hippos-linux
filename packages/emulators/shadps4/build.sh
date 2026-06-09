@@ -17,8 +17,6 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
-source "/work/build/qt611-env.sh"
-
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 
@@ -27,14 +25,12 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER=clang \
     -DCMAKE_CXX_COMPILER=clang++ \
-    -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld -lSPIRV-Tools -lSPIRV-Tools-opt" \
+    -DCMAKE_CXX_FLAGS="-stdlib=libc++ -fexperimental-library" \
+    -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld -stdlib=libc++ -lSPIRV-Tools -lSPIRV-Tools-opt" \
     -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld" \
     -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld" \
-    -DCMAKE_PREFIX_PATH="${QT_ROOT}" \
     -DCMAKE_INSTALL_PREFIX="${STAGING}" \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
-    -DCMAKE_INSTALL_RPATH="/opt/hippos/qt/6.11/lib" \
-    -DENABLE_QT_GUI=ON \
     -DENABLE_DISCORD_RPC=OFF \
     -DENABLE_UPDATER=OFF \
     -DVMA_ENABLE_INSTALL=ON
