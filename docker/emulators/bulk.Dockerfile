@@ -228,6 +228,7 @@ RUN curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         clang-21 \
+        lld-21 \
         llvm-21 \
         libc++-21-dev \
         libc++abi-21-dev \
