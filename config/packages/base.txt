@@ -14,6 +14,7 @@ wpasupplicant
 systemd-timesyncd
 rfkill
 wireless-tools
+wireless-regdb
 iputils-ping
 
 # WiFi & audio firmware (non-free — broad hardware coverage)
@@ -163,6 +164,12 @@ libudev1
 libboost-locale1.83.0
 libboost-system1.83.0
 libboost-date-time1.83.0
+
+# Vulkan shader compilation (required by PCSX2, Dolphin, and other Vulkan emulators)
+libshaderc1
+
+# Audio device backend (required by openMSX, SugarboxV2, and others built against portaudio)
+libportaudio2
 
 # Emulator runtime libraries
 libslirp0
