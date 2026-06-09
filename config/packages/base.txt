@@ -25,7 +25,6 @@ amd64-microcode
 firmware-iwlwifi
 firmware-realtek
 firmware-brcm80211
-broadcom-sta-dkms
 firmware-mediatek
 firmware-sof-signed
 firmware-amd-graphics
@@ -50,8 +49,6 @@ gnupg
 # linux-image-amd64 and linux-headers-amd64 are NOT installed from Debian.
 # The patched 15kHz kernel is built by build/build-kernel.sh and installed
 # via configure-rootfs.sh.
-dkms
-build-essential
 grub-efi-amd64
 
 # Storage

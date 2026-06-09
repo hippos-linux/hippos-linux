@@ -159,19 +159,31 @@ def list_deployments():
     return sorted(names)
 
 
+def _kernel_sort_key(name):
+    """Sort key for vmlinuz-X.Y.Z-hippos filenames."""
+    ver = name.replace("vmlinuz-", "").replace("-hippos", "")
+    try:
+        return tuple(int(x) for x in ver.split("."))
+    except ValueError:
+        return (0,)
+
+
 def find_boot_files(subvol_path):
-    """Find kernel and initrd filenames in subvol /boot."""
+    """Find the newest kernel and matching initrd in subvol /boot."""
     boot = os.path.join(subvol_path, "boot")
-    kernel = initrd = None
+    kernels = []
     try:
         for f in os.listdir(boot):
-            if f.startswith("vmlinuz") and not kernel:
-                kernel = f
-            if f.startswith("initrd") and not initrd:
-                initrd = f
+            if f.startswith("vmlinuz-") and f.endswith("-hippos"):
+                kernels.append(f)
     except FileNotFoundError:
         pass
-    return kernel or "vmlinuz", initrd or "initrd.img"
+    if not kernels:
+        return "vmlinuz", "initrd.img"
+    kernel = sorted(kernels, key=_kernel_sort_key)[-1]
+    kver = kernel[len("vmlinuz-"):]
+    initrd = f"initrd.img-{kver}" if os.path.exists(os.path.join(boot, f"initrd.img-{kver}")) else "initrd.img"
+    return kernel, initrd
 
 
 EFI_GRUB_CFG = "/boot/efi/grub/grub.cfg"
@@ -508,8 +520,11 @@ def cmd_apply():
             log(f"Pruning old deployment {stale}...")
             subprocess.run(
                 ["btrfs", "subvolume", "delete", os.path.join(BTRFS_MNT, stale)],
-                check=False
+                check=False,
             )
+        if old:
+            write_grub_cfg(new_subvol, list_deployments(), uuid, partuuid)
+            log("GRUB updated after pruning")
     finally:
         umount_toplevel()
 
@@ -523,6 +538,155 @@ def cmd_apply():
 
 EMULATORS_DIR = "/userdata/emulators"
 FRONTEND_INSTALL_ROOT = "/"
+
+
+def installed_kernel_version():
+    """Return the newest hippos kernel version installed in /boot, or None."""
+    kernels = []
+    try:
+        for f in os.listdir("/boot"):
+            if f.startswith("vmlinuz-") and f.endswith("-hippos"):
+                kernels.append(f.replace("vmlinuz-", ""))
+    except FileNotFoundError:
+        pass
+    if not kernels:
+        return None
+    return sorted(kernels, key=lambda v: tuple(int(x) for x in v.replace("-hippos", "").split(".")))[-1]
+
+
+def cmd_list_kernel_update():
+    manifest = fetch_manifest(get_channel())
+    if not manifest:
+        die("Could not fetch manifest")
+    kernel = manifest.get("payloads", {}).get("kernel", {})
+    if not kernel:
+        log("No kernel payload in manifest")
+        return
+    remote = kernel.get("version", "")
+    installed = installed_kernel_version()
+    if installed != remote:
+        print(f"kernel\t{installed or 'not installed'} → {remote}")
+
+
+def cmd_update_kernel():
+    manifest = fetch_manifest(get_channel())
+    if not manifest:
+        die("Could not fetch manifest")
+
+    kernel_info = manifest.get("payloads", {}).get("kernel", {})
+    if not kernel_info:
+        die("No kernel payload in manifest")
+
+    remote  = kernel_info.get("version", "")
+    url     = kernel_info.get("url", "")
+    sha256  = kernel_info.get("sha256", "")
+
+    installed = installed_kernel_version()
+    if installed == remote:
+        log(f"Kernel already at {remote}")
+        sys.exit(0)
+
+    log(f"Updating kernel: {installed or 'not installed'} → {remote}")
+
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    deb = os.path.join(CACHE_DIR, f"linux-image-{remote}_amd64.deb")
+
+    if not os.path.exists(deb):
+        log("Downloading kernel deb...")
+        req = _make_request(url)
+        with urllib.request.urlopen(req, timeout=300) as resp, open(deb, "wb") as f:
+            total = int(resp.headers.get("Content-Length", 0))
+            done  = 0
+            while chunk := resp.read(262144):
+                f.write(chunk)
+                done += len(chunk)
+                if total:
+                    log(f"Downloading... {done * 100 // total}%")
+
+    if sha256:
+        log("Verifying checksum...")
+        if sha256_file(deb) != sha256:
+            os.remove(deb)
+            die("SHA256 mismatch — download may be corrupt")
+        log("Checksum OK")
+
+    try:
+        mount_toplevel()
+        running    = current_subvol()
+        subvol_path = os.path.join(BTRFS_MNT, running)
+
+        # Snapshot current subvol for rollback before touching /boot
+        if installed:
+            snap_name = f"@rootfs-kernel-{installed}"
+            snap_path = os.path.join(BTRFS_MNT, snap_name)
+            if not os.path.exists(snap_path):
+                log(f"Snapshotting {running} → {snap_name}...")
+                subprocess.run(
+                    ["btrfs", "subvolume", "snapshot", "-r", subvol_path, snap_path],
+                    check=True,
+                )
+
+        # Install kernel deb via dpkg in chroot — handles depmod + update-initramfs.
+        # update-grub will fail harmlessly (no real ESP/block devices in chroot).
+        log("Installing kernel deb...")
+        deb_in_chroot = f"/tmp/kernel-install.deb"
+        subprocess.run(["cp", deb, os.path.join(subvol_path, "tmp", "kernel-install.deb")], check=True)
+        for fs in ("proc", "sys", "dev", "dev/pts", "run"):
+            target = os.path.join(subvol_path, fs)
+            os.makedirs(target, exist_ok=True)
+            subprocess.run(["mount", "--bind", f"/{fs}", target], check=True)
+        try:
+            subprocess.run(
+                ["chroot", subvol_path, "dpkg", "-i", "--force-confold", deb_in_chroot],
+                check=True,
+            )
+        finally:
+            for fs in reversed(("proc", "sys", "dev/pts", "dev", "run")):
+                subprocess.run(
+                    ["umount", "-l", os.path.join(subvol_path, fs)],
+                    check=False,
+                )
+            try:
+                os.remove(os.path.join(subvol_path, "tmp", "kernel-install.deb"))
+            except Exception:
+                pass
+
+        uuid, partuuid = read_grub_uuid_partuuid()
+        if not uuid or not partuuid:
+            die("Cannot read UUID/PARTUUID from existing grub.cfg")
+
+        deployments = list_deployments()
+        write_grub_cfg(running, deployments, uuid, partuuid)
+        log("GRUB updated")
+
+        grubenv = "/boot/efi/grub/grubenv"
+        subprocess.run(["grub-editenv", grubenv, "create"], check=False)
+        subprocess.run(["grub-editenv", grubenv, "set", "boot_counter=3"], check=True)
+        log("Boot counter armed (3 attempts before rollback)")
+
+        # Prune old kernel snapshots — keep only the one we just made
+        keep = {snap_name} if installed else set()
+        pruned = False
+        for sv in deployments:
+            if sv.startswith("@rootfs-kernel-") and sv not in keep:
+                log(f"Pruning old kernel snapshot {sv}...")
+                subprocess.run(
+                    ["btrfs", "subvolume", "delete", os.path.join(BTRFS_MNT, sv)],
+                    check=False,
+                )
+                pruned = True
+        if pruned:
+            write_grub_cfg(running, list_deployments(), uuid, partuuid)
+            log("GRUB updated after pruning")
+    finally:
+        umount_toplevel()
+
+    try:
+        os.remove(deb)
+    except Exception:
+        pass
+
+    log(f"Kernel updated to {remote}. Reboot to apply.")
 
 
 def installed_emulator_version(name):
@@ -746,7 +910,7 @@ if __name__ == "__main__":
 
     # Read-only commands that don't need root
     READONLY_CMDS = {"check", "list-deployments", "list-emulator-updates",
-                     "list-frontend-updates"}
+                     "list-frontend-updates", "list-kernel-update"}
     if cmd not in READONLY_CMDS:
         _require_root()
         _open_log()
@@ -775,6 +939,10 @@ if __name__ == "__main__":
         if len(sys.argv) < 3:
             die("Usage: hippos-upgrade update-frontend <name>")
         cmd_update_frontend(sys.argv[2])
+    elif cmd == "list-kernel-update":
+        cmd_list_kernel_update()
+    elif cmd == "update-kernel":
+        cmd_update_kernel()
     elif cmd == "update-grub":
         cmd_update_grub()
     else:

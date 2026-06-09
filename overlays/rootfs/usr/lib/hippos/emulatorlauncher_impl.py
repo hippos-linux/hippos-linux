@@ -129,7 +129,7 @@ SHADPS4_CONFIG_DIR = CONFIGS / 'shadps4'
 SHADPS4_USER_CONFIG_DIR = SHADPS4_CONFIG_DIR / 'user'
 SHADPS4_TOML = SHADPS4_USER_CONFIG_DIR / 'config.toml'
 SHADPS4_SAVES = SAVES / 'shadps4'
-SHADPS4_RUNTIME_DIR = USERDATA / 'emulators' / 'shadps4' / 'current'
+SHADPS4_RUNTIME_DIR = Path('/run/hippos/emulators/shadps4')
 SHADPS4_BUNDLE_DIR = Path('/opt/emulators/shadps4')
 SHADPS4_ROM_DIR = USERDATA / 'roms' / 'ps4'
 
@@ -141,7 +141,7 @@ XENIA_BUNDLE_DIR = Path('/opt/emulators/xenia/emulator')
 XENIA_CANARY_BUNDLE_DIR = Path('/opt/emulators/xenia-canary/emulator')
 XENIA_CACHE_DIR = CACHE / 'xenia'
 XENIA_SAVES_DIR = SAVES / 'xbox360'
-LINDBERGH_RUNTIME_DIR = USERDATA / 'emulators' / 'lindbergh-loader' / 'current'
+LINDBERGH_RUNTIME_DIR = Path('/run/hippos/emulators/lindbergh-loader')
 LINDBERGH_BUNDLE_DIR = Path('/opt/emulators/lindbergh-loader')
 CLK_QUICKLOAD_SYSTEMS = {'amstradcpc', 'archimedes', 'electron', 'msx1', 'msx2', 'oricatmos', 'zxspectrum'}
 CLK_SVIDEO_SYSTEMS = {'colecovision', 'mastersystem'}
@@ -2667,6 +2667,18 @@ def _write_unix_settings_file(path: Path, items: list[tuple[str, object]]) -> No
 def _sync_tree(source: Path, destination: Path) -> None:
     if not source.exists():
         return
+    # Guard: destination must not be inside source — syncing a dir into its own
+    # subtree causes current/ to appear in source on the next run, then recurse
+    # infinitely, eventually hitting PATH_MAX ("File name too long").
+    try:
+        destination.resolve().relative_to(source.resolve())
+        __import__('logging').getLogger('hippos.emulatorlauncher').error(
+            "_sync_tree: destination %s is inside source %s — refusing to sync",
+            destination, source,
+        )
+        return
+    except ValueError:
+        pass
     destination.mkdir(parents=True, exist_ok=True)
     cmp = filecmp.dircmp(source, destination)
     for name in cmp.left_only + cmp.diff_files:

@@ -3,8 +3,8 @@ set -euo pipefail
 
 source "/work/build/common.sh"
 
-NAME='shadps4'
-REPO='https://github.com/shadps4-emu/shadPS4.git'
+NAME='shadps4-qtlauncher'
+REPO='https://github.com/shadps4-emu/shadps4-qtlauncher.git'
 TAG="$(github_latest_tag "${REPO}")"
 
 WORK_ROOT="${WORK_ROOT:-/work/work/emulators}"
@@ -17,6 +17,8 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
+source "/work/build/qt611-env.sh"
+
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 
@@ -26,14 +28,14 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_C_COMPILER=clang \
     -DCMAKE_CXX_COMPILER=clang++ \
     -DCMAKE_CXX_FLAGS="-stdlib=libc++ -fexperimental-library" \
-    -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld -stdlib=libc++ -lSPIRV-Tools -lSPIRV-Tools-opt" \
+    -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld -stdlib=libc++" \
     -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld" \
     -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld" \
+    -DCMAKE_PREFIX_PATH="${QT_ROOT}" \
     -DCMAKE_INSTALL_PREFIX="${STAGING}" \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
-    -DENABLE_DISCORD_RPC=OFF \
-    -DENABLE_UPDATER=OFF \
-    -DVMA_ENABLE_INSTALL=ON
+    -DCMAKE_INSTALL_RPATH="/opt/hippos/qt/6.11/lib" \
+    -DENABLE_UPDATER=OFF
 
 log "Building"
 cmake --build "${BUILD}" -j"$(nproc)"
@@ -42,14 +44,14 @@ found_bin="$(find "${BUILD}" "${STAGING}" \
     -maxdepth 5 \
     -type f \
     -perm /111 \
-    -name 'shadps4' \
+    -iname 'shadPS4QtLauncher' \
     -print -quit 2>/dev/null || true)"
 
-[[ -n "${found_bin}" ]] || die "shadps4 binary was not produced"
+[[ -n "${found_bin}" ]] || die "shadPS4QtLauncher binary was not produced"
 
-cp "${found_bin}" "${STAGING}/bin/shadps4"
-chmod +x "${STAGING}/bin/shadps4"
-strip "${STAGING}/bin/shadps4" || true
+cp "${found_bin}" "${STAGING}/bin/shadps4-qtlauncher"
+chmod +x "${STAGING}/bin/shadps4-qtlauncher"
+strip "${STAGING}/bin/shadps4-qtlauncher" || true
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"
