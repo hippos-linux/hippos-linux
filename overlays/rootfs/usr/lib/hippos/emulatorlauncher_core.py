@@ -63,12 +63,23 @@ def _write_mame_config(conf: dict[str, str]) -> None:
         profile    = conf.get('crt.monitor_profile', 'generic_15')
         sw         = conf.get('crt.super_width',     '2560')
         dotclk     = conf.get('crt.dotclock_min',    '0.0')
+        tate       = conf.get('crt.tate_mode',       'off').strip().lower()
         lines += [
-            ('switchres',    '1'),
-            ('monitor',      profile),
-            ('super_width',  sw),
-            ('dotclock_min', dotclk),
+            ('switchres',        '1'),
+            ('switchres_ini',    '1'),
+            ('monitor',          profile),
+            ('super_width',      sw),
+            ('dotclock_min',     dotclk),
+            ('h_size',           '1.0'),
+            ('h_shift',          '0'),
+            ('v_shift',          '0'),
+            ('v_shift_correct',  '0'),
+            ('pixel_precision',  '1'),
         ]
+        if tate == 'ror':
+            lines += [('rotate', '1'), ('autoror', '1')]
+        elif tate == 'rol':
+            lines += [('rotate', '1'), ('autorol', '1')]
 
     col = max(len(k) for k, _ in lines) + 3
     with MAME_INI.open('w') as fh:
