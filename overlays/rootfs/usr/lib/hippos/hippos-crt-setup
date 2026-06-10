@@ -50,13 +50,21 @@ _detect_gpu_driver() {
 }
 
 _auto_crt_output() {
-    # Prefer VGA/DVI-I — the two connector types that carry 15kHz.
-    local preferred
-    preferred="$(_connected_outputs | grep -E '^(VGA|DVI-I)' | head -1 || true)"
-    if [[ -n "${preferred}" ]]; then
-        echo "${preferred}"
-        return
-    fi
+    # CRTs on VGA/DVI-I have no EDID so DRM reports them as disconnected.
+    # Check connected VGA/DVI-I first, then any VGA/DVI-I regardless of status,
+    # then fall back to any connected output.
+    local p name
+    for p in /sys/class/drm/card[0-9]*-*; do
+        [[ -f "${p}/status" ]] || continue
+        [[ "$(< "${p}/status")" == "connected" ]] || continue
+        name="${p##*/}"; name="${name#card*-}"
+        case "${name}" in VGA-*|DVI-I-*) echo "${name}"; return ;; esac
+    done
+    for p in /sys/class/drm/card[0-9]*-*; do
+        [[ -f "${p}/status" ]] || continue
+        name="${p##*/}"; name="${name#card*-}"
+        case "${name}" in VGA-*|DVI-I-*) echo "${name}"; return ;; esac
+    done
     _connected_outputs | head -1
 }
 
@@ -67,7 +75,7 @@ CRT_OUTPUT="$(get crt.output)"
 INTERLACE="$(get crt.interlace)";           INTERLACE="${INTERLACE:-true}"
 SUPER_WIDTH="$(get crt.super_width)";       SUPER_WIDTH="${SUPER_WIDTH:-2560}"
 DOTCLOCK_MIN="$(get crt.dotclock_min)";     DOTCLOCK_MIN="${DOTCLOCK_MIN:-0.0}"
-BOOT_RES="$(get crt.boot_resolution)";      BOOT_RES="${BOOT_RES:-640x480@60}"
+BOOT_RES="$(get crt.boot_resolution)";      BOOT_RES="${BOOT_RES:-640x480i}"
 
 # ── Resolve output ────────────────────────────────────────────────────────────
 
@@ -160,22 +168,46 @@ else
     warn "no videomodes.conf for profile '${MONITOR_PROFILE}' (${VIDEOMODES_SRC} not found)"
 fi
 
-# ── EDID firmware (optional) ──────────────────────────────────────────────────
-# Pre-compiled EDID binary tells the GPU to accept low-refresh-rate modelines
-# without locking out modes the monitor's own EDID would reject.
-# Only applies if a binary is available for this monitor profile.
+# ── EDID firmware ─────────────────────────────────────────────────────────────
+# Generated at runtime via switchres -e so the EDID contains modelines tuned
+# to the chosen monitor profile rather than a generic fixed binary.
+#
+# Off-by-one matrix: the boot resolution and the ES/frontend resolution must
+# differ by at least one pixel to avoid a geometry tool clash.
+#   NVIDIA proprietary: apply W+1 BEFORE EDID generation.
+#   AMD / Intel / Nouveau: apply W+1 AFTER (EDID uses nominal W; Boot_* entries
+#                          in videomodes.conf already carry the +1 width).
 
-EDID_BIN="${EDID_SRC_DIR}/${MONITOR_PROFILE}.bin"
 EDID_INSTALLED=0
 
-if [[ -f "${EDID_BIN}" ]]; then
-    mkdir -p "${EDID_DEST_DIR}"
-    cp "${EDID_BIN}" "${EDID_DEST_DIR}/crt.bin"
-    chmod 644 "${EDID_DEST_DIR}/crt.bin"
-    EDID_INSTALLED=1
-    log "installed EDID: ${MONITOR_PROFILE}.bin → ${EDID_DEST_DIR}/crt.bin"
+# Parse boot resolution: strip @freq suffix and interlace marker for numbers.
+_boot_w="${BOOT_RES%%x*}"
+_boot_rest="${BOOT_RES#*x}"
+_boot_h="${_boot_rest%%[i@]*}"          # strip trailing i or @freq
+_boot_hz="${BOOT_RES##*@}"; _boot_hz="${_boot_hz%%[^0-9]*}"
+[[ -z "${_boot_hz}" || "${_boot_hz}" == "${BOOT_RES}" ]] && _boot_hz=60
+
+# Apply off-by-one: NVIDIA needs W+1 before EDID generation.
+_edid_w="${_boot_w}"
+[[ "${GPU_DRIVER}" == "nvidia" ]] && _edid_w=$(( _boot_w + 1 ))
+
+if command -v switchres >/dev/null 2>&1 && [[ -f "${SWITCHRES_INI}" ]]; then
+    _edid_tmp="$(mktemp -d)"
+    if ( cd "${_edid_tmp}" && \
+         switchres "${_edid_w}" "${_boot_h}" "${_boot_hz}" \
+             -i "${SWITCHRES_INI}" -e 2>/dev/null ) && \
+       [[ -f "${_edid_tmp}/${MONITOR_PROFILE}.bin" ]]; then
+        mkdir -p "${EDID_DEST_DIR}"
+        mv "${_edid_tmp}/${MONITOR_PROFILE}.bin" "${EDID_DEST_DIR}/crt.bin"
+        chmod 644 "${EDID_DEST_DIR}/crt.bin"
+        EDID_INSTALLED=1
+        log "generated EDID: ${MONITOR_PROFILE} ${_edid_w}x${_boot_h}@${_boot_hz} → ${EDID_DEST_DIR}/crt.bin"
+    else
+        warn "switchres EDID generation failed — booting without drm.edid_firmware"
+    fi
+    rm -rf "${_edid_tmp}"
 else
-    log "no EDID binary for '${MONITOR_PROFILE}' — skipping firmware install"
+    warn "switchres not found or switchres.ini missing — skipping EDID generation"
 fi
 
 # ── GRUB kernel params ────────────────────────────────────────────────────────
@@ -183,9 +215,12 @@ fi
 # drm.edid_firmware=...  — only added when EDID binary was installed above
 # update-grub is expensive; only run it when the dropin content changes.
 
-BOOT_RES_KRN="${BOOT_RES%%@*}"   # 640x480@60 → 640x480
+# Strip @freq suffix; keep interlace marker (e.g. 640x480i stays 640x480i).
+# Append eS — 'e' activates the output, 'S' selects the D0023R low-dotclock
+# patched mode set. Without S the kernel ignores the param entirely.
+BOOT_RES_KRN="${BOOT_RES%%@*}"
 
-GRUB_CMDLINE="video=${CRT_OUTPUT}:${BOOT_RES_KRN}e"
+GRUB_CMDLINE="video=${CRT_OUTPUT}:${BOOT_RES_KRN}eS"
 if [[ "${EDID_INSTALLED}" -eq 1 ]]; then
     GRUB_CMDLINE+=" drm.edid_firmware=${CRT_OUTPUT}:edid/crt.bin"
 fi

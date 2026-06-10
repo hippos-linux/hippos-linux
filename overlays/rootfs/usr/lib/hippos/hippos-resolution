@@ -29,11 +29,13 @@ _crt_setmode() {
 
 # Restore the CRT session's base resolution (used after a game exits).
 _crt_restore() {
-    local boot_res w h hz
-    boot_res="$(hippos-settings get crt.boot_resolution 2>/dev/null || echo '640x480@60')"
+    local boot_res w rest h hz
+    boot_res="$(hippos-settings get crt.boot_resolution 2>/dev/null || echo '640x480i')"
     w="${boot_res%%x*}"
-    h="${boot_res#*x}"; h="${h%%@*}"
-    hz="${boot_res#*@}"; hz="${hz%%.*}"
+    rest="${boot_res#*x}"
+    h="${rest%%[i@]*}"                          # strip trailing i or @freq
+    hz="${boot_res##*@}"; hz="${hz%%[^0-9]*}"
+    [[ -z "${hz}" || "${hz}" == "${boot_res}" ]] && hz=60
     switchres "${w}" "${h}" "${hz}" 2>/dev/null || \
         xrandr --output "${PSCREEN}" --auto 2>/dev/null || true
 }

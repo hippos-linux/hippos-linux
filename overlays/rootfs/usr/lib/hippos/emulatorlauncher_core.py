@@ -59,7 +59,7 @@ def _write_mame_config(conf: dict[str, str]) -> None:
         ('mouse',              '1'),
     ]
 
-    if conf.get('crt.enabled') == 'true':
+    if Path('/etc/switchres.ini').exists():
         profile    = conf.get('crt.monitor_profile', 'generic_15')
         sw         = conf.get('crt.super_width',     '2560')
         dotclk     = conf.get('crt.dotclock_min',    '0.0')
