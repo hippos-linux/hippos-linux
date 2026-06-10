@@ -25,13 +25,13 @@ case "${ROTATE}" in
     *)     ROTATION="normal"   ;;
 esac
 
-# Nothing configured — fall back to preferred on all connected outputs
-if [[ -z "$OUTPUT" && ( -z "$RES" || "$RES" == "preferred" ) && "$ROTATION" == "normal" ]]; then
-    xrandr --auto 2>/dev/null || true
-    exit 0
-fi
-
+_OUTPUT_CONFIGURED="$OUTPUT"
 OUTPUT="${OUTPUT:-$(xrandr 2>/dev/null | awk '/ connected/ {print $1; exit}')}"
+
+# Nothing explicitly configured — apply preferred mode and fall through for overscan
+if [[ -z "${_OUTPUT_CONFIGURED}" && ( -z "$RES" || "$RES" == "preferred" ) && "$ROTATION" == "normal" ]]; then
+    xrandr --auto 2>/dev/null || true
+fi
 RES="${RES:-preferred}"
 
 if [[ "$RES" == "preferred" ]]; then
@@ -62,6 +62,22 @@ while IFS= read -r dev; do
         fi
     fi
 done < <(xinput list --name-only 2>/dev/null)
+
+# Apply saved overscan (xrandr underscan) if configured
+_OVERSCAN_ON="$(hippos-settings get display.overscan.enabled 2>/dev/null || true)"
+if [[ "${_OVERSCAN_ON}" == "true" ]]; then
+    _os_left=$(hippos-settings get display.overscan.left   2>/dev/null || echo 0)
+    _os_right=$(hippos-settings get display.overscan.right  2>/dev/null || echo 0)
+    _os_top=$(hippos-settings get display.overscan.top    2>/dev/null || echo 0)
+    _os_bottom=$(hippos-settings get display.overscan.bottom 2>/dev/null || echo 0)
+    _os_hborder=$(( (_os_left + _os_right) / 2 ))
+    _os_vborder=$(( (_os_top + _os_bottom) / 2 ))
+    xrandr --output "${OUTPUT}" --set underscan on \
+           --set "underscan hborder" "${_os_hborder}" \
+           --set "underscan vborder" "${_os_vborder}" 2>/dev/null \
+        && echo "[hippos-display-setup] overscan hborder=${_os_hborder} vborder=${_os_vborder}" \
+        || echo "[hippos-display-setup] overscan not supported on ${OUTPUT}" >&2
+fi
 
 # Apply saved brightness after display is configured
 /usr/lib/hippos/hippos-brightness boot 2>/dev/null || true

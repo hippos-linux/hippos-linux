@@ -32,7 +32,15 @@ fi
 
 # Ensure waydroid is initialised
 if [[ ! -f /var/lib/waydroid/waydroid.cfg ]]; then
-    die "Waydroid not initialised — hippos-waydroid-init.service should handle this on first boot"
+    svc_active="$(systemctl is-active hippos-waydroid-init.service 2>/dev/null || true)"
+    svc_result="$(systemctl show -P Result hippos-waydroid-init.service 2>/dev/null || true)"
+    if [[ "${svc_active}" == "activating" || "${svc_active}" == "active" ]]; then
+        die "Waydroid is initialising — please wait a moment and try again"
+    elif [[ "${svc_result}" == "exit-code" || "${svc_result}" == "failed" || "${svc_result}" == "timeout" ]]; then
+        die "Waydroid init failed (likely no network) — connect to WiFi then run: sudo systemctl restart hippos-waydroid-init.service"
+    else
+        die "Waydroid not initialised — connect to WiFi and run: sudo systemctl start hippos-waydroid-init.service"
+    fi
 fi
 
 start_weston() {
