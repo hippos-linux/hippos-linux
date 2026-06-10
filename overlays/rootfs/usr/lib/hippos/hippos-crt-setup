@@ -49,19 +49,50 @@ _detect_gpu_driver() {
     echo "modesetting"
 }
 
+_detect_dcn() {
+    # Return "dcn" if the AMD GPU uses a DCN (Display Core Next) display engine,
+    # "dce" otherwise. DCN engines (Raven/Renoir/Navi and newer APUs/dGPUs) need
+    # interlace_force_even=1 in switchres.ini for correct interlaced output.
+    local f
+    for f in /sys/kernel/debug/dri/*/amdgpu_ip_info; do
+        [[ -f "${f}" ]] || continue
+        grep -qi "dcn" "${f}" 2>/dev/null && echo "dcn" && return
+    done
+    dmesg 2>/dev/null | grep -qi "amdgpu.*dcn\b\|dcn.*display" && echo "dcn" && return
+    echo "dce"
+}
+
+_connector_type() {
+    # Return the connector family for a given output name.
+    # Understands native connector names from the DRM subsystem.
+    local output="${1}"
+    case "${output}" in
+        VGA-*)              echo "vga"     ;;
+        DVI-I-*|DVI-D-*|DVI-A-*) echo "dvi" ;;
+        HDMI-A-*|HDMI-B-*) echo "hdmi"    ;;
+        DP-*)               echo "dp"      ;;
+        eDP-*)              echo "edp"     ;;
+        LVDS-*)             echo "lvds"    ;;
+        *)                  echo "unknown" ;;
+    esac
+}
+
+_detect_r9_380() {
+    # Return 0 (true) if an AMD R9 380 / Tonga GPU is present.
+    # PCI device IDs 0x6938 (R9 380X) and 0x6939 (R9 380), vendor 0x1002.
+    lspci -n 2>/dev/null | grep -qi "1002:6938\|1002:6939"
+}
+
 _auto_crt_output() {
-    # CRTs on VGA/DVI-I have no EDID so DRM reports them as disconnected.
-    # Check connected VGA/DVI-I first, then any VGA/DVI-I regardless of status,
-    # then fall back to any connected output.
+    # Prefer a connected native analog output (VGA, DVI-I).
+    # Fall back to any connected output to support DP2VGA/HDMI2VGA DAC setups,
+    # where the connector appears as DP-N or HDMI-A-N in DRM.
+    # Users with a disconnected native VGA port (e.g. some AMD oland cards) or
+    # a DAC on a specific port should set crt.output explicitly instead.
     local p name
     for p in /sys/class/drm/card[0-9]*-*; do
         [[ -f "${p}/status" ]] || continue
         [[ "$(< "${p}/status")" == "connected" ]] || continue
-        name="${p##*/}"; name="${name#card*-}"
-        case "${name}" in VGA-*|DVI-I-*) echo "${name}"; return ;; esac
-    done
-    for p in /sys/class/drm/card[0-9]*-*; do
-        [[ -f "${p}/status" ]] || continue
         name="${p##*/}"; name="${name#card*-}"
         case "${name}" in VGA-*|DVI-I-*) echo "${name}"; return ;; esac
     done
@@ -73,8 +104,8 @@ _auto_crt_output() {
 MONITOR_PROFILE="$(get crt.monitor_profile)"; MONITOR_PROFILE="${MONITOR_PROFILE:-generic_15}"
 CRT_OUTPUT="$(get crt.output)"
 INTERLACE="$(get crt.interlace)";           INTERLACE="${INTERLACE:-true}"
-SUPER_WIDTH="$(get crt.super_width)";       SUPER_WIDTH="${SUPER_WIDTH:-2560}"
-DOTCLOCK_MIN="$(get crt.dotclock_min)";     DOTCLOCK_MIN="${DOTCLOCK_MIN:-0.0}"
+SUPER_WIDTH="$(get crt.super_width)";       SUPER_WIDTH="${SUPER_WIDTH:-auto}"
+DOTCLOCK_MIN="$(get crt.dotclock_min)";     DOTCLOCK_MIN="${DOTCLOCK_MIN:-auto}"
 BOOT_RES="$(get crt.boot_resolution)";      BOOT_RES="${BOOT_RES:-640x480i}"
 
 # ── Resolve output ────────────────────────────────────────────────────────────
@@ -95,6 +126,41 @@ log "profile=${MONITOR_PROFILE} output=${CRT_OUTPUT}"
 GPU_DRIVER="$(_detect_gpu_driver)"
 log "GPU driver: ${GPU_DRIVER}"
 
+CONNECTOR_TYPE="$(_connector_type "${CRT_OUTPUT}")"
+log "connector type: ${CONNECTOR_TYPE}"
+
+# Resolve "auto" dotclock_min and super_width based on GPU and connector type.
+# Values are derived from Batocera analysis and match hardware constraints per driver.
+if [[ "${DOTCLOCK_MIN}" == "auto" || "${SUPER_WIDTH}" == "auto" ]]; then
+    case "${GPU_DRIVER}" in
+        amdgpu|radeon)
+            case "${CONNECTOR_TYPE}" in
+                hdmi) _auto_dotclock="25.0"; _auto_super="3840" ;;
+                dp)   _auto_dotclock="0.0";  _auto_super="2560" ;;
+                *)    _auto_dotclock="0.0";  _auto_super="2560" ;;
+            esac
+            ;;
+        nvidia)
+            case "${CONNECTOR_TYPE}" in
+                dp) _auto_dotclock="0.0";  _auto_super="3840" ;;
+                *)  _auto_dotclock="25.0"; _auto_super="3840" ;;
+            esac
+            ;;
+        i915)
+            case "${CONNECTOR_TYPE}" in
+                dp) _auto_dotclock="0.0";  _auto_super="1920" ;;
+                *)  _auto_dotclock="25.0"; _auto_super="1920" ;;
+            esac
+            ;;
+        *)
+            _auto_dotclock="0.0"; _auto_super="2560"
+            ;;
+    esac
+    [[ "${DOTCLOCK_MIN}" == "auto" ]] && DOTCLOCK_MIN="${_auto_dotclock}"
+    [[ "${SUPER_WIDTH}"  == "auto" ]] && SUPER_WIDTH="${_auto_super}"
+    log "resolved auto: dotclock_min=${DOTCLOCK_MIN} super_width=${SUPER_WIDTH} (gpu=${GPU_DRIVER} connector=${CONNECTOR_TYPE})"
+fi
+
 # amdgpu/radeon/nvidia-proprietary → full Switchres modeline set (75+ entries)
 # i915/nouveau/modesetting → limited VESA-style set (16 entries)
 case "${GPU_DRIVER}" in
@@ -112,6 +178,7 @@ mkdir -p "${XORG_CONF_D}"
 case "${GPU_DRIVER}" in
     amdgpu) _gpu_conf="${CRT_X11_DIR}/90-crt-amdgpu.conf"     ;;
     radeon) _gpu_conf="${CRT_X11_DIR}/90-crt-radeon.conf"      ;;
+    nvidia) _gpu_conf="${CRT_X11_DIR}/90-crt-nvidia.conf"      ;;
     *)      _gpu_conf="${CRT_X11_DIR}/90-crt-modesetting.conf" ;;
 esac
 
@@ -138,6 +205,24 @@ fi
 } > "${XORG_CONF_D}/10-crt-ignore.conf"
 log "wrote ${XORG_CONF_D}/10-crt-ignore.conf"
 
+# ── X11: Monitor sync-range hint for the CRT output ──────────────────────────
+# Tells X the broad HorizSync/VertRefresh ranges so it accepts custom Switchres
+# modelines without rejecting them as out-of-range. DPMS and DefaultModes are
+# disabled — the CRT doesn't negotiate these and they can interfere with
+# low-dotclock mode switching.
+
+{
+    printf '# CRT mode — managed by hippos-crt-setup. Do not edit manually.\n'
+    printf 'Section "Monitor"\n'
+    printf '    Identifier  "%s"\n'                "${CRT_OUTPUT}"
+    printf '    HorizSync   15.0-90.0\n'
+    printf '    VertRefresh 49.0-130.0\n'
+    printf '    Option      "DPMS"         "false"\n'
+    printf '    Option      "DefaultModes" "false"\n'
+    printf 'EndSection\n'
+} > "${XORG_CONF_D}/15-crt-monitor.conf"
+log "wrote ${XORG_CONF_D}/15-crt-monitor.conf"
+
 # ── /etc/switchres.ini ────────────────────────────────────────────────────────
 
 if [[ ! -f "${SWITCHRES_TEMPLATE}" ]]; then
@@ -146,12 +231,21 @@ else
     INTERLACE_VAL=1
     [[ "${INTERLACE}" == "false" || "${INTERLACE}" == "0" ]] && INTERLACE_VAL=0
 
+    # interlace_force_even: AMD DCN engines (Raven/Renoir/Navi+) need IFE=1 for
+    # correct interlaced line parity. DCE (Polaris/Vega/older) and non-AMD = 0.
+    IFE=0
+    if [[ "${GPU_DRIVER}" == "amdgpu" ]]; then
+        [[ "$(_detect_dcn)" == "dcn" ]] && IFE=1
+    fi
+    log "interlace_force_even=${IFE}"
+
     sed \
         -e "s/@MONITOR@/${MONITOR_PROFILE}/g" \
         -e "s/@DISPLAY@/${CRT_OUTPUT}/g" \
         -e "s/@INTERLACE@/${INTERLACE_VAL}/g" \
         -e "s/@DOTCLOCK_MIN@/${DOTCLOCK_MIN}/g" \
         -e "s/@SUPER_WIDTH@/${SUPER_WIDTH}/g" \
+        -e "s/@IFE@/${IFE}/g" \
         "${SWITCHRES_TEMPLATE}" > "${SWITCHRES_INI}"
     log "wrote ${SWITCHRES_INI}"
 fi
@@ -172,11 +266,9 @@ fi
 # Generated at runtime via switchres -e so the EDID contains modelines tuned
 # to the chosen monitor profile rather than a generic fixed binary.
 #
-# Off-by-one matrix: the boot resolution and the ES/frontend resolution must
-# differ by at least one pixel to avoid a geometry tool clash.
-#   NVIDIA proprietary: apply W+1 BEFORE EDID generation.
-#   AMD / Intel / Nouveau: apply W+1 AFTER (EDID uses nominal W; Boot_* entries
-#                          in videomodes.conf already carry the +1 width).
+# W+1 offset: the EDID width is boot_width+1 for all GPU types so the boot
+# framebuffer and the ES session resolution differ by one pixel, preventing a
+# geometry tool clash on session start.
 
 EDID_INSTALLED=0
 
@@ -187,9 +279,10 @@ _boot_h="${_boot_rest%%[i@]*}"          # strip trailing i or @freq
 _boot_hz="${BOOT_RES##*@}"; _boot_hz="${_boot_hz%%[^0-9]*}"
 [[ -z "${_boot_hz}" || "${_boot_hz}" == "${BOOT_RES}" ]] && _boot_hz=60
 
-# Apply off-by-one: NVIDIA needs W+1 before EDID generation.
-_edid_w="${_boot_w}"
-[[ "${GPU_DRIVER}" == "nvidia" ]] && _edid_w=$(( _boot_w + 1 ))
+# Apply W+1 before EDID generation for all GPU types.
+# This offsets the EDID width by one pixel so the boot framebuffer and the
+# ES session resolution differ, preventing a geometry tool clash on startup.
+_edid_w=$(( _boot_w + 1 ))
 
 if command -v switchres >/dev/null 2>&1 && [[ -f "${SWITCHRES_INI}" ]]; then
     _edid_tmp="$(mktemp -d)"
@@ -223,6 +316,14 @@ BOOT_RES_KRN="${BOOT_RES%%@*}"
 GRUB_CMDLINE="video=${CRT_OUTPUT}:${BOOT_RES_KRN}eS"
 if [[ "${EDID_INSTALLED}" -eq 1 ]]; then
     GRUB_CMDLINE+=" drm.edid_firmware=${CRT_OUTPUT}:edid/crt.bin"
+fi
+
+# R9 380 (Tonga) requires amdgpu.dc=0 — its DCN hardware reports present but
+# the display core driver is buggy with CRT modelines. Appending dc=0 forces
+# the legacy DCE path which works correctly at 15kHz.
+if [[ "${GPU_DRIVER}" == "amdgpu" ]] && _detect_r9_380; then
+    warn "R9 380 (Tonga) detected — appending amdgpu.dc=0 to GRUB kernel params"
+    GRUB_CMDLINE+=" amdgpu.dc=0"
 fi
 
 mkdir -p "$(dirname "${GRUB_CRT_CONF}")"
