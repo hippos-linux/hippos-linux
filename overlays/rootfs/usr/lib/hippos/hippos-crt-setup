@@ -83,6 +83,15 @@ _detect_r9_380() {
     lspci -n 2>/dev/null | grep -qi "1002:6938\|1002:6939"
 }
 
+_detect_sea_islands() {
+    # Return 0 (true) if a Sea Islands (GCN 2.x / CIK) AMD GPU is present.
+    # Bonaire dGPU: 6640-665F  Hawaii dGPU: 67A0-67BF
+    # Kaveri APU:   1304-131F  Kabini/Mullins APU: 9830-984F
+    # On amdgpu these GPUs have unreliable interlaced mode support.
+    lspci -n 2>/dev/null | grep -qiE \
+        "1002:66[45][0-9a-f]|1002:67[ab][0-9a-f]|1002:13[01][0-9a-f]|1002:98[34][0-9a-f]"
+}
+
 _auto_crt_output() {
     # Prefer a connected native analog output (VGA, DVI-I).
     # Fall back to any connected output to support DP2VGA/HDMI2VGA DAC setups,
@@ -125,6 +134,15 @@ log "profile=${MONITOR_PROFILE} output=${CRT_OUTPUT}"
 
 GPU_DRIVER="$(_detect_gpu_driver)"
 log "GPU driver: ${GPU_DRIVER}"
+
+# Sea Islands (GCN 2.x) warning: Bonaire/Hawaii/Kaveri/Kabini on amdgpu have
+# unreliable interlaced mode support. Users hitting blank-screen issues should
+# switch to the radeon driver (add radeon.si_support=1 amdgpu.si_support=0 to
+# GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub).
+if [[ "${GPU_DRIVER}" == "amdgpu" ]] && _detect_sea_islands; then
+    warn "Sea Islands GPU (GCN 2.x) detected with amdgpu driver — interlaced modes may not work."
+    warn "If you get a blank screen at 240i/480i, add 'radeon.si_support=1 amdgpu.si_support=0' to GRUB kernel params."
+fi
 
 CONNECTOR_TYPE="$(_connector_type "${CRT_OUTPUT}")"
 log "connector type: ${CONNECTOR_TYPE}"
@@ -313,7 +331,14 @@ fi
 # patched mode set. Without S the kernel ignores the param entirely.
 BOOT_RES_KRN="${BOOT_RES%%@*}"
 
+# CRT kernel params:
+# - video=...: sets KMS framebuffer mode at boot
+# - console=tty3: redirects kernel messages off the CRT display
+# - loglevel=0: suppress kernel log output during boot
+# - vt.global_cursor_default=0: hide the blinking cursor on the framebuffer
+# - mitigations=off: disables CPU vulnerability mitigations for emulation perf
 GRUB_CMDLINE="video=${CRT_OUTPUT}:${BOOT_RES_KRN}eS"
+GRUB_CMDLINE+=" console=tty3 loglevel=0 vt.global_cursor_default=0 mitigations=off"
 if [[ "${EDID_INSTALLED}" -eq 1 ]]; then
     GRUB_CMDLINE+=" drm.edid_firmware=${CRT_OUTPUT}:edid/crt.bin"
 fi

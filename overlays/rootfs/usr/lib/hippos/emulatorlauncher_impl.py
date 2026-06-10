@@ -2090,6 +2090,16 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
     else:
         cfg.set('video_shader_enable', '"false"')
 
+    # CRT mode — when switchres.ini is present, enable the switchres resolution
+    # switching backend (mode 4) and tune the menu for low-resolution display.
+    if Path('/etc/switchres.ini').exists():
+        cfg.set('crt_switch_resolution',          '"4"')
+        cfg.set('crt_switch_resolution_super',    '"0"')
+        cfg.set('menu_driver',                    '"rgui"')
+        cfg.set('menu_enable_widgets',            '"false"')
+        cfg.set('notification_show_refresh_rate', '"false"')
+        cfg.set('video_font_size',                '"10"')
+
     # Input
     # Autodetect disabled: we write complete explicit per-player bindings from ES
     # profiles. Enabling autodetect causes RetroArch to load its own autoconfig
