@@ -49,11 +49,13 @@ custom_features:
       'Off': '0'
   shaderset:
     prompt: SHADER SET
+    submenu: GAME RENDERING & SHADERS
     preset: shaderset
   smooth:
     prompt: SMOOTH GAMES (BILINEAR FILTERING)
     description: Disabled if using a shader set or the output display matches the
       game's resolution.
+    submenu: GAME RENDERING & SHADERS
     choices:
       Auto: auto
       'On': '1'
@@ -61,6 +63,7 @@ custom_features:
   integerscale:
     prompt: INTEGER SCALING (PIXEL PERFECT)
     description: Only increase the image size in integer multiples.
+    submenu: GAME RENDERING & SHADERS
     choices:
       Auto: auto
       'On': '1'
@@ -68,14 +71,17 @@ custom_features:
   bezel:
     prompt: DECORATION SET
     description: Select a decoration set for the current system.
+    submenu: DECORATIONS
     preset: decorationsets
   bezel_stretch:
     prompt: STRETCH BEZELS (4K & ULTRAWIDE)
     description: Stretch bezels to fill wide displays.
+    submenu: DECORATIONS
     preset: switchauto
   bezel.tattoo:
     prompt: SHOW TATTOO OVER BEZEL
     description: Show an image overlaid on top of the bezel.
+    submenu: DECORATIONS
     choices:
       Auto: auto
       'No': '0'
@@ -84,6 +90,7 @@ custom_features:
   bezel.tattoo_corner:
     prompt: TATTOO CORNER
     description: Corner used for the bezel overlay.
+    submenu: DECORATIONS
     choices:
       Auto: auto
       North West: NW
@@ -93,11 +100,31 @@ custom_features:
   bezel.tattoo_file:
     prompt: CUSTOM .PNG IMAGE PATH
     description: Custom image used for the bezel overlay.
+    submenu: DECORATIONS
     preset: input
   bezel.resize_tattoo:
     prompt: RESIZE TATTOO
     description: Shrink or expand the bezel overlay to fit.
+    submenu: DECORATIONS
     preset: switch
+  hud:
+    prompt: HEADS UP DISPLAY
+    description: Show context-sensitive info over the game.
+    submenu: DECORATIONS
+    choices:
+      None: none
+      Game info/art: game
+      Performance: perf
+      Custom: custom
+  hud_corner:
+    prompt: HEADS UP DISPLAY CORNER
+    description: Corner used for the HUD.
+    submenu: DECORATIONS
+    choices:
+      North West: NW
+      North East: NE
+      South East: SE
+      South West: SW
   disableautocontrollers:
     prompt: AUTOCONFIGURE CONTROLLERS
     description: Automatically configure controllers on startup.
@@ -108,6 +135,7 @@ custom_features:
   runahead:
     prompt: RUN-AHEAD FRAMES
     description: Render frames ahead of time to reduce input latency.
+    submenu: LATENCY REDUCTION
     choices:
       Auto: ''
       None: '0'
@@ -120,6 +148,7 @@ custom_features:
   secondinstance:
     prompt: USE SECOND INSTANCE FOR RUN-AHEAD
     description: Can prevent audio skips on button presses.
+    submenu: LATENCY REDUCTION
     choices:
       Auto: ''
       'On': '1'
@@ -128,6 +157,7 @@ custom_features:
     prompt: AUTOMATIC FRAME DELAY
     description: Automatically decrease frame delay temporarily to prevent frame drops.
       Can introduce stuttering.
+    submenu: LATENCY REDUCTION
     choices:
       Auto: ''
       'On': '1'
@@ -136,8 +166,68 @@ custom_features:
     prompt: VARIABLE REFRESH RATE
     description: Don't deviate from core requested timing. G-Sync, FreeSync, HDMI
       2.1 VRR.
+    submenu: LATENCY REDUCTION
     choices:
       Auto: ''
+      'On': '1'
+      'Off': '0'
+  preemptiveframes:
+    prompt: USE PRE-EMPTIVE FRAMES
+    description: Use pre-emptive frames instead of run-ahead.
+    submenu: LATENCY REDUCTION
+    choices:
+      'On': 'true'
+      'Off': 'false'
+  video_threaded:
+    prompt: THREADED VIDEO
+    description: Improve performance at the cost of latency.
+    submenu: LATENCY REDUCTION
+    choices:
+      'On': '1'
+      'Off': '0'
+  ai_service_enabled:
+    prompt: ENABLE AI TRANSLATION SERVICE
+    description: Translate on-screen text during gameplay.
+    submenu: AI GAME TRANSLATION
+    choices:
+      'On': '1'
+      'Off': '0'
+  ai_target_lang:
+    prompt: TARGET LANGUAGE
+    description: The language to translate into.
+    submenu: AI GAME TRANSLATION
+    choices:
+      English: En
+      French: Fr
+      Portuguese: Pt
+      German: De
+      Greek: El
+      Spanish: Es
+      Czech: Cs
+      Danish: Da
+      Croatian: Hr
+      Hungarian: Hu
+      Italian: It
+      Japanese: Ja
+      Korean: Ko
+      Dutch: Nl
+      Norwegian: Nn
+      Polish: Po
+      Romanian: Ro
+      Russian: Ru
+      Swedish: Sv
+      Turkish: Tr
+      Simplified Chinese: Zh
+  ai_service_url:
+    prompt: AI TRANSLATION SERVICE URL
+    description: If nothing is specified, use the default service.
+    submenu: AI GAME TRANSLATION
+    preset: input
+  ai_service_pause:
+    prompt: PAUSE ON TRANSLATED SCREEN
+    description: Pause while translated text is on-screen.
+    submenu: AI GAME TRANSLATION
+    choices:
       'On': '1'
       'Off': '0'
   tdp:
@@ -283,101 +373,24 @@ custom_features:
       High Performance: highperformance
       Balanced: balanced
       Power Saver: powersaver
-  hud:
-    prompt: HEADS UP DISPLAY
-    description: Show context-sensitive info over the game.
-    group: DECORATIONS
-    choices:
-      None: none
-      Game info/art: game
-      Performance: perf
-      Custom: custom
-  hud_corner:
-    prompt: HEADS UP DISPLAY CORNER
-    description: Corner used for the HUD.
-    group: DECORATIONS
-    choices:
-      North West: NW
-      North East: NE
-      South East: SE
-      South West: SW
-  ai_service_enabled:
-    prompt: ENABLE AI TRANSLATION SERVICE
-    description: Translate on-screen text during gameplay.
-    group: AI GAME TRANSLATION
-    choices:
-      'On': '1'
-      'Off': '0'
-  ai_target_lang:
-    prompt: TARGET LANGUAGE
-    description: The language to translate into.
-    group: AI GAME TRANSLATION
-    choices:
-      English: En
-      French: Fr
-      Portuguese: Pt
-      German: De
-      Greek: El
-      Spanish: Es
-      Czech: Cs
-      Danish: Da
-      Croatian: Hr
-      Hungarian: Hu
-      Italian: It
-      Japanese: Ja
-      Korean: Ko
-      Dutch: Nl
-      Norwegian: Nn
-      Polish: Po
-      Romanian: Ro
-      Russian: Ru
-      Swedish: Sv
-      Turkish: Tr
-      Simplified Chinese: Zh
-  ai_service_url:
-    prompt: AI TRANSLATION SERVICE URL
-    description: If nothing is specified, use the default service.
-    group: AI GAME TRANSLATION
-    preset: input
-  ai_service_pause:
-    prompt: PAUSE ON TRANSLATED SCREEN
-    description: Pause while translated text is on-screen.
-    group: AI GAME TRANSLATION
-    choices:
-      'On': '1'
-      'Off': '0'
-  preemptiveframes:
-    prompt: USE PRE-EMPTIVE FRAMES
-    description: Use pre-emptive frames instead of run-ahead.
-    group: LATENCY REDUCTION
-    choices:
-      'On': 'true'
-      'Off': 'false'
-  video_threaded:
-    prompt: THREADED VIDEO
-    description: Improve performance at the cost of latency.
-    group: LATENCY REDUCTION
-    choices:
-      'On': '1'
-      'Off': '0'
   use_guns:
     prompt: USE LIGHT GUNS
     description: Use light guns instead of pads if guns are connected.
-    group: CONTROLS
+    submenu: LIGHT GUNS
     choices:
       'On': '1'
       'Off': '0'
   use_wheels:
     prompt: USE WHEELS
     description: Use wheels instead of pads if wheels are connected.
-    group: CONTROLS
+    submenu: WHEELS
     choices:
       'On': '1'
       'Off': '0'
   wheel_rotation:
     prompt: WHEEL ROTATION
     description: Maximum wheel rotation from left to right.
-    group: CONTROLS
+    submenu: WHEELS
     choices:
       '150': '150'
       '180': '180'
@@ -391,7 +404,7 @@ custom_features:
   wheel_deadzone:
     prompt: WHEEL DEADZONE
     description: Wheel deadzone in degrees.
-    group: CONTROLS
+    submenu: WHEELS
     choices:
       '5': '5'
       '10': '10'
@@ -406,7 +419,7 @@ custom_features:
   wheel_midzone:
     prompt: WHEEL MIDZONE
     description: Reserve a non-dead zone at the center of the wheel.
-    group: CONTROLS
+    submenu: WHEELS
     choices:
       '1': '1'
       '2': '2'

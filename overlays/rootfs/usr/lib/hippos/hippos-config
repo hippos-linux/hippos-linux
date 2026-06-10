@@ -14,7 +14,50 @@ case "${1:-}" in
         echo ""
         ;;
     overscan)
-        exit 0
+        export DISPLAY="${DISPLAY:-:0}"
+        _overscan_output() {
+            xrandr --query 2>/dev/null | awk '/connected primary/{print $1; exit} /connected/{o=$1} END{if(o)print o}'
+        }
+        _overscan_apply() {
+            local out="${1:-$(_overscan_output)}"
+            local left right top bottom hborder vborder
+            left=$(hippos-settings get display.overscan.left 2>/dev/null || echo 0)
+            right=$(hippos-settings get display.overscan.right 2>/dev/null || echo 0)
+            top=$(hippos-settings get display.overscan.top 2>/dev/null || echo 0)
+            bottom=$(hippos-settings get display.overscan.bottom 2>/dev/null || echo 0)
+            hborder=$(( (${left} + ${right}) / 2 ))
+            vborder=$(( (${top} + ${bottom}) / 2 ))
+            xrandr --output "${out}" --set underscan on \
+                   --set "underscan hborder" "${hborder}" \
+                   --set "underscan vborder" "${vborder}" 2>/dev/null \
+                || echo "[hippos-config overscan] xrandr underscan not supported on ${out}" >&2
+        }
+        case "${2:-}" in
+            set)
+                [[ -n "${3:-}" && -n "${4:-}" && -n "${5:-}" && -n "${6:-}" ]] || {
+                    echo "usage: hippos-config overscan set <left> <right> <top> <bottom>" >&2
+                    exit 2
+                }
+                hippos-settings set display.overscan.left   "${3}" 2>/dev/null || true
+                hippos-settings set display.overscan.right  "${4}" 2>/dev/null || true
+                hippos-settings set display.overscan.top    "${5}" 2>/dev/null || true
+                hippos-settings set display.overscan.bottom "${6}" 2>/dev/null || true
+                hippos-settings set display.overscan.enabled true  2>/dev/null || true
+                _overscan_apply
+                ;;
+            enable)
+                hippos-settings set display.overscan.enabled true 2>/dev/null || true
+                _overscan_apply
+                ;;
+            disable)
+                hippos-settings set display.overscan.enabled false 2>/dev/null || true
+                _out="$(_overscan_output)"
+                xrandr --output "${_out}" --set underscan off 2>/dev/null || true
+                ;;
+            *)
+                exit 0
+                ;;
+        esac
         ;;
     forgetBT)
         bluetoothctl paired-devices 2>/dev/null | awk '{print $2}' | while read -r mac; do
