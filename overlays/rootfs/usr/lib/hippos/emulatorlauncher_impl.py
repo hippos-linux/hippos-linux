@@ -29,6 +29,12 @@ try:
 except ImportError:
     _HAS_YAML = False
 
+try:
+    import hippos_switchres as _switchres
+    _HAS_SWITCHRES = True
+except ImportError:
+    _HAS_SWITCHRES = False
+
 from hippos_squashfs import mount_squashfs
 from hippos_overlayfs import mount_overlayfs
 from hippos_bezels import prepare_bezel
@@ -2347,7 +2353,24 @@ def _switch_video_mode(conf: dict[str, str], system: str) -> str:
         capture_output=True, text=True, check=False,
     ).stdout.strip()
 
-    videomode = conf.get(f'{system}.videomode') or conf.get('global.videomode', '')
+    videomode = conf.get(f'{system}.videomode') or conf.get('crt.videomode', '') or conf.get('global.videomode', '')
+
+    if _HAS_SWITCHRES and _switchres.is_available():
+        # CRT active — use libswitchres.so directly to avoid XranR stale-mode accumulation.
+        if videomode and videomode != 'default':
+            parsed = _switchres.parse_videomode(videomode)
+            if parsed:
+                _log.info("videomode: CRT ctypes %s for '%s'", videomode, system)
+                if _switchres.switch_to_mode(*parsed):
+                    return original
+                _log.warning("videomode: ctypes failed, falling back to subprocess")
+        else:
+            # No per-system mode — restore to boot resolution (already there on session start).
+            boot_res = conf.get('crt.boot_resolution', '640x480i')
+            parsed = _switchres.parse_videomode(boot_res)
+            if parsed:
+                _switchres.switch_to_mode(*parsed)
+            return original
 
     if videomode and videomode != 'default':
         _log.info("videomode: setting '%s' for system '%s'", videomode, system)
@@ -2405,10 +2428,16 @@ def _prepare_ctx_bezel(ctx: LaunchContext, conf: dict[str, str]) -> None:
     generate_gun_help(ctx.system, ctx.rom, ctx.lightgun, ctx.game_gun, ctx.resolution)
 
 
-def _restore_video_mode(original_mode: str) -> None:
+def _restore_video_mode(original_mode: str, conf: dict[str, str] | None = None) -> None:
     if not original_mode:
         return
     _log.info("videomode: restoring '%s'", original_mode)
+    if _HAS_SWITCHRES and _switchres.is_available():
+        boot_res = (conf or {}).get('crt.boot_resolution', '640x480i')
+        parsed   = _switchres.parse_videomode(boot_res)
+        if parsed and _switchres.switch_to_mode(*parsed):
+            return
+        _log.warning("videomode: ctypes restore failed, falling back to subprocess")
     subprocess.run(
         ['hippos-resolution', 'setMode', original_mode],
         check=False, stderr=subprocess.DEVNULL,
@@ -4255,7 +4284,7 @@ def main() -> int:
         return _run_with_squashfs(ctx, generator)
     finally:
         _restore_game_power_mode(power_governor)
-        _restore_video_mode(original_mode)
+        _restore_video_mode(original_mode, conf)
 
 
 def _run_with_squashfs(ctx: LaunchContext, generator: Callable[[LaunchContext], int]) -> int:
