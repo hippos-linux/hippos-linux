@@ -324,11 +324,15 @@ EOF
         local nvidia_pci busid
         nvidia_pci="$(cat /var/tmp/hippos-nvidia-primary)"
         busid="$(pci_to_xorg_busid "${nvidia_pci}")"
+        # Use the nvidia DDX directly so hippos-xorg-setup detects Driver "nvidia"
+        # and skips writing 91-gpu-setup.conf for the same BusID.
+        # Modesetting here caused two conflicting device sections on the same PCI address.
         cat > "${xorg_prime}" <<EOF
 Section "Device"
     Identifier  "Primary GPU"
-    Driver      "modesetting"
+    Driver      "nvidia"
     BusID       "${busid}"
+    Option      "AllowEmptyInitialConfiguration" "yes"
 EndSection
 
 Section "Screen"
@@ -341,7 +345,7 @@ Section "ServerLayout"
     Screen 0    "Primary Screen"
 EndSection
 EOF
-        log "NVIDIA primary display: Xorg conf written (BusID ${busid})"
+        log "NVIDIA primary display: Xorg conf written (BusID ${busid}, nvidia DDX)"
 
     elif [[ -f /var/tmp/hippos-amd.prime ]]; then
         local pci_id
