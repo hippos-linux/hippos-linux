@@ -7,8 +7,9 @@ Wants=userdata.mount
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+TimeoutStopSec=10
 ExecStart=/usr/lib/hippos/mount-bios-pool
-ExecStop=umount /userdata/bios
+ExecStop=umount -l /userdata/bios
 
 [Install]
 WantedBy=multi-user.target

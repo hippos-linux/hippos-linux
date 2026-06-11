@@ -5,6 +5,7 @@ ConditionPathExists=!/userdata/.config/hippos/flatpak-apps-installed
 
 [Service]
 Type=simple
+TimeoutStopSec=10
 ExecStart=/usr/lib/hippos/hippos-firstboot-flatpak
 StandardOutput=journal
 StandardError=journal

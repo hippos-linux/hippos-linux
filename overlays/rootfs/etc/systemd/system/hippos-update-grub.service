@@ -6,6 +6,7 @@ ConditionPathExists=!/var/lib/hippos/grub-updated
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+TimeoutStopSec=10
 ExecStart=/usr/lib/hippos/update-grub-first-boot
 
 [Install]
