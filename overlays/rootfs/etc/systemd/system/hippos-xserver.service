@@ -13,6 +13,7 @@ ExecStart=/usr/lib/xorg/Xorg :0 vt1 -nolisten tcp -logfile /tmp/Xorg.0.log -ac
 ExecStartPost=/bin/sh -c 'for i in $(seq 1 400); do sleep 0.5; DISPLAY=:0 timeout 2 xrandr --listproviders 2>/dev/null | grep -q "Provider 0:" && break; done; if [ -x /run/hippos/prime-xrandr ]; then for i in $(seq 1 40); do DISPLAY=:0 timeout 2 xrandr --listproviders 2>/dev/null | grep -q "NVIDIA-G0" && break; sleep 0.5; done; DISPLAY=:0 /run/hippos/prime-xrandr 2>/dev/null || true; else DISPLAY=:0 xrandr --auto 2>/dev/null || true; fi; true'
 Restart=on-failure
 RestartSec=2
+TimeoutStartSec=0
 StandardInput=tty
 StandardOutput=tty
 StandardError=journal
