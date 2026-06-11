@@ -7,8 +7,9 @@ Wants=userdata.mount
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+TimeoutStopSec=10
 ExecStart=/usr/lib/hippos/mount-saves-pool
-ExecStop=umount /userdata/saves
+ExecStop=umount -l /userdata/saves
 
 [Install]
 WantedBy=multi-user.target

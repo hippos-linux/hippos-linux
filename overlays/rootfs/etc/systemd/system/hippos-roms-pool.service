@@ -6,8 +6,9 @@ Before=hippos-es.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+TimeoutStopSec=10
 ExecStart=/usr/lib/hippos/mount-roms-pool
-ExecStop=umount /userdata/roms
+ExecStop=umount -l /userdata/roms
 
 [Install]
 WantedBy=multi-user.target
