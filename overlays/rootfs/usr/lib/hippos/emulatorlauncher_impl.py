@@ -2458,6 +2458,13 @@ def _restore_video_mode(original_mode: str, conf: dict[str, str] | None = None) 
 
 def _build_game_env(conf: dict[str, str], ctx: Optional[LaunchContext] = None) -> dict[str, str]:
     env = dict(os.environ)
+    prime_env = Path('/run/hippos/prime.env')
+    if prime_env.exists():
+        for line in prime_env.read_text().splitlines():
+            line = line.removeprefix('export ').strip()
+            if '=' in line:
+                k, v = line.split('=', 1)
+                env[k] = v
     env.setdefault('DISPLAY', ':0')
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
     env['HIPPOS_USE_GUNS'] = '1' if _conf_bool(conf, 'global.use_guns', True) else '0'
