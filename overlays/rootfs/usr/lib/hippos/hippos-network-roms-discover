@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import re
 import shutil
 import subprocess
@@ -140,6 +141,11 @@ def discover_avahi_smb() -> list[Candidate]:
             hosts.add(host)
 
     for host in sorted(hosts):
+        try:
+            if ipaddress.ip_address(host).version == 6:
+                continue
+        except ValueError:
+            pass
         candidates.extend(enumerate_smb_host(host, "avahi"))
     return candidates
 
