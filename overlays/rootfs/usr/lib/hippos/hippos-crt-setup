@@ -93,19 +93,53 @@ _detect_sea_islands() {
 }
 
 _auto_crt_output() {
-    # Prefer a connected native analog output (VGA, DVI-I).
-    # Fall back to any connected output to support DP2VGA/HDMI2VGA DAC setups,
-    # where the connector appears as DP-N or HDMI-A-N in DRM.
-    # Users with a disconnected native VGA port (e.g. some AMD oland cards) or
-    # a DAC on a specific port should set crt.output explicitly instead.
-    local p name
+    # Prefer a connected native analog output (VGA, DVI-I) with no EDID.
+    # LCDs on VGA/DVI-I send EDID; CRTs typically don't — zero-byte edid = CRT.
+    # Fall back to any connected output (for DP2VGA/HDMI2VGA DAC setups).
+    # Users with a DAC on a specific port should set crt.output explicitly.
+    local p name edid_size
     for p in /sys/class/drm/card[0-9]*-*; do
         [[ -f "${p}/status" ]] || continue
         [[ "$(< "${p}/status")" == "connected" ]] || continue
         name="${p##*/}"; name="${name#card*-}"
-        case "${name}" in VGA-*|DVI-I-*) echo "${name}"; return ;; esac
+        case "${name}" in VGA-*|DVI-I-*) ;; *) continue ;; esac
+        edid_size=0
+        [[ -f "${p}/edid" ]] && edid_size="$(wc -c < "${p}/edid")"
+        [[ "${edid_size}" -eq 0 ]] && echo "${name}" && return
     done
     _connected_outputs | head -1
+}
+
+_drm_to_x11_name() {
+    # Map a DRM sysfs connector name (e.g. DVI-I-1) to the X11 DDX output name
+    # (e.g. DVI-I-0). On amdgpu the DDX uses 0-based per-type indexing while DRM
+    # uses 1-based. If DISPLAY is not set, returns the DRM name unchanged.
+    local drm_name="$1"
+    [[ -n "${DISPLAY:-}" ]] || { echo "${drm_name}"; return; }
+    local base_type="${drm_name%-*}"
+    local -a x11_outputs
+    mapfile -t x11_outputs < <(
+        xrandr --query 2>/dev/null \
+          | awk -v b="${base_type}" '/ (connected|disconnected)/ && $1 ~ "^"b"-" {print $1}' \
+          | sort
+    )
+    if [[ "${#x11_outputs[@]}" -eq 1 ]]; then
+        echo "${x11_outputs[0]}"; return
+    fi
+    local drm_idx="${drm_name##*-}"
+    if [[ "${drm_idx}" -gt 0 && "${#x11_outputs[@]}" -gt 0 ]]; then
+        local x11_idx=$(( drm_idx - 1 ))
+        [[ "${x11_idx}" -lt "${#x11_outputs[@]}" ]] && echo "${x11_outputs[${x11_idx}]}" && return
+    fi
+    echo "${drm_name}"
+}
+
+_x11_connected_outputs() {
+    if [[ -n "${DISPLAY:-}" ]]; then
+        xrandr --query 2>/dev/null | awk '/ connected/ {print $1}'
+    else
+        _connected_outputs
+    fi
 }
 
 # ── Read settings ─────────────────────────────────────────────────────────────
@@ -128,7 +162,15 @@ if [[ -z "${CRT_OUTPUT}" || "${CRT_OUTPUT}" == "auto" ]]; then
     log "auto-detected output: ${CRT_OUTPUT}"
 fi
 
-log "profile=${MONITOR_PROFILE} output=${CRT_OUTPUT}"
+# Derive X11 DDX name for xorg.conf and switchres.ini.
+# On amdgpu the DDX uses 0-based per-type indexing (DVI-I-0) while DRM sysfs
+# uses 1-based (DVI-I-1). GRUB/kernel params use DRM names; X11 needs DDX names.
+CRT_OUTPUT_X11="$(_drm_to_x11_name "${CRT_OUTPUT}")"
+if [[ "${CRT_OUTPUT_X11}" != "${CRT_OUTPUT}" ]]; then
+    log "X11 output name resolved: ${CRT_OUTPUT} (DRM) → ${CRT_OUTPUT_X11} (X11)"
+fi
+
+log "profile=${MONITOR_PROFILE} output=${CRT_OUTPUT} x11=${CRT_OUTPUT_X11}"
 
 # ── GPU driver ────────────────────────────────────────────────────────────────
 
@@ -214,12 +256,12 @@ fi
 {
     printf '# CRT mode — managed by hippos-crt-setup. Do not edit manually.\n'
     while read -r output; do
-        [[ "${output}" == "${CRT_OUTPUT}" ]] && continue
+        [[ "${output}" == "${CRT_OUTPUT_X11}" ]] && continue
         printf 'Section "Monitor"\n'
         printf '    Identifier "%s"\n' "${output}"
         printf '    Option "Ignore" "true"\n'
         printf 'EndSection\n\n'
-    done < <(_connected_outputs)
+    done < <(_x11_connected_outputs)
 } > "${XORG_CONF_D}/10-crt-ignore.conf"
 log "wrote ${XORG_CONF_D}/10-crt-ignore.conf"
 
@@ -232,7 +274,7 @@ log "wrote ${XORG_CONF_D}/10-crt-ignore.conf"
 {
     printf '# CRT mode — managed by hippos-crt-setup. Do not edit manually.\n'
     printf 'Section "Monitor"\n'
-    printf '    Identifier  "%s"\n'                "${CRT_OUTPUT}"
+    printf '    Identifier  "%s"\n'                "${CRT_OUTPUT_X11}"
     printf '    HorizSync   15.0-90.0\n'
     printf '    VertRefresh 49.0-130.0\n'
     printf '    Option      "DPMS"         "false"\n'
@@ -259,7 +301,7 @@ else
 
     sed \
         -e "s/@MONITOR@/${MONITOR_PROFILE}/g" \
-        -e "s/@DISPLAY@/${CRT_OUTPUT}/g" \
+        -e "s/@DISPLAY@/${CRT_OUTPUT_X11}/g" \
         -e "s/@INTERLACE@/${INTERLACE_VAL}/g" \
         -e "s/@DOTCLOCK_MIN@/${DOTCLOCK_MIN}/g" \
         -e "s/@SUPER_WIDTH@/${SUPER_WIDTH}/g" \

@@ -112,6 +112,37 @@ pci_to_xorg_busid() {
     printf 'PCI:%d:%d:%d\n' "${bus}" "${dev}" "${fn}"
 }
 
+# Returns 0 if the PCI device at the given address has an active DRM card in sysfs.
+# BIOS-disabled GPUs and non-GPU PCIe devices matching the VGA/3D lspci class
+# still appear in lspci but have no DRM card bound; this distinguishes them from
+# GPUs that are actually driving a display.
+has_drm_card() {
+    local pci_id="$1"
+    # Strip domain prefix if present
+    [[ "${pci_id}" == *:*:* ]] && pci_id="${pci_id#*:}"
+    for card_path in /sys/class/drm/card*/; do
+        readlink -f "${card_path}device" 2>/dev/null | grep -q "${pci_id}" && return 0
+    done
+    return 1
+}
+
+# Returns 0 if the PCI device has at least one DRM connector reporting status=connected.
+# Does not require a valid EDID — handles sleeping monitors that maintain HPD.
+# GPUs with no physical display wiring (e.g. iGPU with all ports routed to dGPU)
+# report all connectors as "disconnected", so this correctly skips them.
+has_connected_output() {
+    local pci_id="$1"
+    [[ "${pci_id}" == *:*:* ]] && pci_id="${pci_id#*:}"
+    for card_path in /sys/class/drm/card*/; do
+        readlink -f "${card_path}device" 2>/dev/null | grep -q "${pci_id}" || continue
+        local card; card="$(basename "${card_path}")"
+        for status_file in /sys/class/drm/"${card}"/*-*/status; do
+            [[ -f "${status_file}" ]] && [[ "$(cat "${status_file}")" == "connected" ]] && return 0
+        done
+    done
+    return 1
+}
+
 # Returns 0 if the PCI device at the given address is Thunderbolt-connected.
 # Thunderbolt downstream PCIe devices have sysfs paths passing through a
 # Thunderbolt domain hierarchy (contains "/domain[0-9]").
@@ -136,7 +167,20 @@ prime_init() {
     log "Multi-GPU detected (${gpu_count}) — checking PRIME"
 
     # NVIDIA PRIME
-    if [[ "$(get_conf nvidia-prime)" != "false" ]]; then
+    if [[ "$(get_conf nvidia-prime)" == "false" ]]; then
+        # User explicitly disabled PRIME.  Still write the nvidia-primary marker so
+        # prime_configure() generates a full Device/Screen/ServerLayout for NVIDIA.
+        # Without it, hippos-xorg-setup only writes a Device section; on hybrid
+        # systems Xorg then assigns the lower-PCI-address iGPU as Screen 0 (no
+        # outputs), leaving the NVIDIA-connected display blank.
+        local ngpu_pci
+        ngpu_pci="$(lspci -nn 2>/dev/null | grep -iE "nvidia" \
+            | grep -iE "VGA|3D|Display controller" | awk 'NR==1{print $1}')"
+        if [[ -n "${ngpu_pci}" ]]; then
+            log "NVIDIA PRIME disabled by config — forcing NVIDIA as primary display GPU (${ngpu_pci})"
+            printf '%s\n' "${ngpu_pci}" > /var/tmp/hippos-nvidia-primary
+        fi
+    else
         local ngpu
         ngpu="$(lspci -nn 2>/dev/null | grep -iE "nvidia" | grep -iE "VGA|3D|Display controller" | head -1 || true)"
         if [[ -n "${ngpu}" ]]; then
@@ -161,18 +205,72 @@ prime_init() {
             fi
 
             if [[ -z "${primary_pci}" ]]; then
-                # Check if NVIDIA itself drives the display
-                local nvidia_connected
-                nvidia_connected="$(find_connected_gpu "${ngpu}" || true)"
-                if [[ -n "${nvidia_connected}" ]]; then
-                    log "NVIDIA drives display directly — marking as primary, no PRIME offload"
+                # No iGPU connector reported a connected display with EDID yet.
+                # Before checking whether NVIDIA drives the display directly, determine
+                # whether any non-NVIDIA GPU has an active DRM card.  If one does, this
+                # is a mux-less Optimus topology (physical port wired to dGPU, iGPU used
+                # for compositing via PRIME Sink Output) and PRIME is correct regardless
+                # of which GPU holds the live HDMI connector.  Only route to
+                # NVIDIA-as-primary when no iGPU DRM card exists at all (mux-switched
+                # BIOS-disabled iGPU, or a true discrete-only system).
+                local any_drm=0
+                local first_drm_pci=""
+                for gpu_entry in "${other_gpus[@]}"; do
+                    local candidate="${gpu_entry%% *}"
+                    if has_drm_card "${candidate}"; then
+                        any_drm=1
+                        first_drm_pci="${candidate}"
+                        break
+                    fi
+                done
+
+                if [[ "${any_drm}" -eq 0 ]]; then
+                    # No iGPU DRM card — check if NVIDIA drives the display directly.
+                    local nvidia_connected
+                    nvidia_connected="$(find_connected_gpu "${ngpu}" || true)"
+                    if [[ -n "${nvidia_connected}" ]]; then
+                        log "No iGPU DRM; NVIDIA drives display directly — primary, no PRIME"
+                        printf '%s\n' "${ngpu%% *}" > /var/tmp/hippos-nvidia-primary
+                        return
+                    fi
+                    log "NVIDIA PRIME: no iGPU DRM and no connected outputs — treating NVIDIA as primary"
                     printf '%s\n' "${ngpu%% *}" > /var/tmp/hippos-nvidia-primary
                     return
                 fi
-                # No connected display detected — assume first non-NVIDIA GPU is primary
-                if [[ "${#other_gpus[@]}" -gt 0 ]]; then
-                    primary_pci="${other_gpus[0]%% *}"
-                    log "NVIDIA PRIME: no connected display detected — defaulting primary to ${primary_pci}"
+
+                # iGPU has DRM — poll briefly for DDC/TMDS to complete.
+                log "NVIDIA PRIME: iGPU DRM active but no connected output yet — polling for DDC (up to 6s)"
+                for _ in 1 2 3 4 5 6; do
+                    sleep 1
+                    primary_pci="$(find_connected_gpu "${other_gpus[@]}" || true)"
+                    [[ -n "${primary_pci}" ]] && break
+                done
+
+                if [[ -z "${primary_pci}" ]]; then
+                    # Still no confirmed connected output after delay.
+                    # Fall back to first non-NVIDIA GPU that has both an active DRM
+                    # card and at least one connector in "connected" state (status
+                    # only, no EDID — catches slow-EDID connectors where HPD asserts
+                    # before the EDID read completes).
+                    local fallback_pci=""
+                    for gpu_entry in "${other_gpus[@]}"; do
+                        local candidate_pci="${gpu_entry%% *}"
+                        if has_drm_card "${candidate_pci}" && has_connected_output "${candidate_pci}"; then
+                            fallback_pci="${candidate_pci}"
+                            break
+                        fi
+                    done
+                    if [[ -n "${fallback_pci}" ]]; then
+                        primary_pci="${fallback_pci}"
+                        log "NVIDIA PRIME: using ${primary_pci} as primary (connected, EDID pending)"
+                    else
+                        # iGPU has DRM but all connectors report disconnected — mux-less
+                        # Optimus where the physical port is on the dGPU.  PRIME Sink
+                        # Output is still the correct mode: modesetting as Screen 0,
+                        # NVIDIA exposes the display via setprovideroutputsource.
+                        primary_pci="${first_drm_pci}"
+                        log "NVIDIA PRIME: iGPU connectors disconnected (mux-less, display wired to dGPU) — using ${primary_pci} as PRIME primary"
+                    fi
                 fi
             else
                 log "NVIDIA PRIME: ${ngpu} (offload), primary display GPU: ${primary_pci}"
@@ -254,53 +352,20 @@ prime_configure() {
             nvidia_pci="$(cat /var/tmp/hippos-nvidia-prime.pci)"
         [[ -n "${nvidia_pci}" ]] && nvidia_busid="$(pci_to_xorg_busid "${nvidia_pci}")"
 
-        if [[ -n "${primary_pci}" ]]; then
-            # Explicitly set the display GPU as screen 0 so NVIDIA doesn't win
-            # screen assignment via OutputClass autoconfiguration priority.
-            local busid
-            busid="$(pci_to_xorg_busid "${primary_pci}")"
-            cat > "${xorg_prime}" <<EOF
-Section "Device"
-    Identifier  "Primary GPU"
-    Driver      "modesetting"
-    BusID       "${busid}"
-EndSection
-
-Section "Screen"
-    Identifier  "Primary Screen"
-    Device      "Primary GPU"
-EndSection
-
-Section "ServerLayout"
-    Identifier  "Prime"
-    Screen 0    "Primary Screen"
-    $([ -n "${nvidia_busid}" ] && printf 'Inactive    "NVIDIA GPU"')
-    Option      "AllowNVIDIAPrime" "1"
-EndSection
-EOF
-        else
-            cat > "${xorg_prime}" <<'EOF'
-Section "ServerLayout"
-    Identifier  "Prime"
-    Option      "AllowNVIDIAPrime" "1"
-EndSection
-EOF
-        fi
-
-        # Explicit NVIDIA device section prevents Xorg from auto-binding the GPU
-        # with modesetting (modeset(G0)), which fails against an active nvidia-drm
-        # device and causes "failed to create screen resources".
-        if [[ -n "${nvidia_busid}" ]]; then
-            cat >> "${xorg_prime}" <<EOF
-
-Section "Device"
-    Identifier  "NVIDIA GPU"
+        # Use OutputClass autoconfiguration (same approach as Batocera).
+        # Avoids hardcoding a primary BusID: when the iGPU EDID is unreadable at
+        # boot (e.g. HDMI port electrically routed through the dGPU on mini-PCs),
+        # an explicit modesetting Device/Screen/ServerLayout crashes X before it
+        # can write a log.  OutputClass lets Xorg pick the primary screen based on
+        # whichever GPU actually has a connected display.
+        cat > "${xorg_prime}" <<'EOF'
+Section "OutputClass"
+    Identifier  "nvidia"
+    MatchDriver "nvidia-drm"
     Driver      "nvidia"
-    BusID       "${nvidia_busid}"
-    Option      "AllowEmptyInitialConfiguration" "1"
+    Option      "AllowEmptyInitialConfiguration" "yes"
 EndSection
 EOF
-        fi
 
         if [[ -f /var/tmp/hippos-nvidia-egpu ]]; then
             cat >> "${xorg_prime}" <<'EOF'
@@ -318,7 +383,24 @@ export __NV_PRIME_RENDER_OFFLOAD_PROVIDER=NVIDIA-G0
 export __GLX_VENDOR_LIBRARY_NAME=nvidia
 export __VK_LAYER_NV_optimus=NVIDIA_only
 EOF
-        log "PRIME: NVIDIA — Xorg conf written (primary: ${primary_pci:-unknown}) + render offload env"
+
+        # Script run by hippos-xserver ExecStartPost after X is up.
+        # Establishes the PRIME Sink Output relationship (modesetting as scan-out
+        # provider consuming NVIDIA-G0 as the display output source), then applies
+        # the resulting mode configuration.  Without --setprovideroutputsource,
+        # xrandr --auto only sees i915's own connectors (all disconnected on
+        # mux-less Optimus) and no image appears on the NVIDIA-connected display.
+        mkdir -p /run/hippos
+        cat > /run/hippos/prime-xrandr <<'EOF'
+#!/bin/sh
+if xrandr --listproviders 2>/dev/null | grep -q "NVIDIA-G0"; then
+    xrandr --setprovideroutputsource modesetting NVIDIA-G0
+fi
+xrandr --auto
+EOF
+        chmod +x /run/hippos/prime-xrandr
+
+        log "PRIME: NVIDIA — Xorg conf written (primary: ${primary_pci:-unknown}) + render offload env + prime-xrandr"
 
     elif [[ -f /var/tmp/hippos-nvidia-primary ]]; then
         local nvidia_pci busid
