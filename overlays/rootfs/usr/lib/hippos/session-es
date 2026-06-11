@@ -19,9 +19,6 @@ export DISPLAY=:0
 export SDL_JOYSTICK_HIDAPI_STEAM=1
 unset XAUTHORITY
 
-# shellcheck disable=SC1091
-[[ -f /run/hippos/prime.env ]] && source /run/hippos/prime.env
-
 dbus-update-activation-environment --systemd DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS HOME 2>/dev/null || true
 
 /usr/lib/hippos/hippos-audio-setup
@@ -36,9 +33,6 @@ fi
 
 pkill -x unclutter 2>/dev/null || true
 unclutter -idle 3 -root &
-
-# Pre-warm NVIDIA PRIME context so openbox doesn't pay 18s init cost on first GL connection
-[[ -f /run/hippos/prime.env ]] && timeout 5 glxinfo -B >/dev/null 2>&1 || true
 
 xsetroot -solid black
 
