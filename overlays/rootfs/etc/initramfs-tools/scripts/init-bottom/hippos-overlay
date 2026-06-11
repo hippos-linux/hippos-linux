@@ -1,0 +1,65 @@
+#!/bin/sh
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in prereqs) prereqs; exit 0;; esac
+
+. /scripts/functions
+
+kmsg() { echo "hippos-overlay: $*" > /dev/kmsg 2>/dev/null || true; }
+
+BTRFS_MNT="/run/hippos-btrfs"
+
+kmsg "starting (rootmnt=${rootmnt})"
+
+modprobe overlay 2>/dev/null || true
+
+MAIN_DEV="$(blkid -L HippOS 2>/dev/null)"
+if [ -z "${MAIN_DEV}" ]; then
+    kmsg "HippOS partition not found — booting without overlay"
+    exit 0
+fi
+kmsg "main device: ${MAIN_DEV}"
+
+mkdir -p "${BTRFS_MNT}"
+if ! mount -t btrfs -o subvolid=5,noatime,commit=5,compress=zstd:1 "${MAIN_DEV}" "${BTRFS_MNT}"; then
+    kmsg "failed to mount HippOS btrfs top-level — booting without overlay"
+    exit 0
+fi
+kmsg "HippOS btrfs top-level mounted at ${BTRFS_MNT}"
+
+# Determine which rootfs subvol to use from the kernel cmdline.
+ROOT_SUBVOL="@rootfs"
+for _param in $(cat /proc/cmdline); do
+    case "$_param" in
+        rootflags=*subvol=*)
+            _sv="${_param##*subvol=}"
+            ROOT_SUBVOL="${_sv%%,*}"
+            ;;
+    esac
+done
+kmsg "rootfs subvol: ${ROOT_SUBVOL}"
+
+if [ ! -d "${BTRFS_MNT}/${ROOT_SUBVOL}" ] || [ ! -d "${BTRFS_MNT}/@overlay" ]; then
+    kmsg "required subvolumes missing — booting without overlay"
+    umount "${BTRFS_MNT}"
+    exit 0
+fi
+
+UPPER="${BTRFS_MNT}/@overlay/upper"
+WORK="${BTRFS_MNT}/@overlay/work"
+mkdir -p "${UPPER}" "${WORK}"
+
+OVERLAY_OPTS="lowerdir=${BTRFS_MNT}/${ROOT_SUBVOL},upperdir=${UPPER},workdir=${WORK}"
+if ! mount -t overlay -o "${OVERLAY_OPTS}" overlay "${rootmnt}"; then
+    kmsg "overlay mount failed"
+    umount "${BTRFS_MNT}"
+    exit 0
+fi
+kmsg "overlay mounted at ${rootmnt}"
+
+mkdir -p "${rootmnt}/userdata"
+if ! mount -t btrfs -o subvol=@userdata,noatime,commit=5,compress=zstd:1 "${MAIN_DEV}" "${rootmnt}/userdata"; then
+    kmsg "userdata mount failed — systemd will mount it from fstab"
+fi
+
+kmsg "done"

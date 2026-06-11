@@ -4,6 +4,7 @@ After=network-online.target var-lib-waydroid.mount
 Wants=network-online.target
 Requires=var-lib-waydroid.mount
 ConditionPathExists=!/userdata/system/waydroid/waydroid.cfg
+StartLimitIntervalSec=0
 
 [Service]
 Type=exec
@@ -12,7 +13,6 @@ StandardOutput=journal
 StandardError=journal
 Restart=on-failure
 RestartSec=60
-StartLimitIntervalSec=0
 
 [Install]
 WantedBy=multi-user.target
