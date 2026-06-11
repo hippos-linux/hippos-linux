@@ -10,7 +10,7 @@ ExecStartPre=/bin/sh -c 'for i in $(seq 1 40); do ls /dev/dri/card* >/dev/null 2
 ExecStartPre=/usr/lib/hippos/hippos-xorg-setup
 ExecStartPre=/bin/rm -f /tmp/.X0-lock /tmp/.X11-unix/X0
 ExecStart=/usr/lib/xorg/Xorg :0 vt1 -nolisten tcp -logfile /tmp/Xorg.0.log -ac
-ExecStartPost=/bin/sh -c 'for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do sleep 0.25; DISPLAY=:0 timeout 3 xrandr --listproviders 2>/dev/null && break; done; if [ -x /run/hippos/prime-xrandr ]; then DISPLAY=:0 /run/hippos/prime-xrandr 2>/dev/null || true; else DISPLAY=:0 xrandr --auto 2>/dev/null || true; fi; true'
+ExecStartPost=/bin/sh -c 'for i in $(seq 1 400); do sleep 0.5; DISPLAY=:0 timeout 2 xrandr --listproviders 2>/dev/null | grep -q "Provider 0:" && break; done; if [ -x /run/hippos/prime-xrandr ]; then for i in $(seq 1 40); do DISPLAY=:0 timeout 2 xrandr --listproviders 2>/dev/null | grep -q "NVIDIA-G0" && break; sleep 0.5; done; DISPLAY=:0 /run/hippos/prime-xrandr 2>/dev/null || true; else DISPLAY=:0 xrandr --auto 2>/dev/null || true; fi; true'
 Restart=on-failure
 RestartSec=2
 StandardInput=tty

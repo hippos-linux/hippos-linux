@@ -1,6 +1,6 @@
 [Unit]
 Description=HippOS First-Boot GRUB Configuration
-After=local-fs.target
+After=local-fs.target hippos-firstboot-flatpak.service
 ConditionPathExists=!/var/lib/hippos/grub-updated
 
 [Service]
