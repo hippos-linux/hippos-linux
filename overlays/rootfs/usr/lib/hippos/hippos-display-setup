@@ -50,20 +50,24 @@ esac
 _OUTPUT_CONFIGURED="$OUTPUT"
 OUTPUT="${OUTPUT:-$(xrandr 2>/dev/null | awk '/ connected/ {print $1; exit}')}"
 
-# Nothing explicitly configured — apply preferred mode and fall through for overscan
-if [[ -z "${_OUTPUT_CONFIGURED}" && ( -z "$RES" || "$RES" == "preferred" ) && "$ROTATION" == "normal" ]]; then
-    xrandr --auto 2>/dev/null || true
-fi
-RES="${RES:-preferred}"
+# Skip xrandr resolution/rotation when CRT is enabled — the kernel sets the
+# framebuffer mode via the GRUB video= param and X uses the CRT X11 config.
+# Calling --preferred or --auto here would override 15kHz back to 31kHz.
+if [[ "${_CRT_ENABLED}" != "true" && "${_CRT_ACTIVE}" != "true" ]]; then
+    if [[ -z "${_OUTPUT_CONFIGURED}" && ( -z "$RES" || "$RES" == "preferred" ) && "$ROTATION" == "normal" ]]; then
+        xrandr --auto 2>/dev/null || true
+    fi
+    RES="${RES:-preferred}"
 
-if [[ "$RES" == "preferred" ]]; then
-    xrandr --output "$OUTPUT" --preferred --rotate "$ROTATION" 2>/dev/null \
-        && echo "[hippos-display-setup] $OUTPUT preferred rotate=$ROTATION" \
-        || echo "[hippos-display-setup] xrandr failed for $OUTPUT" >&2
-else
-    xrandr --output "$OUTPUT" --mode "$RES" --rotate "$ROTATION" 2>/dev/null \
-        && echo "[hippos-display-setup] $OUTPUT $RES rotate=$ROTATION" \
-        || echo "[hippos-display-setup] mode '$RES' not available for $OUTPUT" >&2
+    if [[ "$RES" == "preferred" ]]; then
+        xrandr --output "$OUTPUT" --preferred --rotate "$ROTATION" 2>/dev/null \
+            && echo "[hippos-display-setup] $OUTPUT preferred rotate=$ROTATION" \
+            || echo "[hippos-display-setup] xrandr failed for $OUTPUT" >&2
+    else
+        xrandr --output "$OUTPUT" --mode "$RES" --rotate "$ROTATION" 2>/dev/null \
+            && echo "[hippos-display-setup] $OUTPUT $RES rotate=$ROTATION" \
+            || echo "[hippos-display-setup] mode '$RES' not available for $OUTPUT" >&2
+    fi
 fi
 
 # Bind touchscreen to the configured output and apply rotation matrix

@@ -1,4 +1,5 @@
 # Core OS
+usrmerge
 systemd
 systemd-sysv
 dbus
@@ -88,6 +89,8 @@ power-profiles-daemon
 thermald
 switcheroo-control
 zram-tools
+upower
+lm-sensors
 
 # Python runtime (hippos tools, emulatorlauncher, hotkey daemon)
 python3
@@ -108,6 +111,8 @@ xinput-calibrator
 xdotool
 xinit
 x11-xserver-utils
+x11-utils
+dbus-x11
 xfonts-base
 
 # GPU base (required for X11 hardware acceleration)
@@ -207,4 +212,6 @@ pciutils
 hwdata
 nano
 htop
+btop
+inxi
 psmisc
