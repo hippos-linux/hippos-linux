@@ -6,9 +6,10 @@ Before=hippos-es.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-TimeoutStopSec=10
+TimeoutStopSec=5
 ExecStart=/usr/lib/hippos/mount-roms-pool
 ExecStop=umount -l /userdata/roms
+ExecStop=pkill -f "mergerfs.*userdata/roms" || true
 
 [Install]
 WantedBy=multi-user.target

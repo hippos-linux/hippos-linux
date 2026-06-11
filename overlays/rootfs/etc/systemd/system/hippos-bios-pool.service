@@ -7,9 +7,10 @@ Wants=userdata.mount
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-TimeoutStopSec=10
+TimeoutStopSec=5
 ExecStart=/usr/lib/hippos/mount-bios-pool
 ExecStop=umount -l /userdata/bios
+ExecStop=pkill -f "mergerfs.*userdata/bios" || true
 
 [Install]
 WantedBy=multi-user.target

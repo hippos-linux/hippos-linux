@@ -7,9 +7,10 @@ Wants=userdata.mount
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-TimeoutStopSec=10
+TimeoutStopSec=5
 ExecStart=/usr/lib/hippos/mount-saves-pool
 ExecStop=umount -l /userdata/saves
+ExecStop=pkill -f "mergerfs.*userdata/saves" || true
 
 [Install]
 WantedBy=multi-user.target
