@@ -34,6 +34,16 @@ fi
 pkill -x unclutter 2>/dev/null || true
 unclutter -idle 3 -root &
 
+# One-shot PRIME provider check (Batocera-style): no polling, no blocking.
+# Sets up setprovideroutputsource for HDMI-on-NVIDIA machines if providers are
+# already registered; games get PRIME env vars via emulatorlauncher's prime.env read.
+if [ -x /run/hippos/prime-xrandr ]; then
+    provider_count=$(DISPLAY=:0 xrandr --listproviders 2>/dev/null | grep 'Providers:' | awk '{print $4}')
+    if [ "${provider_count:-0}" -ge 2 ]; then
+        DISPLAY=:0 /run/hippos/prime-xrandr 2>/dev/null || true
+    fi
+fi
+
 xsetroot -solid black
 
 exec openbox --sm-disable --startup /usr/bin/emulationstation
