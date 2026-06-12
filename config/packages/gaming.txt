@@ -4,7 +4,7 @@
 waydroid
 aapt
 weston
-unclutter
+unclutter-xfixes
 
 # Enable i386 before installing:
 # dpkg --add-architecture i386
