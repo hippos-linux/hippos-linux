@@ -82,14 +82,7 @@ find_connected_gpu() {
             readlink -f "${card_path}device" 2>/dev/null | grep -q "${pci_id}" || continue
             local card; card="$(basename "${card_path}")"
             for status_file in /sys/class/drm/"${card}"/*-*/status; do
-                [[ -f "${status_file}" ]] && [[ "$(cat "${status_file}")" == "connected" ]] || continue
-                # Require a non-empty EDID to confirm a real monitor is attached.
-                # status=connected without EDID is common on DP ports with no display
-                # (Arrow Lake iGPU, some mux-switched HDMI ports) and causes false-positive
-                # PRIME primary-display detection.  The "no display found" fallback in
-                # prime_init() handles the sleeping-monitor case.
-                local edid_file="${status_file%/status}/edid"
-                [[ -f "${edid_file}" ]] && [[ -s "${edid_file}" ]] && {
+                [[ -f "${status_file}" ]] && [[ "$(cat "${status_file}")" == "connected" ]] && {
                     printf '%s\n' "${pci_id}"; return 0
                 }
             done
@@ -265,9 +258,7 @@ prime_init() {
                         log "NVIDIA PRIME: using ${primary_pci} as primary (connected, EDID pending)"
                     else
                         # iGPU has DRM but all connectors report disconnected — mux-less
-                        # Optimus where the physical port is on the dGPU.  PRIME Sink
-                        # Output is still the correct mode: modesetting as Screen 0,
-                        # NVIDIA exposes the display via setprovideroutputsource.
+                        # Optimus where the physical port is on the dGPU.
                         primary_pci="${first_drm_pci}"
                         log "NVIDIA PRIME: iGPU connectors disconnected (mux-less, display wired to dGPU) — using ${primary_pci} as PRIME primary"
                     fi
@@ -332,8 +323,7 @@ prime_init() {
 # ── PRIME configuration (env + Xorg) ─────────────────────────────────────────
 # Called after prime_init() has written marker files.
 # Generates:
-#   /run/hippos/prime.env        — sourced by sessions (DRI_PRIME / NV offload vars)
-#   /run/hippos/prime-xrandr     — run after Xorg starts for NVIDIA PRIME sync
+#   /run/hippos/prime.env        — sourced by emulatorlauncher (DRI_PRIME / NV offload vars)
 #   /etc/X11/xorg.conf.d/90-hippos-prime.conf — Xorg layout for NVIDIA PRIME
 
 prime_configure() {
@@ -363,7 +353,6 @@ Section "OutputClass"
     Identifier  "nvidia"
     MatchDriver "nvidia-drm"
     Driver      "nvidia"
-    Option      "AllowEmptyInitialConfiguration" "yes"
 EndSection
 EOF
 
@@ -384,23 +373,7 @@ export __GLX_VENDOR_LIBRARY_NAME=nvidia
 export __VK_LAYER_NV_optimus=NVIDIA_only
 EOF
 
-        # Script run by hippos-xserver ExecStartPost after X is up.
-        # Establishes the PRIME Sink Output relationship (modesetting as scan-out
-        # provider consuming NVIDIA-G0 as the display output source), then applies
-        # the resulting mode configuration.  Without --setprovideroutputsource,
-        # xrandr --auto only sees i915's own connectors (all disconnected on
-        # mux-less Optimus) and no image appears on the NVIDIA-connected display.
-        mkdir -p /run/hippos
-        cat > /run/hippos/prime-xrandr <<'EOF'
-#!/bin/sh
-if xrandr --listproviders 2>/dev/null | grep -q "NVIDIA-G0"; then
-    xrandr --setprovideroutputsource modesetting NVIDIA-G0
-fi
-xrandr --auto
-EOF
-        chmod +x /run/hippos/prime-xrandr
-
-        log "PRIME: NVIDIA — Xorg conf written (primary: ${primary_pci:-unknown}) + render offload env + prime-xrandr"
+        log "PRIME: NVIDIA — Xorg conf written (primary: ${primary_pci:-unknown}) + render offload env"
 
     elif [[ -f /var/tmp/hippos-nvidia-primary ]]; then
         local nvidia_pci busid

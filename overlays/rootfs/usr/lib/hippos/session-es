@@ -34,13 +34,17 @@ fi
 pkill -x unclutter 2>/dev/null || true
 unclutter -idle 3 -root &
 
-# One-shot PRIME provider check (Batocera-style): no polling, no blocking.
-# Sets up setprovideroutputsource for HDMI-on-NVIDIA machines if providers are
-# already registered; games get PRIME env vars via emulatorlauncher's prime.env read.
-if [ -x /run/hippos/prime-xrandr ]; then
+if [ -f /var/tmp/hippos-nvidia.prime ]; then
     provider_count=$(DISPLAY=:0 xrandr --listproviders 2>/dev/null | grep 'Providers:' | awk '{print $4}')
     if [ "${provider_count:-0}" -ge 2 ]; then
-        DISPLAY=:0 /run/hippos/prime-xrandr 2>/dev/null || true
+        provider_number=$(DISPLAY=:0 xrandr --listproviders 2>/dev/null | awk '/NVIDIA/ {print $2}' | tr -d ':')
+        if [ -n "$provider_number" ]; then
+            export __NV_PRIME_RENDER_OFFLOAD=$provider_number
+            export __VK_LAYER_NV_optimus=NVIDIA_only
+            export __GLX_VENDOR_LIBRARY_NAME=nvidia
+            export VDPAU_DRIVER=nvidia
+            export LIBVA_DRIVER_NAME=nvidia
+        fi
     fi
 fi
 
