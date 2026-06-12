@@ -1,11 +1,27 @@
+shared_features:
+  - videomode
+  - mangohud
+  - vkbasalt
+  - gamescope
+  - gamescope_output_resolution
+  - gamescope_nested_resolution
+  - gamescope_nested_refresh
+  - gamescope_scaler
+  - gamescope_filter
+  - gamescope_sharpness
+  - gamescope_hdr
+  - gamescope_args
+custom_features:
+  wine-runner:
+    prompt: WINE RUNNER
+    description: "Choose the Wine runner. Custom runners go in /userdata/system/wine-runners/<name>/."
+    preset: runners
+  dxvk:
+    prompt: DXVK
+    description: Converts DirectX 8/9/10/11 calls to Vulkan. Disable if you get graphical issues.
+    choices:
+      "On (Default)": "true"
+      "Off": "false"
 systems:
 - name: windows
-  as_core:
-  - wine-tkg
-  - wine-proton
-  - umu
 - name: windows_installers
-  as_core:
-  - wine-tkg
-  - wine-proton
-  - umu
