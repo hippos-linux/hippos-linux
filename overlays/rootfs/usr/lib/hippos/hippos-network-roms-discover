@@ -5,6 +5,7 @@ import hashlib
 import ipaddress
 import re
 import shutil
+import socket
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -126,10 +127,22 @@ def discover_smbtree() -> list[Candidate]:
     return candidates
 
 
+def local_addresses() -> set[str]:
+    addrs: set[str] = {"127.0.0.1", "::1"}
+    try:
+        hostname = socket.gethostname()
+        for info in socket.getaddrinfo(hostname, None):
+            addrs.add(info[4][0])
+    except OSError:
+        pass
+    return addrs
+
+
 def discover_avahi_smb() -> list[Candidate]:
     output = run(["avahi-browse", "-rtp", "_smb._tcp"], timeout=8)
     candidates: list[Candidate] = []
     hosts: set[str] = set()
+    self_addrs = local_addresses()
     for raw in output.splitlines():
         if not raw.startswith("="):
             continue
@@ -142,7 +155,10 @@ def discover_avahi_smb() -> list[Candidate]:
 
     for host in sorted(hosts):
         try:
-            if ipaddress.ip_address(host).version == 6:
+            addr = ipaddress.ip_address(host)
+            if addr.version == 6:
+                continue
+            if str(addr) in self_addrs:
                 continue
         except ValueError:
             pass
