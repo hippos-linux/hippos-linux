@@ -40,7 +40,7 @@ if [[ -f "${GRUB_CRT_CONF}" ]]; then
     if update-grub 2>/dev/null; then
         log "GRUB updated — CRT kernel params removed"
     else
-        log "WARNING: update-grub failed — rerun manually to apply"
+        log "WARNING: update-grub failed — CRT params will clear after next boot"
     fi
 fi
 

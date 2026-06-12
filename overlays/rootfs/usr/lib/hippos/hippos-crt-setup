@@ -402,7 +402,7 @@ if [[ "${_new_grub_conf}" != "${_old_grub_conf}" ]]; then
     if update-grub 2>/dev/null; then
         log "GRUB updated: ${GRUB_CMDLINE}"
     else
-        warn "update-grub failed — GRUB CRT params will apply after next manual update-grub"
+        warn "update-grub failed — CRT params will apply after next boot"
     fi
 else
     log "GRUB dropin unchanged — skipping update-grub"
