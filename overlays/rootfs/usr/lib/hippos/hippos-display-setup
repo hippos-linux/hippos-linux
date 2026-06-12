@@ -54,15 +54,31 @@ OUTPUT="${OUTPUT:-$(xrandr 2>/dev/null | awk '/ connected/ {print $1; exit}')}"
 # framebuffer mode via the GRUB video= param and X uses the CRT X11 config.
 # Calling --preferred or --auto here would override 15kHz back to 31kHz.
 if [[ "${_CRT_ENABLED}" != "true" && "${_CRT_ACTIVE}" != "true" ]]; then
-    if [[ -z "${_OUTPUT_CONFIGURED}" && ( -z "$RES" || "$RES" == "preferred" ) && "$ROTATION" == "normal" ]]; then
-        xrandr --auto 2>/dev/null || true
-    fi
-    RES="${RES:-preferred}"
+    # Strip max- prefix saved by hippos-resolution setMode (e.g. "max-1920x1080")
+    [[ "$RES" == max-* ]] && RES="${RES#max-}"
 
-    if [[ "$RES" == "preferred" ]]; then
+    if [[ -z "$RES" || "$RES" == "preferred" ]]; then
+        # Prefer 1920x1080@60 when unconfigured (safe default for TVs),
+        # fall back to --auto if the output doesn't advertise that mode.
+        if xrandr --listModes "$OUTPUT" 2>/dev/null | grep -qE '^[[:space:]]*1920x1080[[:space:]]+60\.[0-9]+'; then
+            RES="1920x1080"
+            echo "[hippos-display-setup] $OUTPUT defaulting to 1920x1080 (safe default)"
+        else
+            xrandr --output "$OUTPUT" --auto 2>/dev/null || true
+            echo "[hippos-display-setup] $OUTPUT --auto (1920x1080@60 not advertised)"
+        fi
+    fi
+
+    if [[ "$RES" == "preferred" || -z "$RES" ]]; then
         xrandr --output "$OUTPUT" --preferred --rotate "$ROTATION" 2>/dev/null \
             && echo "[hippos-display-setup] $OUTPUT preferred rotate=$ROTATION" \
             || echo "[hippos-display-setup] xrandr failed for $OUTPUT" >&2
+    elif [[ "$RES" == *"."* ]]; then
+        # mode.rate format saved by hippos-resolution (e.g. "1920x1080.60")
+        RATE="${RES##*.}"; RES="${RES%.*}"
+        xrandr --output "$OUTPUT" --mode "$RES" --rate "$RATE" --rotate "$ROTATION" 2>/dev/null \
+            && echo "[hippos-display-setup] $OUTPUT ${RES}@${RATE}Hz rotate=$ROTATION" \
+            || echo "[hippos-display-setup] mode '$RES @ $RATE' not available for $OUTPUT" >&2
     else
         xrandr --output "$OUTPUT" --mode "$RES" --rotate "$ROTATION" 2>/dev/null \
             && echo "[hippos-display-setup] $OUTPUT $RES rotate=$ROTATION" \
