@@ -33,6 +33,11 @@ unset XAUTHORITY
 
 dbus-update-activation-environment --systemd DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS XDG_CONFIG_HOME HOME 2>/dev/null || true
 
+# Ensure wifi radio is on when entering desktop (NM may have saved a disabled state at boot)
+if [[ "$(/usr/lib/hippos/hippos-planemode status 2>/dev/null)" != "on" ]]; then
+    nmcli radio wifi on 2>/dev/null || true
+fi
+
 /usr/lib/hippos/hippos-audio-setup
 /usr/lib/hippos/hippos-display-setup
 

@@ -428,11 +428,21 @@ if __name__ == '__main__':
     # Allow BT hardware to settle
     time.sleep(5)
 
-    # Find adapter and snapshot existing devices
+    # Find adapter and power it on so ES can see it without a desktop BT manager
     try:
         gadapter = bluezutils.find_adapter(options.dev_id)
     except Exception:
         gadapter = bluezutils.find_adapter(None)
+
+    try:
+        adapter_props = dbus.Interface(
+            gadapter.proxy_object,
+            'org.freedesktop.DBus.Properties',
+        )
+        adapter_props.Set('org.bluez.Adapter1', 'Powered', dbus.Boolean(True))
+        logging.info('Adapter powered on')
+    except Exception as e:
+        logging.warning(f'Could not power on adapter: {e}')
 
     om = dbus.Interface(bus.get_object('org.bluez', '/'), 'org.freedesktop.DBus.ObjectManager')
     for path, interfaces in om.GetManagedObjects().items():

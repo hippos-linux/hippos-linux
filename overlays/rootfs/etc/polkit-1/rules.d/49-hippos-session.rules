@@ -16,6 +16,22 @@ polkit.addRule(function(action, subject) {
     }
 });
 
+// Allow hippos to mount/unmount/eject removable drives via udisks2 (hot-plug).
+// btrfs drives are still blocked by 90-btrfs-no-udisks2.rules so hippos-storage
+// handles them instead.
+polkit.addRule(function(action, subject) {
+    var udisksActions = [
+        "org.freedesktop.udisks2.filesystem-mount",
+        "org.freedesktop.udisks2.filesystem-mount-system",
+        "org.freedesktop.udisks2.filesystem-unmount-others",
+        "org.freedesktop.udisks2.eject-media",
+        "org.freedesktop.udisks2.power-off-drive"
+    ];
+    if (udisksActions.indexOf(action.id) >= 0 && subject.user === "hippos") {
+        return polkit.Result.YES;
+    }
+});
+
 // Allow hippos to power off, reboot, suspend, and hibernate without a logind session
 polkit.addRule(function(action, subject) {
     var powerActions = [
