@@ -53,7 +53,7 @@ nvidia_init() {
         current|open|legacy470)
             printf 'blacklist nouveau\noptions nouveau modeset=0\n' \
                 > /etc/modprobe.d/hippos-nvidia-blacklist.conf
-            printf 'options nvidia-drm modeset=1\n' \
+            printf 'options nvidia-drm modeset=1\noptions nvidia NVreg_DynamicPowerManagement=0x01\n' \
                 > /etc/modprobe.d/hippos-nvidia-drm.conf
             modprobe nvidia         2>>"${LOG}" || true
             modprobe nvidia-modeset 2>>"${LOG}" || true
