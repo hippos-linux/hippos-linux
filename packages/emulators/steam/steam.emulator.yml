@@ -1,3 +1,16 @@
+shared_features:
+  - videomode
+  - mangohud
+  - vkbasalt
+  - gamescope
+  - gamescope_output_resolution
+  - gamescope_nested_resolution
+  - gamescope_nested_refresh
+  - gamescope_scaler
+  - gamescope_filter
+  - gamescope_sharpness
+  - gamescope_hdr
+  - gamescope_args
 systems:
 - name: steam
   as_core: steam
