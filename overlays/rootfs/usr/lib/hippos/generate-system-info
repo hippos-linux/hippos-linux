@@ -27,7 +27,14 @@ def main():
         path      = (system.findtext("path")          or "").strip()
         extension = (system.findtext("extension")     or "").strip()
 
-        if not path or not os.path.isdir(path):
+        if not path:
+            continue
+
+        try:
+            os.makedirs(path, exist_ok=True)
+            os.chown(path, 1000, 100)
+        except OSError as e:
+            print(f"[generate-system-info] could not create {path}: {e}", file=sys.stderr)
             continue
 
         lines = [fullname]
