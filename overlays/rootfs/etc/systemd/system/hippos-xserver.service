@@ -10,7 +10,7 @@ ExecStartPre=/bin/sh -c 'for i in $(seq 1 40); do ls /dev/dri/card* >/dev/null 2
 ExecStartPre=/usr/lib/hippos/hippos-xorg-setup
 ExecStartPre=/bin/rm -f /tmp/.X0-lock /tmp/.X11-unix/X0
 ExecStart=/usr/lib/xorg/Xorg :0 vt7 -nolisten tcp -logfile /tmp/Xorg.0.log -ac
-ExecStartPost=/bin/sh -c 'for i in $(seq 1 40); do [ -S /tmp/.X11-unix/X0 ] && break; sleep 0.25; done; DISPLAY=:0 xrandr --auto 2>/dev/null || true'
+ExecStartPost=/bin/sh -c 'for i in $(seq 1 40); do [ -S /tmp/.X11-unix/X0 ] && break; sleep 0.25; done; DISPLAY=:0 xrandr --auto 2>/dev/null || true; chvt 7'
 Restart=on-failure
 RestartSec=2
 StandardInput=tty
