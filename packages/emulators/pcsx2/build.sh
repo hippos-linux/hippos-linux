@@ -146,6 +146,9 @@ mkdir -p "${STAGING}/lib"
 find "${KDDW_BUILD}/lib" -name "libkddockwidgets*.so*" \( -type f -o -type l \) | while read -r f; do
     cp -P "$f" "${STAGING}/lib/"
 done
+find /usr/lib/x86_64-linux-gnu -name "libshaderc_shared.so*" \( -type f -o -type l \) | while read -r f; do
+    cp -P "$f" "${STAGING}/lib/"
+done
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"
