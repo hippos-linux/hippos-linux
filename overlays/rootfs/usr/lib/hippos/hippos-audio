@@ -3,6 +3,7 @@
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
 export PIPEWIRE_RUNTIME_DIR="${XDG_RUNTIME_DIR}"
+export PULSE_SERVER="${PULSE_SERVER:-unix:${XDG_RUNTIME_DIR}/pulse/native}"
 
 _default_sink() { LC_ALL=C pactl get-default-sink 2>/dev/null || true; }
 _volume_pct()   { LC_ALL=C pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null | grep -oE '[0-9]+%' | head -1 | tr -d '%'; }

@@ -23,12 +23,29 @@ echo "Token:  ${TOKEN:0:8}…"
 echo "Server: ${UPLOAD_URL}"
 echo ""
 
+# ── Issue description ─────────────────────────────────────────────────────────
+
+echo "Describe the issue (press Enter twice when done):"
+ISSUE=""
+while IFS= read -r _line; do
+    [[ -z "${_line}" && -z "${ISSUE}" ]] && continue   # skip leading blanks
+    [[ -z "${_line}" ]] && break                        # blank line = done
+    ISSUE="${ISSUE}${_line}"$'\n'
+done
+ISSUE="${ISSUE%$'\n'}"
+if [[ -z "${ISSUE}" ]]; then
+    echo "Error: Issue description is required."
+    exit 1
+fi
+echo ""
+
 # ── Collect ───────────────────────────────────────────────────────────────────
 
 WORK="$(mktemp -d /tmp/hippos-upload.XXXXXX)"
 trap 'rm -rf "${WORK}"' EXIT
 LOGS="${WORK}/logs"
 mkdir -p "${LOGS}"
+printf '%s\n' "${ISSUE}" > "${LOGS}/issue.txt"
 
 echo -n "  System info...         "
 {
@@ -70,6 +87,25 @@ echo -n "  System info...         "
     echo ""
     echo "=== Display (xrandr) ==="
     DISPLAY=:0 xrandr 2>/dev/null || echo "xrandr not available"
+
+    echo ""
+    echo "=== Connector Status ==="
+    for _status in /sys/class/drm/*/status; do
+        printf '%s: %s\n' "${_status%/status}" "$(cat "${_status}" 2>/dev/null)"
+    done 2>/dev/null || echo "none"
+
+    echo ""
+    echo "=== EDID ==="
+    for _edid in /sys/class/drm/*/edid; do
+        _conn="${_edid%/edid}"
+        _size="$(wc -c < "${_edid}" 2>/dev/null || echo 0)"
+        if [[ "${_size}" -gt 0 ]]; then
+            printf '%s: %d bytes\n' "${_conn}" "${_size}"
+            edid-decode "${_edid}" 2>/dev/null || true
+        else
+            printf '%s: no EDID\n' "${_conn}"
+        fi
+    done 2>/dev/null || echo "none"
 
     echo ""
     echo "=== Service Status ==="
@@ -114,6 +150,36 @@ if [[ -f /var/log/hippos-gpu.log ]]; then
 else
     echo "not found"
 fi
+
+echo -n "  GRUB config...         "
+if [[ -f /boot/efi/grub/grub.cfg ]]; then
+    cp /boot/efi/grub/grub.cfg "${LOGS}/grub.cfg"
+    echo "done"
+else
+    echo "not found"
+fi
+
+echo -n "  GRUB defaults...       "
+{
+    for _f in /etc/default/grub /etc/default/grub.d/*.cfg; do
+        [[ -f "${_f}" ]] || continue
+        echo "=== ${_f} ==="
+        cat "${_f}"
+        echo ""
+    done
+} > "${LOGS}/grub-defaults.txt" 2>/dev/null
+[[ -s "${LOGS}/grub-defaults.txt" ]] && echo "done" || echo "not found"
+
+echo -n "  modprobe conf...       "
+{
+    for _f in /etc/modprobe.d/hippos-*.conf; do
+        [[ -f "${_f}" ]] || continue
+        echo "=== ${_f} ==="
+        cat "${_f}"
+        echo ""
+    done
+} > "${LOGS}/modprobe-hippos.txt" 2>/dev/null
+[[ -s "${LOGS}/modprobe-hippos.txt" ]] && echo "done" || echo "not found"
 
 echo -n "  /userdata/system/logs..."
 if [[ -d /userdata/system/logs ]]; then

@@ -115,6 +115,7 @@ x11-xserver-utils
 x11-utils
 dbus-x11
 xfonts-base
+edid-decode
 
 # GPU base (required for X11 hardware acceleration)
 libgl1-mesa-dri

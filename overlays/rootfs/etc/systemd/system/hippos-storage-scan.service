@@ -1,7 +1,6 @@
 [Unit]
 Description=HippOS storage scanner
-After=hippos-es.service
-Wants=hippos-es.service
+After=hippos-es.service hippos-desktop.service
 
 [Service]
 Type=oneshot
