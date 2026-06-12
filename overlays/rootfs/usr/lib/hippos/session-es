@@ -31,8 +31,10 @@ if hippos-touchscreen-detect 2>/dev/null; then
     touchegg &
 fi
 
-pkill -x unclutter 2>/dev/null || true
-unclutter -idle 3 -root &
+unclutter --noevents -b
+
+xset -dpms
+xset s off
 
 if [ -f /var/tmp/hippos-nvidia.prime ]; then
     provider_count=$(DISPLAY=:0 xrandr --listproviders 2>/dev/null | grep 'Providers:' | awk '{print $4}')

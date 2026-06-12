@@ -38,6 +38,7 @@ firmware-samsung
 thunderbolt-tools
 
 # Input
+kbd
 xserver-xorg-input-evdev
 
 # NVIDIA: installed from NVIDIA's own Debian 13 repo in configure-rootfs.sh
