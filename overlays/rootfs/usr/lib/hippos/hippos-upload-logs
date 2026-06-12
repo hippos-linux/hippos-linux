@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+# hippos-upload-logs — collect system logs and post to your HippOS beta thread.
+# Requires updates.token in /userdata/system/hippos.conf (sent via Discord DM
+# when you received Early Access).
+
+set -euo pipefail
+
+UPLOAD_URL="${HIPPOS_UPLOAD_URL:-https://logs.hippos-linux.org/upload-logs}"
+
+echo "HippOS Log Uploader"
+echo "==================="
+
+# ── Token ─────────────────────────────────────────────────────────────────────
+
+TOKEN="$(hippos-settings get updates.token 2>/dev/null || true)"
+if [[ -z "${TOKEN}" ]]; then
+    echo "Error: No beta token configured."
+    echo "Add 'updates.token=<your-token>' to /userdata/system/hippos.conf"
+    echo "Your token was sent by DM when you received the Early Access role."
+    exit 1
+fi
+echo "Token:  ${TOKEN:0:8}…"
+echo "Server: ${UPLOAD_URL}"
+echo ""
+
+# ── Collect ───────────────────────────────────────────────────────────────────
+
+WORK="$(mktemp -d /tmp/hippos-upload.XXXXXX)"
+trap 'rm -rf "${WORK}"' EXIT
+LOGS="${WORK}/logs"
+mkdir -p "${LOGS}"
+
+echo -n "  System info...         "
+{
+    echo "=== HippOS Version ==="
+    cat /usr/share/hippos/version 2>/dev/null || echo "unknown"
+
+    echo ""
+    echo "=== Kernel ==="
+    uname -a
+
+    echo ""
+    echo "=== CPU ==="
+    lscpu 2>/dev/null | head -30 || head -40 /proc/cpuinfo || true
+
+    echo ""
+    echo "=== Memory ==="
+    free -h
+
+    echo ""
+    echo "=== PCI Devices ==="
+    lspci -nn 2>/dev/null || true
+
+    echo ""
+    echo "=== Block Devices ==="
+    lsblk 2>/dev/null || true
+
+    echo ""
+    echo "=== Disk Usage ==="
+    df -h 2>/dev/null || true
+
+    echo ""
+    echo "=== GPU Modules ==="
+    lsmod 2>/dev/null | grep -E "nvidia|nouveau|amdgpu|radeon|i915|xe|drm" || echo "none matched"
+
+    echo ""
+    echo "=== PRIME Sentinels ==="
+    ls -la /var/tmp/hippos-*.prime 2>/dev/null || echo "none"
+
+    echo ""
+    echo "=== Display (xrandr) ==="
+    DISPLAY=:0 xrandr 2>/dev/null || echo "xrandr not available"
+
+    echo ""
+    echo "=== Service Status ==="
+    systemctl status --no-pager \
+        hippos-xserver hippos-es hippos-gpu-init \
+        hippos-userdata hippos-update-grub-first-boot \
+        2>/dev/null || true
+} > "${LOGS}/system-info.txt" 2>&1
+echo "done"
+
+echo -n "  Settings...            "
+{
+    echo "=== hippos.conf (token redacted) ==="
+    sed 's/\(updates\.token\s*=\s*\).*/\1<redacted>/' \
+        /userdata/system/hippos.conf 2>/dev/null || echo "(not found)"
+} > "${LOGS}/settings.txt" 2>&1
+echo "done"
+
+echo -n "  Journal (current boot)..."
+journalctl -b --no-pager 2>/dev/null > "${LOGS}/journal-boot.txt" || true
+echo " done"
+
+echo -n "  HippOS service journal..."
+journalctl -b --no-pager \
+    -u hippos-xserver -u hippos-es -u hippos-gpu-init \
+    -u hippos-userdata -u hippos-update-grub-first-boot \
+    2>/dev/null > "${LOGS}/journal-hippos-services.txt" || true
+echo " done"
+
+echo -n "  Xorg log...            "
+if [[ -f /tmp/Xorg.0.log ]]; then
+    cp /tmp/Xorg.0.log "${LOGS}/"
+    echo "done"
+else
+    echo "not found"
+fi
+
+echo -n "  GPU init log...        "
+if [[ -f /var/log/hippos-gpu.log ]]; then
+    cp /var/log/hippos-gpu.log "${LOGS}/"
+    echo "done"
+else
+    echo "not found"
+fi
+
+echo -n "  /userdata/system/logs..."
+if [[ -d /userdata/system/logs ]]; then
+    cp -r /userdata/system/logs "${LOGS}/userdata-system-logs"
+    _count="$(find /userdata/system/logs -type f | wc -l)"
+    echo " ${_count} file(s)"
+else
+    echo " directory not found"
+fi
+
+# ── Bundle ────────────────────────────────────────────────────────────────────
+
+BUNDLE="${WORK}/hippos-logs.tar.gz"
+echo -n "  Bundling...            "
+tar -czf "${BUNDLE}" -C "${WORK}" logs/
+_size="$(du -sh "${BUNDLE}" | cut -f1)"
+echo "${_size}"
+
+# ── Upload ────────────────────────────────────────────────────────────────────
+
+echo ""
+echo -n "Uploading to your beta thread... "
+HTTP_STATUS="$(curl -sf -o /dev/null -w "%{http_code}" \
+    -X POST "${UPLOAD_URL}" \
+    -H "X-HippOS-Token: ${TOKEN}" \
+    -F "logs=@${BUNDLE};type=application/gzip" \
+    --max-time 120 2>/dev/null || echo "000")"
+
+case "${HTTP_STATUS}" in
+    200)
+        echo "done"
+        echo ""
+        echo "Logs posted to your beta thread on Discord."
+        ;;
+    401)
+        echo "failed"
+        echo ""
+        echo "Error: Invalid token. Check updates.token in /userdata/system/hippos.conf"
+        exit 1
+        ;;
+    404)
+        echo "failed"
+        echo ""
+        echo "Error: Token not recognised — your beta access may have been revoked."
+        exit 1
+        ;;
+    413)
+        echo "failed"
+        echo ""
+        echo "Error: Log bundle too large. Try again after clearing old logs."
+        exit 1
+        ;;
+    000)
+        echo "failed"
+        echo ""
+        echo "Error: Could not reach upload server. Check your internet connection."
+        exit 1
+        ;;
+    *)
+        echo "failed"
+        echo ""
+        echo "Error: Unexpected response (HTTP ${HTTP_STATUS})."
+        exit 1
+        ;;
+esac
