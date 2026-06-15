@@ -71,4 +71,4 @@ docs/           Build and runtime notes
 
 ## License
 
-The build system and OS integration code in this repository are MIT licensed unless otherwise noted. Each bundled emulator carries its own license.
+The build system and OS integration code in this repository are GPL-3.0 licensed unless otherwise noted. Each bundled emulator carries its own license.
