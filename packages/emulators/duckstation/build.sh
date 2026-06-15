@@ -90,9 +90,5 @@ done
     versioned="$(ls libplutosvg.so.0.* 2>/dev/null | head -1)" && \
     [[ -n "${versioned}" ]] && ln -sf "${versioned}" libplutosvg.so.0 || true)
 
-find /usr/lib/x86_64-linux-gnu -name "libshaderc_shared.so*" \( -type f -o -type l \) | while read -r f; do
-    cp -P "$f" "${STAGING}/lib/"
-done
-
 write_artifact_version "${STAGING}" "$(git -C "${SRC}" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d)"
 log "Done. Artifact at ${STAGING}"

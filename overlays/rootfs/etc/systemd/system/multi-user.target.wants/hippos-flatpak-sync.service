@@ -1,1 +1,1 @@
-../hippos-flatpak-sync.service
+../../../../usr/lib/systemd/system/hippos-flatpak-sync.service

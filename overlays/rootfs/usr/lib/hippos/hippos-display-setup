@@ -35,6 +35,17 @@ elif [[ "${_CRT_ACTIVE}" == "true" ]]; then
     sudo /usr/lib/hippos/hippos-crt-teardown 2>&1 || true
 fi
 
+# After CRT setup, apply the boot resolution via switchres before ES starts.
+# Without this, ES inherits the kernel KMS modeline from the video= boot param
+# which may be slightly off (e.g. 62Hz instead of 60Hz), preventing CRT sync.
+# hippos-resolution minTomaxResolution in CRT mode calls switchres with the
+# configured crt.boot_resolution (e.g. 640x480i → switchres 640 480 60),
+# generating a standard NTSC 480i modeline at the correct field rate.
+if [[ -f /etc/switchres.ini ]] && command -v switchres >/dev/null 2>&1; then
+    hippos-resolution minTomaxResolution 2>/dev/null || true
+    echo "[hippos-display-setup] CRT boot mode applied via switchres"
+fi
+
 OUTPUT=$(hippos-settings get display.output 2>/dev/null || true)
 RES=$(hippos-settings get display.resolution 2>/dev/null || true)
 ROTATE=$(hippos-settings get display.rotate 2>/dev/null || true)

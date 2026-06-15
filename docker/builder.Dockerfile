@@ -24,6 +24,11 @@ RUN apt-get update \
         grub2-common \
         grub-efi-amd64-bin \
         grub-pc-bin \
+        gcc-aarch64-linux-gnu \
+        g++-aarch64-linux-gnu \
+        binutils-aarch64-linux-gnu \
+        qemu-user-static \
+        binfmt-support \
         kmod \
         kpartx \
         libdw-dev \

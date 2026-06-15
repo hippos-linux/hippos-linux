@@ -7,12 +7,25 @@ set -euo pipefail
 source "/work/build/common.sh"
 
 EMULATOR_NAME='retroarch'
-ARTIFACT_ROOT="${ARTIFACT_ROOT:-/artifacts}"
+
+case "${ARCH}" in
+    amd64)
+        LIBRETRO_ARCH="x86_64"
+        ;;
+    arm64)
+        LIBRETRO_ARCH="aarch64"
+        ;;
+    *)
+        die "Unsupported libretro buildbot arch for ARCH=${ARCH}"
+        ;;
+esac
+
+ARTIFACT_ROOT="${ARTIFACT_ROOT:-"${ARTIFACTS_DIR}/${ARCH}"}"
 STAGING_DIR="${ARTIFACT_ROOT}/emulators/${EMULATOR_NAME}"
 CORES_DIR="${ARTIFACT_ROOT}/libretro-cores"
-ETAG_DIR="${ARTIFACT_ROOT}/libretro-cores/.etags"
+ETAG_DIR="${CORES_DIR}/.etags"
 
-BUILDBOT_BASE="https://buildbot.libretro.com/nightly/linux/x86_64/latest"
+BUILDBOT_BASE="https://buildbot.libretro.com/nightly/linux/${LIBRETRO_ARCH}/latest"
 
 FORCE=0
 [[ "${1:-}" == "--force" ]] && FORCE=1
@@ -21,10 +34,11 @@ log() { printf '[build:%s] %s\n' "${EMULATOR_NAME}" "$*"; }
 
 mkdir -p "${STAGING_DIR}" "${CORES_DIR}" "${ETAG_DIR}"
 
-log "Fetching buildbot index..."
+log "Fetching buildbot index for ARCH=${ARCH} (${LIBRETRO_ARCH})..."
 AVAILABLE=$(curl -fsSL "${BUILDBOT_BASE}/" \
     | grep -o 'href="[^"]*_libretro\.so\.zip"' \
-    | sed 's|href="/nightly/linux/x86_64/latest/||;s/\.zip"//' \
+    | sed 's|href="||;s|\.zip"||' \
+    | xargs -n1 basename \
     | sort)
 
 total=0
@@ -41,7 +55,8 @@ while IFS= read -r so_name; do
 
     if [[ "${FORCE}" -eq 0 ]]; then
         remote_etag=$(curl -fsSI "${BUILDBOT_BASE}/${so_name}.zip" \
-            | grep -i '^etag:' | tr -d '\r' | awk '{print $2}')
+            | grep -i '^etag:' | tr -d '\r' | awk '{print $2}' || true)
+
         stored_etag=""
         [[ -f "${etag_file}" ]] && stored_etag=$(cat "${etag_file}")
 
@@ -52,15 +67,20 @@ while IFS= read -r so_name; do
     fi
 
     log "Downloading ${so_name}..."
-    tmp=$(mktemp)
+
+    tmp="$(mktemp)"
+    headers="${tmp}.headers"
+
     if curl -fsSL "${BUILDBOT_BASE}/${so_name}.zip" \
-            -D "${tmp}.headers" \
+            -D "${headers}" \
             -o "${tmp}"; then
+
         if unzip -p "${tmp}" "${so_name}" > "${dest}" 2>/dev/null \
             || unzip -p "${tmp}" > "${dest}" 2>/dev/null; then
-            # Save ETag for next run
-            new_etag=$(grep -i '^etag:' "${tmp}.headers" | tr -d '\r' | awk '{print $2}')
+
+            new_etag=$(grep -i '^etag:' "${headers}" | tr -d '\r' | awk '{print $2}' || true)
             [[ -n "${new_etag}" ]] && echo -n "${new_etag}" > "${etag_file}"
+
             downloaded=$(( downloaded + 1 ))
             log "  OK: ${so_name}"
         else
@@ -68,9 +88,10 @@ while IFS= read -r so_name; do
             rm -f "${dest}"
             failed=$(( failed + 1 ))
         fi
-        rm -f "${tmp}" "${tmp}.headers"
+
+        rm -f "${tmp}" "${headers}"
     else
-        rm -f "${tmp}" "${tmp}.headers"
+        rm -f "${tmp}" "${headers}"
         log "  WARN: download failed for ${so_name}"
         failed=$(( failed + 1 ))
     fi

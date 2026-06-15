@@ -1,0 +1,8 @@
+# arm64-specific base packages
+
+# GRUB EFI bootloader for arm64
+grub-efi-arm64
+
+# Raspberry Pi firmware and trusted firmware
+raspi-firmware
+arm-trusted-firmware

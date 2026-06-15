@@ -1,1 +1,1 @@
-../hippos-capture-boot-logs.service
+../../../../usr/lib/systemd/system/hippos-capture-boot-logs.service

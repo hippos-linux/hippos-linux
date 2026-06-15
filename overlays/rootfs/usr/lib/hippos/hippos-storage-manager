@@ -1157,8 +1157,18 @@ def rebuild_rom_pool() -> None:
     subprocess.run(["systemctl", "start", "--no-block", "hippos-rom-scan.service"], check=False)
 
 
+def rebuild_bios_pool() -> None:
+    subprocess.run(["systemctl", "restart", "--no-block", "hippos-bios-pool.service"], check=False)
+
+
+def rebuild_saves_pool() -> None:
+    subprocess.run(["systemctl", "restart", "--no-block", "hippos-saves-pool.service"], check=False)
+
+
 def rebuild_and_reload() -> None:
     rebuild_rom_pool()
+    rebuild_bios_pool()
+    rebuild_saves_pool()
     reload_es_games()
 
 
@@ -1192,7 +1202,7 @@ def cmd_eject(mount_path: str) -> int:
         path.rmdir()
     except OSError:
         pass
-    rebuild_rom_pool()
+    rebuild_and_reload()
     return 0
 
 
@@ -1242,6 +1252,8 @@ def cmd_mount(device: str) -> int:
             rebuild_and_reload()
     else:
         rebuild_rom_pool()
+        rebuild_bios_pool()
+        rebuild_saves_pool()
     return proc.returncode
 
 

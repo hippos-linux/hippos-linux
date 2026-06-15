@@ -1,1 +1,1 @@
-../hippos-update-grub.service
+../../../../usr/lib/systemd/system/hippos-update-grub.service

@@ -21,8 +21,6 @@ iputils-ping
 # WiFi & audio firmware (non-free — broad hardware coverage)
 firmware-linux
 firmware-linux-nonfree
-intel-microcode
-amd64-microcode
 firmware-iwlwifi
 firmware-realtek
 firmware-atheros
@@ -50,10 +48,9 @@ wget
 gnupg
 
 # Boot
-# linux-image-amd64 and linux-headers-amd64 are NOT installed from Debian.
-# The patched 15kHz kernel is built by build/build-kernel.sh and installed
-# via configure-rootfs.sh.
-grub-efi-amd64
+# The patched kernel is built by build/build-kernel.sh and installed via
+# configure-rootfs.sh. GRUB EFI package is arch-specific (see base-${ARCH}.txt).
+# grub-efi-amd64 / grub-efi-arm64 live in config/packages/base-${ARCH}.txt.
 
 # Storage
 btrfs-progs
@@ -123,11 +120,7 @@ libgles2
 
 # GPU Xorg drivers (modesetting is default but DDX drivers improve compatibility)
 xserver-xorg-video-amdgpu
-xserver-xorg-video-intel
 xserver-xorg-video-fbdev
-
-# Intel VA-API (free tier; non-free tier installed by configure-rootfs.sh)
-intel-media-va-driver
 
 # Audio
 pipewire
@@ -173,6 +166,7 @@ libboost-date-time1.83.0
 
 # Vulkan shader compilation (required by PCSX2, Dolphin, and other Vulkan emulators)
 libshaderc1
+libshaderc-dev
 
 # Audio device backend (required by openMSX, SugarboxV2, and others built against portaudio)
 libportaudio2
@@ -187,7 +181,6 @@ libphysfs1
 libtcl8.6
 libsdl2-net-2.0-0
 libcubeb0
-libsdl3-0:i386
 
 # Media
 ffmpeg

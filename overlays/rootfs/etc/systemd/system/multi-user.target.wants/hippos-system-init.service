@@ -1,1 +1,1 @@
-../hippos-system-init.service
+../../../../usr/lib/systemd/system/hippos-system-init.service

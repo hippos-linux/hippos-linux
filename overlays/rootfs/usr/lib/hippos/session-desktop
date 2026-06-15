@@ -41,4 +41,7 @@ fi
 /usr/lib/hippos/hippos-audio-setup
 /usr/lib/hippos/hippos-display-setup
 
+xset -dpms 2>/dev/null || true
+xset s off 2>/dev/null || true
+
 exec "$SESSION_CMD"
