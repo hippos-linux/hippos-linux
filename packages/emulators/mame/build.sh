@@ -18,7 +18,16 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}"
 
-make -C "${SRC}" -j"$(nproc)" TOOLS=1 NOWERROR=1
+if [[ "${ARCH:-amd64}" == "arm64" ]]; then
+    make -C "${SRC}" -j"$(nproc)" NOWERROR=1 \
+        CROSS_BUILD=1 \
+        OVERRIDE_CC=aarch64-linux-gnu-gcc \
+        OVERRIDE_CXX=aarch64-linux-gnu-g++ \
+        OVERRIDE_LD=aarch64-linux-gnu-ld \
+        PTR64=1
+else
+    make -C "${SRC}" -j"$(nproc)" TOOLS=1 NOWERROR=1
+fi
 
 mkdir -p "${STAGING}/bin"
 staged=0

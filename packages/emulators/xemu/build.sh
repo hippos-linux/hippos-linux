@@ -57,7 +57,7 @@ chmod +x "${STAGING}/bin/xemu"
 strip "${STAGING}/bin/xemu" || true
 
 mkdir -p "${STAGING}/lib"
-cp /usr/lib/x86_64-linux-gnu/libtomlplusplus.so.3* "${STAGING}/lib/" 2>/dev/null || true
+cp /usr/lib/${GNU_ARCH}/libtomlplusplus.so.3* "${STAGING}/lib/" 2>/dev/null || true
 patchelf --set-rpath '$ORIGIN/../lib' "${STAGING}/bin/xemu" 2>/dev/null || true
 
 if [[ -d "${SRC}/data" ]]; then

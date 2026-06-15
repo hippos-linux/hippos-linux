@@ -27,7 +27,10 @@ fi
 
 mkdir -p "${STAGING}/bin"
 cd "${SRC}"
-./configure --prefix="${STAGING}"
+_host_args=()
+[[ "${ARCH:-amd64}" == "arm64" ]] && [[ "$(uname -m)" == "x86_64" ]] && \
+    _host_args=(--host=aarch64-linux-gnu --build=x86_64-linux-gnu)
+./configure --prefix="${STAGING}" "${_host_args[@]}"
 make -j"$(nproc)"
 make install
 

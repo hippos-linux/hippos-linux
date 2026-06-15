@@ -27,14 +27,14 @@ meson install -C "${BUILD}"
 
 # meson strips RPATH on install; re-add so bundled libs are found at runtime
 find "${STAGING}/bin" -type f -perm /111 | while read -r b; do
-    patchelf --set-rpath '$ORIGIN/../lib/x86_64-linux-gnu:$ORIGIN/../lib' "${b}" 2>/dev/null || true
+    patchelf --set-rpath "\$ORIGIN/../lib/${GNU_ARCH}:\$ORIGIN/../lib" "${b}" 2>/dev/null || true
 done
 
 # Copy vendored shared libs (fluidsynth, mt32emu) that meson wrap builds but doesn't install
-mkdir -p "${STAGING}/lib/x86_64-linux-gnu"
+mkdir -p "${STAGING}/lib/${GNU_ARCH}"
 find "${BUILD}" \( -name "libfluidsynth.so*" -o -name "libmt32emu.so*" \) \
     ! -name "*.a" \
-    -exec cp -P {} "${STAGING}/lib/x86_64-linux-gnu/" \; 2>/dev/null || true
+    -exec cp -P {} "${STAGING}/lib/${GNU_ARCH}/" \; 2>/dev/null || true
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"

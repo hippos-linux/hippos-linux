@@ -19,6 +19,11 @@ STAGING="${ARTIFACT_ROOT}/emulators/${NAME}"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
+if [[ "${ARCH:-amd64}" == "arm64" ]]; then
+    log "SKIP: vpinball standalone build uses a linux-x64-only CMakeLists with hardcoded x86 SIMD flags; no arm64 build available"
+    exit 0
+fi
+
 if [[ -d "${SRC}/.git" ]]; then
     current_sha="$(git -C "${SRC}" rev-parse HEAD 2>/dev/null || echo 'unknown')"
     if [[ "${current_sha}" != "${SHA}" ]]; then

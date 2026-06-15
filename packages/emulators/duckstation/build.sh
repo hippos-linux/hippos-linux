@@ -5,8 +5,13 @@ source "/work/build/common.sh"
 
 NAME='duckstation'
 REPO='https://github.com/stenzek/duckstation.git'
-DEPS_REPO='https://github.com/duckstation/dependencies/releases/latest/download/deps-linux-x64.tar.xz'
 REF="${DUCKSTATION_REF:-master}"
+
+case "${ARCH:-amd64}" in
+    arm64) _ds_arch="aarch64"; _ds_deps_suffix="linux-aarch64" ;;
+    *)     _ds_arch="x64";     _ds_deps_suffix="linux-x64"     ;;
+esac
+DEPS_REPO="https://github.com/duckstation/dependencies/releases/latest/download/deps-${_ds_deps_suffix}.tar.xz"
 
 ARTIFACT_ROOT="${ARTIFACT_ROOT:-/artifacts}"
 WORK_ROOT="${WORK_ROOT:-/work/work/emulators}"
@@ -24,13 +29,13 @@ source "/work/build/qt611-env.sh"
 
 mkdir -p "${SRC}/dep/prebuilt" "${STAGING}/bin"
 
-if [[ ! -f "${SRC}/dep/prebuilt/.deps-linux-x64.done" ]]; then
-    log "Downloading DuckStation deps-linux-x64"
-    curl -fL "${DEPS_REPO}" -o "${WORK_ROOT}/${NAME}/deps-linux-x64.tar.xz"
+if [[ ! -f "${SRC}/dep/prebuilt/.deps-${_ds_deps_suffix}.done" ]]; then
+    log "Downloading DuckStation deps-${_ds_deps_suffix}"
+    curl -fL "${DEPS_REPO}" -o "${WORK_ROOT}/${NAME}/deps-${_ds_deps_suffix}.tar.xz"
 
     log "Extracting DuckStation prebuilt dependencies"
-    tar -xJf "${WORK_ROOT}/${NAME}/deps-linux-x64.tar.xz" -C "${SRC}/dep/prebuilt"
-    touch "${SRC}/dep/prebuilt/.deps-linux-x64.done"
+    tar -xJf "${WORK_ROOT}/${NAME}/deps-${_ds_deps_suffix}.tar.xz" -C "${SRC}/dep/prebuilt"
+    touch "${SRC}/dep/prebuilt/.deps-${_ds_deps_suffix}.done"
 fi
 
 rm -rf "${BUILD}"
@@ -50,11 +55,11 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld" \
     -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld" \
     -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
-    -DCMAKE_PREFIX_PATH="${QT_ROOT};${SRC}/dep/prebuilt/linux-x64" \
-    -DADDITIONAL_LIBRARY_PATHS="${SRC}/dep/prebuilt/linux-x64/lib" \
-    -DSoundTouch_ROOT="${SRC}/dep/prebuilt/linux-x64" \
-    -DSoundTouch_DIR="${SRC}/dep/prebuilt/linux-x64/lib/cmake/SoundTouch" \
-    -DSHADERC_LIBRARY=/usr/lib/x86_64-linux-gnu/libshaderc_combined.a \
+    -DCMAKE_PREFIX_PATH="${QT_ROOT};${SRC}/dep/prebuilt/${_ds_deps_suffix}" \
+    -DADDITIONAL_LIBRARY_PATHS="${SRC}/dep/prebuilt/${_ds_deps_suffix}/lib" \
+    -DSoundTouch_ROOT="${SRC}/dep/prebuilt/${_ds_deps_suffix}" \
+    -DSoundTouch_DIR="${SRC}/dep/prebuilt/${_ds_deps_suffix}/lib/cmake/SoundTouch" \
+    -DSHADERC_LIBRARY=/usr/lib/${GNU_ARCH}/libshaderc_combined.a \
     -DBUILD_QT_FRONTEND=ON \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
     -DCMAKE_INSTALL_RPATH="/opt/hippos/qt/6.11/lib:\$ORIGIN/../lib"
@@ -78,7 +83,7 @@ cp -r "${BUILD}/bin/resources" "${STAGING}/bin/"
 # Bundle prebuilt runtime libs that the binary's $ORIGIN/../lib rpath expects.
 # libcpuinfo.so has no soname versioning in the duckstation prebuilt.
 # libsoundtouch.so.2 differs from Debian's libSoundTouch.so.1 (different case + version).
-PREBUILT_LIB="${SRC}/dep/prebuilt/linux-x64/lib"
+PREBUILT_LIB="${SRC}/dep/prebuilt/${_ds_deps_suffix}/lib"
 mkdir -p "${STAGING}/lib"
 cp "${PREBUILT_LIB}/libcpuinfo.so" "${STAGING}/lib/"
 cp "${PREBUILT_LIB}/libsoundtouch.so.2.3.3" "${STAGING}/lib/"

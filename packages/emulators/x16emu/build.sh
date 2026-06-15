@@ -16,6 +16,11 @@ STAGING="${ARTIFACT_ROOT}/emulators/${NAME}"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
+if [[ "${ARCH:-amd64}" == "arm64" ]]; then
+    log "SKIP: x16emu Makefile hardcodes /usr/include/x86_64-linux-gnu/SDL2; no arm64 support"
+    exit 0
+fi
+
 clone_source "${REPO}" "${TAG}" "${SRC}"
 
 mkdir -p "${STAGING}/bin"
