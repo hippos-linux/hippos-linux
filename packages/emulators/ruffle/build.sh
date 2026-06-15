@@ -43,9 +43,15 @@ rustup override set "${TOOLCHAIN}"
 rustc +"${TOOLCHAIN}" --version
 cargo +"${TOOLCHAIN}" --version
 
-cargo +"${TOOLCHAIN}" build --release --package ruffle_desktop
-
-cp "${SRC}/target/release/ruffle_desktop" "${STAGING}/bin/ruffle"
+if [[ "${ARCH:-amd64}" == "arm64" ]]; then
+    rustup target add aarch64-unknown-linux-gnu --toolchain "${TOOLCHAIN}"
+    cargo +"${TOOLCHAIN}" build --release --package ruffle_desktop \
+        --target aarch64-unknown-linux-gnu
+    cp "${SRC}/target/aarch64-unknown-linux-gnu/release/ruffle_desktop" "${STAGING}/bin/ruffle"
+else
+    cargo +"${TOOLCHAIN}" build --release --package ruffle_desktop
+    cp "${SRC}/target/release/ruffle_desktop" "${STAGING}/bin/ruffle"
+fi
 
 if [[ ! -x "${STAGING}/bin/ruffle" ]]; then
     die "ruffle binary was not produced"

@@ -29,7 +29,11 @@ mkdir -p "${STAGING}/bin"
 (
     cd "${SRC}"
     autoreconf -i
+    _host_args=()
+    [[ "${ARCH:-amd64}" == "arm64" ]] && [[ "$(uname -m)" == "x86_64" ]] && \
+        _host_args=(--host=aarch64-linux-gnu --build=x86_64-linux-gnu)
     ./configure \
+        "${_host_args[@]}" \
         --prefix="${STAGING}" \
         --enable-sdlui2 \
         --without-oss

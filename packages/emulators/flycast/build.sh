@@ -28,7 +28,7 @@ cmake -S "${SRC}" -B "${BUILD}/standalone" \
 cmake --build "${BUILD}/standalone" -j"$(nproc)"
 cp "${BUILD}/standalone/flycast" "${STAGING}/bin/"
 mkdir -p "${STAGING}/lib"
-cp /usr/lib/x86_64-linux-gnu/libao.so.4* "${STAGING}/lib/" 2>/dev/null || true
+cp /usr/lib/${GNU_ARCH}/libao.so.4* "${STAGING}/lib/" 2>/dev/null || true
 patchelf --set-rpath '$ORIGIN/../lib' "${STAGING}/bin/flycast" 2>/dev/null || true
 
 write_artifact_version "${STAGING}" "${TAG}"

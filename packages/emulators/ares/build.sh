@@ -37,7 +37,7 @@ ARES_BIN="$(find "${BUILD}" -maxdepth 5 -name 'ares' -type f -perm /111 | head -
 log "Binary: ${ARES_BIN}"
 cp "${ARES_BIN}" "${STAGING}/bin/ares"
 mkdir -p "${STAGING}/lib"
-cp /usr/lib/x86_64-linux-gnu/libao.so.4* "${STAGING}/lib/" 2>/dev/null || true
+cp /usr/lib/${GNU_ARCH}/libao.so.4* "${STAGING}/lib/" 2>/dev/null || true
 patchelf --set-rpath '$ORIGIN/../lib' "${STAGING}/bin/ares" 2>/dev/null || true
 
 # Copy any bundled data/shaders alongside the binary

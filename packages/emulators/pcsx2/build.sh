@@ -112,7 +112,7 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_PREFIX_PATH="${QT_ROOT};${PLUTOVG_PREFIX};${PLUTOSVG_PREFIX};${KDDW_PREFIX}" \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
     -DCMAKE_INSTALL_RPATH="/opt/hippos/qt/6.11/lib:\$ORIGIN/../lib" \
-    -DSHADERC_LIBRARY=/usr/lib/x86_64-linux-gnu/libshaderc_combined.a \
+    -DSHADERC_LIBRARY=/usr/lib/${GNU_ARCH}/libshaderc_combined.a \
     -DSHADERC_INCLUDE_DIR=/usr/include \
     -DBUILD_SHARED_LIBS=OFF \
     -DDISABLE_ADVANCE_SIMD=ON \

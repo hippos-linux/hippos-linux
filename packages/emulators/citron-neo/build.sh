@@ -31,6 +31,12 @@ rm -rf "${STAGING}"
 rm -rf "${BUILD}"
 mkdir -p "${STAGING}/bin"
 
+_citron_arch_flags=()
+[[ "${ARCH:-amd64}" == "amd64" ]] && _citron_arch_flags=(
+    -DCMAKE_C_FLAGS="-mtls-dialect=gnu2"
+    -DCMAKE_CXX_FLAGS="-mtls-dialect=gnu2"
+)
+
 log "Configuring Citron Neo ${TAG}"
 cmake -S "${SRC}" -B "${BUILD}" \
     -G Ninja \
@@ -62,8 +68,7 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
     -DCMAKE_INSTALL_RPATH="/opt/hippos/qt/6.11/lib" \
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-    -DCMAKE_C_FLAGS="-mtls-dialect=gnu2" \
-    -DCMAKE_CXX_FLAGS="-mtls-dialect=gnu2" \
+    "${_citron_arch_flags[@]}" \
     -Wno-dev
 
 log "Building Citron Neo"

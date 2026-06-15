@@ -28,9 +28,9 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_INSTALL_RPATH="\$ORIGIN/../lib" \
     -DSOLARUS_LIBRARY_INSTALL=ON \
     -DLUA_INCLUDE_DIR=/usr/include/luajit-2.1 \
-    -DLUA_LIBRARY=/usr/lib/x86_64-linux-gnu/libluajit-5.1.so \
+    -DLUA_LIBRARY=/usr/lib/${GNU_ARCH}/libluajit-5.1.so \
     -DLUAJIT_INCLUDE_DIR=/usr/include/luajit-2.1 \
-    -DLUAJIT_LIBRARY=/usr/lib/x86_64-linux-gnu/libluajit-5.1.so
+    -DLUAJIT_LIBRARY=/usr/lib/${GNU_ARCH}/libluajit-5.1.so
 
 log "Building"
 cmake --build "${BUILD}" -j"$(nproc)"
