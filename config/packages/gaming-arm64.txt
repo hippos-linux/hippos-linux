@@ -1,0 +1,4 @@
+# arm64-specific gaming packages
+
+# Broadcom VideoCore VII Vulkan driver (Raspberry Pi 5)
+vulkan-broadcom

@@ -6,38 +6,19 @@ aapt
 weston
 unclutter-xfixes
 
-# Enable i386 before installing:
-# dpkg --add-architecture i386
-# apt-get update
-
-# Vulkan / OpenGL gaming stack
+# Vulkan / OpenGL gaming stack (arch-specific multiarch variants in gaming-${ARCH}.txt)
 libvulkan1
-libvulkan1:i386
 vulkan-tools
 
-libgl1:amd64
-libgl1:i386
+libgl1
 
-libglx-mesa0:amd64
-libglx-mesa0:i386
+libglx-mesa0
 
-libgl1-mesa-dri:amd64
-libgl1-mesa-dri:i386
+libgbm1
 
-libgbm1:amd64
-libgbm1:i386
-
-libegl1:amd64
-libegl1:i386
-
-libgles2:amd64
-libgles2:i386
+libegl1
 
 mesa-vulkan-drivers
-mesa-vulkan-drivers:i386
-
-# Steam (repo.steampowered.com configured in configure-rootfs.sh)
-steam-launcher
 
 # Performance and overlay tools
 gamemode
@@ -58,7 +39,6 @@ vainfo
 # Wine (system wine for winetricks/q4wine)
 wine
 wine64
-wine32:i386
 winetricks
 
 # Game launchers

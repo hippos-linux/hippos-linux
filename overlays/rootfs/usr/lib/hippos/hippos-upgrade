@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import glob
+import platform
 import shlex
 import shutil
 import subprocess
@@ -19,8 +20,10 @@ CACHE_DIR    = "/userdata/system/cache/update"
 BTRFS_MNT    = "/tmp/hippos-btrfs-update"
 LOG_FILE     = "/userdata/system/logs/upgrade.log"
 
+_DEB_ARCH = {'x86_64': 'amd64', 'aarch64': 'arm64'}.get(platform.machine(), platform.machine())
+
 MANIFEST_URLS = [
-    "https://hippos-linux.org/api/update/manifest.json",
+    f"https://hippos-linux.org/api/update/manifest-{_DEB_ARCH}.json",
 ]
 
 _log_fh = None
@@ -667,7 +670,7 @@ def cmd_update_kernel():
     log(f"Updating kernel: {installed or 'not installed'} → {remote}")
 
     os.makedirs(CACHE_DIR, exist_ok=True)
-    deb = os.path.join(CACHE_DIR, f"linux-image-{remote}_amd64.deb")
+    deb = os.path.join(CACHE_DIR, f"linux-image-{remote}_{_DEB_ARCH}.deb")
 
     if not os.path.exists(deb):
         log("Downloading kernel deb...")

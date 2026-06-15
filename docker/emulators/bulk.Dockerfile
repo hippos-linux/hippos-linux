@@ -1,5 +1,7 @@
 FROM hippos-emulator-base:latest
 
+ARG TARGETARCH=amd64
+
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
 
@@ -26,7 +28,6 @@ RUN apt-get update \
         freeglut3-dev \
         g++ \
         gcc \
-        gcc-multilib \
         gettext \
         git \
         glslang-dev \
@@ -45,7 +46,6 @@ RUN apt-get update \
         libbluetooth-dev \
         libboost-all-dev \
         libbz2-dev \
-        libc6-dev-i386 \
         libcap-dev \
         libcereal-dev \
         libcubeb-dev \
@@ -220,6 +220,14 @@ RUN apt-get update \
         zip \
         zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
+
+RUN if [ "${TARGETARCH}" = "amd64" ]; then \
+        apt-get update \
+        && apt-get install -y --no-install-recommends \
+            gcc-multilib \
+            libc6-dev-i386 \
+        && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 RUN curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
         -o /etc/apt/trusted.gpg.d/llvm.asc \

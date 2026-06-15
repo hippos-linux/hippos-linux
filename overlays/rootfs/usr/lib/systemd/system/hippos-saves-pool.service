@@ -1,13 +1,16 @@
 [Unit]
 Description=HippOS MergerFS saves pool
-After=local-fs.target userdata.mount hippos-userdata-init.service
+After=local-fs.target userdata.mount hippos-storage.service
 Before=hippos-es.service
+Wants=userdata.mount
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+TimeoutStopSec=5
 ExecStart=/usr/lib/hippos/mount-saves-pool
-ExecStop=umount /userdata/saves
+ExecStop=umount -l /userdata/saves
+ExecStop=pkill -f "mergerfs.*userdata/saves" || true
 
 [Install]
 WantedBy=multi-user.target

@@ -1,1 +1,1 @@
-/etc/systemd/system/hippos-boot-success.service
+../../../../usr/lib/systemd/system/hippos-boot-success.service

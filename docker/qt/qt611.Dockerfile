@@ -68,6 +68,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libasound2-dev \
     && rm -rf /var/lib/apt/lists/*
 
+ARG TARGETARCH=amd64
+
 WORKDIR /build
 
 RUN curl -fsSL \
@@ -90,6 +92,7 @@ RUN mkdir qt-build && cd qt-build && \
     cmake --build . -j"$(nproc)" && \
     cmake --install .
 
-RUN tar -cJf /qt-6.11-hippos-x86_64.tar.xz -C /opt/hippos/qt 6.11
+RUN NATIVE_ARCH=$([ "${TARGETARCH}" = "amd64" ] && echo "x86_64" || echo "aarch64") && \
+    tar -cJf "/qt-6.11-hippos-${NATIVE_ARCH}.tar.xz" -C /opt/hippos/qt 6.11
 
 CMD ["/bin/bash"]

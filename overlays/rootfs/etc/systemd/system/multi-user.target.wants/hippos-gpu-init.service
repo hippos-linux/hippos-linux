@@ -1,1 +1,1 @@
-../hippos-gpu-init.service
+../../../../usr/lib/systemd/system/hippos-gpu-init.service

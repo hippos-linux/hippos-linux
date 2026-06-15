@@ -1,0 +1,17 @@
+# amd64-specific base packages
+
+# Processor microcode
+intel-microcode
+amd64-microcode
+
+# GRUB EFI bootloader for x86_64
+grub-efi-amd64
+
+# Intel Xorg DDX driver (supplements modesetting for Gen9- hardware)
+xserver-xorg-video-intel
+
+# Intel VA-API (free tier; non-free tier installed by configure-rootfs.sh)
+intel-media-va-driver
+
+# i386 runtime library required by lindbergh-loader
+libsdl3-0:i386
