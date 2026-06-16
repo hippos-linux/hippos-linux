@@ -59,6 +59,8 @@ _detect_dcn() {
         grep -qi "dcn" "${f}" 2>/dev/null && echo "dcn" && return
     done
     dmesg 2>/dev/null | grep -qi "amdgpu.*dcn\b\|dcn.*display" && echo "dcn" && return
+    dmesg 2>/dev/null | grep -qi "soc21_common\|ip block.*dcn\|Navi" && echo "dcn" && return
+    lspci -nn 2>/dev/null | grep -qiE '1002:7[0-9a-f]{3}' && echo "dcn" && return
     echo "dce"
 }
 

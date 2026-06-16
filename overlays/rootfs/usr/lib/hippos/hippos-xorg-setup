@@ -2,11 +2,22 @@
 # hippos-xorg-setup — runs as ExecStartPre for hippos-xserver.service.
 # NVIDIA Xorg driver assignment is handled by the nvidia package's own
 # /usr/share/X11/xorg.conf.d/nvidia-drm-outputclass.conf (OutputClass approach).
-# No custom conf generation needed.
 
-# Clean up any conf written by older versions of this script.
 rm -f /etc/X11/xorg.conf.d/91-gpu-setup.conf \
       /etc/X11/xorg.conf.d/90-hippos-prime.conf
 
 log() { printf '[hippos-xorg-setup] %s\n' "$*"; }
-log "done (nvidia OutputClass handled by package)"
+
+_crt_wanted() {
+    [[ "$(hippos-settings get crt.enabled 2>/dev/null || true)" == "true" ]]
+}
+
+if _crt_wanted; then
+    log "CRT enabled — running hippos-crt-setup before X"
+    /usr/lib/hippos/hippos-crt-setup || log "hippos-crt-setup failed"
+elif [[ -f /etc/X11/xorg.conf.d/90-crt-gpu.conf ]]; then
+    log "CRT disabled — running hippos-crt-teardown"
+    /usr/lib/hippos/hippos-crt-teardown || true
+fi
+
+log "done"

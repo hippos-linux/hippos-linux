@@ -92,6 +92,46 @@ case "${1:-}" in
     listOutputs)
         xrandr --query 2>/dev/null | awk '/connected/{print $1}'
         ;;
+    listCrtBootModes)
+        PROFILE="${2:-}"
+        [[ -z "${PROFILE}" ]] && PROFILE="$(hippos-settings get crt.monitor_profile 2>/dev/null || true)"
+        PROFILE="${PROFILE:-generic_15}"
+
+        _emit_boot_mode() {
+            printf '%s:%s\n' "$1" "$2"
+        }
+
+        case "${PROFILE}" in
+            generic_15|ntsc|pal|arcade_15|arcade_15ex)
+                _emit_boot_mode "640x480i"  "640x480i @ 15 kHz"
+                _emit_boot_mode "640x480"   "640x480p @ 15 kHz"
+                _emit_boot_mode "768x576i"  "768x576i @ 15 kHz"
+                ;;
+            arcade_25)
+                _emit_boot_mode "640x480"   "640x480p @ 25 kHz"
+                _emit_boot_mode "640x480i"  "640x480i @ 25 kHz"
+                _emit_boot_mode "768x576i"  "768x576i @ 25 kHz"
+                ;;
+            arcade_31)
+                _emit_boot_mode "640x480"   "640x480p @ 31 kHz"
+                _emit_boot_mode "640x480i"  "640x480i @ 31 kHz"
+                _emit_boot_mode "768x576i"  "768x576i @ 31 kHz"
+                ;;
+            arcade_15_25)
+                _emit_boot_mode "640x480i"  "640x480i @ 15/25 kHz"
+                _emit_boot_mode "640x480"   "640x480p @ 15/25 kHz"
+                _emit_boot_mode "768x576i"  "768x576i @ 15/25 kHz"
+                ;;
+            arcade_15_25_31|arcade_15_31)
+                _emit_boot_mode "640x480i"  "640x480i @ 15/25/31 kHz"
+                _emit_boot_mode "640x480"   "640x480p @ 15/25/31 kHz"
+                _emit_boot_mode "768x576i"  "768x576i @ 15/25/31 kHz"
+                ;;
+            *)
+                _emit_boot_mode "640x480i"  "640x480i @ 15 kHz (default)"
+                ;;
+        esac
+        ;;
     currentOutput)
         echo "$PSCREEN"
         ;;
