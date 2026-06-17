@@ -21,10 +21,10 @@ from optparse import OptionParser, make_option
 
 AGENT_INTERFACE = 'org.bluez.Agent1'
 AGENT_PATH      = '/hippos/agent'
-BT_LISTING_FILE = '/var/run/bt_listing'
-BT_DEVICE_FILE  = '/var/run/bt_device'
-BT_STATUS_FILE  = '/var/run/bt_status'
-LOG_FILE        = '/var/log/hippos-bluetooth-agent.log'
+BT_LISTING_FILE = '/run/hippos-bt/bt_listing'
+BT_DEVICE_FILE  = '/run/hippos-bt/bt_device'
+BT_STATUS_FILE  = '/run/hippos-bt/bt_status'
+LOG_FILE        = '/run/hippos-bt/agent.log'
 # UID of the hippos user — for pactl PipeWire socket
 HIPPOS_UID      = 1000
 

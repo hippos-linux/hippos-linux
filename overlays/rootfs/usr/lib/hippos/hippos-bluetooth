@@ -47,10 +47,10 @@ case "${1:-}" in
         AGENT_PID=$(pgrep -f hippos-bluetooth-agent 2>/dev/null | head -1)
         if [ -n "${AGENT_PID}" ]; then
             # Agent running: use file-based listing so the agent drives discovery
-            rm -f /var/run/bt_listing
-            touch /var/run/bt_listing
+            rm -f /run/hippos-bt/bt_listing
+            touch /run/hippos-bt/bt_listing
             kill -USR1 "${AGENT_PID}"
-            tail -n +0 -f /var/run/bt_listing 2>/dev/null
+            tail -n +0 -f /run/hippos-bt/bt_listing 2>/dev/null
         else
             # Fallback: direct bluetoothctl scan (no agent)
             { echo "scan on"; sleep infinity; } | bluetoothctl 2>/dev/null | \
@@ -70,7 +70,7 @@ case "${1:-}" in
     stop_live_devices)
         AGENT_PID=$(pgrep -f hippos-bluetooth-agent 2>/dev/null | head -1)
         [ -n "${AGENT_PID}" ] && kill -USR2 "${AGENT_PID}"
-        rm -f /var/run/bt_listing
+        rm -f /run/hippos-bt/bt_listing
         _btctl scan off 2>/dev/null || true
         ;;
     *)

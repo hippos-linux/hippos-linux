@@ -32,6 +32,18 @@ polkit.addRule(function(action, subject) {
     }
 });
 
+// Allow hippos to set NTP and timezone (KDE Plasma System Settings → Date & Time)
+polkit.addRule(function(action, subject) {
+    var timedateActions = [
+        "org.freedesktop.timedate1.set-ntp",
+        "org.freedesktop.timedate1.set-timezone",
+        "org.freedesktop.timedate1.set-time"
+    ];
+    if (timedateActions.indexOf(action.id) >= 0 && subject.user === "hippos") {
+        return polkit.Result.YES;
+    }
+});
+
 // Allow hippos to power off, reboot, suspend, and hibernate without a logind session
 polkit.addRule(function(action, subject) {
     var powerActions = [

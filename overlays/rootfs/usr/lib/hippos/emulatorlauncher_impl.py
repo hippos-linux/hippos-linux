@@ -2041,7 +2041,7 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
     cfg.set('system_directory',         f'"{BIOS}"')
     cfg.set('core_options_path',        f'"{RA_CORES_CFG}"')
     cfg.set('assets_directory',         '"/usr/share/libretro/assets"')
-    cfg.set('video_shader_dir',         f'"{HIPPOS_SHADERS}"')
+    cfg.set('video_shader_dir',         f'"{USER_SHADERS}"')
 
     # Video
     cfg.set('video_fullscreen',         '"true"')
@@ -2086,7 +2086,7 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
         cfg.set('video_shader',        f'"{SHADER_BEZEL}"')
     elif shaderset and shaderset != 'none':
         cfg.set('video_shader_enable', '"true"')
-        cfg.set('video_shader', f'"{HIPPOS_SHADERS}/{shaderset}.{shader_ext}"')
+        cfg.set('video_shader', f'"{USER_SHADERS}/{shaderset}.{shader_ext}"')
     else:
         cfg.set('video_shader_enable', '"false"')
 

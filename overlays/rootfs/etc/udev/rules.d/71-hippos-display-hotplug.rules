@@ -1,0 +1,3 @@
+# Re-apply display settings when a display is connected or disconnected.
+# Uses systemd-run to escape the udev timeout into a transient service.
+SUBSYSTEM=="drm", ACTION=="change", RUN+="/usr/bin/systemd-run --no-block /usr/lib/hippos/hippos-display-hotplug"

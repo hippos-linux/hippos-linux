@@ -19,21 +19,32 @@ _hdmi_sink() {
     LC_ALL=C pactl list sinks short 2>/dev/null | awk '/hdmi/{print $2; exit}'
 }
 
+_wait_hdmi_sink() {
+    local sink
+    for _ in $(seq 1 15); do
+        sink="$(_hdmi_sink)"
+        [[ -n "$sink" ]] && echo "$sink" && return
+        sleep 1
+    done
+}
+
 if [[ -n "$DEVICE" && "$DEVICE" != "default" ]]; then
     if pactl set-default-sink "$DEVICE" 2>/dev/null; then
         echo "[hippos-audio-setup] default sink: $DEVICE"
     else
-        echo "[hippos-audio-setup] sink '$DEVICE' not found, trying HDMI fallback" >&2
+        echo "[hippos-audio-setup] sink '$DEVICE' not found, waiting for HDMI sink" >&2
         # Saved sink name may not match after driver reload or PipeWire renaming.
-        HDMI_SINK="$(_hdmi_sink)"
+        # NVIDIA HDMI audio can take several seconds to appear after PipeWire is ready.
+        HDMI_SINK="$(_wait_hdmi_sink)"
         if [[ -n "$HDMI_SINK" ]]; then
             pactl set-default-sink "$HDMI_SINK" 2>/dev/null && \
                 echo "[hippos-audio-setup] HDMI fallback: $HDMI_SINK" || true
         fi
     fi
 else
-    # No saved preference — prefer HDMI if available (common on TV-connected gaming PCs)
-    HDMI_SINK="$(_hdmi_sink)"
+    # No saved preference — prefer HDMI if available (common on TV-connected gaming PCs).
+    # Wait up to 15s for HDMI sink to appear; NVIDIA audio driver init can be slow.
+    HDMI_SINK="$(_wait_hdmi_sink)"
     if [[ -n "$HDMI_SINK" ]]; then
         pactl set-default-sink "$HDMI_SINK" 2>/dev/null && \
             echo "[hippos-audio-setup] auto-selected HDMI sink: $HDMI_SINK" || true

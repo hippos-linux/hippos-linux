@@ -1,0 +1,11 @@
+[Unit]
+Description=HippOS Wake on Controller (USB HID wakeup)
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/hippos/hippos-wake-controllers
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

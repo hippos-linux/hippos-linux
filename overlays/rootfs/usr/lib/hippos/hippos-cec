@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Send HDMI-CEC commands to the TV.
+# Usage: hippos-cec on | off
+#   on  — power on TV and switch to our HDMI input (active source)
+#   off — send TV to standby
+# Controlled by system.hdmi_cec.enabled in hippos-settings.
+
+ENABLED="$(hippos-settings get system.hdmi_cec.enabled 2>/dev/null || true)"
+[[ "$ENABLED" != "true" ]] && exit 0
+
+command -v cec-client >/dev/null 2>&1 || { echo "[hippos-cec] cec-client not found" >&2; exit 1; }
+
+_cec_send() {
+    echo "$1" | timeout 8 cec-client -s -d 1 -t p 2>/dev/null || true
+}
+
+case "${1:-}" in
+    on)
+        _cec_send "on 0"
+        sleep 2
+        _cec_send "as"
+        echo "[hippos-cec] TV on + active source"
+        ;;
+    off|standby)
+        _cec_send "standby 0"
+        echo "[hippos-cec] TV standby"
+        ;;
+    *)
+        echo "Usage: hippos-cec on|off" >&2
+        exit 1
+        ;;
+esac

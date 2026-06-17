@@ -52,6 +52,15 @@ fi
 
 xsetroot -solid black
 
+# HDMI-CEC: power on TV and switch to our input (runs in background, non-blocking)
+/usr/lib/hippos/hippos-cec on &
+
+# Sleep timer: auto-suspend after configured idle period
+_SLEEP_TIMER="$(hippos-settings get system.sleep_timer 2>/dev/null || true)"
+if [[ -n "$_SLEEP_TIMER" && "$_SLEEP_TIMER" != "0" ]]; then
+    xautolock -time "$_SLEEP_TIMER" -locker "/usr/bin/hippos-shutdown suspend" -detectsleep &
+fi
+
 # Switch to VT7 once ES is running. Plymouth retains its last frame on VT1
 # while we're here, hiding GPU log text that would otherwise flash on screen.
 # Poll for the ES process, then give it a moment to render its first frame.
@@ -59,4 +68,22 @@ xsetroot -solid black
   sleep 0.5
   chvt 7 2>/dev/null || true ) &
 
-exec openbox --sm-disable --startup /usr/bin/emulationstation
+# Translate display.output (xrandr name) → SDL display index so ES opens on the right screen.
+# SDL enumerates active displays in xrandr output order.
+_DISPLAY_OUTPUT=$(hippos-settings get display.output 2>/dev/null || true)
+_MONITOR_IDX=""
+if [[ -n "$_DISPLAY_OUTPUT" && "$_DISPLAY_OUTPUT" != "all" ]]; then
+    _idx=0
+    while IFS= read -r _out; do
+        if [[ "$_out" == "$_DISPLAY_OUTPUT" ]]; then
+            _MONITOR_IDX="$_idx"
+            break
+        fi
+        _idx=$((_idx + 1))
+    done < <(xrandr 2>/dev/null | awk '/connected/ && /[0-9]+x[0-9]+\+[0-9]+\+[0-9]+/{print $1}')
+fi
+
+_ES_CMD="/usr/bin/emulationstation"
+[[ -n "$_MONITOR_IDX" ]] && _ES_CMD="$_ES_CMD --monitor $_MONITOR_IDX"
+
+exec openbox --sm-disable --startup "$_ES_CMD"

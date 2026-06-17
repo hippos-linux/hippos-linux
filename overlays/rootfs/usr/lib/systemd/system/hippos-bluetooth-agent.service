@@ -5,6 +5,9 @@ Requires=bluetooth.service
 
 [Service]
 Type=simple
+User=hippos
+RuntimeDirectory=hippos-bt
+RuntimeDirectoryPreserve=yes
 ExecStart=/usr/lib/hippos/hippos-bluetooth-agent
 Restart=on-failure
 RestartSec=5

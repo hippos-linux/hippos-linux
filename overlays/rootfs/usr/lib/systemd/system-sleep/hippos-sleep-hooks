@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Re-enable WoL and controller wakeup after resume.
+# Some NICs and USB controllers lose their wakeup state during S3 suspend.
+# systemd-sleep passes: $1 = pre|post, $2 = suspend|hibernate|hybrid-sleep|...
+
+case "$1" in
+    pre)
+        /usr/lib/hippos/hippos-cec off 2>/dev/null || true
+        ;;
+    post)
+        /usr/lib/hippos/hippos-wol 2>/dev/null || true
+        /usr/lib/hippos/hippos-wake-controllers 2>/dev/null || true
+        /usr/lib/hippos/hippos-cec on 2>/dev/null || true
+        ;;
+esac

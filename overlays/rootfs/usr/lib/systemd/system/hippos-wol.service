@@ -1,0 +1,12 @@
+[Unit]
+Description=HippOS Wake on LAN
+After=network.target
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/hippos/hippos-wol
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
