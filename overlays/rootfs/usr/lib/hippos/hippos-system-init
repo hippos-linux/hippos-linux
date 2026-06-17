@@ -6,6 +6,8 @@ set -euo pipefail
 log() { printf '[hippos-system-init] %s\n' "$*"; }
 get() { hippos-settings get "$1" 2>/dev/null || true; }
 
+hippos-settings sync
+
 # ── Timezone ─────────────────────────────────────────────────────────────────
 TIMEZONE="$(get system.timezone)"
 if [[ -n "${TIMEZONE}" ]]; then
