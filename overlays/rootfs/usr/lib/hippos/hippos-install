@@ -1,0 +1,320 @@
+#!/usr/bin/env bash
+# hippos-install — disk clone utility
+# Commands:
+#   listDisks                   list non-boot block devices
+#   listArchs                   print running architecture
+#   listHipposDisks             list non-boot disks with HippOS btrfs label (clone sources)
+#   install <target> <arch>     clone boot disk → target
+#   cloneFrom <source> <target> clone <source> HippOS disk → target
+
+set -euo pipefail
+
+EFI_SIZE_MB=256
+TOOLS_SIZE_MB=16
+
+die()  { echo "ERROR: $*" >&2; exit 1; }
+log()  { echo ">>> $*"; }
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+part_dev() {
+    # Partition naming: nvme0n1/mmcblk0 use p-suffix, sda/vda do not
+    local disk="$1" num="$2"
+    if [[ "$disk" =~ [0-9]$ ]]; then
+        echo "${disk}p${num}"
+    else
+        echo "${disk}${num}"
+    fi
+}
+
+get_boot_disk() {
+    # Prefer PARTUUID from kernel cmdline (set by GRUB/RPi boot)
+    local root_partuuid
+    root_partuuid=$(grep -oP '(?<=root=PARTUUID=)[^ ]+' /proc/cmdline 2>/dev/null || true)
+    if [[ -n "$root_partuuid" ]]; then
+        local part_dev
+        part_dev=$(blkid -t PARTUUID="$root_partuuid" -o device 2>/dev/null | head -1 || true)
+        if [[ -b "$part_dev" ]]; then
+            lsblk -ndo PKNAME "$part_dev"
+            return
+        fi
+    fi
+    # Fallback: find btrfs mount for @rootfs
+    local root_src
+    root_src=$(findmnt -n -o SOURCE / 2>/dev/null | head -1 || true)
+    [[ -b "$root_src" ]] || die "cannot detect boot device"
+    lsblk -ndo PKNAME "$root_src"
+}
+
+# ── commands ─────────────────────────────────────────────────────────────────
+
+cmd_list_disks() {
+    local boot_disk
+    boot_disk=$(get_boot_disk)
+    lsblk -ndo NAME,SIZE,MODEL -e 11 | while read -r name size model; do
+        local dev="/dev/$name"
+        [[ "$(lsblk -ndo TYPE "$dev" 2>/dev/null)" == "disk" ]] || continue
+        [[ "$name" == "$boot_disk" ]] && continue
+        model="${model:-Unknown}"
+        echo "$dev $model ($size)"
+    done
+}
+
+cmd_list_archs() {
+    local arch
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)  echo "amd64" ;;
+        aarch64) echo "arm64" ;;
+        *)       echo "$arch" ;;
+    esac
+}
+
+cmd_list_hippos_disks() {
+    # Non-boot disks that carry a HippOS btrfs partition (usable clone sources)
+    local boot_disk
+    boot_disk=$(get_boot_disk)
+    lsblk -ndo NAME,SIZE,MODEL -e 11 | while read -r name size model; do
+        local dev="/dev/$name"
+        [[ "$(lsblk -ndo TYPE "$dev" 2>/dev/null)" == "disk" ]] || continue
+        [[ "$name" == "$boot_disk" ]] && continue
+        # Check for a HippOS-labelled btrfs partition
+        if blkid -l -t LABEL=HippOS -t TYPE=btrfs 2>/dev/null | grep -q "^$dev"; then
+            model="${model:-Unknown}"
+            echo "$dev $model ($size)"
+        else
+            # Try each partition
+            local found=0
+            while IFS= read -r pdev; do
+                local label
+                label=$(blkid -s LABEL -o value "$pdev" 2>/dev/null || true)
+                local fstype
+                fstype=$(blkid -s TYPE -o value "$pdev" 2>/dev/null || true)
+                if [[ "$label" == "HippOS" && "$fstype" == "btrfs" ]]; then
+                    found=1
+                    break
+                fi
+            done < <(lsblk -ndo PATH "$dev" 2>/dev/null | grep -v "^$dev$")
+            if [[ "$found" -eq 1 ]]; then
+                model="${model:-Unknown}"
+                echo "$dev $model ($size)"
+            fi
+        fi
+    done
+}
+
+# ── core clone function ───────────────────────────────────────────────────────
+
+clone_disk() {
+    local SRC_DISK="$1"
+    local TGT_DISK="$2"
+
+    [[ -b "$SRC_DISK" ]] || die "source disk not found: $SRC_DISK"
+    [[ -b "$TGT_DISK" ]] || die "target disk not found: $TGT_DISK"
+    [[ "$SRC_DISK" != "$TGT_DISK" ]] || die "source and target are the same disk"
+
+    local SRC_EFI   SRC_TOOLS   SRC_MAIN
+    SRC_EFI=$(part_dev "$SRC_DISK" 1)
+    SRC_TOOLS=$(part_dev "$SRC_DISK" 2)
+    SRC_MAIN=$(part_dev "$SRC_DISK" 3)
+
+    [[ -b "$SRC_EFI"  ]] || die "source EFI partition not found: $SRC_EFI"
+    [[ -b "$SRC_MAIN" ]] || die "source HippOS partition not found: $SRC_MAIN"
+
+    local TMP_MNT
+    TMP_MNT=$(mktemp -d /tmp/hippos-install.XXXXXX)
+
+    local SRC_BTRFS="${TMP_MNT}/src"
+    local TGT_BTRFS="${TMP_MNT}/tgt"
+    local SRC_EFI_MNT="${TMP_MNT}/src-efi"
+    local TGT_EFI_MNT="${TMP_MNT}/tgt-efi"
+    mkdir -p "$SRC_BTRFS" "$TGT_BTRFS" "$SRC_EFI_MNT" "$TGT_EFI_MNT"
+
+    _cleanup() {
+        set +e
+        umount "$SRC_BTRFS"    2>/dev/null; true
+        umount "$TGT_BTRFS"    2>/dev/null; true
+        umount "$SRC_EFI_MNT"  2>/dev/null; true
+        umount "$TGT_EFI_MNT"  2>/dev/null; true
+        umount "${TMP_MNT}/src-tools" 2>/dev/null; true
+        umount "${TMP_MNT}/tgt-tools" 2>/dev/null; true
+        rm -rf "$TMP_MNT"
+    }
+    trap _cleanup EXIT
+
+    # 1. Partition target ──────────────────────────────────────────────────────
+    log "Partitioning $TGT_DISK..."
+    parted -s "$TGT_DISK" mklabel gpt
+    parted -s "$TGT_DISK" mkpart EFI   fat32 1MiB                                   "$((1 + EFI_SIZE_MB))MiB"
+    parted -s "$TGT_DISK" mkpart Tools fat32 "$((1 + EFI_SIZE_MB))MiB"              "$((1 + EFI_SIZE_MB + TOOLS_SIZE_MB))MiB"
+    parted -s "$TGT_DISK" mkpart HippOS btrfs "$((1 + EFI_SIZE_MB + TOOLS_SIZE_MB))MiB" "100%"
+    parted -s "$TGT_DISK" set 1 esp on
+    partprobe "$TGT_DISK" 2>/dev/null || true
+    udevadm settle 2>/dev/null || true
+    sleep 1
+
+    local TGT_EFI  TGT_TOOLS  TGT_MAIN
+    TGT_EFI=$(part_dev "$TGT_DISK" 1)
+    TGT_TOOLS=$(part_dev "$TGT_DISK" 2)
+    TGT_MAIN=$(part_dev "$TGT_DISK" 3)
+
+    [[ -b "$TGT_EFI"  ]] || die "target EFI partition not found after partitioning: $TGT_EFI"
+    [[ -b "$TGT_MAIN" ]] || die "target HippOS partition not found after partitioning: $TGT_MAIN"
+
+    # 2. Format target ─────────────────────────────────────────────────────────
+    log "Formatting target partitions..."
+    mkfs.vfat -F 32 -n EFI   "$TGT_EFI"
+    [[ -b "$TGT_TOOLS" ]] && mkfs.vfat -F 32 -n Tools "$TGT_TOOLS" || true
+    mkfs.btrfs -f -L HippOS  "$TGT_MAIN"
+
+    # 3. Clone btrfs subvolumes via send/receive ───────────────────────────────
+    log "Mounting source btrfs (subvol=/)..."
+    mount -t btrfs -o subvol=/ "$SRC_MAIN" "$SRC_BTRFS"
+
+    log "Mounting target btrfs..."
+    mount "$TGT_MAIN" "$TGT_BTRFS"
+
+    for sv in @rootfs @userdata @overlay; do
+        [[ -d "$SRC_BTRFS/$sv" ]] || { log "Skipping missing subvolume $sv"; continue; }
+        log "Cloning $sv..."
+
+        # btrfs send requires a read-only subvolume
+        local snap="${sv}_snap_$(date +%s)"
+        btrfs subvolume snapshot -r "$SRC_BTRFS/$sv" "$SRC_BTRFS/$snap"
+
+        btrfs send "$SRC_BTRFS/$snap" | btrfs receive "$TGT_BTRFS"
+
+        # Received snapshot has the snap name; make a RW copy with the real name
+        btrfs subvolume snapshot "$TGT_BTRFS/$snap" "$TGT_BTRFS/$sv"
+        btrfs subvolume delete   "$TGT_BTRFS/$snap"
+        btrfs subvolume delete   "$SRC_BTRFS/$snap"
+    done
+
+    # Preserve default subvolume (@userdata) so desktops auto-mount user data
+    local USERDATA_ID
+    USERDATA_ID=$(btrfs subvolume list "$TGT_BTRFS" | awk '/path @userdata$/{print $2}' | head -1)
+    [[ -n "$USERDATA_ID" ]] && btrfs subvolume set-default "$USERDATA_ID" "$TGT_BTRFS"
+
+    # 4. Collect old and new UUIDs ─────────────────────────────────────────────
+    local OLD_EFI_PARTUUID  OLD_MAIN_PARTUUID  OLD_MAIN_UUID
+    OLD_EFI_PARTUUID=$(blkid  -s PARTUUID -o value "$SRC_EFI"  2>/dev/null || true)
+    OLD_MAIN_PARTUUID=$(blkid -s PARTUUID -o value "$SRC_MAIN" 2>/dev/null || true)
+    OLD_MAIN_UUID=$(blkid     -s UUID     -o value "$SRC_MAIN" 2>/dev/null || true)
+
+    local TGT_EFI_PARTUUID  TGT_MAIN_PARTUUID  TGT_MAIN_UUID
+    TGT_EFI_PARTUUID=$(blkid  -s PARTUUID -o value "$TGT_EFI"  2>/dev/null || true)
+    TGT_MAIN_PARTUUID=$(blkid -s PARTUUID -o value "$TGT_MAIN" 2>/dev/null || true)
+    TGT_MAIN_UUID=$(blkid     -s UUID     -o value "$TGT_MAIN" 2>/dev/null || true)
+
+    # 5. Update /etc/fstab in @rootfs ─────────────────────────────────────────
+    log "Updating /etc/fstab..."
+    local FSTAB="$TGT_BTRFS/@rootfs/etc/fstab"
+    if [[ -f "$FSTAB" ]]; then
+        [[ -n "$OLD_EFI_PARTUUID"  ]] && sed -i "s/${OLD_EFI_PARTUUID}/${TGT_EFI_PARTUUID}/g"   "$FSTAB"
+        [[ -n "$OLD_MAIN_PARTUUID" ]] && sed -i "s/${OLD_MAIN_PARTUUID}/${TGT_MAIN_PARTUUID}/g" "$FSTAB"
+    fi
+
+    umount "$SRC_BTRFS"
+    umount "$TGT_BTRFS"
+
+    # 6. Clone EFI partition (rsync — fast, preserves GRUB modules) ────────────
+    log "Cloning EFI partition..."
+    mount "$SRC_EFI" "$SRC_EFI_MNT" -o ro
+    mount "$TGT_EFI" "$TGT_EFI_MNT"
+    rsync -aHAX --delete "$SRC_EFI_MNT/" "$TGT_EFI_MNT/"
+
+    # 7. Update bootloader config with new UUIDs ───────────────────────────────
+    log "Updating bootloader config..."
+    local GRUB_CFG="$TGT_EFI_MNT/grub/grub.cfg"
+    if [[ -f "$GRUB_CFG" ]]; then
+        [[ -n "$OLD_MAIN_UUID"     ]] && sed -i "s/${OLD_MAIN_UUID}/${TGT_MAIN_UUID}/g"         "$GRUB_CFG"
+        [[ -n "$OLD_MAIN_PARTUUID" ]] && sed -i "s/${OLD_MAIN_PARTUUID}/${TGT_MAIN_PARTUUID}/g" "$GRUB_CFG"
+    fi
+    local CMDLINE_TXT="$TGT_EFI_MNT/cmdline.txt"   # RPi
+    if [[ -f "$CMDLINE_TXT" ]]; then
+        [[ -n "$OLD_MAIN_PARTUUID" ]] && sed -i "s/${OLD_MAIN_PARTUUID}/${TGT_MAIN_PARTUUID}/g" "$CMDLINE_TXT"
+    fi
+
+    # 8. Reinstall GRUB on target disk (ensures NVRAM-independent boot) ────────
+    if [[ ! -f "$TGT_EFI_MNT/cmdline.txt" ]]; then
+        log "Reinstalling GRUB on $TGT_DISK..."
+        local GRUB_TGT
+        case "$(uname -m)" in
+            x86_64)  GRUB_TGT="x86_64-efi" ;;
+            aarch64) GRUB_TGT="arm64-efi"  ;;
+            *)       GRUB_TGT="" ;;
+        esac
+        if [[ -n "$GRUB_TGT" ]]; then
+            grub-install \
+                --target="$GRUB_TGT" \
+                --efi-directory="$TGT_EFI_MNT" \
+                --boot-directory="$TGT_EFI_MNT" \
+                --removable \
+                --no-nvram \
+                --modules="btrfs part_gpt fat normal search search_fs_uuid search_label" \
+                --recheck \
+                "$TGT_DISK" 2>/dev/null \
+            || log "grub-install failed (non-fatal — UUID patch in grub.cfg may suffice)"
+        fi
+    fi
+
+    sync
+    umount "$SRC_EFI_MNT"
+    umount "$TGT_EFI_MNT"
+
+    # 9. Copy Tools partition ─────────────────────────────────────────────────
+    if [[ -b "$SRC_TOOLS" ]]; then
+        local SRC_TOOLS_MNT="${TMP_MNT}/src-tools"
+        local TGT_TOOLS_MNT="${TMP_MNT}/tgt-tools"
+        mkdir -p "$SRC_TOOLS_MNT" "$TGT_TOOLS_MNT"
+        if mount "$SRC_TOOLS" "$SRC_TOOLS_MNT" -o ro 2>/dev/null; then
+            mount "$TGT_TOOLS" "$TGT_TOOLS_MNT"
+            log "Copying Tools partition..."
+            rsync -aHAX --delete "$SRC_TOOLS_MNT/" "$TGT_TOOLS_MNT/"
+            sync
+            umount "$SRC_TOOLS_MNT"
+            umount "$TGT_TOOLS_MNT"
+        fi
+    fi
+
+    # 10. Expand btrfs to fill target partition ────────────────────────────────
+    log "Expanding btrfs filesystem to fill $TGT_MAIN..."
+    mount "$TGT_MAIN" "$TGT_BTRFS"
+    btrfs filesystem resize max "$TGT_BTRFS"
+    sync
+    umount "$TGT_BTRFS"
+
+    log "Done. $TGT_DISK is ready to boot."
+}
+
+# ── dispatch ──────────────────────────────────────────────────────────────────
+
+CMD="${1:-}"
+case "$CMD" in
+    listDisks)
+        cmd_list_disks
+        ;;
+    listArchs)
+        cmd_list_archs
+        ;;
+    listHipposDisks)
+        cmd_list_hippos_disks
+        ;;
+    install)
+        [[ $# -ge 2 ]] || die "usage: hippos-install install <target-disk> [arch]"
+        TGT="$2"
+        SRC="/dev/$(get_boot_disk)"
+        log "Cloning boot disk ($SRC) → $TGT"
+        clone_disk "$SRC" "$TGT"
+        ;;
+    cloneFrom)
+        [[ $# -ge 3 ]] || die "usage: hippos-install cloneFrom <source-disk> <target-disk>"
+        SRC="$2"
+        TGT="$3"
+        log "Cloning $SRC → $TGT"
+        clone_disk "$SRC" "$TGT"
+        ;;
+    *)
+        die "unknown command: ${CMD:-<none>}. Valid: listDisks listArchs listHipposDisks install cloneFrom"
+        ;;
+esac
