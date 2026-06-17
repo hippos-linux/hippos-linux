@@ -58,6 +58,7 @@ cloud-guest-utils
 e2fsprogs
 exfatprogs
 ntfs-3g
+pv
 mergerfs
 fuse3
 rsync

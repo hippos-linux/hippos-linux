@@ -174,6 +174,9 @@ clone_disk() {
     log "Mounting target btrfs..."
     mount "$TGT_MAIN" "$TGT_BTRFS"
 
+    local HAS_PV=0
+    command -v pv >/dev/null 2>&1 && HAS_PV=1
+
     for sv in @rootfs @userdata @overlay; do
         [[ -d "$SRC_BTRFS/$sv" ]] || { log "Skipping missing subvolume $sv"; continue; }
         log "Cloning $sv..."
@@ -182,7 +185,33 @@ clone_disk() {
         local snap="${sv}_snap_$(date +%s)"
         btrfs subvolume snapshot -r "$SRC_BTRFS/$sv" "$SRC_BTRFS/$snap"
 
-        btrfs send "$SRC_BTRFS/$snap" | btrfs receive "$TGT_BTRFS"
+        if [[ "$HAS_PV" -eq 1 ]]; then
+            # Measure subvolume size for percentage display
+            local sv_bytes
+            sv_bytes=$(du -sb "$SRC_BTRFS/$snap" 2>/dev/null | awk '{print $1}' || echo 0)
+
+            local pv_log="${TMP_MNT}/pv-${sv}.log"
+            # pv -n: writes bare percentage (0-100) to stderr once per second
+            # --force: required when no TTY attached
+            (btrfs send "$SRC_BTRFS/$snap" 2>/dev/null \
+                | pv --force -n -s "$sv_bytes" 2>"$pv_log" \
+                | btrfs receive "$TGT_BTRFS" >/dev/null 2>&1) &
+            local clone_pid=$!
+
+            local last_pct=""
+            while kill -0 "$clone_pid" 2>/dev/null; do
+                local pct
+                pct=$(tail -1 "$pv_log" 2>/dev/null || true)
+                if [[ -n "$pct" && "$pct" != "$last_pct" ]]; then
+                    echo "Cloning $sv: ${pct}%"
+                    last_pct="$pct"
+                fi
+                sleep 0.4
+            done
+            wait "$clone_pid" || die "btrfs send/receive failed for $sv"
+        else
+            btrfs send "$SRC_BTRFS/$snap" 2>/dev/null | btrfs receive "$TGT_BTRFS" >/dev/null
+        fi
 
         # Received snapshot has the snap name; make a RW copy with the real name
         btrfs subvolume snapshot "$TGT_BTRFS/$snap" "$TGT_BTRFS/$sv"
