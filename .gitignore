@@ -8,6 +8,8 @@ tmp/
 
 # Not yet public
 build/
+/setup.sh
+/build.sh
 /scripts/
 
 # Rootfs/images

@@ -7,6 +7,7 @@ Commands:
   del <key>           remove from user conf
   list                print all effective key=value pairs
   dump                print user conf only
+  sync                append missing default keys into user conf
 
 Also callable as hippos-settings-get / hippos-settings-set via symlinks.
 
@@ -26,7 +27,7 @@ USER_CONF      = Path('/userdata/system/hippos.conf')
 HW_DEFAULTS    = Path('/run/hippos/hardware-defaults.conf')
 DEFAULTS_CONF  = Path('/usr/share/hippos/hippos-defaults.conf')
 
-_USAGE = 'Usage: hippos-settings get <key> | set <key> <value> | del <key> | list | dump'
+_USAGE = 'Usage: hippos-settings get <key> | set <key> <value> | del <key> | list | dump | sync'
 
 
 def _parse(path: Path) -> dict[str, str]:
@@ -90,6 +91,17 @@ def cmd_dump() -> int:
     return 0
 
 
+def cmd_sync() -> int:
+    """Append any keys present in defaults but missing from user conf."""
+    defaults = {**_parse(DEFAULTS_CONF), **_parse(HW_DEFAULTS)}
+    user = _parse(USER_CONF)
+    missing = {k: v for k, v in defaults.items() if k not in user}
+    if missing:
+        user.update(missing)
+        _write(USER_CONF, user)
+    return 0
+
+
 def main() -> int:
     name = os.path.basename(sys.argv[0])
     args = sys.argv[1:]
@@ -121,6 +133,8 @@ def main() -> int:
         return cmd_list()
     if cmd == 'dump' and not rest:
         return cmd_dump()
+    if cmd == 'sync' and not rest:
+        return cmd_sync()
 
     print(_USAGE, file=sys.stderr)
     return 1
