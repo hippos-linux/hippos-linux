@@ -123,6 +123,7 @@ def load_context() -> dict[str, Any]:
     return {
         'name': data.get('name', 'emulationstation'),
         'keys': _resolve_keys(data.get('keys', {})),
+        'common_disabled': data.get('common_disabled', False),
     }
 
 def load_common_context() -> dict[str, Any]:
@@ -297,16 +298,24 @@ class HotkeyDaemon:
     # --- action execution ----------------------------------------------------
 
     def _resolve_action(self, action: str) -> Any:
-        """Look up action in context, then common context."""
-        return self.context.get('keys', {}).get(action) or self.common_keys.get(action)
+        """Look up action in context, then common context (unless common is disabled)."""
+        result = self.context.get('keys', {}).get(action)
+        if result is not None:
+            return result
+        if not self.context.get('common_disabled', False):
+            return self.common_keys.get(action)
+        return None
 
     def execute_action(self, action: str, begin: bool) -> None:
         target = self._resolve_action(action)
         if target is None:
             return
-        # Special: reset cursor position when exiting an emulator
-        if action == 'exit' and not begin:
-            send_mouse_reset(self.uinput)
+        # Reset cursor on key-DOWN for key targets, on key-UP for command targets.
+        if action == 'exit':
+            if isinstance(target, str) and not begin:
+                send_mouse_reset(self.uinput)
+            elif not isinstance(target, str) and begin:
+                send_mouse_reset(self.uinput)
         if isinstance(target, str):
             # command — execute on key release only
             if not begin:
@@ -361,10 +370,13 @@ class HotkeyDaemon:
 
         # Gamepad button map
         button_map = {c: n for c, n in FALLBACK_GAMEPAD_BUTTONS.items() if c in keys}
-        for sdl_idx, action_name in self.es_button_maps.get(device.name, {}).items():
-            evdev_code = ecodes.BTN_GAMEPAD + sdl_idx
-            if evdev_code in keys:
-                button_map[evdev_code] = action_name
+        # ES input config stores SDL joystick button indices. SDL enumerates gamepad buttons
+        # in ascending evdev-code order, so sort the device's actual button codes to translate.
+        gamepad_btn_codes = sorted(c for c in keys if c >= ecodes.BTN_GAMEPAD)
+        es_map = self.es_button_maps.get(device.name, {})
+        for sdl_idx, action_name in es_map.items():
+            if sdl_idx < len(gamepad_btn_codes):
+                button_map[gamepad_btn_codes[sdl_idx]] = action_name
 
         # Keyboard fallback: use default_mapping so media keys trigger actions
         if not action_map and not button_map:
@@ -495,9 +507,11 @@ def cmd_send(action: str) -> None:
     time.sleep(0.3)
     uinput.close()
 
-def cmd_new_context(name: str, json_str: str) -> None:
+def cmd_new_context(name: str, json_str: str, disable_common: bool = False) -> None:
     Path('/run/hippos').mkdir(parents=True, exist_ok=True)
-    data = {'name': name, 'keys': json.loads(json_str)}
+    data: dict[str, Any] = {'name': name, 'keys': json.loads(json_str)}
+    if disable_common:
+        data['common_disabled'] = True
     CONTEXT_FILE.write_text(json.dumps(data))
     _signal_daemon()
 
@@ -551,6 +565,8 @@ if __name__ == '__main__':
                         help='Send a named action and exit')
     parser.add_argument('--new-context', nargs=2, metavar=('NAME', 'JSON'),
                         help='Switch to a new hotkey context')
+    parser.add_argument('--disable-common', action='store_true',
+                        help='Suppress common context actions in this context')
     parser.add_argument('--default-context', action='store_true',
                         help='Reset to the default emulationstation context')
     parser.add_argument('--reload', action='store_true',
@@ -562,7 +578,7 @@ if __name__ == '__main__':
     if args.send:
         cmd_send(args.send)
     elif args.new_context:
-        cmd_new_context(args.new_context[0], args.new_context[1])
+        cmd_new_context(args.new_context[0], args.new_context[1], args.disable_common)
     elif args.default_context:
         cmd_default_context()
     elif args.reload:
