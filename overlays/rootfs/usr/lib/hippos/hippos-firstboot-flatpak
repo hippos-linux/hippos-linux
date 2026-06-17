@@ -30,7 +30,6 @@ APPS=(
     com.usebottles.bottles
     com.heroicgameslauncher.hgl
     com.vysp3r.ProtonPlus
-    io.github.kolunmi.Bazaar
     com.github.tchx84.Flatseal
     it.mijorus.gearlever
     com.localsend.localsend
