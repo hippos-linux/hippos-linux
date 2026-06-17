@@ -23,6 +23,18 @@ cd "${SRC}"
 
 export PATH="/root/.cargo/bin:${PATH}"
 
+# openssl-sys uses pkg-config but the Debian default path isn't always inherited
+# in cargo subprocess environments. OPENSSL_DIR bypasses pkg-config entirely.
+export OPENSSL_DIR=/usr
+export OPENSSL_INCLUDE_DIR=/usr/include
+if [[ "${ARCH:-amd64}" == "arm64" ]]; then
+    export AARCH64_UNKNOWN_LINUX_GNU_OPENSSL_DIR=/usr
+    export AARCH64_UNKNOWN_LINUX_GNU_OPENSSL_LIB_DIR=/usr/lib/aarch64-linux-gnu
+    export AARCH64_UNKNOWN_LINUX_GNU_OPENSSL_INCLUDE_DIR=/usr/include
+else
+    export OPENSSL_LIB_DIR=/usr/lib/x86_64-linux-gnu
+fi
+
 if ! command -v rustup >/dev/null 2>&1; then
     die "rustup not found"
 fi

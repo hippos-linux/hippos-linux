@@ -1,6 +1,7 @@
 work/
 output/
 artifacts/
+!artifacts/qt/qt-6.11-hippos-x86_64.tar.xz
 dist/
 cache/
 tmp/

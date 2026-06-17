@@ -30,6 +30,10 @@ git -C "${SRC}" submodule update --init --recursive
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 
+# Bundled x86_64 ffmpeg statics take priority over USE_SYSTEM_FFMPEG on arm64;
+# remove them so cmake falls back to the system arm64 ffmpeg packages.
+[[ "${ARCH:-amd64}" == "arm64" ]] && rm -rf "${SRC}/src/external/ffmpeg/linux/x86_64"
+
 log "Configuring"
 cmake -S "${SRC}" -B "${BUILD}" \
     -G Ninja \

@@ -29,9 +29,8 @@ if [[ ! -x "${SRC}/vcpkg/vcpkg" ]]; then
     "${SRC}/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
 fi
 
-# Overlay triplet: disable SDL_IBUS so SDL3 compiles consistently without ibus
-# symbols. The default vcpkg SDL3 build references SDL_IBus_* from SDL_ime.c but
-# omits SDL_ibus.c when ibus headers are absent, leaving undefined symbols at link.
+# Overlay triplets: x64-linux (amd64) and arm64-linux (cross-compile).
+# Disable SDL_IBUS so SDL3 compiles consistently without ibus symbols.
 TRIPLET_DIR="${SRC}/custom-triplets"
 mkdir -p "${TRIPLET_DIR}"
 cat > "${TRIPLET_DIR}/x64-linux.cmake" << 'TRIPLET_EOF'
@@ -45,21 +44,55 @@ if("${PORT}" STREQUAL "sdl3")
 endif()
 TRIPLET_EOF
 
+# arm64 cross-compile triplet: chains to the hippos aarch64 toolchain so vcpkg
+# packages are built with aarch64-linux-gnu-gcc, not the host x86_64 compiler.
+cat > "${TRIPLET_DIR}/arm64-linux.cmake" << 'TRIPLET_EOF'
+set(VCPKG_TARGET_ARCHITECTURE arm64)
+set(VCPKG_CRT_LINKAGE dynamic)
+set(VCPKG_LIBRARY_LINKAGE static)
+set(VCPKG_CMAKE_SYSTEM_NAME Linux)
+set(VCPKG_BUILD_TYPE release)
+set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE /opt/hippos/aarch64-toolchain.cmake)
+if("${PORT}" STREQUAL "sdl3")
+    list(APPEND VCPKG_CMAKE_CONFIGURE_OPTIONS "-DSDL_IBUS=OFF")
+endif()
+TRIPLET_EOF
+
+# Determine vcpkg target triplet and cmake compiler based on build target arch.
+if [[ "${ARCH:-amd64}" == "arm64" ]] && [[ "$(uname -m)" == "x86_64" ]]; then
+    _vcpkg_triplet=arm64-linux
+    _c_compiler=aarch64-linux-gnu-gcc
+    _cxx_compiler=aarch64-linux-gnu-g++
+    _linker_flags=()
+    YMIR_AVX2=OFF
+    _ar="$(command -v aarch64-linux-gnu-ar)"
+    _ranlib="$(command -v aarch64-linux-gnu-ranlib)"
+else
+    _vcpkg_triplet=x64-linux
+    _c_compiler=clang
+    _cxx_compiler=clang++
+    _linker_flags=(
+        -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld"
+        -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld"
+        -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld"
+    )
+    YMIR_AVX2=OFF
+    if grep -qw avx2 /proc/cpuinfo 2>/dev/null; then
+        YMIR_AVX2=ON
+    fi
+    LLVM_AR="$(command -v llvm-ar-19 || command -v llvm-ar || true)"
+    LLVM_RANLIB="$(command -v llvm-ranlib-19 || command -v llvm-ranlib || true)"
+    _ar="${LLVM_AR}"
+    _ranlib="${LLVM_RANLIB}"
+fi
+
 # If cached SDL3 is missing SDL_IBus_* symbols (broken build), clear vcpkg
 # installed packages so they rebuild with the corrected triplet.
-SDL3_LIB="${SRC}/vcpkg_installed/x64-linux/lib/libSDL3.a"
+SDL3_LIB="${SRC}/vcpkg_installed/${_vcpkg_triplet}/lib/libSDL3.a"
 if [[ -f "${SDL3_LIB}" ]] && ! nm "${SDL3_LIB}" 2>/dev/null | grep -q 'SDL_IBus_Quit'; then
     log "SDL3 missing IBus symbols; clearing vcpkg cache for clean rebuild"
     rm -rf "${SRC}/vcpkg_installed"
 fi
-
-YMIR_AVX2=OFF
-if grep -qw avx2 /proc/cpuinfo 2>/dev/null; then
-    YMIR_AVX2=ON
-fi
-
-LLVM_AR="$(command -v llvm-ar-19 || command -v llvm-ar || true)"
-LLVM_RANLIB="$(command -v llvm-ranlib-19 || command -v llvm-ranlib || true)"
 
 cmake_flags=(
     -G Ninja
@@ -67,11 +100,11 @@ cmake_flags=(
     -DCMAKE_CXX_SCAN_FOR_MODULES=OFF
     -DCMAKE_TOOLCHAIN_FILE="${SRC}/vcpkg/scripts/buildsystems/vcpkg.cmake"
     -DVCPKG_OVERLAY_TRIPLETS="${TRIPLET_DIR}"
-    -DCMAKE_C_COMPILER=clang
-    -DCMAKE_CXX_COMPILER=clang++
-    -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld"
-    -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld"
-    -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld"
+    -DVCPKG_TARGET_TRIPLET="${_vcpkg_triplet}"
+    -DVCPKG_HOST_TRIPLET=x64-linux
+    -DCMAKE_C_COMPILER="${_c_compiler}"
+    -DCMAKE_CXX_COMPILER="${_cxx_compiler}"
+    "${_linker_flags[@]}"
     -DCMAKE_INSTALL_PREFIX="${STAGING}"
     -DBUILD_SHARED_LIBS=OFF
     -DYMIR_BUILD_SANDBOX=OFF
@@ -86,14 +119,14 @@ cmake_flags=(
     -DYmir_AVX2="${YMIR_AVX2}"
 )
 
-if [[ -n "${LLVM_AR}" && -n "${LLVM_RANLIB}" ]]; then
+if [[ -n "${_ar}" && -n "${_ranlib}" ]]; then
     cmake_flags+=(
-        -DCMAKE_AR="${LLVM_AR}"
-        -DCMAKE_RANLIB="${LLVM_RANLIB}"
-        -DCMAKE_C_COMPILER_AR="${LLVM_AR}"
-        -DCMAKE_C_COMPILER_RANLIB="${LLVM_RANLIB}"
-        -DCMAKE_CXX_COMPILER_AR="${LLVM_AR}"
-        -DCMAKE_CXX_COMPILER_RANLIB="${LLVM_RANLIB}"
+        -DCMAKE_AR="${_ar}"
+        -DCMAKE_RANLIB="${_ranlib}"
+        -DCMAKE_C_COMPILER_AR="${_ar}"
+        -DCMAKE_C_COMPILER_RANLIB="${_ranlib}"
+        -DCMAKE_CXX_COMPILER_AR="${_ar}"
+        -DCMAKE_CXX_COMPILER_RANLIB="${_ranlib}"
     )
 fi
 

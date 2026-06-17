@@ -43,6 +43,15 @@ done
 
 mkdir -p "${STAGING}/bin" "${STAGING}/data"
 
+if [[ "${ARCH:-amd64}" == "arm64" ]] && [[ "$(uname -m)" == "x86_64" ]]; then
+    # glslang subproject hardcodes x86-only compiler flags (-mcx16, -msse2, -msse4.1)
+    # in its meson.build using build_machine detection. Patch them out before build.
+    find "${SRC}" \( -path '*/glslang*' -o -path '*/subprojects/glslang*' \) \
+        -name 'meson.build' \
+        -exec sed -i "s/-mcx16//g; s/-msse2//g; s/-msse4\.1//g; s/-mfpmath=sse//g" {} \; \
+        2>/dev/null || true
+fi
+
 log "Building with upstream build.sh"
 cd "${SRC}"
 ./build.sh

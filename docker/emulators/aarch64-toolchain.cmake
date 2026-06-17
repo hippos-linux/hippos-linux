@@ -25,21 +25,11 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)
 
-# Qt cross-compilation: moc/rcc/uic must run on the build host (amd64).
-# When a matching arm64 Qt6 11 build is mounted at /opt/hippos/qt/6.11 we use
-# it alongside the amd64 host tools — same version, no mismatch.
-# Without the arm64 build, fall back to the system Qt6 (6.8.x) for both target
-# and host; qt6-base-dev (amd64) must be installed to provide host cmake files.
-if(IS_DIRECTORY /opt/hippos/qt/6.11-host)
-    if(IS_DIRECTORY /opt/hippos/qt/6.11)
-        list(PREPEND CMAKE_PREFIX_PATH /opt/hippos/qt/6.11)
-        set(QT_HOST_PATH /opt/hippos/qt/6.11-host)
-        set(QT_HOST_PATH_CMAKE_DIR /opt/hippos/qt/6.11-host/lib/cmake)
-    else()
-        set(QT_HOST_PATH /usr)
-        set(QT_HOST_PATH_CMAKE_DIR /usr/lib/x86_64-linux-gnu/cmake)
-    endif()
-endif()
+# Qt cross-compilation: QT_HOST_PATH is injected by the cmake wrapper at build
+# time from the QT_HOST_PATH env var (defaulting to /usr = system Qt6.8.x).
+# qt611-env.sh exports QT_HOST_PATH=/opt/hippos/qt/6.11-host for emulators that
+# target our custom Qt 6.11; that value overrides the /usr default.
+# Do not set QT_HOST_PATH here; the wrapper handles it.
 
 # pkg-config: override the search path so the native binary finds arm64 .pc files.
 set(ENV{PKG_CONFIG_LIBDIR}      /usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig)
