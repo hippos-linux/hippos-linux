@@ -1513,10 +1513,23 @@ def hotkey_context(name: str):
     source = HOTKEY_CONTEXT_DIR / f'{name}.json'
     try:
         if source.exists():
-            subprocess.run(
-                [str(HOTKEYS_BIN), '--new-context', name, source.read_text()],
-                capture_output=True,
-            )
+            data = json.loads(source.read_text())
+            keys: dict[str, object] = data.get('keys', {})
+
+            conf = _load_effective_hippos_conf()
+            exit_hotkey_only = conf.get('system.exithotkeyonly', '').lower() in ('1', 'true', 'yes')
+            ui_mode = conf.get('system.ui_mode', 'Full')
+
+            if exit_hotkey_only:
+                keys = {'exit': keys['exit']} if 'exit' in keys else {}
+
+            if ui_mode.lower() != 'full':
+                keys.pop('menu', None)
+
+            cmd = [str(HOTKEYS_BIN), '--new-context', name, json.dumps(keys)]
+            if exit_hotkey_only:
+                cmd.append('--disable-common')
+            subprocess.run(cmd, capture_output=True)
     except Exception as exc:
         _log.warning("Could not set hotkey context '%s': %s", name, exc)
 
