@@ -41,6 +41,11 @@ nfs-common
 avahi-daemon
 avahi-utils
 
+# Software centre (Discover — Flatpak + apt, works on all desktops)
+plasma-discover
+plasma-discover-backend-flatpak
+packagekit
+
 # Screenshot
 scrot
 

@@ -1,6 +1,9 @@
-FROM hippos-emulator-base:latest
-
+# ARG before FROM so the base image tag is arch-specific.
+# Re-declared below for use in RUN instructions (Docker ARG scope rule).
 ARG TARGETARCH=amd64
+FROM hippos-emulator-base-${TARGETARCH}:latest
+
+ARG TARGETARCH
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -100,7 +103,8 @@ RUN if [ "${TARGETARCH}" = "arm64" ]; then \
 # _sfx is set before the package list and expanded by the shell before apt sees it.
 RUN set -e; \
     _sfx=""; \
-    if [ "${TARGETARCH}" = "arm64" ]; then _sfx=":arm64"; apt-get update; fi; \
+    if [ "${TARGETARCH}" = "arm64" ]; then _sfx=":arm64"; fi; \
+    apt-get update; \
     apt-get install -y --no-install-recommends \
         freeglut3-dev${_sfx} \
         glslang-dev${_sfx} \
@@ -115,7 +119,34 @@ RUN set -e; \
         libavutil-dev${_sfx} \
         libbacktrace-dev${_sfx} \
         libbluetooth-dev${_sfx} \
-        libboost-all-dev${_sfx} \
+        libboost-atomic-dev${_sfx} \
+        libboost-chrono-dev${_sfx} \
+        libboost-container-dev${_sfx} \
+        libboost-context-dev${_sfx} \
+        libboost-coroutine-dev${_sfx} \
+        libboost-date-time-dev${_sfx} \
+        libboost-dev${_sfx} \
+        libboost-exception-dev${_sfx} \
+        libboost-fiber-dev${_sfx} \
+        libboost-filesystem-dev${_sfx} \
+        libboost-graph-dev${_sfx} \
+        libboost-iostreams-dev${_sfx} \
+        libboost-locale-dev${_sfx} \
+        libboost-log-dev${_sfx} \
+        libboost-math-dev${_sfx} \
+        libboost-nowide-dev${_sfx} \
+        libboost-program-options-dev${_sfx} \
+        libboost-random-dev${_sfx} \
+        libboost-regex-dev${_sfx} \
+        libboost-serialization-dev${_sfx} \
+        libboost-stacktrace-dev${_sfx} \
+        libboost-system-dev${_sfx} \
+        libboost-test-dev${_sfx} \
+        libboost-thread-dev${_sfx} \
+        libboost-timer-dev${_sfx} \
+        libboost-type-erasure-dev${_sfx} \
+        libboost-url-dev${_sfx} \
+        libboost-wave-dev${_sfx} \
         libbz2-dev${_sfx} \
         libcap-dev${_sfx} \
         libcubeb-dev${_sfx} \
@@ -143,6 +174,7 @@ RUN set -e; \
         libglew-dev${_sfx} \
         libglu1-mesa-dev${_sfx} \
         libglvnd-dev${_sfx} \
+        libglx-dev${_sfx} \
         libgtk-3-dev${_sfx} \
         libgudev-1.0-dev${_sfx} \
         libharfbuzz-dev${_sfx} \
@@ -245,6 +277,7 @@ RUN set -e; \
         qtbase5-dev${_sfx} \
         qt6-base-dev${_sfx} \
         qt6-base-private-dev${_sfx} \
+        qt6-charts-dev${_sfx} \
         qt6-multimedia-dev${_sfx} \
         qt6-svg-dev${_sfx} \
         qt6-tools-dev${_sfx} \
@@ -276,7 +309,10 @@ RUN if [ "${TARGETARCH}" = "arm64" ]; then \
             llvm-19-dev \
             llvm-19-tools \
             ffmpeg \
-        && rm -rf /var/lib/apt/lists/*; \
+        && rm -rf /var/lib/apt/lists/* \
+        && if [ -f /usr/bin/glslang ] && [ ! -e /usr/bin/glslangValidator ]; then \
+               ln -s /usr/bin/glslang /usr/bin/glslangValidator; \
+           fi; \
     fi
 
 # ── Step 5: amd64-only extras ─────────────────────────────────────────────────
@@ -333,7 +369,13 @@ done\n\
 for _a in "$@"; do\n\
     case "${_a}" in --toolchain|-DCMAKE_TOOLCHAIN_FILE*) exec "${_cmake}" "$@";; esac\n\
 done\n\
-exec "${_cmake}" --toolchain /opt/hippos/aarch64-toolchain.cmake "$@"\n' \
+# Inject Qt host path; qt611-env.sh overrides QT_HOST_PATH env var for Qt 6.11 builds.\n\
+_qt_host="${QT_HOST_PATH:-/usr}"\n\
+_qt_host_cmake="${QT_HOST_PATH_CMAKE_DIR:-/usr/lib/x86_64-linux-gnu/cmake}"\n\
+exec "${_cmake}" --toolchain /opt/hippos/aarch64-toolchain.cmake \\\n\
+    "-DQT_HOST_PATH=${_qt_host}" \\\n\
+    "-DQT_HOST_PATH_CMAKE_DIR=${_qt_host_cmake}" \\\n\
+    "$@"\n' \
     > /usr/local/bin/cmake && chmod +x /usr/local/bin/cmake
 
 RUN printf '#!/bin/bash\n\

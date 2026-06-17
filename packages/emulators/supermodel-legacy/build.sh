@@ -23,9 +23,18 @@ clone_source "${REPO}" "${TAG}" "${SRC}"
 
 mkdir -p "${STAGING}/bin"
 
-# Supermodel's Linux build entrypoint is Makefiles/Makefile.UNIX from the repo
-# root. The generated binary lands in bin/supermodel.
-make -C "${SRC}" -f Makefiles/Makefile.UNIX -j"$(nproc)" NET_BOARD=0
+_cross_args=()
+if [[ "${ARCH:-amd64}" == "arm64" ]] && [[ "$(uname -m)" == "x86_64" ]]; then
+    _cross_args=(
+        CC=aarch64-linux-gnu-gcc
+        CXX=aarch64-linux-gnu-g++
+        AR=aarch64-linux-gnu-ar
+        "CXXFLAGS=-I/usr/include/aarch64-linux-gnu"
+        "CFLAGS=-I/usr/include/aarch64-linux-gnu"
+    )
+fi
+
+make -C "${SRC}" -f Makefiles/Makefile.UNIX -j"$(nproc)" NET_BOARD=0 "${_cross_args[@]}"
 
 find "${SRC}" -path '*/bin*/supermodel' -type f -perm /111 \
     -exec cp {} "${STAGING}/bin/" \; 2>/dev/null || true

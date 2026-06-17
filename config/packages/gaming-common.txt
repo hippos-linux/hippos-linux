@@ -20,6 +20,15 @@ libegl1
 
 mesa-vulkan-drivers
 
+# Network tools (WoL, etc.)
+ethtool
+
+# HDMI-CEC TV control
+cec-utils
+
+# Sleep timer (idle-based auto-suspend)
+xautolock
+
 # Performance and overlay tools
 gamemode
 mangohud

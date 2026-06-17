@@ -18,8 +18,10 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
-if ! dpkg -s qt6-charts-dev >/dev/null 2>&1; then
-    apt-get update -qq && apt-get install -y --no-install-recommends qt6-charts-dev
+_charts_pkg="qt6-charts-dev"
+[[ "${ARCH:-amd64}" == "arm64" ]] && _charts_pkg="qt6-charts-dev:arm64"
+if ! dpkg -s "${_charts_pkg}" >/dev/null 2>&1; then
+    apt-get update -qq && apt-get install -y --no-install-recommends "${_charts_pkg}"
 fi
 
 rm -rf "${STAGING}"

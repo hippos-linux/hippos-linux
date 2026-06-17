@@ -30,12 +30,64 @@ source "/work/build/qt611-env.sh"
 mkdir -p "${SRC}/dep/prebuilt" "${STAGING}/bin"
 
 if [[ ! -f "${SRC}/dep/prebuilt/.deps-${_ds_deps_suffix}.done" ]]; then
-    log "Downloading DuckStation deps-${_ds_deps_suffix}"
-    curl -fL "${DEPS_REPO}" -o "${WORK_ROOT}/${NAME}/deps-${_ds_deps_suffix}.tar.xz"
+    if [[ "${ARCH:-amd64}" == "arm64" ]] && [[ "$(uname -m)" == "x86_64" ]]; then
+        # No prebuilt arm64 tarball available from duckstation/dependencies.
+        # Use the upstream cross-compilation dep build script instead.
+        CROSS_DEPS_DIR="${WORK_ROOT}/${NAME}/cross-deps-arm64"
+        CROSS_DEPS_SCRIPT="${WORK_ROOT}/${NAME}/build-dependencies-linux-cross.sh"
 
-    log "Extracting DuckStation prebuilt dependencies"
-    tar -xJf "${WORK_ROOT}/${NAME}/deps-${_ds_deps_suffix}.tar.xz" -C "${SRC}/dep/prebuilt"
-    touch "${SRC}/dep/prebuilt/.deps-${_ds_deps_suffix}.done"
+        if [[ ! -f "${CROSS_DEPS_DIR}/.done" ]]; then
+            log "Downloading cross-dep build script"
+            curl -fL \
+                "https://raw.githubusercontent.com/duckstation/dependencies/refs/heads/master/build-dependencies-linux-cross.sh" \
+                -o "${CROSS_DEPS_SCRIPT}"
+            chmod +x "${CROSS_DEPS_SCRIPT}"
+
+            # Strip the Qt build/install sections from the script — we already
+            # have a custom arm64 Qt 6.11 mounted at ${QT_ROOT}. Skip from any
+            # "echo "Building/Installing Qt..." line through the next non-Qt
+            # section echo so the script only builds the non-Qt deps
+            # (cpuinfo, soundtouch, plutosvg, shaderc, SDL, etc.).
+            python3 - "${CROSS_DEPS_SCRIPT}" << 'PYEOF'
+import sys, re
+lines = open(sys.argv[1]).readlines()
+out, skip = [], False
+for line in lines:
+    if re.match(r'\s*echo "(?:Building|Installing) Qt', line):
+        skip = True
+    elif skip and re.match(r'\s*echo "(?:Building|Installing) ', line) and 'Qt' not in line:
+        skip = False
+    if not skip:
+        out.append(line)
+open(sys.argv[1], 'w').writelines(out)
+PYEOF
+
+            mkdir -p "${CROSS_DEPS_DIR}"
+            log "Building arm64 dependencies from source (this takes a while)"
+            # SYSROOTDIR=/: arm64 multiarch libs live at /usr/lib/aarch64-linux-gnu/
+            # HOSTDIR unused now (Qt sections stripped), but arg is still required
+            "${CROSS_DEPS_SCRIPT}" \
+                /opt/hippos/qt/6.11-host \
+                arm64 \
+                / \
+                "${CROSS_DEPS_DIR}"
+            touch "${CROSS_DEPS_DIR}/.done"
+        fi
+
+        # Symlink cross-built deps where duckstation cmake expects prebuilt/linux-aarch64
+        ln -sfn "${CROSS_DEPS_DIR}" "${SRC}/dep/prebuilt/${_ds_deps_suffix}"
+        touch "${SRC}/dep/prebuilt/.deps-${_ds_deps_suffix}.done"
+    else
+        log "Downloading DuckStation deps-${_ds_deps_suffix}"
+        if ! curl -fL "${DEPS_REPO}" -o "${WORK_ROOT}/${NAME}/deps-${_ds_deps_suffix}.tar.xz"; then
+            log "Prebuilt deps unavailable for ${_ds_deps_suffix} (${DEPS_REPO}); skipping"
+            exit 0
+        fi
+
+        log "Extracting DuckStation prebuilt dependencies"
+        tar -xJf "${WORK_ROOT}/${NAME}/deps-${_ds_deps_suffix}.tar.xz" -C "${SRC}/dep/prebuilt"
+        touch "${SRC}/dep/prebuilt/.deps-${_ds_deps_suffix}.done"
+    fi
 fi
 
 rm -rf "${BUILD}"
