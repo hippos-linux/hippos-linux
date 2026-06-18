@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Add ES Ports Shortcut
+Comment=Create an EmulationStation Ports launcher for this file
+Exec=/usr/lib/hippos/hippos-es-ports-add %f
+Icon=emblem-favorite
+Terminal=false
+MimeType=application/x-executable;application/vnd.appimage;application/x-desktop;
