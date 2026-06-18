@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Create an ES Ports .sh launcher for an AppImage or .desktop file.
+
+FILE="$1"
+PORTS_DIR="/userdata/roms/ports"
+
+notify() { notify-send "ES Ports" "$1" --icon="${2:-emblem-favorite}" 2>/dev/null || true; }
+
+if [[ ! -f "$FILE" ]]; then
+    notify "File not found: $FILE" dialog-error
+    exit 1
+fi
+
+mkdir -p "$PORTS_DIR"
+
+case "$FILE" in
+    *.desktop)
+        NAME=$(grep -m1 "^Name=" "$FILE" | cut -d= -f2- | tr -d '\r\n')
+        EXEC=$(grep -m1 "^Exec=" "$FILE" | cut -d= -f2- | tr -d '\r\n' | sed 's/ %[fFuUickdDnNvm%]//g')
+        [[ -z "$NAME" ]] && NAME=$(basename "$FILE" .desktop)
+        if [[ -z "$EXEC" ]]; then
+            notify "No Exec= found in $(basename "$FILE")" dialog-error
+            exit 1
+        fi
+        ;;
+    *.AppImage|*.appimage)
+        NAME=$(basename "$FILE"); NAME="${NAME%.AppImage}"; NAME="${NAME%.appimage}"
+        EXEC="\"$FILE\""
+        chmod +x "$FILE" 2>/dev/null || true
+        ;;
+    *)
+        NAME=$(basename "$FILE")
+        EXEC="\"$FILE\""
+        chmod +x "$FILE" 2>/dev/null || true
+        ;;
+esac
+
+SLUG=$(echo "$NAME" | tr -cd '[:alnum:] ._-' | tr ' ' '_')
+OUT="$PORTS_DIR/${SLUG}.sh"
+
+cat > "$OUT" <<SCRIPT
+#!/bin/bash
+exec $EXEC
+SCRIPT
+chmod +x "$OUT"
+
+notify "Added: $NAME"
