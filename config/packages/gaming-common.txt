@@ -27,7 +27,7 @@ ethtool
 cec-utils
 
 # Sleep timer (idle-based auto-suspend)
-xautolock
+xprintidle
 
 # Performance and overlay tools
 gamemode

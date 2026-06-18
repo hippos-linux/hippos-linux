@@ -58,7 +58,7 @@ xsetroot -solid black
 # Sleep timer: auto-suspend after configured idle period
 _SLEEP_TIMER="$(hippos-settings get system.sleep_timer 2>/dev/null || true)"
 if [[ -n "$_SLEEP_TIMER" && "$_SLEEP_TIMER" != "0" ]]; then
-    xautolock -time "$_SLEEP_TIMER" -locker "/usr/bin/hippos-shutdown suspend" -detectsleep &
+    ( while true; do sleep 30; _idle=$(xprintidle 2>/dev/null || echo 0); [ "$_idle" -ge "$((_SLEEP_TIMER * 60000))" ] && /usr/bin/hippos-shutdown suspend; done ) &
 fi
 
 # Switch to VT7 once ES is running. Plymouth retains its last frame on VT1
