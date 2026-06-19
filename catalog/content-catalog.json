@@ -41,58 +41,6 @@
       "source_subdir": "cht"
     },
     {
-      "id": "bezels-nes",
-      "name": "Bezels — NES",
-      "description": "Decorative bezels for the NES from The Bezel Project.",
-      "category": "bezels",
-      "version": "latest",
-      "download_size": 31457280,
-      "url": "https://github.com/thebezelproject/bezelproject-NES/archive/refs/heads/master.tar.gz",
-      "sha256": "",
-      "install_path": "thebezelproject/nes",
-      "strip_components": 1,
-      "source_subdir": ""
-    },
-    {
-      "id": "bezels-snes",
-      "name": "Bezels — SNES",
-      "description": "Decorative bezels for the SNES from The Bezel Project.",
-      "category": "bezels",
-      "version": "latest",
-      "download_size": 31457280,
-      "url": "https://github.com/thebezelproject/bezelproject-SNES/archive/refs/heads/master.tar.gz",
-      "sha256": "",
-      "install_path": "thebezelproject/snes",
-      "strip_components": 1,
-      "source_subdir": ""
-    },
-    {
-      "id": "bezels-megadrive",
-      "name": "Bezels — Mega Drive / Genesis",
-      "description": "Decorative bezels for the Mega Drive / Genesis from The Bezel Project.",
-      "category": "bezels",
-      "version": "latest",
-      "download_size": 31457280,
-      "url": "https://github.com/thebezelproject/bezelproject-MegaDrive/archive/refs/heads/master.tar.gz",
-      "sha256": "",
-      "install_path": "thebezelproject/megadrive",
-      "strip_components": 1,
-      "source_subdir": ""
-    },
-    {
-      "id": "bezels-gba",
-      "name": "Bezels — Game Boy Advance",
-      "description": "Decorative bezels for the GBA from The Bezel Project.",
-      "category": "bezels",
-      "version": "latest",
-      "download_size": 10485760,
-      "url": "https://github.com/thebezelproject/bezelproject-GBA/archive/refs/heads/master.tar.gz",
-      "sha256": "",
-      "install_path": "thebezelproject/gba",
-      "strip_components": 1,
-      "source_subdir": ""
-    },
-    {
       "id": "theme-hippos-minimal",
       "name": "HippOS Minimal Theme",
       "description": "The official HippOS EmulationStation theme — dark, minimal, purple accent.",
