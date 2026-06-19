@@ -46,7 +46,7 @@ from hippos_controller_monitor import start_controller_monitor
 from HipposPaths import (  # noqa: E402
     USERDATA, HOME, CONFIGS, SAVES, BIOS, SCREENSHOTS, CACHE, LOGS,
     HIPPOS_CONF, HIPPOS_SHARE_DIR, DEFAULTS_DIR, HIPPOS_SHADERS, USER_SHADERS,
-    USER_ES_DIR,
+    USER_DECORATIONS, CHEATS, USER_ES_DIR,
 )
 
 RA_CONFIG_DIR = CONFIGS / 'retroarch'
@@ -2055,6 +2055,8 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
     cfg.set('core_options_path',        f'"{RA_CORES_CFG}"')
     cfg.set('assets_directory',         '"/usr/share/libretro/assets"')
     cfg.set('video_shader_dir',         f'"{USER_SHADERS}"')
+    cfg.set('cheat_database_path',      f'"{CHEATS}"')
+    cfg.set('overlay_directory',        f'"{USER_DECORATIONS}"')
 
     # Video
     cfg.set('video_fullscreen',         '"true"')
