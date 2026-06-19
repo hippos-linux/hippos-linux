@@ -14,11 +14,12 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
-VERSION_FILE = "/usr/share/hippos/version"
-SYSCONF      = "/userdata/system/hippos.conf"
-CACHE_DIR    = "/userdata/system/cache/update"
-BTRFS_MNT    = "/tmp/hippos-btrfs-update"
-LOG_FILE     = "/userdata/system/logs/upgrade.log"
+VERSION_FILE      = "/usr/share/hippos/version"
+SYSCONF           = "/userdata/system/hippos.conf"
+CACHE_DIR         = "/userdata/system/cache/update"
+BTRFS_MNT         = "/tmp/hippos-btrfs-update"
+LOG_FILE          = "/userdata/system/logs/upgrade.log"
+PATCHES_STATE_FILE = "/userdata/system/applied-patches.json"
 
 _DEB_ARCH = {'x86_64': 'amd64', 'aarch64': 'arm64'}.get(platform.machine(), platform.machine())
 
@@ -963,6 +964,79 @@ def cmd_update_frontend(name):
     log("Restart EmulationStation to apply the update.")
 
 
+def applied_patch_ids():
+    try:
+        return set(json.load(open(PATCHES_STATE_FILE)))
+    except Exception:
+        return set()
+
+
+def mark_patch_applied(patch_id):
+    ids = applied_patch_ids()
+    ids.add(patch_id)
+    os.makedirs(os.path.dirname(PATCHES_STATE_FILE), exist_ok=True)
+    with open(PATCHES_STATE_FILE, "w") as f:
+        json.dump(sorted(ids), f)
+
+
+def cmd_list_patches():
+    manifest = fetch_manifest(get_channel())
+    if not manifest:
+        die("Could not fetch manifest")
+    patches = manifest.get("payloads", {}).get("patches", [])
+    applied = applied_patch_ids()
+    for p in patches:
+        pid = p.get("id", "")
+        dest = p.get("dest", "")
+        if pid and pid not in applied:
+            print(f"{pid}\t{dest}")
+
+
+def cmd_apply_patches():
+    manifest = fetch_manifest(get_channel())
+    if not manifest:
+        die("Could not fetch manifest — check network")
+    patches = manifest.get("payloads", {}).get("patches", [])
+    if not patches:
+        log("No patches in manifest")
+        return
+    applied = applied_patch_ids()
+    for p in patches:
+        pid  = p.get("id", "")
+        dest = p.get("dest", "")
+        url  = p.get("url", "")
+        sha256 = p.get("sha256", "")
+        if not pid or not dest or not url:
+            log(f"Patch entry missing id/dest/url — skipping")
+            continue
+        if pid in applied:
+            log(f"Patch {pid}: already applied — skipping")
+            continue
+        log(f"Applying patch {pid} → {dest}...")
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        tmp = os.path.join(CACHE_DIR, f"patch-{pid}-{os.path.basename(dest)}")
+        req = _make_request(url)
+        with urllib.request.urlopen(req, timeout=60) as resp, open(tmp, "wb") as f:
+            f.write(resp.read())
+        if sha256:
+            log("Verifying checksum...")
+            if sha256_file(tmp) != sha256:
+                os.remove(tmp)
+                die(f"Patch {pid}: SHA256 mismatch — aborting")
+            log("Checksum OK")
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        orig_mode = None
+        try:
+            orig_mode = os.stat(dest).st_mode
+        except FileNotFoundError:
+            pass
+        shutil.move(tmp, dest)
+        if orig_mode is not None:
+            os.chmod(dest, orig_mode)
+        mark_patch_applied(pid)
+        log(f"Patch {pid} applied")
+
+
 def cmd_update_grub():
     """Rewrite grub.cfg with current boot counter logic and btrfs subvol state."""
     try:
@@ -991,7 +1065,7 @@ if __name__ == "__main__":
 
     # Read-only commands that don't need root
     READONLY_CMDS = {"check", "list-deployments", "list-emulator-updates",
-                     "list-frontend-updates", "list-kernel-update"}
+                     "list-frontend-updates", "list-kernel-update", "list-patches"}
     if cmd not in READONLY_CMDS:
         _require_root()
         _open_log()
@@ -1024,6 +1098,10 @@ if __name__ == "__main__":
         cmd_list_kernel_update()
     elif cmd == "update-kernel":
         cmd_update_kernel()
+    elif cmd == "list-patches":
+        cmd_list_patches()
+    elif cmd == "apply-patches":
+        cmd_apply_patches()
     elif cmd == "update-grub":
         cmd_update_grub()
     else:
