@@ -205,6 +205,30 @@ def cmd_list():
             preview_url   = pkg.get("preview_url", ""),
         )
 
+    # Bezels — delegated to hippos-bezelproject
+    try:
+        result = subprocess.run(["hippos-bezelproject", "list"], capture_output=True, text=True, timeout=5)
+        for line in result.stdout.splitlines():
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            installed_flag, system_id = parts[0], parts[1]
+            label = system_id.upper()
+            _pkg_node(root,
+                pkg_id        = f"bezels-{system_id}",
+                repository    = "hippos",
+                version       = "latest",
+                description   = f"{label} Bezels — The Bezel Project",
+                group         = "bezels",
+                packager      = "TheBezelProject",
+                installed     = installed_flag == "[I]",
+                url           = "",
+                download_size = 0,
+                preview_url   = "",
+            )
+    except Exception as e:
+        print(f"WARNING: Could not load bezels: {e}", file=sys.stderr)
+
     # Wine runners — capped at WINE_LIST_LIMIT most recent per source
     try:
         runners = load_wine_runners()
@@ -441,6 +465,16 @@ def _install_apt(pkg):
 def cmd_install(name):
     state = load_state()
 
+    # Bezel package?
+    if name.startswith("bezels-"):
+        system_id = name[len("bezels-"):]
+        print(f"Installing bezels for {system_id}...", flush=True)
+        ret = subprocess.call(["hippos-bezelproject", "install", system_id])
+        if ret != 0:
+            print(f"ERROR: bezel install failed (exit {ret})", flush=True)
+            sys.exit(1)
+        return
+
     # Wine runner?
     if name.startswith("wine::"):
         runners = load_wine_runners()
@@ -473,6 +507,12 @@ def cmd_install(name):
 
 def cmd_remove(name):
     state = load_state()
+
+    if name.startswith("bezels-"):
+        system_id = name[len("bezels-"):]
+        subprocess.call(["hippos-bezelproject", "remove", system_id])
+        print(f"Done: bezels for {system_id} removed.", flush=True)
+        return
 
     if name.startswith("wine::"):
         dest = _runner_install_dir(name)
