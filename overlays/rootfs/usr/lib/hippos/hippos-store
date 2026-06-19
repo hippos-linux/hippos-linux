@@ -46,29 +46,34 @@ INSTALL_ROOTS = {
 
 WINE_SOURCES = [
     {
-        "id":    "wine-ge",
-        "label": "Wine-GE",
-        "api":   "https://api.github.com/repos/GloriousEggroll/wine-ge-custom/releases?per_page=100",
-        "pick":  lambda a: a["name"].endswith((".tar.xz", ".tar.gz"))
-                           and "x86_64" in a["name"]
-                           and not a["name"].endswith(".sha512sum"),
+        "id":       "wine-ge",
+        "label":    "Wine-GE",
+        "packager": "GloriousEggroll",
+        "api":      "https://api.github.com/repos/GloriousEggroll/wine-ge-custom/releases?per_page=100",
+        "pick":     lambda a: a["name"].endswith((".tar.xz", ".tar.gz"))
+                              and "x86_64" in a["name"]
+                              and not a["name"].endswith(".sha512sum"),
     },
     {
-        "id":    "wine-tkg",
-        "label": "Wine-TKG",
-        "api":   "https://api.github.com/repos/Kron4ek/Wine-Builds/releases?per_page=100",
-        "pick":  lambda a: a["name"].endswith(".tar.xz")
-                           and "amd64" in a["name"]
-                           and "staging" not in a["name"],
+        "id":       "wine-tkg",
+        "label":    "Wine-TKG",
+        "packager": "Kron4ek",
+        "api":      "https://api.github.com/repos/Kron4ek/Wine-Builds/releases?per_page=100",
+        "pick":     lambda a: a["name"].endswith(".tar.xz")
+                              and "amd64" in a["name"]
+                              and "staging" not in a["name"],
     },
     {
-        "id":    "proton-ge",
-        "label": "Proton-GE",
-        "api":   "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases?per_page=100",
-        "pick":  lambda a: a["name"].endswith((".tar.gz",))
-                           and not a["name"].endswith(".sha512sum"),
+        "id":       "proton-ge",
+        "label":    "Proton-GE",
+        "packager": "GloriousEggroll",
+        "api":      "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases?per_page=100",
+        "pick":     lambda a: a["name"].endswith((".tar.gz",))
+                              and not a["name"].endswith(".sha512sum"),
     },
 ]
+
+WINE_LIST_LIMIT = 10  # most recent releases shown per source in the store
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +150,7 @@ def load_wine_runners(force_refresh=False):
                         "name":        asset["name"].removesuffix(".tar.xz").removesuffix(".tar.gz"),
                         "description": f"{src['label']} — {rel.get('tag_name', '')}",
                         "category":    src["id"],
+                        "packager":    src["packager"],
                         "version":     rel.get("tag_name", "unknown"),
                         "download_size": asset.get("size", 0),
                         "url":         asset["browser_download_url"],
@@ -163,6 +169,21 @@ def load_wine_runners(force_refresh=False):
 # list
 # ---------------------------------------------------------------------------
 
+def _pkg_node(root, pkg_id, repository, version, description, group, packager, installed, url, download_size, preview_url):
+    node = ET.SubElement(root, "package")
+    ET.SubElement(node, "name").text              = pkg_id
+    ET.SubElement(node, "repository").text        = repository
+    ET.SubElement(node, "available_version").text = version
+    ET.SubElement(node, "description").text       = description
+    ET.SubElement(node, "group").text             = group
+    ET.SubElement(node, "packager").text          = packager
+    ET.SubElement(node, "status").text            = "installed" if installed else "available"
+    ET.SubElement(node, "url").text               = url
+    ET.SubElement(node, "download_size").text     = str(download_size)
+    ET.SubElement(node, "installed_size").text    = str(download_size)
+    ET.SubElement(node, "preview_url").text       = preview_url
+
+
 def cmd_list():
     catalog = load_catalog()
     state   = load_state()
@@ -171,19 +192,42 @@ def cmd_list():
 
     for pkg in catalog:
         pkg_id = pkg["id"]
-        installed = pkg_id in state
-        node = ET.SubElement(root, "package")
-        ET.SubElement(node, "name").text             = pkg_id
-        ET.SubElement(node, "repository").text       = "hippos"
-        ET.SubElement(node, "available_version").text = pkg.get("version", "latest")
-        ET.SubElement(node, "description").text      = pkg.get("description", "")
-        ET.SubElement(node, "group").text            = pkg.get("category", "")
-        ET.SubElement(node, "packager").text         = pkg.get("packager", "HippOS")
-        ET.SubElement(node, "status").text           = "installed" if installed else "available"
-        ET.SubElement(node, "url").text              = pkg.get("url", "")
-        ET.SubElement(node, "download_size").text    = str(pkg.get("download_size", 0))
-        ET.SubElement(node, "installed_size").text   = str(pkg.get("download_size", 0))
-        ET.SubElement(node, "preview_url").text      = pkg.get("preview_url", "")
+        _pkg_node(root,
+            pkg_id        = pkg_id,
+            repository    = "hippos",
+            version       = pkg.get("version", "latest"),
+            description   = pkg.get("description", ""),
+            group         = pkg.get("category", ""),
+            packager      = pkg.get("packager", "HippOS"),
+            installed     = pkg_id in state,
+            url           = pkg.get("url", ""),
+            download_size = pkg.get("download_size", 0),
+            preview_url   = pkg.get("preview_url", ""),
+        )
+
+    # Wine runners — capped at WINE_LIST_LIMIT most recent per source
+    try:
+        runners = load_wine_runners()
+        counts  = {}
+        for runner in runners:
+            src_id = runner["category"]
+            if counts.get(src_id, 0) >= WINE_LIST_LIMIT:
+                continue
+            counts[src_id] = counts.get(src_id, 0) + 1
+            _pkg_node(root,
+                pkg_id        = runner["id"],
+                repository    = "runners",
+                version       = runner.get("version", "unknown"),
+                description   = runner.get("description", runner["name"]),
+                group         = runner["category"],
+                packager      = runner.get("packager", ""),
+                installed     = runner["id"] in state,
+                url           = runner.get("url", ""),
+                download_size = runner.get("download_size", 0),
+                preview_url   = "",
+            )
+    except Exception as e:
+        print(f"WARNING: Could not load wine runners: {e}", file=sys.stderr)
 
     print("<packages>", flush=True)
     for pkg_node in root:
@@ -290,8 +334,6 @@ def _gamelist_add(pkg):
     ET.SubElement(node, "genre").text  = pkg.get("genre", "")
 
     ET.indent(root, space="    ")
-    tree = ET.ElementTree(root)
-    ET.indent(tree, space="    ")
     os.makedirs(os.path.dirname(PORTS_GAMELIST), exist_ok=True)
     with open(PORTS_GAMELIST, "wb") as f:
         f.write(b'<?xml version="1.0"?>\n')
