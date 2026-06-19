@@ -1,7 +1,5 @@
-DOOM (PrBoom)
+PrBoom
 Manufacturer: id Software
-Hardware: Engine
+Released: 1993
+Hardware: engine
 Extensions: .wad .iwad .pwad
-
-Place DOOM WAD files in this directory.
-Do not delete prboom.wad.
