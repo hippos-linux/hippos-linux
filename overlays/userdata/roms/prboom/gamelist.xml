@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<gameList>
+    <game>
+        <path>./doom1.wad</path>
+        <name>DOOM (Shareware)</name>
+        <desc>The game that defined the first-person shooter genre. Fight through four episodes of demon-infested bases and hellscapes as a lone marine armed with a pistol, shotgun, and chainsaw. This is the original shareware episode — Knee-Deep in the Dead — fully playable and free to distribute since 1993.</desc>
+        <image>./images/Doom-image.png</image>
+        <thumbnail>./images/Doom-thumb.png</thumbnail>
+        <marquee>./images/Doom-logo.png</marquee>
+        <video>./videos/Doom-video.mp4</video>
+        <rating>0.97</rating>
+        <releasedate>19931210T000000</releasedate>
+        <developer>id Software</developer>
+        <publisher>id Software</publisher>
+        <genre>First-Person Shooter</genre>
+        <players>1</players>
+    </game>
+</gameList>
