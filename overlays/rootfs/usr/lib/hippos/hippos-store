@@ -267,7 +267,9 @@ def _install_catalog_tarball(pkg):
     _extract_tarball(archive, dest, pkg.get("strip_components", 1), pkg.get("source_subdir", ""))
 
 
-PORTS_GAMELIST = "/userdata/roms/ports/gamelist.xml"
+PORTS_GAMELIST   = "/userdata/roms/ports/gamelist.xml"
+SCUMMVM_ROMS     = "/userdata/roms/scummvm"
+SCUMMVM_GAMELIST = "/userdata/roms/scummvm/gamelist.xml"
 
 def _gamelist_add(pkg):
     launcher = f"./{pkg['id']}.sh"
@@ -314,9 +316,64 @@ def _gamelist_remove(pkg_id):
         ET.ElementTree(root).write(f, encoding="utf-8", xml_declaration=False)
 
 
+def _scummvm_add(pkg):
+    scummvm_id = pkg["scummvm_id"]
+    os.makedirs(SCUMMVM_ROMS, exist_ok=True)
+    dot_scummvm = os.path.join(SCUMMVM_ROMS, f"{scummvm_id}.scummvm")
+    with open(dot_scummvm, "w") as f:
+        f.write(f"{scummvm_id}\n")
+
+    try:
+        tree = ET.parse(SCUMMVM_GAMELIST)
+        root = tree.getroot()
+    except (FileNotFoundError, ET.ParseError):
+        root = ET.Element("gameList")
+
+    entry_path = f"./{scummvm_id}.scummvm"
+    for existing in root.findall("game"):
+        if existing.findtext("path") == entry_path:
+            return
+
+    node = ET.SubElement(root, "game")
+    ET.SubElement(node, "path").text  = entry_path
+    ET.SubElement(node, "name").text  = pkg.get("name", pkg["id"])
+    ET.SubElement(node, "desc").text  = pkg.get("description", "")
+    ET.SubElement(node, "genre").text = pkg.get("genre", "")
+
+    ET.indent(root, space="    ")
+    os.makedirs(SCUMMVM_ROMS, exist_ok=True)
+    with open(SCUMMVM_GAMELIST, "wb") as f:
+        f.write(b'<?xml version="1.0"?>\n')
+        ET.ElementTree(root).write(f, encoding="utf-8", xml_declaration=False)
+
+
+def _scummvm_remove(pkg):
+    scummvm_id = pkg["scummvm_id"]
+    dot_scummvm = os.path.join(SCUMMVM_ROMS, f"{scummvm_id}.scummvm")
+    if os.path.exists(dot_scummvm):
+        os.remove(dot_scummvm)
+
+    entry_path = f"./{scummvm_id}.scummvm"
+    try:
+        tree = ET.parse(SCUMMVM_GAMELIST)
+        root = tree.getroot()
+    except (FileNotFoundError, ET.ParseError):
+        return
+
+    for node in root.findall("game"):
+        if node.findtext("path") == entry_path:
+            root.remove(node)
+            break
+
+    with open(SCUMMVM_GAMELIST, "wb") as f:
+        f.write(b'<?xml version="1.0"?>\n')
+        ET.ElementTree(root).write(f, encoding="utf-8", xml_declaration=False)
+
+
 def _install_apt(pkg):
     apt_pkgs     = pkg.get("apt_packages", [])
     launcher_cmd = pkg.get("launcher_command", "")
+    scummvm_id   = pkg.get("scummvm_id", "")
     print(f"Installing {pkg['name']} via apt...", flush=True)
     env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive"}
     subprocess.call(["apt-get", "update", "-qq"], env=env)
@@ -324,7 +381,9 @@ def _install_apt(pkg):
     if ret != 0:
         print(f"ERROR: apt install failed (exit {ret})", flush=True)
         sys.exit(1)
-    if launcher_cmd:
+    if scummvm_id:
+        _scummvm_add(pkg)
+    elif launcher_cmd:
         os.makedirs("/userdata/roms/ports", exist_ok=True)
         launcher = f"/userdata/roms/ports/{pkg['id']}.sh"
         with open(launcher, "w") as f:
@@ -391,10 +450,13 @@ def cmd_remove(name):
 
     if pkg.get("type") == "apt":
         subprocess.call(["apt-get", "remove", "-y"] + pkg.get("apt_packages", []))
-        launcher = f"/userdata/roms/ports/{name}.sh"
-        if os.path.exists(launcher):
-            os.remove(launcher)
-        _gamelist_remove(name)
+        if pkg.get("scummvm_id"):
+            _scummvm_remove(pkg)
+        else:
+            launcher = f"/userdata/roms/ports/{name}.sh"
+            if os.path.exists(launcher):
+                os.remove(launcher)
+            _gamelist_remove(name)
     else:
         dest_root    = INSTALL_ROOTS.get(pkg.get("category", ""), "/userdata/roms/ports")
         install_path = pkg.get("install_path", "")
