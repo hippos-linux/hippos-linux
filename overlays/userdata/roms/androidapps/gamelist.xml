@@ -3,6 +3,11 @@
     <game>
         <path>./Waydroid.waydroid</path>
         <name>Waydroid</name>
+        <desc>Waydroid runs a full Android environment directly on HippOS using Linux namespaces and a lightweight container. Launch Android apps and games with near-native performance — no emulation overhead. Open the full Waydroid interface to install APKs, access the app drawer, and use any Android software you need.</desc>
         <image>./images/waydroid-logo.jpg</image>
+        <developer>Waydroid Team</developer>
+        <publisher>Waydroid Team</publisher>
+        <genre>Android Apps</genre>
+        <players>1</players>
     </game>
 </gameList>
