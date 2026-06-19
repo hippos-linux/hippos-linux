@@ -45,7 +45,7 @@ from hippos_controller_monitor import start_controller_monitor
 
 from HipposPaths import (  # noqa: E402
     USERDATA, HOME, CONFIGS, SAVES, BIOS, SCREENSHOTS, CACHE, LOGS,
-    HIPPOS_CONF, HIPPOS_SHARE_DIR, DEFAULTS_DIR, HIPPOS_SHADERS,
+    HIPPOS_CONF, HIPPOS_SHARE_DIR, DEFAULTS_DIR, HIPPOS_SHADERS, USER_SHADERS,
     USER_ES_DIR,
 )
 
