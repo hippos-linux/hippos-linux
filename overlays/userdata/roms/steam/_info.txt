@@ -1,4 +1,5 @@
 Steam
 Manufacturer: Valve
-Hardware: None
+Released: 2003
+Hardware: os
 Extensions: .steam
