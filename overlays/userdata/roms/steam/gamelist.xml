@@ -3,6 +3,11 @@
     <game>
         <path>./Steam.steam</path>
         <name>Steam Big Picture</name>
+        <desc>Steam Big Picture is Valve's controller-friendly interface for your full Steam library. Browse your games, access the Steam store, manage downloads, and launch titles from the couch with full gamepad support. Your entire Steam collection is available the moment you sign in.</desc>
         <image>./images/steam-logo.jpg</image>
+        <developer>Valve</developer>
+        <publisher>Valve</publisher>
+        <genre>Gaming Platform</genre>
+        <players>1</players>
     </game>
 </gameList>
