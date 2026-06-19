@@ -271,6 +271,7 @@ def _install_apt(pkg):
     launcher_cmd = pkg.get("launcher_command", "")
     print(f"Installing {pkg['name']} via apt...", flush=True)
     env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive"}
+    subprocess.call(["apt-get", "update", "-qq"], env=env)
     ret = subprocess.call(["apt-get", "install", "-y", "--no-install-recommends"] + apt_pkgs, env=env)
     if ret != 0:
         print(f"ERROR: apt install failed (exit {ret})", flush=True)
