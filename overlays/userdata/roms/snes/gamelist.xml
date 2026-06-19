@@ -3,6 +3,16 @@
     <game>
         <path>./GunmanClive.zip</path>
         <name>Gunman Clive</name>
-        <image>./images/GunmanClive-logo.png</image>
+        <desc>Gunman Clive is a charming side-scrolling action platformer set in the Wild West, developed by Bertil Hörberg. Originally a mobile and 3DS release, this SNES homebrew port brings Clive's pencil-sketch art style and tight shooting mechanics to the Super Nintendo. Battle outlaws, robots, and bosses across short but satisfying stages with a distinct hand-drawn aesthetic.</desc>
+        <image>./images/GunmanClive-image.png</image>
+        <thumbnail>./images/GunmanClive-thumb.png</thumbnail>
+        <marquee>./images/GunmanClive-logo.png</marquee>
+        <video>./videos/GunmanClive-video.mp4</video>
+        <rating>0.85</rating>
+        <releasedate>20131222T000000</releasedate>
+        <developer>Bertil Hörberg</developer>
+        <publisher>Bertil Hörberg</publisher>
+        <genre>Action / Platformer</genre>
+        <players>1</players>
     </game>
 </gameList>

@@ -3,6 +3,16 @@
     <game>
         <path>./cavestory.zip</path>
         <name>Cave Story</name>
-        <image>./images/cavestory-logo.jpg</image>
+        <desc>Cave Story is a beloved action-adventure platformer originally created solo by Daisuke "Pixel" Amaya over five years. This Mega Drive port brings the full story of Quote — a robot who wakes up with no memory in a cave filled with sentient creatures called Mimigas — to Sega's 16-bit hardware. Explore non-linear dungeons, collect weapons, and uncover a conspiracy in one of indie gaming's greatest classics.</desc>
+        <image>./images/cavestory-image.png</image>
+        <thumbnail>./images/cavestory-thumb.png</thumbnail>
+        <marquee>./images/cavestory-logo.jpg</marquee>
+        <video>./videos/cavestory-video.mp4</video>
+        <rating>0.95</rating>
+        <releasedate>20041220T000000</releasedate>
+        <developer>Daisuke Amaya (port by Sonic Fan)</developer>
+        <publisher>Studio Pixel</publisher>
+        <genre>Action / Adventure / Platformer</genre>
+        <players>1</players>
     </game>
 </gameList>

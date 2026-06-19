@@ -3,6 +3,16 @@
     <game>
         <path>./Swabby.zip</path>
         <name>Swabby</name>
-        <image>./images/Swabby-logo.png</image>
+        <desc>Swabby is a puzzle-action game for the Sega Game Gear in which you control a small cleaning robot tasked with scrubbing coloured tiles across a series of increasingly tricky stages. Push tiles into matching groups to clear them before time runs out. A delightful homebrew title with clean visuals and addictive gameplay that makes great use of the Game Gear's portable format.</desc>
+        <image>./images/Swabby-image.png</image>
+        <thumbnail>./images/Swabby-thumb.png</thumbnail>
+        <marquee>./images/Swabby-logo.png</marquee>
+        <video>./videos/Swabby-video.mp4</video>
+        <rating>0.78</rating>
+        <releasedate>20190101T000000</releasedate>
+        <developer>Furrtek</developer>
+        <publisher>Furrtek</publisher>
+        <genre>Puzzle</genre>
+        <players>1</players>
     </game>
 </gameList>

@@ -3,6 +3,16 @@
     <game>
         <path>./Spelunky.zip</path>
         <name>Spelunky</name>
-        <image>./images/Spelunky-logo.jpg</image>
+        <desc>Spelunky is a roguelike platformer in which you explore procedurally generated underground caves packed with traps, monsters, and treasure. This Game Boy Color demake faithfully recreates the core loop of the original freeware Spelunky — every run is different, death is permanent, and the secrets run deep. An impressive technical achievement for the GBC hardware.</desc>
+        <image>./images/Spelunky-image.png</image>
+        <thumbnail>./images/Spelunky-thumb.png</thumbnail>
+        <marquee>./images/Spelunky-logo.jpg</marquee>
+        <video>./videos/Spelunky-video.mp4</video>
+        <rating>0.88</rating>
+        <releasedate>20220101T000000</releasedate>
+        <developer>Damian Yerrick</developer>
+        <publisher>Damian Yerrick</publisher>
+        <genre>Roguelike / Platformer</genre>
+        <players>1</players>
     </game>
 </gameList>

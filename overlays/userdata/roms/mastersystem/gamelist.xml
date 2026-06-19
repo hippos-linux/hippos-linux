@@ -3,6 +3,16 @@
     <game>
         <path>./AstroForce.sms.zip</path>
         <name>AstroForce</name>
-        <image>./images/AstroForce.sms-logo.png</image>
+        <desc>AstroForce is a vertical shoot-'em-up for the Sega Master System developed by Enrique Ruiz (Eruiz00). Inspired by classic arcade shmups, it features multiple stages of intense spaceship combat with power-ups, enemy formations, and end-of-level bosses. A technical showcase for the Master System's capabilities and one of the most accomplished SMS homebrew titles ever released.</desc>
+        <image>./images/AstroForce-image.png</image>
+        <thumbnail>./images/AstroForce-thumb.png</thumbnail>
+        <marquee>./images/AstroForce.sms-logo.png</marquee>
+        <video>./videos/AstroForce-video.mp4</video>
+        <rating>0.84</rating>
+        <releasedate>20170101T000000</releasedate>
+        <developer>Enrique Ruiz</developer>
+        <publisher>Enrique Ruiz</publisher>
+        <genre>Shoot 'em Up</genre>
+        <players>1</players>
     </game>
 </gameList>
