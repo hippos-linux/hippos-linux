@@ -38,7 +38,7 @@ INSTALL_ROOTS = {
     "bezels":    "/userdata/decorations",
     "cheats":    "/userdata/cheats",
     "themes":    "/userdata/themes",
-    "ports":     "/userdata/ports",
+    "ports":     "/userdata/roms/ports",
     "wine-ge":   WINE_RUNNERS_DIR,
     "wine-tkg":  WINE_RUNNERS_DIR,
     "proton-ge": WINE_RUNNERS_DIR,
@@ -257,7 +257,7 @@ def _install_wine_runner(pkg):
 
 def _install_catalog_tarball(pkg):
     category     = pkg.get("category", "")
-    dest_root    = INSTALL_ROOTS.get(category, "/userdata/ports")
+    dest_root    = INSTALL_ROOTS.get(category, "/userdata/roms/ports")
     install_path = pkg.get("install_path", "")
     dest         = os.path.join(dest_root, install_path) if install_path else dest_root
     os.makedirs(CACHE_DIR, exist_ok=True)
@@ -276,8 +276,8 @@ def _install_apt(pkg):
         print(f"ERROR: apt install failed (exit {ret})", flush=True)
         sys.exit(1)
     if launcher_cmd:
-        os.makedirs("/userdata/ports", exist_ok=True)
-        launcher = f"/userdata/ports/{pkg['id']}.sh"
+        os.makedirs("/userdata/roms/ports", exist_ok=True)
+        launcher = f"/userdata/roms/ports/{pkg['id']}.sh"
         with open(launcher, "w") as f:
             f.write(f"#!/usr/bin/env bash\nexec {launcher_cmd}\n")
         os.chmod(launcher, 0o755)
@@ -341,11 +341,11 @@ def cmd_remove(name):
 
     if pkg.get("type") == "apt":
         subprocess.call(["apt-get", "remove", "-y"] + pkg.get("apt_packages", []))
-        launcher = f"/userdata/ports/{name}.sh"
+        launcher = f"/userdata/roms/ports/{name}.sh"
         if os.path.exists(launcher):
             os.remove(launcher)
     else:
-        dest_root    = INSTALL_ROOTS.get(pkg.get("category", ""), "/userdata/ports")
+        dest_root    = INSTALL_ROOTS.get(pkg.get("category", ""), "/userdata/roms/ports")
         install_path = pkg.get("install_path", "")
         if install_path:
             target = os.path.join(dest_root, install_path)
