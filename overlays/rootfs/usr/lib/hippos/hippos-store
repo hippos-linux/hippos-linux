@@ -178,6 +178,7 @@ def cmd_list():
         ET.SubElement(node, "available_version").text = pkg.get("version", "latest")
         ET.SubElement(node, "description").text      = pkg.get("description", "")
         ET.SubElement(node, "group").text            = pkg.get("category", "")
+        ET.SubElement(node, "packager").text         = pkg.get("packager", "HippOS")
         ET.SubElement(node, "status").text           = "installed" if installed else "available"
         ET.SubElement(node, "url").text              = pkg.get("url", "")
         ET.SubElement(node, "download_size").text    = str(pkg.get("download_size", 0))
@@ -266,6 +267,53 @@ def _install_catalog_tarball(pkg):
     _extract_tarball(archive, dest, pkg.get("strip_components", 1), pkg.get("source_subdir", ""))
 
 
+PORTS_GAMELIST = "/userdata/roms/ports/gamelist.xml"
+
+def _gamelist_add(pkg):
+    launcher = f"./{pkg['id']}.sh"
+    try:
+        tree = ET.parse(PORTS_GAMELIST)
+        root = tree.getroot()
+    except (FileNotFoundError, ET.ParseError):
+        root = ET.Element("gameList")
+
+    for existing in root.findall("game"):
+        if existing.findtext("path") == launcher:
+            return
+
+    node = ET.SubElement(root, "game")
+    ET.SubElement(node, "path").text   = launcher
+    ET.SubElement(node, "name").text   = pkg.get("name", pkg["id"])
+    ET.SubElement(node, "desc").text   = pkg.get("description", "")
+    ET.SubElement(node, "genre").text  = pkg.get("genre", "")
+
+    ET.indent(root, space="    ")
+    tree = ET.ElementTree(root)
+    ET.indent(tree, space="    ")
+    os.makedirs(os.path.dirname(PORTS_GAMELIST), exist_ok=True)
+    with open(PORTS_GAMELIST, "wb") as f:
+        f.write(b'<?xml version="1.0"?>\n')
+        ET.ElementTree(root).write(f, encoding="utf-8", xml_declaration=False)
+
+
+def _gamelist_remove(pkg_id):
+    launcher = f"./{pkg_id}.sh"
+    try:
+        tree = ET.parse(PORTS_GAMELIST)
+        root = tree.getroot()
+    except (FileNotFoundError, ET.ParseError):
+        return
+
+    for node in root.findall("game"):
+        if node.findtext("path") == launcher:
+            root.remove(node)
+            break
+
+    with open(PORTS_GAMELIST, "wb") as f:
+        f.write(b'<?xml version="1.0"?>\n')
+        ET.ElementTree(root).write(f, encoding="utf-8", xml_declaration=False)
+
+
 def _install_apt(pkg):
     apt_pkgs     = pkg.get("apt_packages", [])
     launcher_cmd = pkg.get("launcher_command", "")
@@ -282,6 +330,7 @@ def _install_apt(pkg):
         with open(launcher, "w") as f:
             f.write(f"#!/usr/bin/env bash\nexec {launcher_cmd}\n")
         os.chmod(launcher, 0o755)
+        _gamelist_add(pkg)
 
 
 # ---------------------------------------------------------------------------
@@ -345,6 +394,7 @@ def cmd_remove(name):
         launcher = f"/userdata/roms/ports/{name}.sh"
         if os.path.exists(launcher):
             os.remove(launcher)
+        _gamelist_remove(name)
     else:
         dest_root    = INSTALL_ROOTS.get(pkg.get("category", ""), "/userdata/roms/ports")
         install_path = pkg.get("install_path", "")
