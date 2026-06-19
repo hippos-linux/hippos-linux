@@ -3,6 +3,16 @@
     <game>
         <path>./BattleKid.zip</path>
         <name>Battle Kid: Fortress of Peril</name>
-        <image>./images/BattleKid-logo.png</image>
+        <desc>Battle Kid: Fortress of Peril is a notoriously difficult action platformer for the NES inspired by the "I Wanna Be The Guy" genre. You play as Timmy, infiltrating a fortress filled with pixel-perfect traps and relentless enemies. Created by Sivak Games and released in 2010, it was one of the first commercially sold NES homebrew titles and a true test of patience and reflexes.</desc>
+        <image>./images/BattleKid-image.png</image>
+        <thumbnail>./images/BattleKid-thumb.png</thumbnail>
+        <marquee>./images/BattleKid-logo.png</marquee>
+        <video>./videos/BattleKid-video.mp4</video>
+        <rating>0.82</rating>
+        <releasedate>20100101T000000</releasedate>
+        <developer>Sivak Games</developer>
+        <publisher>Sivak Games</publisher>
+        <genre>Platformer</genre>
+        <players>1</players>
     </game>
 </gameList>

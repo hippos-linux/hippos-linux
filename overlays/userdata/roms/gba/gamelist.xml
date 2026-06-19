@@ -3,6 +3,16 @@
     <game>
         <path>./apotris.zip</path>
         <name>Apotris</name>
-        <image>./images/apotris-logo.png</image>
+        <desc>Apotris is a feature-complete Tetris clone for the Game Boy Advance, built by akouzoukos as a passion project and released free of charge. It includes multiple game modes — Marathon, Sprint, Ultra, and more — along with modern Tetris mechanics like hold piece, ghost piece, and T-spin detection. One of the most polished GBA homebrew releases ever made.</desc>
+        <image>./images/apotris-image.png</image>
+        <thumbnail>./images/apotris-thumb.png</thumbnail>
+        <marquee>./images/apotris-logo.png</marquee>
+        <video>./videos/apotris-video.mp4</video>
+        <rating>0.92</rating>
+        <releasedate>20210101T000000</releasedate>
+        <developer>akouzoukos</developer>
+        <publisher>akouzoukos</publisher>
+        <genre>Puzzle</genre>
+        <players>1</players>
     </game>
 </gameList>

@@ -3,6 +3,16 @@
     <game>
         <path>./tobu.zip</path>
         <name>Tobu Tobu Girl</name>
-        <image>./images/tobu-logo.png</image>
+        <desc>Tobu Tobu Girl is a vertical platformer for the original Game Boy in which you play as a girl trying to reach the sky. Jump on enemies to bounce ever higher, collecting power-ups and dodging hazards across five distinct worlds. Made by Tangram Games and released as freeware in 2017, it's a love letter to the Game Boy's hardware with a chiptune soundtrack and crisp pixel art.</desc>
+        <image>./images/tobu-image.png</image>
+        <thumbnail>./images/tobu-thumb.png</thumbnail>
+        <marquee>./images/tobu-logo.png</marquee>
+        <video>./videos/tobu-video.mp4</video>
+        <rating>0.9</rating>
+        <releasedate>20171223T000000</releasedate>
+        <developer>Tangram Games</developer>
+        <publisher>Tangram Games</publisher>
+        <genre>Platformer</genre>
+        <players>1</players>
     </game>
 </gameList>
