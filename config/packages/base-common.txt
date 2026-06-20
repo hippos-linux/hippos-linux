@@ -186,6 +186,9 @@ libcubeb0
 # Media
 ffmpeg
 
+# Cloud sync
+rclone
+
 # Scripting utilities
 jq
 libxml2-utils

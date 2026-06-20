@@ -1,0 +1,14 @@
+[Unit]
+Description=HippOS save sync upload
+After=network.target userdata.mount
+Wants=network.target
+
+[Service]
+Type=oneshot
+User=hippos
+ExecStart=/usr/lib/hippos/hippos-save-sync upload
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

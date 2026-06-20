@@ -1,0 +1,15 @@
+[Unit]
+Description=HippOS save sync restore from cloud
+After=network-online.target userdata.mount
+Wants=network-online.target
+Before=hippos-es.service
+
+[Service]
+Type=oneshot
+User=hippos
+ExecStart=/usr/lib/hippos/hippos-save-sync restore
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
