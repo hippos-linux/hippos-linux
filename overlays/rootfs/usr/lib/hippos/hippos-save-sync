@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RCLONE_CONF=/userdata/system/rclone/rclone.conf
+LOG_FILE=/userdata/system/logs/save-sync.log
+REMOTE_PATH=hippos-saves
+
+log() { printf '[hippos-save-sync] %s\n' "$*" | tee -a "${LOG_FILE}"; }
+
+REMOTE=$(/usr/lib/hippos/hippos-settings get global.save_sync_remote 2>/dev/null || true)
+REMOTE="${REMOTE//[[:space:]]/}"
+
+if [[ -z "${REMOTE}" ]]; then
+    exit 0
+fi
+
+if [[ ! -f "${RCLONE_CONF}" ]]; then
+    log "rclone.conf not found at ${RCLONE_CONF}; run: rclone --config ${RCLONE_CONF} config"
+    exit 1
+fi
+
+mkdir -p "$(dirname "${LOG_FILE}")"
+
+DIRECTION="${1:-upload}"
+RCLONE_OPTS=(
+    --config "${RCLONE_CONF}"
+    --update
+    --timeout 30s
+    --retries 1
+    --low-level-retries 1
+    --log-file "${LOG_FILE}"
+    --log-level INFO
+)
+
+case "${DIRECTION}" in
+    upload)
+        log "uploading saves to ${REMOTE}:${REMOTE_PATH}/"
+        rclone copy /userdata/saves/ "${REMOTE}:${REMOTE_PATH}/" "${RCLONE_OPTS[@]}"
+        log "upload done"
+        ;;
+    restore)
+        log "restoring saves from ${REMOTE}:${REMOTE_PATH}/"
+        rclone copy "${REMOTE}:${REMOTE_PATH}/" /userdata/saves/ "${RCLONE_OPTS[@]}"
+        log "restore done"
+        ;;
+    *)
+        printf 'Usage: hippos-save-sync [upload|restore]\n' >&2
+        exit 1
+        ;;
+esac

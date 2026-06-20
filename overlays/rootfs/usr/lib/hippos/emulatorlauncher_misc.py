@@ -255,8 +255,9 @@ def launch_x16emu(ctx: LaunchContext) -> int:
         cmd.append('-widescreen')
     for nplayer, _ in enumerate(ctx.controllers[:4], start=1):
         cmd.append(f'-joy{nplayer}')
+    (SAVES / 'x16').mkdir(parents=True, exist_ok=True)
     env = _build_game_env(conf, ctx)
-    env['XDG_DATA_HOME'] = str(CACHE)
+    env['XDG_DATA_HOME'] = str(SAVES / 'x16')
     result = _run_game_command(ctx, 'x16emu', cmd, env)
     return result.returncode
 

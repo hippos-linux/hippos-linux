@@ -4317,6 +4317,10 @@ def main() -> int:
     finally:
         _restore_game_power_mode(power_governor)
         _restore_video_mode(original_mode, conf)
+        subprocess.run(
+            ['systemctl', 'start', '--no-block', 'hippos-save-sync.service'],
+            check=False, capture_output=True,
+        )
 
 
 def _run_with_squashfs(ctx: LaunchContext, generator: Callable[[LaunchContext], int]) -> int:
