@@ -28,7 +28,7 @@ _wait_hdmi_sink() {
     done
 }
 
-if [[ -n "$DEVICE" && "$DEVICE" != "default" ]]; then
+if [[ -n "$DEVICE" && "$DEVICE" != "default" && "$DEVICE" != "auto" ]]; then
     if pactl set-default-sink "$DEVICE" 2>/dev/null; then
         echo "[hippos-audio-setup] default sink: $DEVICE"
     else
