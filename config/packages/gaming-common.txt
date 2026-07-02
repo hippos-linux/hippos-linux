@@ -45,11 +45,6 @@ mesa-va-drivers
 mesa-vdpau-drivers
 vainfo
 
-# Wine (system wine for winetricks/q4wine)
-wine
-wine64
-winetricks
-
 # Game launchers
 lutris
 
