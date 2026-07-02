@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# hippos-heroic — launch a Heroic game from a .heroic launcher file.
+set -euo pipefail
+
+ROM="${1:-}"
+[[ -n "$ROM" ]] || { echo "usage: hippos-heroic <romfile>" >&2; exit 1; }
+
+ENTRY=$(< "$ROM")
+PLATFORM="${ENTRY%%:*}"
+APP_NAME="${ENTRY#*:}"
+
+case "$PLATFORM" in
+    epic)   RUNNER="legendary" ;;
+    gog)    RUNNER="gogdl"    ;;
+    amazon) RUNNER="nile"     ;;
+    *)      RUNNER="$PLATFORM" ;;
+esac
+
+mkdir -p /userdata/system/logs
+
+heroic_running() {
+    pgrep -u hippos -f "com\.heroicgameslauncher\.hgl" >/dev/null 2>&1
+}
+
+xdg-open "heroic://launch/${RUNNER}/${APP_NAME}"
+
+for _ in {1..30}; do
+    heroic_running && break
+    sleep 1
+done
+
+while heroic_running; do
+    sleep 5
+done
+
+/usr/lib/hippos/hippos-heroic-sync >/userdata/system/logs/heroic-sync.log 2>&1 || true

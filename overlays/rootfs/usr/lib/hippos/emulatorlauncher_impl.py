@@ -175,6 +175,7 @@ STANDALONE_BINARIES: dict[str, tuple[str, ...]] = {
     'play': ('Play', 'play'),
     'gsplus': ('GSplus', 'gsplus'),
     'samcoupe': ('samcoupe', 'simcoupe'),
+    'heroic': ('heroic',),
     'steam': ('steam',),
     'flatpak': ('flatpak',),
     'moonlight': ('moonlight',),
@@ -2821,6 +2822,7 @@ from emulatorlauncher_gsplus import launch_gsplus as _launch_gsplus
 from emulatorlauncher_misc import (
     launch_clk as _launch_clk,
     launch_flatpak as _launch_flatpak,
+    launch_heroic as _launch_heroic,
     launch_ioquake3 as _launch_ioquake3,
     launch_lexaloffle as _launch_lexaloffle,
     launch_lightspark as _launch_lightspark,
@@ -4068,6 +4070,7 @@ WRITES_TO_ROM: frozenset[str] = frozenset({
 # until it gets its own generator.
 GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'libretro':    _launch_libretro,
+    'retroarch':   _launch_libretro,
     'sh':          _launch_sh,
     'duckstation': _launch_duckstation,
     'pcsx2':       _launch_pcsx2,
@@ -4098,6 +4101,7 @@ GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'fallout1-ce': _launch_fallout1_ce,
     'fallout2-ce': _launch_fallout2_ce,
     'flatpak':     _launch_flatpak,
+    'heroic':      _launch_heroic,
     'clk':         _launch_clk,
     'easyrpg':     launch_easyrpg,
     'fsuae':       launch_fsuae,

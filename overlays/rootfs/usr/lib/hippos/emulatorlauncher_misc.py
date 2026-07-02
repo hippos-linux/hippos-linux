@@ -141,6 +141,27 @@ def launch_flatpak(ctx: LaunchContext) -> int:
     return result.returncode
 
 
+def launch_heroic(ctx: LaunchContext) -> int:
+    wrapper = Path('/usr/lib/hippos/hippos-heroic')
+    if not wrapper.exists():
+        _log.error("Heroic wrapper not found: %s", wrapper)
+        return 1
+    try:
+        entry = ctx.rom.read_text(encoding='utf-8').strip()
+    except OSError as exc:
+        _log.error("Could not read Heroic launcher from %s: %s", ctx.rom, exc)
+        return 1
+    if not entry:
+        _log.error("Empty Heroic launcher in %s", ctx.rom)
+        return 1
+    conf = _load_hippos_conf()
+    env = _build_game_env(conf, ctx)
+    cmd = [str(wrapper), str(ctx.rom)]
+    _log.info("Launching Heroic: %s", entry)
+    result = _run_game_command(ctx, 'heroic', cmd, env)
+    return result.returncode
+
+
 def launch_pygame(ctx: LaunchContext) -> int:
     pygame_dir = Path('/opt/emulators/python-pygame2')
     conf = _load_hippos_conf()
