@@ -19,6 +19,3 @@ mesa-vulkan-drivers:i386
 
 # Steam (repo.steampowered.com configured in configure-rootfs.sh)
 steam-launcher
-
-# Wine 32-bit
-wine32:i386
