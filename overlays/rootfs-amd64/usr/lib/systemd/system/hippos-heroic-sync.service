@@ -1,0 +1,12 @@
+[Unit]
+Description=HippOS Heroic launcher sync
+After=local-fs.target userdata.mount
+Wants=userdata.mount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/hippos/hippos-heroic-sync
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

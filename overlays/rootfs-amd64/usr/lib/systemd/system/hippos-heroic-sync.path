@@ -1,0 +1,15 @@
+[Unit]
+Description=Watch for Heroic game installs/removals
+After=local-fs.target userdata.mount
+
+[Path]
+PathModified=/userdata/.config/heroic/legendaryConfig/legendary/installed.json
+PathModified=/userdata/.config/heroic/gog_store/installed.json
+PathModified=/userdata/.config/heroic/nile_config/nile/installed.json
+PathModified=/userdata/.var/app/com.heroicgameslauncher.hgl/config/heroic/legendaryConfig/legendary/installed.json
+PathModified=/userdata/.var/app/com.heroicgameslauncher.hgl/config/heroic/gog_store/installed.json
+PathModified=/userdata/.var/app/com.heroicgameslauncher.hgl/config/heroic/nile_config/nile/installed.json
+Unit=hippos-heroic-sync.service
+
+[Install]
+WantedBy=multi-user.target

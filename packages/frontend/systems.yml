@@ -170,6 +170,7 @@ _emulator_defaults:
   socrates:      { emulator: mame,               core: mame               }
   solarus:       { emulator: solarus-engine,     core: solarus            }
   spectravideo:  { emulator: openmsx,            core: openmsx            }
+  heroic:        { emulator: heroic,             core: heroic             }
   steam:         { emulator: steam,              core: steam              }
   sufami:        { emulator: retroarch,          core: snes9x             }
   supergrafx:    { emulator: retroarch,          core: mednafen_supergrafx }
@@ -2569,6 +2570,14 @@ snes-msu1:
   platform: snes
   release: 1990
   theme: snes
+heroic:
+  extensions:
+  - heroic
+  force: true
+  hardware: os
+  manufacturer: Heroic Games Launcher
+  name: Heroic
+  release: 2021
 steam:
   extensions:
   - steam
