@@ -263,6 +263,52 @@ _install_grub() {
     || log "grub-install failed (non-fatal)"
 }
 
+# ── target-disk unmount ──────────────────────────────────────────────────────
+
+_unmount_disk() {
+    local disk="$1"
+
+    local parts=()
+    while IFS= read -r p; do parts+=("$p"); done \
+        < <(lsblk -nlpo PATH "$disk" 2>/dev/null | grep -v "^$disk$")
+    [[ ${#parts[@]} -eq 0 ]] && return 0
+
+    # Direct mountpoints for each partition on this disk
+    local direct=()
+    for pdev in "${parts[@]}"; do
+        while IFS= read -r mnt; do
+            [[ -n "$mnt" ]] && direct+=("$mnt")
+        done < <(findmnt -n -o TARGET --source "$pdev" 2>/dev/null)
+    done
+    [[ ${#direct[@]} -eq 0 ]] && return 0
+
+    # Union/overlay mounts (e.g. mergerfs) whose source path references this disk.
+    # These must be torn down before the underlying partition mounts.
+    local overlays=()
+    for dm in "${direct[@]}"; do
+        local rel="${dm#/}"
+        while IFS=' ' read -r src mnt _; do
+            local skip=0
+            for d in "${direct[@]}"; do [[ "$mnt" == "$d" ]] && skip=1 && break; done
+            (( skip )) && continue
+            [[ "$src" == *"${rel}/"* || "$src" == *"${rel}:"* || "$src" == *":${rel}"* ]] || continue
+            overlays+=("$mnt")
+        done < /proc/mounts
+    done
+
+    local mnt
+    if [[ ${#overlays[@]} -gt 0 ]]; then
+        for mnt in $(printf '%s\n' "${overlays[@]}" | sort -u \
+                     | awk '{print length($0), $0}' | sort -rn | awk '{print $2}'); do
+            umount "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
+        done
+    fi
+    for mnt in $(printf '%s\n' "${direct[@]}" | sort -u \
+                 | awk '{print length($0), $0}' | sort -rn | awk '{print $2}'); do
+        umount "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
+    done
+}
+
 # ── full-disk clone ───────────────────────────────────────────────────────────
 
 clone_disk() {
@@ -303,6 +349,9 @@ clone_disk() {
     trap _cleanup EXIT
 
     # 1. Partition target
+    log "Unmounting any existing mounts on $TGT_DISK..."
+    _unmount_disk "$TGT_DISK"
+
     log "Partitioning $TGT_DISK..."
     parted -s "$TGT_DISK" mklabel gpt
     parted -s "$TGT_DISK" mkpart EFI    fat32 1MiB                                   "$((1 + EFI_SIZE_MB))MiB"
@@ -356,7 +405,7 @@ clone_disk() {
     log "Cloning EFI partition..."
     mount "$SRC_EFI" "$SRC_EFI_MNT" -o ro
     mount "$TGT_EFI" "$TGT_EFI_MNT"
-    rsync -aHAX --delete "$SRC_EFI_MNT/" "$TGT_EFI_MNT/"
+    rsync -rlt --delete "$SRC_EFI_MNT/" "$TGT_EFI_MNT/"
 
     # 7. Update bootloader config
     log "Updating bootloader config..."
@@ -388,7 +437,7 @@ clone_disk() {
         if mount "$SRC_TOOLS" "$SRC_TOOLS_MNT" -o ro 2>/dev/null; then
             mount "$TGT_TOOLS" "$TGT_TOOLS_MNT"
             log "Copying Tools partition..."
-            rsync -aHAX --delete "$SRC_TOOLS_MNT/" "$TGT_TOOLS_MNT/"
+            rsync -rlt --delete "$SRC_TOOLS_MNT/" "$TGT_TOOLS_MNT/"
             sync
             umount "$SRC_TOOLS_MNT"
             umount "$TGT_TOOLS_MNT"
