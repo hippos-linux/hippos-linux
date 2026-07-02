@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch for Steam game installs/removals
+After=local-fs.target userdata.mount
+
+[Path]
+PathChanged=/userdata/.steam/steam/steamapps
+PathChanged=/userdata/.local/share/Steam/steamapps
+Unit=hippos-steam-sync.service
+
+[Install]
+WantedBy=multi-user.target
