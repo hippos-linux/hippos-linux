@@ -224,6 +224,22 @@ def read_grub_uuid_partuuid():
                         partuuid = t.split("PARTUUID=")[1].split()[0].rstrip("\\")
     except FileNotFoundError:
         pass
+    # Live image grub.cfg uses root=LABEL=HippOS — no PARTUUID/UUID baked in.
+    # Fall back to reading them directly from the running block device.
+    if not partuuid or not uuid:
+        try:
+            dev = btrfs_device()
+            r = subprocess.run(
+                ["blkid", "-s", "PARTUUID", "-s", "UUID", "-o", "export", dev],
+                capture_output=True, text=True, check=True,
+            )
+            for line in r.stdout.splitlines():
+                if line.startswith("PARTUUID=") and not partuuid:
+                    partuuid = line.split("=", 1)[1]
+                elif line.startswith("UUID=") and not uuid:
+                    uuid = line.split("=", 1)[1]
+        except Exception:
+            pass
     return uuid, partuuid
 
 
