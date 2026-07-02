@@ -32,6 +32,7 @@ fi
 # ── Keyboard layout ───────────────────────────────────────────────────────────
 KBLAYOUT="$(get system.kblayout)"
 KBVARIANT="$(get system.kbvariant)"
+[[ "${KBVARIANT}" == "none" ]] && KBVARIANT=""
 if [[ -n "${KBLAYOUT}" ]]; then
     localectl set-keymap "${KBLAYOUT}" 2>/dev/null || true
     cat > /etc/default/keyboard <<EOF
