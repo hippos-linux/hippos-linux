@@ -490,14 +490,20 @@ install_to_partition() {
     }
     trap _cleanup EXIT
 
-    # 1. Format target btrfs partition
+    # 1. Unmount target partitions (e.g. leftover foreign filesystem auto-mounted at boot)
+    local TGT_DISK
+    TGT_DISK="/dev/$(lsblk -ndo PKNAME "$TGT_MAIN")"
+    log "Unmounting any existing mounts on $TGT_DISK..."
+    _unmount_disk "$TGT_DISK"
+
+    # 2. Format target btrfs partition
     log "Formatting $TGT_MAIN as btrfs (HippOS)..."
     mkfs.btrfs -f -L HippOS "$TGT_MAIN"
 
-    # 2. Clone btrfs subvolumes
+    # 3. Clone btrfs subvolumes
     _clone_btrfs_subvolumes "$SRC_MAIN" "$TGT_MAIN" "$SRC_BTRFS" "$TGT_BTRFS" "$TMP_MNT"
 
-    # 3. Collect UUIDs
+    # 4. Collect UUIDs
     local OLD_EFI_PARTUUID OLD_MAIN_PARTUUID OLD_MAIN_UUID
     OLD_EFI_PARTUUID=$(blkid  -s PARTUUID -o value "$SRC_EFI"  2>/dev/null || true)
     OLD_MAIN_PARTUUID=$(blkid -s PARTUUID -o value "$SRC_MAIN" 2>/dev/null || true)
@@ -508,7 +514,7 @@ install_to_partition() {
     TGT_MAIN_PARTUUID=$(blkid -s PARTUUID -o value "$TGT_MAIN"     2>/dev/null || true)
     TGT_MAIN_UUID=$(blkid     -s UUID     -o value "$TGT_MAIN"     2>/dev/null || true)
 
-    # 4. Update fstab
+    # 5. Update fstab
     log "Updating /etc/fstab..."
     local FSTAB="$TGT_BTRFS/@rootfs/etc/fstab"
     if [[ -f "$FSTAB" ]]; then
@@ -519,7 +525,7 @@ install_to_partition() {
     umount "$SRC_BTRFS"
     umount "$TGT_BTRFS"
 
-    # 5. Set up GRUB in EFI/HippOS/ (non-destructive to existing EFI contents)
+    # 6. Set up GRUB in EFI/HippOS/ (non-destructive to existing EFI contents)
     log "Mounting source EFI..."
     mount "$SRC_EFI" "$SRC_EFI_MNT" -o ro
 
@@ -542,8 +548,6 @@ install_to_partition() {
     [[ -f "$SRC_GRUBENV" ]] && cp "$SRC_GRUBENV" "$TGT_GRUB_DIR/grubenv" || true
 
     # Install GRUB into EFI/HippOS/ — adds UEFI boot entry, does not overwrite EFI/BOOT/
-    local TGT_DISK
-    TGT_DISK="/dev/$(lsblk -ndo PKNAME "$TGT_EFI_PART")"
     log "Installing GRUB on $TGT_DISK (EFI/HippOS/)..."
     _install_grub "$TGT_EFI_MNT" "$TGT_DISK" "HippOS" "no"
 
@@ -551,7 +555,7 @@ install_to_partition() {
     umount "$SRC_EFI_MNT"
     umount "$TGT_EFI_MNT"
 
-    # 6. Expand btrfs
+    # 7. Expand btrfs
     log "Expanding btrfs filesystem to fill $TGT_MAIN..."
     mount "$TGT_MAIN" "$TGT_BTRFS"
     btrfs filesystem resize max "$TGT_BTRFS"

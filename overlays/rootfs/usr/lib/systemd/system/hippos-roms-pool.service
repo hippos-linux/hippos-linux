@@ -6,6 +6,7 @@ Before=hippos-es.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+TimeoutStartSec=180
 TimeoutStopSec=5
 ExecStart=/usr/lib/hippos/mount-roms-pool
 ExecStartPost=/usr/lib/hippos/generate-system-info

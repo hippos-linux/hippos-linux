@@ -7,6 +7,21 @@ OUT_DIR="${LOG_DIR}/${BOOT_ID}"
 
 mkdir -p "${OUT_DIR}"
 
+# hippos-es.service is started dynamically (not statically pulled into the
+# boot transaction), so ordering alone doesn't guarantee it has even been
+# asked to start yet, let alone reached its actual outcome. Poll until the
+# session settles one way or another before snapshotting, so the capture
+# reflects what actually happened instead of a mid-dispatch snapshot.
+for _ in $(seq 1 100); do
+    systemctl is-active --quiet hippos-es.service && break
+    systemctl is-active --quiet hippos-desktop.service && break
+    systemctl is-failed --quiet hippos-es.service && break
+    systemctl is-failed --quiet hippos-desktop.service && break
+    sleep 0.5
+done
+# Give the session a moment to finish logging its own startup sequence.
+sleep 3
+
 journalctl -b --no-pager > "${OUT_DIR}/journal.log" 2>&1 || true
 journalctl -b -p warning..alert --no-pager > "${OUT_DIR}/warnings.log" 2>&1 || true
 journalctl -b -u hippos-es.service -u hippos-xserver.service -u hippos-hotkeys.service --no-pager > "${OUT_DIR}/frontend.log" 2>&1 || true

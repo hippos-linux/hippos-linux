@@ -1,10 +1,15 @@
 [Unit]
 Description=Capture HippOS boot diagnostics
-After=hippos-es.service hippos-xserver.service userdata.mount
+# hippos-es.service is started dynamically by hippos-session.service, not
+# pulled in by graphical.target — After=hippos-es.service alone is a no-op
+# here since it's never part of this unit's boot transaction. Order after
+# the dispatcher itself and let the script poll for the real outcome.
+After=hippos-session.service hippos-es.service hippos-xserver.service userdata.mount
 Wants=userdata.mount
 
 [Service]
 Type=oneshot
+TimeoutStartSec=120
 ExecStart=/usr/lib/hippos/capture-boot-logs
 
 [Install]
