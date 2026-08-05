@@ -7,6 +7,7 @@ Wants=userdata.mount
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+TimeoutStartSec=180
 TimeoutStopSec=5
 ExecStart=/usr/lib/hippos/mount-bios-pool
 ExecStop=umount -l /userdata/bios
