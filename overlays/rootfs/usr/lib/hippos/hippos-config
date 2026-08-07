@@ -8,7 +8,18 @@ case "${1:-}" in
         exit $?
         ;;
     lsoutputs)
-        xrandr --query 2>/dev/null | awk '/connected/{print $1}'
+        # Read DRM connector names directly from sysfs — always consistent kernel
+        # names (DP-1, DP-2, HDMI-A-1 …) regardless of which X11 driver is active.
+        # xrandr names vary between amdgpu driver versions and CRT/HD xorg configs.
+        for f in /sys/class/drm/card*-*; do
+            name="${f##*/}"        # strip path: card0-DP-1
+            name="${name#card*-}"  # strip card prefix (shortest match): DP-1
+            case "${name}" in
+                DP-*|HDMI-A-*|HDMI-*|DVI-*|VGA-*)
+                    echo "${name}"
+                    ;;
+            esac
+        done
         ;;
     getRootPassword)
         echo ""

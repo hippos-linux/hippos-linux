@@ -30,7 +30,9 @@ _crt_setmode() {
 # Restore the CRT session's base resolution (used after a game exits).
 _crt_restore() {
     local boot_res w rest h hz
-    boot_res="$(hippos-settings get crt.boot_resolution 2>/dev/null || echo '640x480i')"
+    boot_res="$(hippos-settings get crt.boot_resolution 2>/dev/null || echo '640x480i_15')"
+    # Strip _<khz> band suffix (new token format: 640x480i_15 → 640x480i)
+    boot_res="${boot_res%%_[0-9]*}"
     w="${boot_res%%x*}"
     rest="${boot_res#*x}"
     h="${rest%%[i@]*}"                          # strip trailing i or @freq
@@ -91,6 +93,65 @@ case "${1:-}" in
         ;;
     listOutputs)
         xrandr --query 2>/dev/null | awk '/connected/{print $1}'
+        ;;
+    listCrtBootModes)
+        PROFILE="${2:-}"
+        [[ -z "${PROFILE}" ]] && PROFILE="$(hippos-settings get crt.monitor_profile 2>/dev/null || true)"
+        PROFILE="${PROFILE:-generic_15}"
+
+        _emit_boot_mode() {
+            # $1 = token (saved as crt.boot_resolution, e.g. 640x480i_15)
+            # $2 = label  (shown in ES, e.g. BOOT_640x480i_15)
+            printf '%s:%s\n' "$1" "$2"
+        }
+
+        case "${PROFILE}" in
+            generic_15|ntsc|pal|arcade_15|arcade_15ex)
+                _emit_boot_mode "640x480i_15"  "BOOT_640x480i_15"
+                _emit_boot_mode "640x480p_15"  "BOOT_640x480p_15"
+                _emit_boot_mode "768x576i_15"  "BOOT_768x576i_15"
+                ;;
+            arcade_25)
+                _emit_boot_mode "640x480p_25"  "BOOT_640x480p_25"
+                _emit_boot_mode "640x480i_25"  "BOOT_640x480i_25"
+                _emit_boot_mode "768x576i_25"  "BOOT_768x576i_25"
+                ;;
+            arcade_31)
+                _emit_boot_mode "640x480p_31"  "BOOT_640x480p_31"
+                _emit_boot_mode "640x480i_31"  "BOOT_640x480i_31"
+                _emit_boot_mode "768x576i_31"  "BOOT_768x576i_31"
+                ;;
+            arcade_15_25)
+                _emit_boot_mode "640x480i_15"  "BOOT_640x480i_15"
+                _emit_boot_mode "640x480i_25"  "BOOT_640x480i_25"
+                _emit_boot_mode "640x480p_15"  "BOOT_640x480p_15"
+                _emit_boot_mode "640x480p_25"  "BOOT_640x480p_25"
+                _emit_boot_mode "768x576i_15"  "BOOT_768x576i_15"
+                _emit_boot_mode "768x576i_25"  "BOOT_768x576i_25"
+                ;;
+            arcade_15_31)
+                _emit_boot_mode "640x480i_15"  "BOOT_640x480i_15"
+                _emit_boot_mode "640x480i_31"  "BOOT_640x480i_31"
+                _emit_boot_mode "640x480p_15"  "BOOT_640x480p_15"
+                _emit_boot_mode "640x480p_31"  "BOOT_640x480p_31"
+                _emit_boot_mode "768x576i_15"  "BOOT_768x576i_15"
+                _emit_boot_mode "768x576i_31"  "BOOT_768x576i_31"
+                ;;
+            arcade_15_25_31)
+                _emit_boot_mode "640x480i_15"  "BOOT_640x480i_15"
+                _emit_boot_mode "640x480i_25"  "BOOT_640x480i_25"
+                _emit_boot_mode "640x480i_31"  "BOOT_640x480i_31"
+                _emit_boot_mode "640x480p_15"  "BOOT_640x480p_15"
+                _emit_boot_mode "640x480p_25"  "BOOT_640x480p_25"
+                _emit_boot_mode "640x480p_31"  "BOOT_640x480p_31"
+                _emit_boot_mode "768x576i_15"  "BOOT_768x576i_15"
+                _emit_boot_mode "768x576i_25"  "BOOT_768x576i_25"
+                _emit_boot_mode "768x576i_31"  "BOOT_768x576i_31"
+                ;;
+            *)
+                _emit_boot_mode "640x480i_15"  "BOOT_640x480i_15"
+                ;;
+        esac
         ;;
     currentOutput)
         echo "$PSCREEN"

@@ -4,6 +4,20 @@
 
 export DISPLAY="${DISPLAY:-:0}"
 
+# Legacy stock images may seed crt.enabled=auto or crt.output=auto — normalize to manual-only.
+case "$(hippos-settings get crt.enabled 2>/dev/null || true)" in
+    auto) hippos-settings set crt.enabled false ;;
+esac
+case "$(hippos-settings get crt.output 2>/dev/null || true)" in
+    auto) hippos-settings del crt.output 2>/dev/null || true ;;
+esac
+case "$(hippos-settings get crt.super_width 2>/dev/null || true)" in
+    auto) hippos-settings set crt.super_width 2560 ;;
+esac
+case "$(hippos-settings get crt.dotclock_min 2>/dev/null || true)" in
+    auto) hippos-settings set crt.dotclock_min 0.0 ;;
+esac
+
 _CRT_ENABLED="$(hippos-settings get crt.enabled 2>/dev/null || true)"
 _CRT_ACTIVE="$(test -f /etc/X11/xorg.conf.d/90-crt-gpu.conf && echo true || echo false)"
 
