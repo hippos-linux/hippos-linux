@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import configparser
-import os
 from pathlib import Path
 
-from emulatorlauncher_impl import (
-    BIOS, SAVES, CONFIGS, SCREENSHOTS, CACHE,
+from emulatorlauncher_shared import (
     LaunchContext,
     _build_game_env,
     _conf_bool,
@@ -21,18 +19,22 @@ from emulatorlauncher_impl import (
     generate_sdl_game_controller_config,
 )
 
+from HipposPaths import BIOS, CACHE, CONFIGS, SAVES, SCREENSHOTS
+
+
 # ── xenia-edge (native Linux build) ──────────────────────────────────────────
 # xenia and xenia-canary run via Wine. xenia-edge is a native Linux binary —
 # no Wine prefix, no z: path mangling, direct exec.
 
-from emulatorlauncher_impl import (
-    XENIA_SAVES_DIR, XENIA_CACHE_DIR,
+from emulatorlauncher_shared import (
+    _conf_bool,
+    _conf_int,
+    _conf_value,
     _load_effective_hippos_conf,
-    _probe_vulkan_version,
-    _conf_bool, _conf_int, _conf_value,
-    _read_toml, _write_toml,
+    _read_toml,
+    _write_toml,
 )
-from emulatorlauncher_xenia import _xenia_base_config
+from emulatorlauncher_xenia import XENIA_CACHE_DIR, XENIA_SAVES_DIR, _xenia_base_config
 
 
 def launch_xenia_edge(ctx: LaunchContext) -> int:

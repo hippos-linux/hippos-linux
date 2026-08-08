@@ -4,14 +4,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
 
-from emulatorlauncher_impl import (
-    CACHE,
+from emulatorlauncher_shared import (
     LaunchContext,
-    PLAY_CONFIG_DIR,
-    PLAY_CONFIG_FILE,
-    PLAY_DATA_DIR,
-    PLAY_INPUT_FILE,
-    PLAY_SAVES_DIR,
     _build_game_env,
     _conf_value,
     _find_emulator_bin,
@@ -21,6 +15,8 @@ from emulatorlauncher_impl import (
     _run_game_command,
     configure_emulator,
 )
+
+from HipposPaths import CACHE, CONFIGS, SAVES
 
 
 def _play_device_id(profile: Optional[object], ctrl: object) -> str:
@@ -195,3 +191,10 @@ def launch_play(ctx: LaunchContext) -> int:
     env['QT_QPA_PLATFORM'] = 'xcb'
     result = _run_game_command(ctx, 'play', cmd, env)
     return result.returncode
+
+
+PLAY_CONFIG_DIR = CONFIGS / 'play'
+PLAY_DATA_DIR = PLAY_CONFIG_DIR / 'Play Data Files'
+PLAY_CONFIG_FILE = PLAY_DATA_DIR / 'config.xml'
+PLAY_INPUT_FILE = PLAY_DATA_DIR / 'inputprofiles' / 'default.xml'
+PLAY_SAVES_DIR = SAVES / 'ps2'

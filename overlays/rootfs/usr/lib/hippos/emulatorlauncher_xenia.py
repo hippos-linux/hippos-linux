@@ -4,18 +4,8 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from emulatorlauncher_impl import (
+from emulatorlauncher_shared import (
     LaunchContext,
-    HOME,
-    configure_emulator,
-    XENIA_BUNDLE_DIR,
-    XENIA_CACHE_DIR,
-    XENIA_CANARY_PREFIX_DIR,
-    XENIA_CANARY_RUNTIME_DIR,
-    XENIA_CANARY_BUNDLE_DIR,
-    XENIA_PREFIX_DIR,
-    XENIA_RUNTIME_DIR,
-    XENIA_SAVES_DIR,
     _build_game_env,
     _conf_bool,
     _conf_int,
@@ -27,7 +17,10 @@ from emulatorlauncher_impl import (
     _run_game_command,
     _sync_tree,
     _write_toml,
+    configure_emulator,
 )
+
+from HipposPaths import CACHE, HOME, SAVES, USERDATA
 
 
 def _xenia_runtime_paths(core: str) -> tuple[Path, Path, Path]:
@@ -221,3 +214,13 @@ def launch_xenia(ctx: LaunchContext) -> int:
 
     result = _run_game_command(ctx, ctx.emulator, cmd, env, cwd=config_dir)
     return result.returncode
+
+
+XENIA_RUNTIME_DIR = USERDATA / 'emulators' / 'xenia' / 'current'
+XENIA_CANARY_RUNTIME_DIR = USERDATA / 'emulators' / 'xenia-canary' / 'current'
+XENIA_PREFIX_DIR = USERDATA / 'wine-bottles' / 'xenia' / 'current'
+XENIA_CANARY_PREFIX_DIR = USERDATA / 'wine-bottles' / 'xenia-canary' / 'current'
+XENIA_BUNDLE_DIR = Path('/opt/emulators/xenia/emulator')
+XENIA_CANARY_BUNDLE_DIR = Path('/opt/emulators/xenia-canary/emulator')
+XENIA_CACHE_DIR = CACHE / 'xenia'
+XENIA_SAVES_DIR = SAVES / 'xbox360'

@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from emulatorlauncher_impl import (
-    CONFIGS,
+from emulatorlauncher_shared import (
     ESBinding,
     LaunchContext,
-    SAVES,
     _build_game_env,
     _find_emulator_bin,
     _load_effective_hippos_conf,
@@ -14,6 +12,9 @@ from emulatorlauncher_impl import (
     _pick_es_profile,
     _run_game_command,
 )
+
+from HipposPaths import CONFIGS, SAVES
+
 
 _SYSTEM_MAP: dict[str, str] = {
     'nes':          'Famicom',

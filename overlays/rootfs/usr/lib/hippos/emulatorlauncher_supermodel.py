@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-from emulatorlauncher_impl import (
+from pathlib import Path
+
+from emulatorlauncher_shared import (
     LaunchContext,
-    SAVES,
-    SUPERMODEL_CONFIG_DIR,
-    SUPERMODEL_INI,
-    SUPERMODEL_TEMPLATE,
     _build_game_env,
-    _conf_bool,
     _display_resolution_from_conf,
     _find_emulator_bin,
     _load_effective_hippos_conf,
     _new_ini_parser,
     _run_game_command,
 )
+
+from HipposPaths import CONFIGS, SAVES
 
 
 def write_supermodel_config(ctx: LaunchContext) -> None:
@@ -103,3 +102,8 @@ def launch_supermodel(ctx: LaunchContext) -> int:
     env['SDL_JOYSTICK_HIDAPI'] = '0'
     result = _run_game_command(ctx, 'supermodel', cmd, env)
     return result.returncode
+
+
+SUPERMODEL_CONFIG_DIR = CONFIGS / 'supermodel'
+SUPERMODEL_INI        = SUPERMODEL_CONFIG_DIR / 'Supermodel.ini'
+SUPERMODEL_TEMPLATE   = Path('/usr/share/supermodel/Supermodel.ini.template')

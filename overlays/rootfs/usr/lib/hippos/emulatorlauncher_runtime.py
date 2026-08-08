@@ -1,34 +1,14 @@
 from __future__ import annotations
+import zipfile
+import configparser
+from typing import Optional
 
 from pathlib import Path
 
-from emulatorlauncher_impl import (
-    AMIBERRY_BIOS_DIR,
-    AMIBERRY_CONFIG_DIR,
-    AMIBERRY_CONF,
-    AMIBERRY_DATA_DIR,
-    AMIBERRY_INPUTS_DIR,
-    AMIBERRY_LOG_FILE,
-    AMIBERRY_OVERLAY_CFG,
-    AMIBERRY_PLUGINS_DIR,
-    AMIBERRY_RETROARCH_DIR,
-    AMIBERRY_SAVES_DIR,
-    AMIBERRY_SCREENSHOTS_DIR,
-    AMIBERRY_WHDBOOT_DIR,
-    CONFIGS,
-    LINDBERGH_CONFIG_DIR,
-    LINDBERGH_CONFIG_FILE,
-    LINDBERGH_CONTROLS_FILE,
-    LINDBERGH_RUNTIME_DIR,
-    LINDBERGH_SAVES_DIR,
+from emulatorlauncher_shared import (
+    ESBinding,
+    ESControllerProfile,
     LaunchContext,
-    SAVES,
-    USERDATA,
-    _HAT_DIR,
-    _RA_BTN_MAP,
-    _RA_DPAD_MAP,
-    _RA_AXIS_MAP,
-    _amiberry_rom_type,
     _build_game_env,
     _conf_bool,
     _conf_value,
@@ -36,25 +16,18 @@ from emulatorlauncher_impl import (
     _ensure_section,
     _find_emulator_bin,
     _find_executable,
-    _load_effective_hippos_conf,
     _load_es_input_configs,
     _load_hippos_conf,
-    _lindbergh_binding_to_value,
-    _lindbergh_game_section,
-    _lindbergh_mapping_for_device,
-    _lindbergh_short_rom_name,
-    _lindbergh_write_templates,
+    _log,
     _new_ini_parser,
     _pick_es_profile,
-    _ra_analog_dpad_mode,
-    _ra_binding_value,
-    _ra_btn_map_for_ctx,
-    _ra_type_suffix,
     _run_game_command,
     _sync_tree,
     _write_unix_settings_file,
     generate_sdl_game_controller_config,
 )
+
+from HipposPaths import BIOS, CONFIGS, LOGS, SAVES, SCREENSHOTS, USERDATA
 
 
 def _amiberry_floppies_from_rom(rom: Path) -> list[Path]:
@@ -555,3 +528,262 @@ def launch_lindbergh_loader(ctx: LaunchContext) -> int:
 
     result = _run_game_command(ctx, 'lindbergh-loader', cmd, env, cwd=LINDBERGH_RUNTIME_DIR)
     return result.returncode
+
+
+AMIBERRY_CONFIG_DIR = CONFIGS / 'amiberry'
+AMIBERRY_CONF = AMIBERRY_CONFIG_DIR / 'amiberry.conf'
+AMIBERRY_RETROARCH_DIR = AMIBERRY_CONFIG_DIR / 'retroarch'
+AMIBERRY_OVERLAY_CFG = AMIBERRY_RETROARCH_DIR / 'overlay.cfg'
+AMIBERRY_INPUTS_DIR = AMIBERRY_RETROARCH_DIR / 'inputs'
+AMIBERRY_PLUGINS_DIR = AMIBERRY_CONFIG_DIR / 'plugins'
+AMIBERRY_WHDBOOT_DIR = AMIBERRY_CONFIG_DIR / 'whdboot'
+AMIBERRY_SAVES_DIR = SAVES / 'amiga'
+AMIBERRY_SCREENSHOTS_DIR = SCREENSHOTS
+AMIBERRY_BIOS_DIR = BIOS / 'amiga'
+AMIBERRY_LOG_FILE = LOGS / 'amiberry.log'
+AMIBERRY_DATA_DIR = Path('/usr/share/amiberry/data')
+
+
+LINDBERGH_RUNTIME_DIR = Path('/run/hippos/emulators/lindbergh-loader')
+
+
+LINDBERGH_TEMPLATE_DIR = Path('/usr/share/hippos/lindbergh')
+LINDBERGH_TEMPLATE_INI = LINDBERGH_TEMPLATE_DIR / 'lindbergh.ini'
+LINDBERGH_TEMPLATE_CONTROLS = LINDBERGH_TEMPLATE_DIR / 'controls.ini'
+LINDBERGH_CONFIG_DIR = CONFIGS / 'lindbergh'
+LINDBERGH_CONFIG_FILE = LINDBERGH_CONFIG_DIR / 'lindbergh.ini'
+LINDBERGH_CONTROLS_FILE = LINDBERGH_CONFIG_DIR / 'controls.ini'
+LINDBERGH_SAVES_DIR = SAVES / 'lindbergh'
+
+LINDBERGH_PAD_MAPPING: dict[str, str] = {
+    'a': 'BUTTON_2',
+    'b': 'BUTTON_1',
+    'x': 'BUTTON_4',
+    'y': 'BUTTON_3',
+    'start': 'BUTTON_START',
+    'select': 'COIN',
+    'up': 'BUTTON_UP',
+    'down': 'BUTTON_DOWN',
+    'left': 'BUTTON_LEFT',
+    'right': 'BUTTON_RIGHT',
+    'joystick1up': 'ANALOGUE_2',
+    'joystick1left': 'ANALOGUE_1',
+    'pageup': 'BUTTON_5',
+    'pagedown': 'BUTTON_6',
+    'l2': 'BUTTON_7',
+    'r2': 'BUTTON_8',
+    'l3': 'BUTTON_SERVICE',
+}
+
+LINDBERGH_WHEEL_MAPPING: dict[str, str] = {
+    'a': 'BUTTON_2',
+    'b': 'BUTTON_1',
+    'x': 'BUTTON_4',
+    'y': 'BUTTON_3',
+    'start': 'BUTTON_START',
+    'select': 'COIN',
+    'left': 'BUTTON_LEFT',
+    'right': 'BUTTON_RIGHT',
+    'joystick1left': 'ANALOGUE_1',
+    'pageup': 'BUTTON_DOWN',
+    'pagedown': 'BUTTON_UP',
+    'l2': 'ANALOGUE_3',
+    'r2': 'ANALOGUE_2',
+    'l3': 'BUTTON_SERVICE',
+}
+
+LINDBERGH_GUN_MAPPING: dict[str, str] = {
+    'a': 'BUTTON_2',
+    'b': 'BUTTON_1',
+    'x': 'BUTTON_4',
+    'y': 'BUTTON_3',
+    'start': 'BUTTON_START',
+    'select': 'COIN',
+    'up': 'BUTTON_UP',
+    'down': 'BUTTON_DOWN',
+    'left': 'BUTTON_LEFT',
+    'right': 'BUTTON_RIGHT',
+    'joystick1up': 'ANALOGUE_2',
+    'joystick1left': 'ANALOGUE_1',
+    'pageup': 'BUTTON_5',
+    'pagedown': 'BUTTON_6',
+    'l2': 'BUTTON_7',
+    'r2': 'BUTTON_8',
+    'l3': 'BUTTON_SERVICE',
+}
+
+
+def _lindbergh_short_rom_name(rom: Path) -> str:
+    return rom.stem.lower()
+
+
+def _lindbergh_game_section(short_rom: str) -> str:
+    if short_rom.startswith(('outr', 'hummer', 'hdkotr', 'harley', 'rtuned', 'initiad', 'segartv')):
+        return 'Driving'
+    if short_rom.startswith(('ghostsev', 'hotd4', 'hotdex', 'hotd4sp', 'primevah', 'primehunt', '2spicy', 'letsgoju', 'letsgojua')):
+        return 'Shooting'
+    if short_rom.startswith('abcli'):
+        return 'ABC'
+    if short_rom.startswith(('mj4', 'axa')):
+        return 'Mahjong'
+    return 'Digital'
+
+
+def _lindbergh_mapping_for_device(short_rom: str, device_type: str, is_real_wheel: bool) -> dict[str, str]:
+    if device_type == 'gun':
+        return dict(LINDBERGH_GUN_MAPPING)
+
+    if device_type == 'wheel':
+        mapping = dict(LINDBERGH_WHEEL_MAPPING)
+        if not is_real_wheel:
+            x = mapping.pop('x', None)
+            y = mapping.pop('y', None)
+            pageup = mapping.pop('pageup', None)
+            pagedown = mapping.pop('pagedown', None)
+            if x is not None:
+                mapping['pageup'] = x
+            if y is not None:
+                mapping['b'] = y
+            if pagedown is not None:
+                mapping['x'] = pagedown
+            if pageup is not None:
+                mapping['y'] = pageup
+
+        if short_rom in ('hdkotr',) or 'harley' in short_rom:
+            mapping['x'] = 'BUTTON_2'
+            mapping['l2'] = 'ANALOGUE_4'
+            mapping['r2'] = 'ANALOGUE_1'
+            mapping['joystick1left'] = 'ANALOGUE_2'
+            mapping.pop('a', None)
+            mapping.pop('y', None)
+            mapping['pageup'] = 'BUTTON_4'
+            mapping['pagedown'] = 'BUTTON_3'
+        if short_rom == 'rtuned':
+            mapping['x'] = 'BUTTON_DOWN'
+            mapping['a'] = 'BUTTON_RIGHT'
+            mapping['y'] = 'BUTTON_1_ON_PLAYER_2'
+            mapping.pop('right', None)
+        if short_rom.startswith('initiad'):
+            mapping['x'] = 'BUTTON_1'
+            mapping['up'] = 'BUTTON_UP'
+            mapping['down'] = 'BUTTON_DOWN'
+            mapping.pop('b', None)
+        if short_rom.startswith('hummer'):
+            mapping['a'] = 'BUTTON_DOWN_ON_PLAYER_2'
+            mapping['x'] = 'BUTTON_DOWN'
+            mapping.pop('pageup', None)
+        if short_rom.startswith('segartv'):
+            mapping['a'] = 'BUTTON_1_ON_PLAYER_2'
+            mapping['x'] = 'BUTTON_DOWN'
+            mapping.pop('pageup', None)
+        if short_rom.startswith('outr'):
+            mapping['x'] = 'BUTTON_DOWN'
+        if short_rom in ('rtuned',) or short_rom.startswith(('segartv', 'outr', 'initiad')):
+            mapping['pageup'] = 'BUTTON_DOWN_ON_PLAYER_2'
+            mapping['pagedown'] = 'BUTTON_UP_ON_PLAYER_2'
+        return mapping
+
+    mapping = dict(LINDBERGH_PAD_MAPPING)
+    if short_rom.startswith('outr'):
+        mapping['x'] = 'BUTTON_DOWN'
+        mapping['pageup'] = 'BUTTON_DOWN_ON_PLAYER_2'
+        mapping['pagedown'] = 'BUTTON_UP_ON_PLAYER_2'
+        mapping.pop('joystick1up', None)
+        mapping.pop('down', None)
+    if short_rom.startswith('hummer'):
+        mapping['a'] = 'BUTTON_DOWN_ON_PLAYER_2'
+        mapping['pageup'] = 'BUTTON_5'
+        mapping['pagedown'] = 'BUTTON_6'
+        mapping.pop('joystick1up', None)
+        mapping.pop('down', None)
+    if short_rom.startswith('initiad'):
+        mapping['x'] = 'BUTTON_1'
+        mapping.pop('joystick1up', None)
+        mapping.pop('b', None)
+    if short_rom == 'rtuned':
+        mapping['a'] = 'BUTTON_RIGHT'
+        mapping['y'] = 'BUTTON_1_ON_PLAYER_2'
+        mapping.pop('joystick1up', None)
+        mapping.pop('right', None)
+        mapping.pop('down', None)
+    if short_rom.startswith('segartv'):
+        mapping['a'] = 'BUTTON_1_ON_PLAYER_2'
+        mapping.pop('joystick1up', None)
+        mapping.pop('down', None)
+    if short_rom in ('hdkotr',) or 'harley' in short_rom:
+        mapping['joystick1left'] = 'ANALOGUE_2'
+        mapping['r2'] = 'ANALOGUE_1'
+        mapping['l2'] = 'ANALOGUE_4'
+        mapping['x'] = 'BUTTON_2'
+        mapping['pageup'] = 'BUTTON_4'
+        mapping['pagedown'] = 'BUTTON_3'
+        mapping.pop('joystick1up', None)
+        mapping.pop('a', None)
+        mapping.pop('y', None)
+    if short_rom.startswith('abcli'):
+        mapping['a'] = 'BUTTON_1'
+        mapping['b'] = 'BUTTON_2'
+        mapping['x'] = 'BUTTON_3'
+        mapping['r2'] = 'ANALOGUE_3'
+        mapping.pop('l2', None)
+        mapping.pop('y', None)
+    return mapping
+
+
+def _lindbergh_binding_to_value(binding: ESBinding, ctrl: ESControllerProfile, logical_name: str) -> Optional[str]:
+    prefix = ctrl.device_path
+    if not prefix:
+        return None
+    if binding.type in ('button', 'key'):
+        return f'{prefix}:KEY:{binding.code}'
+    if binding.type == 'axis':
+        axis = 'ABS_NEG' if binding.value < 0 else 'ABS'
+        return f'{prefix}:{axis}:{binding.code}'
+    if binding.type == 'hat':
+        axis_base = 16 + int(binding.code) * 2
+        if binding.value in (1, 4):
+            axis_base += 1
+        return f'{prefix}:ABS:{axis_base}'
+    return None
+
+
+def _lindbergh_write_templates() -> tuple[configparser.ConfigParser, configparser.ConfigParser]:
+    ini = _new_ini_parser()
+    ini.optionxform = str
+    ini.read(LINDBERGH_TEMPLATE_INI)
+    controls = _new_ini_parser()
+    controls.optionxform = str
+    controls.read(LINDBERGH_TEMPLATE_CONTROLS)
+    return ini, controls
+
+
+def _amiberry_rom_type(rom: Path) -> str:
+    extension = rom.suffix[1:].lower()
+    if extension == 'lha':
+        return 'WHDL'
+    if extension == 'hdf':
+        return 'HDF'
+    if extension == 'uae':
+        return 'UAE'
+    if extension in ('iso', 'cue', 'chd'):
+        return 'CD'
+    if extension in ('adf', 'ipf'):
+        return 'DISK'
+    if extension == 'zip':
+        try:
+            with zipfile.ZipFile(rom) as zipf:
+                for zipfilename in zipf.namelist():
+                    if '/' in zipfilename:
+                        continue
+                    inner_ext = Path(zipfilename).suffix[1:].lower()
+                    if inner_ext == 'info':
+                        return 'WHDL'
+                    if inner_ext == 'lha':
+                        return 'UNKNOWN'
+                    if inner_ext in ('adf', 'ipf'):
+                        return 'DISK'
+                    if inner_ext == 'uae':
+                        return 'UAE'
+        except Exception as exc:
+            _log.warning("Could not inspect Amiberry zip %s: %s", rom, exc)
+    return 'UNKNOWN'

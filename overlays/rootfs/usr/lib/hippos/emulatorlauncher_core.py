@@ -1,46 +1,32 @@
 from __future__ import annotations
+from typing import Optional
 
 import configparser
 from pathlib import Path
 
-from emulatorlauncher_impl import (
-    _log,
-    BIOS,
-    CACHE,
-    CONFIGS,
-    DOLPHIN_CONFIG_DIR,
-    DOLPHIN_GFX_INI,
-    DOLPHIN_INI,
-    DOLPHIN_QT_INI,
-    DUCKSTATION_CONFIG_DIR,
-    DUCKSTATION_SETTINGS,
-    FLYCAST_CONFIG_DIR,
-    FLYCAST_EMU_CFG,
+from emulatorlauncher_shared import (
+    ControllerInfo,
+    ESBinding,
+    ESControllerProfile,
     LaunchContext,
-    MAME_CONFIG_DIR,
-    MAME_INI,
-    MAME_ROMS,
-    MUPEN_CONFIG_DIR,
-    MUPEN_CUSTOM,
-    SAVES,
-    SCREENSHOTS,
     _build_game_env,
     _conf_bool,
     _conf_value,
     _display_resolution_from_conf,
+    _ensure_section,
     _find_emulator_bin,
     _load_effective_hippos_conf,
-    _load_hippos_conf,
-    _new_ini_parser,
-    _run_game_command,
-    _write_dolphin_controller_configs,
-    _write_mupen_controller_configs,
-    _ensure_section,
-    generate_sdl_game_controller_config,
-    _gun_type,
     _load_es_input_configs,
+    _load_hippos_conf,
+    _log,
+    _new_ini_parser,
+    _normalize,
     _pick_es_profile,
+    _run_game_command,
+    generate_sdl_game_controller_config,
 )
+
+from HipposPaths import BIOS, CONFIGS, SAVES, SCREENSHOTS, USERDATA
 
 
 def _write_mame_config(conf: dict[str, str]) -> None:
@@ -88,7 +74,6 @@ def _write_mame_config(conf: dict[str, str]) -> None:
             fh.write(f'{key:<{col}}{value}\n')
 
 
-
 def launch_mame(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('mame')
     if bin_path is None:
@@ -117,15 +102,9 @@ def launch_mame(ctx: LaunchContext) -> int:
     return result.returncode
 
 
-
 def _write_dolphin_config(ctx: LaunchContext) -> None:
     conf = _load_effective_hippos_conf()
-    profiles = []
-    try:
-        from emulatorlauncher_impl import _load_es_input_configs
-        profiles = _load_es_input_configs()
-    except Exception:
-        profiles = []
+    profiles = _load_es_input_configs()
     DOLPHIN_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     parser = _new_ini_parser()
     if DOLPHIN_INI.exists():
@@ -210,7 +189,6 @@ def _write_dolphin_config(ctx: LaunchContext) -> None:
     _write_dolphin_controller_configs(ctx, profiles)
 
 
-
 def launch_dolphin(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('dolphin-emu') or _find_emulator_bin('dolphin')
     if bin_path is None:
@@ -222,8 +200,6 @@ def launch_dolphin(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     result = _run_game_command(ctx, 'dolphin', cmd, env)
     return result.returncode
-
-
 
 
 def _lightgun_color(index: int) -> str:
@@ -821,3 +797,324 @@ def _sync_tree(source: Path, destination: Path) -> None:
 launch_mupen64plus_qt = _launch_mupen64plus_qt
 launch_duckstation = _launch_duckstation
 launch_flycast = _launch_flycast
+
+
+MAME_CONFIG_DIR = CONFIGS / 'mame'
+MAME_INI        = MAME_CONFIG_DIR / 'mame.ini'
+MAME_ROMS       = USERDATA / 'roms' / 'mame'
+
+DOLPHIN_CONFIG_DIR = CONFIGS / 'dolphin-emu'
+DOLPHIN_INI        = DOLPHIN_CONFIG_DIR / 'Dolphin.ini'
+DOLPHIN_GFX_INI    = DOLPHIN_CONFIG_DIR / 'GFX.ini'
+DOLPHIN_QT_INI     = DOLPHIN_CONFIG_DIR / 'Qt.ini'
+
+DUCKSTATION_CONFIG_DIR = CONFIGS / 'duckstation'
+DUCKSTATION_SETTINGS   = DUCKSTATION_CONFIG_DIR / 'settings.ini'
+
+FLYCAST_CONFIG_DIR = CONFIGS / 'flycast'
+FLYCAST_EMU_CFG    = FLYCAST_CONFIG_DIR / 'emu.cfg'
+
+MUPEN_CONFIG_DIR   = CONFIGS / 'mupen64'
+MUPEN_CUSTOM       = MUPEN_CONFIG_DIR / 'mupen64plus.cfg'
+
+
+MUPEN_VALID_N64_CONTROLLER_GUIDS = {
+    "050000007e0500001920000001800000",
+    "05000000c82d00006928000000010000",
+    "030000007e0500001920000011810000",
+    "05000000c82d00001930000001000000",
+    "03000000c82d00001930000011010000",
+}
+
+MUPEN_VALID_N64_CONTROLLER_NAMES = {
+    "N64 Controller",
+    "Nintendo Co., Ltd. N64 Controller",
+    "8BitDo N64 Modkit",
+    "8BitDo 64 BT",
+    "8BitDo 8BitDo 64 Bluetooth Controller",
+}
+
+DOLPHIN_GC_MAPPING: dict[str, str] = {
+    'a': 'Buttons/A',
+    'b': 'Buttons/B',
+    'x': 'Buttons/X',
+    'y': 'Buttons/Y',
+    'start': 'Buttons/Start',
+    'select': 'Buttons/Z',
+    'pageup': '',
+    'pagedown': '',
+    'up': 'D-Pad/Up',
+    'down': 'D-Pad/Down',
+    'left': 'D-Pad/Left',
+    'right': 'D-Pad/Right',
+    'l2': 'Triggers/L',
+    'r2': 'Triggers/R',
+    'joystick1up': 'Main Stick/Up',
+    'joystick1down': 'Main Stick/Down',
+    'joystick1left': 'Main Stick/Left',
+    'joystick1right': 'Main Stick/Right',
+    'joystick2up': 'C-Stick/Up',
+    'joystick2down': 'C-Stick/Down',
+    'joystick2left': 'C-Stick/Left',
+    'joystick2right': 'C-Stick/Right',
+    'hotkey': 'Buttons/Hotkey',
+}
+
+DOLPHIN_WHEEL_MAPPING: dict[str, str] = {
+    'select': 'Buttons/Z',
+    'start': 'Buttons/Start',
+    'up': 'D-Pad/Up',
+    'down': 'D-Pad/Down',
+    'left': 'D-Pad/Left',
+    'right': 'D-Pad/Right',
+    'a': 'Buttons/A',
+    'b': 'Buttons/B',
+    'x': 'Buttons/X',
+    'y': 'Buttons/Y',
+    'pageup': 'Triggers/L-Analog',
+    'pagedown': 'Triggers/R-Analog',
+    'r2': 'Main Stick/Up',
+    'l2': 'Main Stick/Down',
+    'joystick1left': 'Main Stick/Left',
+    'joystick1right': 'Main Stick/Right',
+}
+
+MUPEN_DEFAULT_MAPPING: dict[str, str] = {
+    'AnalogDeadzone': '0,0',
+    'AnalogPeak': '32768,32768',
+    'l3': 'Mempak switch',
+    'r3': 'Rumblepak switch',
+    'a': 'C Button R',
+    'b': 'A Button',
+    'x': 'C Button U',
+    'y': 'B Button',
+    'start': 'Start',
+    'select': '',
+    'pageup': 'L Trig',
+    'pagedown': 'R Trig',
+    'l2': 'Z Trig',
+    'r2': '',
+    'up': 'DPad U',
+    'down': 'DPad D',
+    'right': 'DPad R',
+    'left': 'DPad L',
+    'joystick1up': 'Y Axis',
+    'joystick1down': 'Y Axis',
+    'joystick1left': 'X Axis',
+    'joystick1right': 'X Axis',
+    'joystick2up': 'C Button U',
+    'joystick2down': 'C Button D',
+    'joystick2left': 'C Button L',
+    'joystick2right': 'C Button R',
+}
+
+MUPEN_N64_MAPPING: dict[str, str] = {
+    'AnalogDeadzone': '0,0',
+    'AnalogPeak': '32768,32768',
+    'l3': 'Mempak switch',
+    'r3': 'Rumblepak switch',
+    'a': 'B Button',
+    'b': 'A Button',
+    'x': 'C Button U',
+    'y': 'C Button L',
+    'start': 'Start',
+    'select': 'Z Trig',
+    'pageup': 'L Trig',
+    'pagedown': 'R Trig',
+    'l2': 'C Button D',
+    'r2': 'C Button R',
+    'up': 'DPad U',
+    'down': 'DPad D',
+    'right': 'DPad R',
+    'left': 'DPad L',
+    'joystick1up': 'Y Axis',
+    'joystick1down': 'Y Axis',
+    'joystick1left': 'X Axis',
+    'joystick1right': 'X Axis',
+    'joystick2up': '',
+    'joystick2down': '',
+    'joystick2left': '',
+    'joystick2right': '',
+}
+
+
+def _gun_type(ctx: LaunchContext) -> str:
+    gun_type = ctx.game_gun.get('type', '').strip().lower()
+    if gun_type in ('justifier', 'guncon'):
+        return gun_type
+    return 'guncon'
+
+
+def _write_dolphin_controller_configs(ctx: LaunchContext, profiles: list[ESControllerProfile]) -> None:
+    if ctx.system not in ('gamecube', 'triforce'):
+        return
+
+    config_path = DOLPHIN_CONFIG_DIR / 'GCPadNew.ini'
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    profile_counts: dict[str, int] = {}
+    with config_path.open('w', encoding='utf-8') as fh:
+        for ctrl in ctx.controllers:
+            profile = _pick_es_profile(profiles, ctrl)
+            name_key = _normalize(ctrl.name)
+            nsamepad = profile_counts.get(name_key, 0)
+            profile_counts[name_key] = nsamepad + 1
+            if profile is None:
+                _log.warning("No ES input profile matched controller %s (%s)", ctrl.name, ctrl.guid)
+                continue
+
+            mapping = DOLPHIN_WHEEL_MAPPING if ctrl.is_wheel and ctx.system in ('gamecube', 'triforce') else DOLPHIN_GC_MAPPING
+            section = f'GCPad{ctrl.player}'
+            fh.write(f'[{section}]\n')
+            fh.write(f'Device = evdev/{nsamepad}/{ctrl.name}\n')
+            if ctrl.is_wheel and ctx.system in ('gamecube', 'triforce'):
+                fh.write('Rumble/Motor = Constant\n')
+                fh.write('Rumble/Motor/Range = -100.\n')
+                fh.write('Main Stick/Dead Zone = 0.\n')
+
+            for logical_name, target in mapping.items():
+                if not target:
+                    continue
+                binding = profile.inputs.get(logical_name)
+                if binding is None:
+                    continue
+                value = _es_binding_to_dolphin(binding, target, ctrl, profile)
+                if value is None:
+                    continue
+                fh.write(f'{target} = {value}\n')
+            fh.write('\n')
+
+
+def _mupen_selected_mapping(ctrl: ControllerInfo) -> dict[str, str]:
+    if ctrl.guid in MUPEN_VALID_N64_CONTROLLER_GUIDS or ctrl.name in MUPEN_VALID_N64_CONTROLLER_NAMES:
+        return MUPEN_N64_MAPPING
+    return MUPEN_DEFAULT_MAPPING
+
+
+def _mupen_analog_peak(conf: dict[str, str], key: str) -> str:
+    default_value = 32768
+    multiplier = 1.0
+    try:
+        multiplier = float(_conf_value(conf, key, '1') or '1')
+    except ValueError:
+        multiplier = 1.0
+    adjusted = round(default_value * multiplier)
+    return f'{adjusted},{adjusted}'
+
+
+def _mupen_analog_deadzone(conf: dict[str, str], key: str, default_peak: str) -> str:
+    default_value = int(default_peak.split(',')[0])
+    try:
+        deadzone_multiplier = float(_conf_value(conf, key, '0.01') or '0.01')
+    except ValueError:
+        deadzone_multiplier = 0.01
+    deadzone = round(default_value * deadzone_multiplier)
+    return f'{deadzone},{deadzone}'
+
+
+def _write_mupen_controller_configs(ctx: LaunchContext, profiles: list[ESControllerProfile], parser: configparser.ConfigParser, conf: dict[str, str]) -> None:
+    for ctrl in ctx.controllers:
+        profile = _pick_es_profile(profiles, ctrl)
+        if profile is None:
+            _log.warning("No ES input profile matched controller %s (%s)", ctrl.name, ctrl.guid)
+            continue
+        mapping = _mupen_selected_mapping(ctrl)
+        section = f'Input-SDL-Control{ctrl.player}'
+        _ensure_section(parser, section)
+        parser.set(section, 'Version', '2')
+        parser.set(section, 'mode', '0')
+        parser.set(section, 'device', str(ctrl.index))
+        parser.set(section, 'name', str(ctrl.name.encode('ascii', 'ignore')))
+        parser.set(section, 'plugged', 'True')
+        parser.set(section, 'plugin', '2')
+        parser.set(section, 'mouse', 'False')
+
+        peak = _mupen_analog_peak(conf, f'mupen64-sensitivity{ctrl.player}')
+        parser.set(section, 'AnalogPeak', peak)
+        if ctrl.is_wheel and ctx.system in ('n64', 'n64dd'):
+            parser.set(section, 'AnalogDeadzone', '0,0')
+        else:
+            parser.set(section, 'AnalogDeadzone', _mupen_analog_deadzone(conf, f'mupen64-deadzone{ctrl.player}', peak))
+
+        for logical_name, target in mapping.items():
+            if target in {'AnalogDeadzone', 'AnalogPeak'}:
+                continue
+            binding = profile.inputs.get(logical_name)
+            if binding is None:
+                continue
+            value = _es_binding_to_mupen(binding, target, ctrl, profile)
+            if value is None or target == '':
+                continue
+            parser.set(section, target, value)
+
+    for x in range(len(ctx.controllers) + 1, 4):
+        section = f'Input-SDL-Control{x}'
+        if parser.has_section(section):
+            parser.remove_section(section)
+
+
+def _es_binding_to_dolphin(binding: ESBinding, target: str, ctrl: ControllerInfo, profile: ESControllerProfile) -> Optional[str]:
+    if binding.type == 'button':
+        return f'`Button {binding.code}`'
+
+    if binding.type == 'hat':
+        hat_base = ctrl.nb_axes + binding.code * 2
+        if binding.value in (1, 4):
+            return f'`Axis {hat_base + 1}{"-" if binding.value == 1 else "+"}`'
+        return f'`Axis {hat_base}{"-" if binding.value == 8 else "+"}`'
+
+    if binding.type == 'axis':
+        prefix = 'Full ' if target in {'Triggers/L-Analog', 'Triggers/R-Analog'} else ''
+        if binding.value < 0:
+            return f'`{prefix}Axis {binding.code}-`'
+        return f'`{prefix}Axis {binding.code}+`'
+
+    if binding.type == 'key':
+        return f'`Button {binding.code}`'
+
+    return None
+
+
+def _es_binding_to_mupen(binding: ESBinding, target: str, ctrl: ControllerInfo, profile: ESControllerProfile) -> Optional[str]:
+    if binding.type == 'button':
+        if target in {'X Axis', 'Y Axis'}:
+            reverse_map = {
+                'up': 'down',
+                'left': 'right',
+                'joystick1up': 'joystick1down',
+                'joystick1left': 'joystick1right',
+                'joystick2up': 'joystick2down',
+                'joystick2left': 'joystick2right',
+            }
+            if binding.name in ('down', 'right', 'joystick1down', 'joystick1right', 'joystick2down', 'joystick2right'):
+                return None
+            reverse_name = reverse_map.get(binding.name)
+            if reverse_name and reverse_name in profile.inputs:
+                reverse_binding = profile.inputs[reverse_name]
+                return f'button({binding.code}, {reverse_binding.code})'
+        return f'button({binding.code})'
+    if binding.type == 'hat':
+        if target in {'X Axis', 'Y Axis'}:
+            if binding.value == 1:
+                return f'hat({binding.code} Up Down)'
+            if binding.value == 4:
+                return f'hat({binding.code} Down Up)'
+            if binding.value == 2:
+                return f'hat({binding.code} Right Left)'
+            if binding.value == 8:
+                return f'hat({binding.code} Left Right)'
+            return None
+        direction = {1: 'Up', 2: 'Right', 4: 'Down', 8: 'Left'}.get(binding.value)
+        if direction:
+            return f'hat({binding.code} {direction})'
+        return None
+    if binding.type == 'axis':
+        if target in {'X Axis', 'Y Axis'}:
+            if binding.value < 0:
+                return f'axis({binding.code}-,{binding.code}+)'
+            return f'axis({binding.code}+,{binding.code}-)'
+        if binding.value > 0:
+            return f'axis({binding.code}+)'
+        return f'axis({binding.code}-)'
+    if binding.type == 'key':
+        return f'button({binding.code})'
+    return None
