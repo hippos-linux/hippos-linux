@@ -1,0 +1,3 @@
+# HippOS — label-based mounts with short device waits (BC-250 / slow enumerators).
+LABEL=EFI /boot/efi vfat umask=0077,nofail,x-systemd.device-timeout=5 0 0
+LABEL=HippOS /userdata btrfs defaults,noatime,commit=5,compress=zstd:1,subvol=@userdata,nofail,x-systemd.device-timeout=5 0 0

@@ -1,8 +1,9 @@
-GRUB_DEFAULT=0
-GRUB_TIMEOUT=0
-GRUB_TIMEOUT_STYLE=hidden
+GRUB_DEFAULT=saved
+GRUB_SAVEDEFAULT=true
+GRUB_TIMEOUT=8
+GRUB_TIMEOUT_STYLE=menu
 GRUB_DISTRIBUTOR="HippOS"
-GRUB_CMDLINE_LINUX_DEFAULT="quiet loglevel=3"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet loglevel=3 random.trust_cpu=on"
 GRUB_CMDLINE_LINUX="rootfstype=btrfs rw console=tty0 console=ttyS0,115200 vt.global_cursor_default=0"
 GRUB_DISABLE_OS_PROBER=false
 GRUB_TERMINAL="console serial"

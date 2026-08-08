@@ -3,10 +3,15 @@
 # etc.) to hippos-upgrade update-grub so /boot/efi/grub/grub.cfg is updated.
 # System grub-mkconfig would write to /boot/grub/grub.cfg (BTRFS rootfs) which
 # GRUB never reads — its boot prefix is on the EFI partition at /boot/efi/grub/.
+# After upgrade, rewrite a Latest+LTS menu when both kernels are present.
 if [ -x /usr/lib/hippos/hippos-upgrade ]; then
-    exec /usr/lib/hippos/hippos-upgrade update-grub "$@"
+    /usr/lib/hippos/hippos-upgrade update-grub "$@" || true
 fi
-# Not available (e.g. early chroot during build) — exit cleanly so package
-# postinst hooks don't fail.
-echo "update-grub: hippos-upgrade not available, skipping" >&2
+if [ -x /usr/lib/hippos/write-dual-kernel-grub ]; then
+    /usr/lib/hippos/write-dual-kernel-grub || true
+    exit 0
+fi
+if [ ! -x /usr/lib/hippos/hippos-upgrade ]; then
+    echo "update-grub: hippos-upgrade not available, skipping" >&2
+fi
 exit 0

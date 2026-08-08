@@ -25,7 +25,15 @@ if ! is_true "$(setting enable_bootloader true)"; then
 fi
 
 log "Regenerating grub.cfg with os-prober scan"
-/usr/lib/hippos/hippos-upgrade update-grub
+if [[ -x /usr/lib/hippos/hippos-upgrade ]]; then
+    /usr/lib/hippos/hippos-upgrade update-grub || log "hippos-upgrade update-grub failed (continuing)"
+fi
+
+# Prefer explicit Latest + LTS menu when both kernels are installed (BC-250 / dual-kernel images)
+if [[ -x /usr/lib/hippos/write-dual-kernel-grub ]]; then
+    log "Writing dual-kernel EFI menu (latest default, LTS selectable)"
+    /usr/lib/hippos/write-dual-kernel-grub || log "write-dual-kernel-grub failed"
+fi
 
 touch "${MARKER}"
 log "Done"
