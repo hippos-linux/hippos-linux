@@ -64,11 +64,14 @@ case "${1:-}" in
             mute)        LC_ALL=C pactl set-sink-mute @DEFAULT_SINK@ 1 ;;
             unmute)      LC_ALL=C pactl set-sink-mute @DEFAULT_SINK@ 0 ;;
             mute-toggle) LC_ALL=C pactl set-sink-mute @DEFAULT_SINK@ toggle ;;
-            [0-9]*)      LC_ALL=C pactl set-sink-volume @DEFAULT_SINK@ "${VOL}%" || exit 1 ;;
+            [0-9]*)
+                NEW=$(( VOL > 100 ? 100 : VOL ))
+                LC_ALL=C pactl set-sink-volume @DEFAULT_SINK@ "${NEW}%" || exit 1
+                ;;
             [+-][0-9]*)
                 CUR=$(_volume_pct)
                 NEW=$(( CUR + VOL ))
-                NEW=$(( NEW < 0 ? 0 : (NEW > 150 ? 150 : NEW) ))
+                NEW=$(( NEW < 0 ? 0 : (NEW > 100 ? 100 : NEW) ))
                 LC_ALL=C pactl set-sink-volume @DEFAULT_SINK@ "${NEW}%" || exit 1
                 ;;
             *) echo "invalid volume value" >&2; exit 1 ;;
