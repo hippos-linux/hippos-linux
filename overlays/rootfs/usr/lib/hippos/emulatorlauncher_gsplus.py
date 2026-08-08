@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from emulatorlauncher_impl import (
-    BIOS,
-    GSPLUS_CONFIG_DIR,
-    GSPLUS_CONFIG_FILE,
+from emulatorlauncher_shared import (
     LaunchContext,
     _build_game_env,
     _conf_value,
@@ -13,6 +10,8 @@ from emulatorlauncher_impl import (
     _write_unix_settings_file,
     generate_sdl_game_controller_config,
 )
+
+from HipposPaths import BIOS, CONFIGS
 
 
 def write_gsplus_config(ctx: LaunchContext) -> None:
@@ -114,3 +113,7 @@ def launch_gsplus(ctx: LaunchContext) -> int:
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
     result = _run_game_command(ctx, 'gsplus', cmd, env)
     return result.returncode
+
+
+GSPLUS_CONFIG_DIR = CONFIGS / 'GSplus'
+GSPLUS_CONFIG_FILE = GSPLUS_CONFIG_DIR / 'config.txt'

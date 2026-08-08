@@ -3,17 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from emulatorlauncher_impl import (
-    CACHE,
-    HOME,
+from emulatorlauncher_shared import (
     LaunchContext,
-    SHADPS4_BUNDLE_DIR,
-    SHADPS4_CONFIG_DIR,
-    SHADPS4_ROM_DIR,
-    SHADPS4_RUNTIME_DIR,
-    SHADPS4_SAVES,
-    SHADPS4_TOML,
-    SHADPS4_USER_CONFIG_DIR,
     _build_game_env,
     _conf_bool,
     _conf_value,
@@ -26,6 +17,8 @@ from emulatorlauncher_impl import (
     _sync_tree,
     _write_toml,
 )
+
+from HipposPaths import CACHE, CONFIGS, HOME, SAVES, USERDATA
 
 
 def _shadps4_base_config(display_resolution: Optional[tuple[int, int]]) -> dict[str, object]:
@@ -207,3 +200,12 @@ def launch_shadps4(ctx: LaunchContext) -> int:
     env['XDG_CACHE_HOME'] = str(CACHE / 'shadps4')
     result = _run_game_command(ctx, 'shadps4', cmd, env, cwd=SHADPS4_RUNTIME_DIR)
     return result.returncode
+
+
+SHADPS4_CONFIG_DIR = CONFIGS / 'shadps4'
+SHADPS4_USER_CONFIG_DIR = SHADPS4_CONFIG_DIR / 'user'
+SHADPS4_TOML = SHADPS4_USER_CONFIG_DIR / 'config.toml'
+SHADPS4_SAVES = SAVES / 'shadps4'
+SHADPS4_RUNTIME_DIR = Path('/run/hippos/emulators/shadps4')
+SHADPS4_BUNDLE_DIR = Path('/opt/emulators/shadps4')
+SHADPS4_ROM_DIR = USERDATA / 'roms' / 'ps4'

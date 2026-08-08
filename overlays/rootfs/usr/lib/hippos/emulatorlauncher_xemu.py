@@ -6,26 +6,18 @@ from pathlib import Path
 from shutil import copyfile
 from typing import Optional
 
-from emulatorlauncher_impl import (
-    CACHE,
-    CONFIGS,
+from emulatorlauncher_shared import (
     LaunchContext,
-    SHADPS4_CONFIG_DIR,
-    USERDATA,
-    XEMU_CONFIG_DIR,
-    XEMU_CONFIG_FILE,
-    XEMU_DATA_DIRS,
-    XEMU_SAVES_DIR,
     _build_game_env,
-    _conf_bool,
     _conf_value,
     _display_resolution_from_conf,
     _find_emulator_bin,
     _load_hippos_conf,
     _new_ini_parser,
-    _probe_vulkan_version,
     _run_game_command,
 )
+
+from HipposPaths import CONFIGS, SAVES
 
 
 def _xemu_find_data_dir() -> Optional[Path]:
@@ -145,3 +137,9 @@ def launch_xemu(ctx: LaunchContext) -> int:
     env['LC_NUMERIC'] = 'C'
     result = _run_game_command(ctx, 'xemu', cmd, env)
     return result.returncode
+
+
+XEMU_CONFIG_DIR = CONFIGS / 'xemu'
+XEMU_CONFIG_FILE = XEMU_CONFIG_DIR / 'xemu.toml'
+XEMU_SAVES_DIR = SAVES / 'xbox'
+XEMU_DATA_DIRS = (Path('/opt/emulators/xemu/data'), Path('/usr/share/xemu/data'))

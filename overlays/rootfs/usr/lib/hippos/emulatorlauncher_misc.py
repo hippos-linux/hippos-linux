@@ -1,21 +1,10 @@
 from __future__ import annotations
 
-import configparser
 import json
-import os
 from pathlib import Path
 
-from emulatorlauncher_impl import (
-    BIOS,
-    CACHE,
-    CONFIGS,
-    CLK_QUICKLOAD_SYSTEMS,
-    CLK_RGB_SYSTEMS,
-    CLK_SVIDEO_SYSTEMS,
+from emulatorlauncher_shared import (
     LaunchContext,
-    SAVES,
-    TSUGARU_CD_SYSTEMS,
-    USERDATA,
     _build_game_env,
     _conf_bool,
     _conf_value,
@@ -28,6 +17,8 @@ from emulatorlauncher_impl import (
     _run_game_command,
     generate_sdl_game_controller_config,
 )
+
+from HipposPaths import BIOS, CONFIGS, SAVES, USERDATA
 
 
 # Vice joystick action mapping
@@ -583,7 +574,6 @@ def launch_gzdoom(ctx: LaunchContext) -> int:
         encoding='utf-8',
     )
 
-    # Update INI file with joystick bindings
     sections = _gzdoom_read_ini(ini_path)
 
     _gzdoom_ini_set(sections, '[GlobalSettings]', 'vid_vsync', _conf_value(conf, 'gz_vsync', 'false'))
@@ -602,7 +592,6 @@ def launch_gzdoom(ctx: LaunchContext) -> int:
               str(cfg_dir / 'soundfonts'), str(cfg_dir / 'fm_banks')]:
         _gzdoom_ini_set_if_missing(sections, '[SoundfontSearch.Directories]', f'Path_{p}', p)
 
-    # Clear old Joy bindings and rewrite from ES profile
     for bind_sec in ('[Doom.Bindings]', '[Doom.AutomapBindings]'):
         sections.setdefault(bind_sec, {})
         sections[bind_sec] = {k: v for k, v in sections[bind_sec].items()
@@ -611,7 +600,6 @@ def launch_gzdoom(ctx: LaunchContext) -> int:
     if ctx.controllers:
         p1 = ctx.controllers[0]
         profile = _pick_es_profile(profiles, p1)
-        # Enable P1 joystick, disable rest
         for i in range(len(ctx.controllers)):
             _gzdoom_ini_set(sections, f'[Joy:JS:{i}]', 'Enabled', '1' if i == 0 else '0')
 
@@ -711,3 +699,9 @@ def launch_ryujinx(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     result = _run_game_command(ctx, 'ryujinx', cmd, env)
     return result.returncode
+
+
+CLK_QUICKLOAD_SYSTEMS = {'amstradcpc', 'archimedes', 'electron', 'msx1', 'msx2', 'oricatmos', 'zxspectrum'}
+CLK_SVIDEO_SYSTEMS = {'colecovision', 'mastersystem'}
+CLK_RGB_SYSTEMS = {'amstradcpc', 'atarist', 'electron', 'enterprise', 'msx1', 'msx2', 'oricatmos', 'zxspectrum'}
+TSUGARU_CD_SYSTEMS = {'.iso', '.cue', '.bin'}

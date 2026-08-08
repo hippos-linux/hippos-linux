@@ -4,12 +4,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from emulatorlauncher_impl import (
-    OPENBOR_BINARIES,
-    OPENBOR_CONFIG_DIR,
-    OPENBOR_CONFIG_FILES,
-    OPENBOR_ROM_DIR,
-    OPENBOR_SAVE_DIR,
+from emulatorlauncher_shared import (
     ControllerInfo,
     ESControllerProfile,
     LaunchContext,
@@ -22,6 +17,8 @@ from emulatorlauncher_impl import (
     _run_game_command,
     _write_unix_settings_file,
 )
+
+from HipposPaths import CONFIGS, SAVES, USERDATA
 
 
 def _openbor_guess_core(rom: Path) -> str:
@@ -153,3 +150,20 @@ def launch_openbor(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     result = _run_game_command(ctx, 'openbor', cmd, env, cwd=OPENBOR_ROM_DIR)
     return result.returncode
+
+
+OPENBOR_CONFIG_DIR = CONFIGS / 'openbor'
+OPENBOR_SAVE_DIR = SAVES / 'openbor'
+OPENBOR_ROM_DIR = USERDATA / 'roms' / 'openbor'
+OPENBOR_CONFIG_FILES = {
+    'openbor4432': 'config4432.ini',
+    'openbor6412': 'config6412.ini',
+    'openbor7142': 'config7142.ini',
+    'openbor7530': 'config7530.ini',
+}
+OPENBOR_BINARIES = {
+    'openbor4432': 'OpenBOR4432',
+    'openbor6412': 'OpenBOR6412',
+    'openbor7142': 'OpenBOR7142',
+    'openbor7530': 'OpenBOR7530',
+}

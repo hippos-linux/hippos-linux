@@ -1,14 +1,10 @@
 from __future__ import annotations
+from pathlib import Path
 
 from shutil import copyfile
 
-from emulatorlauncher_impl import (
+from emulatorlauncher_shared import (
     LaunchContext,
-    VPINBALL_CONFIG_DIR,
-    VPINBALL_DEFAULT_INI,
-    VPINBALL_INI,
-    VPINBALL_LOG,
-    VPINBALL_PINMAME_INI,
     _build_game_env,
     _conf_bool,
     _conf_value,
@@ -19,6 +15,8 @@ from emulatorlauncher_impl import (
     _run_game_command,
     generate_sdl_game_controller_config,
 )
+
+from HipposPaths import CONFIGS
 
 
 def write_vpinball_config(ctx: LaunchContext) -> None:
@@ -187,3 +185,10 @@ def launch_vpinball(ctx: LaunchContext) -> int:
     env['SDL_RENDER_VSYNC'] = '0'
     result = _run_game_command(ctx, 'vpinball', cmd, env)
     return result.returncode
+
+
+VPINBALL_CONFIG_DIR = CONFIGS / 'vpinball'
+VPINBALL_INI = VPINBALL_CONFIG_DIR / 'VPinballX.ini'
+VPINBALL_LOG = VPINBALL_CONFIG_DIR / 'vpinball.log'
+VPINBALL_PINMAME_INI = VPINBALL_CONFIG_DIR / 'pinmame' / 'ini'
+VPINBALL_DEFAULT_INI = Path('/usr/bin/vpinball/assets/Default_VPinballX.ini')

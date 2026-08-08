@@ -3,28 +3,27 @@
 from __future__ import annotations
 
 import configparser
-import os
 import shutil
 import zipfile
 from pathlib import Path
 from typing import Optional
 import xml.etree.ElementTree as ET
 
-from emulatorlauncher_impl import (
-    BIOS, SAVES, SCREENSHOTS, CONFIGS,
-    LaunchContext,
+from emulatorlauncher_shared import (
     ControllerInfo,
+    LaunchContext,
     _build_game_env,
-    _conf_bool,
     _conf_value,
-    _conf_int,
     _find_emulator_bin,
+    _load_es_input_configs,
     _load_hippos_conf,
     _log,
     _pick_es_profile,
-    _load_es_input_configs,
     _run_game_command,
 )
+
+from HipposPaths import BIOS, CONFIGS, SAVES, SCREENSHOTS
+
 
 # ── DOS ────────────────────────────────────────────────────────────────────────
 
@@ -47,7 +46,6 @@ def launch_dosbox_staging(ctx: LaunchContext) -> int:
             cmd += ['--conf', str(cfg_file)]
             break
 
-    # Mount the ROM directory and run
     cmd += [
         '--working-dir', str(rom.parent),
         '-c', f'mount c "{rom.parent}"',

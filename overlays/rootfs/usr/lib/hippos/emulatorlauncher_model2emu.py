@@ -3,12 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from emulatorlauncher_impl import (
+from emulatorlauncher_shared import (
     LaunchContext,
-    MODEL2_ROMS,
-    MODEL2_RUNTIME_EMU,
-    MODEL2_RUNTIME_ROOT,
-    MODEL2_SOURCE_EMU,
     _build_game_env,
     _conf_bool,
     _conf_value,
@@ -19,6 +15,8 @@ from emulatorlauncher_impl import (
     _run_game_command,
     _sync_tree,
 )
+
+from HipposPaths import USERDATA
 
 
 def _model2_border_thickness(width: int) -> str:
@@ -178,3 +176,9 @@ def launch_model2emu(ctx: LaunchContext) -> int:
 
     result = _run_game_command(ctx, 'model2emu', cmd, env, cwd=runtime_emu)
     return result.returncode
+
+
+MODEL2_RUNTIME_ROOT = USERDATA / 'emulators' / 'model2emu' / 'current'
+MODEL2_RUNTIME_EMU  = MODEL2_RUNTIME_ROOT / 'emulator'
+MODEL2_SOURCE_EMU   = Path('/opt/emulators/model2emu/emulator')
+MODEL2_ROMS         = USERDATA / 'roms' / 'model2'

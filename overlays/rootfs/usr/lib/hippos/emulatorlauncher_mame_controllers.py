@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from xml.dom import minidom
 
-from emulatorlauncher_impl import (
+from emulatorlauncher_shared import (
     ESBinding,
     ESControllerProfile,
     LaunchContext,

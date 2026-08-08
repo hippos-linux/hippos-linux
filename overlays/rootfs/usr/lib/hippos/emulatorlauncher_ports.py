@@ -1,24 +1,19 @@
 from __future__ import annotations
 
-import configparser
 import json
-import os
-from pathlib import Path
 
-from emulatorlauncher_impl import (
-    CONFIGS,
-    SAVES,
-    SCREENSHOTS,
+from emulatorlauncher_shared import (
     LaunchContext,
     _build_game_env,
     _ensure_section,
     _find_emulator_bin,
     _load_hippos_conf,
-    _log,
     _new_ini_parser,
     _run_game_command,
-    generate_sdl_game_controller_config,
 )
+
+from HipposPaths import CONFIGS, SAVES
+
 
 # ── eduke32 / fury ──────────────────────────────────────────────────────────────
 
