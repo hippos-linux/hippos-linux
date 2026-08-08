@@ -6,6 +6,7 @@ import json
 import os
 import glob
 import platform
+import re
 import shlex
 import shutil
 import subprocess
@@ -131,7 +132,24 @@ def fetch_manifest(channel):
 
 
 def ver_tuple(v):
-    return tuple(int(x) for x in v.lstrip("v").split(".")[:3] + [0, 0, 0])
+    """Normalize a version string to a comparable (major, minor, patch, prerelease) tuple.
+
+    Always pads/truncates major.minor.patch to exactly 3 components so "1.2" and
+    "1.2.0" compare equal instead of the shorter string sorting as lower — Python's
+    tuple comparison treats a missing trailing element as smaller than any present
+    value, and cur/remote version strings aren't guaranteed to have the same number
+    of dot-separated parts.
+
+    Dev channel versions carry a "-dev.N" suffix (e.g. "0.5.3-dev.3") — the trailing
+    N is kept as a 4th element so successive dev builds on the same base version
+    still compare as increasing. Non-prerelease versions get 0 here, which doesn't
+    change their relative ordering against each other.
+    """
+    base, _, pre = v.lstrip("v").partition("-")
+    parts = (base.split(".") + ["0", "0", "0"])[:3]
+    pre_match = re.search(r"(\d+)$", pre)
+    pre_num = int(pre_match.group(1)) if pre_match else 0
+    return tuple(int(x) for x in parts) + (pre_num,)
 
 
 def btrfs_device():
