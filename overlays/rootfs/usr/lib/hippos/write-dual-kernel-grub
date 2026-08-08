@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Write EFI grub.cfg with Latest (default) + LTS entries when both kernels exist.
+# Intended to run after hippos-upgrade update-grub so BC-250 can pick LTS without
+# forcing every other user onto the older kernel.
+set -euo pipefail
+
+log() { echo "write-dual-kernel-grub: $*"; }
+
+EFI_GRUB="/boot/efi/grub/grub.cfg"
+BOOT_DIR="/boot"
+
+if [[ ! -d /boot/efi/grub ]]; then
+  if ! mountpoint -q /boot/efi 2>/dev/null; then
+    mkdir -p /boot/efi
+    mount LABEL=EFI /boot/efi 2>/dev/null || mount /dev/disk/by-label/EFI /boot/efi 2>/dev/null || true
+  fi
+fi
+
+if [[ ! -d /boot/efi/grub ]]; then
+  log "EFI grub dir missing — skip"
+  exit 0
+fi
+
+# Newest non-LTS and newest LTS by mtime among matching names
+mapfile -t LATEST_K < <(ls -1t "${BOOT_DIR}"/vmlinuz-*-hippos 2>/dev/null | grep -v -- '-lts$' || true)
+mapfile -t LTS_K < <(ls -1t "${BOOT_DIR}"/vmlinuz-*-hippos-lts 2>/dev/null || true)
+
+LATEST_VMLINUZ="${LATEST_K[0]:-}"
+LTS_VMLINUZ="${LTS_K[0]:-}"
+
+if [[ -z "${LATEST_VMLINUZ}" || -z "${LTS_VMLINUZ}" ]]; then
+  log "Need both latest and LTS kernels under ${BOOT_DIR} — leave existing grub.cfg"
+  exit 0
+fi
+
+latest_ver="$(basename "${LATEST_VMLINUZ}" | sed 's/^vmlinuz-//')"
+lts_ver="$(basename "${LTS_VMLINUZ}" | sed 's/^vmlinuz-//')"
+latest_initrd="${BOOT_DIR}/initrd.img-${latest_ver}"
+lts_initrd="${BOOT_DIR}/initrd.img-${lts_ver}"
+
+if [[ ! -f "${latest_initrd}" || ! -f "${lts_initrd}" ]]; then
+  log "Matching initrd missing — leave existing grub.cfg"
+  exit 0
+fi
+
+FS_UUID="$(blkid -s UUID -o value "$(findmnt -n -o SOURCE / | sed 's/\[.*//')" 2>/dev/null || true)"
+if [[ -z "${FS_UUID}" ]]; then
+  FS_UUID="$(blkid -s UUID -o value -l -t LABEL=HippOS 2>/dev/null || true)"
+fi
+
+ROOT_ARGS="root=LABEL=HippOS rootfstype=btrfs rootflags=subvol=@rootfs rw random.trust_cpu=on"
+# Soften appliance wait-online stalls without requiring a rebuilt unit mask everywhere
+EXTRA_CMDLINE="plymouth.enable=0 systemd.mask=NetworkManager-wait-online.service"
+
+search_block() {
+  if [[ -n "${FS_UUID}" ]]; then
+    cat <<EOF
+    if ! search --no-floppy --set=root --fs-uuid ${FS_UUID} ; then
+        search --no-floppy --set=root --label HippOS
+    fi
+EOF
+  else
+    cat <<'EOF'
+    search --no-floppy --set=root --label HippOS
+EOF
+  fi
+}
+
+TMP="$(mktemp)"
+{
+  cat <<'EOF'
+set default=saved
+set timeout=8
+set timeout_style=menu
+load_env
+EOF
+  cat <<EOF
+
+menuentry "HippOS (latest — ${latest_ver})" --id hippos-latest {
+    insmod btrfs
+    insmod part_gpt
+$(search_block)
+    echo 'Loading HippOS latest...'
+    linux /@rootfs/boot/vmlinuz-${latest_ver} ${ROOT_ARGS} ${EXTRA_CMDLINE} quiet loglevel=3 console=tty0 console=ttyS0,115200
+    initrd /@rootfs/boot/initrd.img-${latest_ver}
+    save_env default
+}
+
+menuentry "HippOS (LTS — ${lts_ver})" --id hippos-lts {
+    insmod btrfs
+    insmod part_gpt
+$(search_block)
+    echo 'Loading HippOS LTS...'
+    linux /@rootfs/boot/vmlinuz-${lts_ver} ${ROOT_ARGS} ${EXTRA_CMDLINE} quiet loglevel=3 console=tty0 console=ttyS0,115200
+    initrd /@rootfs/boot/initrd.img-${lts_ver}
+    save_env default
+}
+
+menuentry "HippOS LTS verbose (recovery)" --id hippos-lts-verbose {
+    insmod btrfs
+    insmod part_gpt
+$(search_block)
+    linux /@rootfs/boot/vmlinuz-${lts_ver} ${ROOT_ARGS} ignore_loglevel ${EXTRA_CMDLINE} console=tty0 console=ttyS0,115200 consoleblank=0
+    initrd /@rootfs/boot/initrd.img-${lts_ver}
+}
+EOF
+} >"${TMP}"
+
+mkdir -p /boot/efi/grub
+if [[ -f "${EFI_GRUB}" ]]; then
+  cp -a "${EFI_GRUB}" "${EFI_GRUB}.bak-before-dual-kernel"
+fi
+mv "${TMP}" "${EFI_GRUB}"
+# Default saved entry id if unset
+if [[ ! -f /boot/efi/grub/grubenv ]] || ! grep -q '^default=' /boot/efi/grub/grubenv 2>/dev/null; then
+  grub-editenv /boot/efi/grub/grubenv set default=hippos-latest 2>/dev/null || \
+    printf '# GRUB Environment Block\ndefault=hippos-latest\n' > /boot/efi/grub/grubenv
+fi
+sync
+log "Wrote dual-kernel menu (latest=${latest_ver}, lts=${lts_ver}) → ${EFI_GRUB}"
