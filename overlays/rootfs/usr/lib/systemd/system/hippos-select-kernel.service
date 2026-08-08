@@ -1,0 +1,14 @@
+[Unit]
+Description=HippOS Kernel Selection (GRUB_DEFAULT sync from system.kernel)
+After=local-fs.target userdata.mount
+Wants=userdata.mount
+Before=hippos-es.service hippos-desktop.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=60
+ExecStart=/usr/lib/hippos/hippos-select-kernel
+
+[Install]
+WantedBy=multi-user.target

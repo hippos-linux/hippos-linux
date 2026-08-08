@@ -414,10 +414,13 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
     # Build ordered entry list: default first, rest as rollback
     ordered = [default_subvol] + [s for s in reversed(all_subvols) if s != default_subvol]
 
-    # Check for other OSes — if found, show a menu on every boot.
+    # Menu stays visible with a short timeout on every boot — lets users pick
+    # the other kernel (see /etc/default/grub) or a rollback deployment
+    # without needing to hold Esc. os_prober_entries() below only controls
+    # whether other-OS entries get added, not menu visibility.
     other_entries = os_prober_entries()
-    default_timeout = "5" if other_entries else "0"
-    default_style   = "menu" if other_entries else "hidden"
+    default_timeout = "5"
+    default_style   = "menu"
 
     # Boot-counter logic: grubenv holds boot_counter (set to 3 on each update).
     # Each failed boot decrements it; when it hits 0 the rollback entry is shown.
