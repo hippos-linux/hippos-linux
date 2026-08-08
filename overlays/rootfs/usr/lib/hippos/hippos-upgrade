@@ -107,8 +107,14 @@ def _make_request(url: str) -> urllib.request.Request:
 
 
 def fetch_manifest(channel):
-    urls = MANIFEST_URLS[:]
-    urls.insert(1, f"https://updates.hippos.org/{channel}/manifest.json")
+    # Dev channel is gated by token role (KV value 'dev', see betaAuth.ts
+    # validateDevToken) and lives at its own path — a stable/beta token
+    # cannot read it, so it must not fall back to the regular manifest URLs.
+    if channel == "dev":
+        urls = [f"https://hippos-linux.org/api/update/manifest-{_DEB_ARCH}-dev.json"]
+    else:
+        urls = MANIFEST_URLS[:]
+        urls.insert(1, f"https://updates.hippos.org/{channel}/manifest.json")
     for url in urls:
         try:
             req = _make_request(url)
