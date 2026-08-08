@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# hippos-upload-logs — collect system logs and post to your HippOS beta thread.
+# hippos-upload-logs — collect system logs and post them to Discord.
 # Requires updates.token in /userdata/system/hippos.conf (sent via Discord DM
-# when you received Early Access).
+# when you received Early Access or Dev Access). Beta tokens post to your beta
+# thread; the shared dev token posts to the dev channel instead.
 
 set -euo pipefail
 
@@ -203,7 +204,7 @@ echo "${_size}"
 # ── Upload ────────────────────────────────────────────────────────────────────
 
 echo ""
-echo -n "Uploading to your beta thread... "
+echo -n "Uploading... "
 HTTP_STATUS="$(curl -s -o /dev/null -w "%{http_code}" \
     -X POST "${UPLOAD_URL}" \
     -H "X-HippOS-Token: ${TOKEN}" \
@@ -215,7 +216,7 @@ case "${HTTP_STATUS}" in
     200)
         echo "done"
         echo ""
-        echo "Logs posted to your beta thread on Discord."
+        echo "Logs posted to Discord."
         ;;
     401)
         echo "failed"
