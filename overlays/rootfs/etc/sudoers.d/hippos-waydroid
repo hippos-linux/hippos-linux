@@ -1,0 +1,7 @@
+# waydroid's own session-start network setup (waydroid-net.sh: ip link,
+# iptables, dnsmasq) needs root, but `waydroid session start` is not
+# root-gated at the CLI level and shells out to it as the invoking user.
+# Without this, waydroid-net.sh fails silently/errors and the waydroid0
+# bridge referenced by the LXC container config never gets created.
+hippos ALL=(ALL) NOPASSWD: /usr/bin/waydroid session start
+hippos ALL=(ALL) NOPASSWD: /usr/bin/waydroid session stop
