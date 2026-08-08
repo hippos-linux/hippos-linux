@@ -160,6 +160,15 @@ if [[ -z "${CRT_OUTPUT}" || "${CRT_OUTPUT}" == "auto" ]]; then
         exit 1
     fi
     log "auto-detected output: ${CRT_OUTPUT}"
+
+    # Pin the result to crt.output rather than re-running detection every
+    # boot. _auto_crt_output's heuristic treats a zero-byte EDID as "this is
+    # a CRT" — but once this script installs drm.edid_firmware for that same
+    # output (below), the port legitimately reports a (synthetic) EDID on
+    # every later boot, so re-detection with crt.output still "auto" would
+    # then see a non-zero EDID and stop finding its own CRT. Once resolved,
+    # stay resolved; the user can set crt.output back to "auto" to re-probe.
+    hippos-settings set crt.output "${CRT_OUTPUT}" 2>/dev/null || true
 fi
 
 # Derive X11 DDX name for xorg.conf and switchres.ini.
@@ -392,6 +401,12 @@ if [[ "${GPU_DRIVER}" == "amdgpu" ]] && _detect_r9_380; then
     warn "R9 380 (Tonga) detected — appending amdgpu.dc=0 to GRUB kernel params"
     GRUB_CMDLINE+=" amdgpu.dc=0"
 fi
+
+# ── Write GRUB dropin ─────────────────────────────────────────────────────────
+# The D0023R 15kHz patches ship in every kernel variant now (see
+# kb/guidance/crt-support-plan.md), so CRT mode no longer needs to repoint
+# GRUB_DEFAULT at a separate kernel — just the CRT display boot params on top
+# of whichever kernel is already selected.
 
 mkdir -p "$(dirname "${GRUB_CRT_CONF}")"
 _new_grub_conf="$(printf '# CRT mode — managed by hippos-crt-setup. Do not edit manually.\nGRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT %s"\n' "${GRUB_CMDLINE}")"

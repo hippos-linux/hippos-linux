@@ -1,9 +1,22 @@
+# GRUB_DEFAULT is overwritten by configure-rootfs.sh at build time with the
+# exact title of the standard (non-CRT) kernel menuentry, and at runtime by
+# hippos-select-kernel (system.kernel setting, every boot) and by
+# hippos-crt-setup/-teardown when CRT mode is toggled. See
+# kb/guidance/crt-support-plan.md and kb/guidance/settings-reference.md — two
+# kernels ship in every image, this picks which one boots by default.
+#
+# Menu is shown (not hidden) with a short timeout so users can manually pick
+# the other kernel for a single boot without needing to hold Esc.
 GRUB_DEFAULT=0
-GRUB_TIMEOUT=0
-GRUB_TIMEOUT_STYLE=hidden
+GRUB_TIMEOUT=5
+GRUB_TIMEOUT_STYLE=menu
 GRUB_DISTRIBUTOR="HippOS"
 GRUB_CMDLINE_LINUX_DEFAULT="quiet loglevel=3"
 GRUB_CMDLINE_LINUX="rootfstype=btrfs rw console=tty0 console=ttyS0,115200 vt.global_cursor_default=0"
 GRUB_DISABLE_OS_PROBER=false
+# Flat top-level menuentries instead of nesting all-but-the-newest kernel under
+# "Advanced options for..." — keeps GRUB_DEFAULT title matching (above) simple
+# and makes manual kernel selection possible if the hidden menu is revealed.
+GRUB_DISABLE_SUBMENU=y
 GRUB_TERMINAL="console serial"
 GRUB_SERIAL_COMMAND="serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1"
