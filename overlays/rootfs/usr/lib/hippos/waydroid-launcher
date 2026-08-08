@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+[[ $# -ge 1 ]] || { printf '[waydroid-launcher] error: usage: %s <rom.apk|rom.waydroid>\n' "$0" >&2; exit 1; }
 ROM="$1"
 CACHE_DIR="/userdata/system/cache/waydroid-launcher"
 PKG_CACHE="${CACHE_DIR}/packages.tsv"
@@ -43,9 +44,9 @@ if [[ ! -f /var/lib/waydroid/waydroid.cfg ]]; then
     fi
 fi
 
-start_weston() {
+try_weston() {
+    local extra_flag="$1"
     local runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-    log "Starting Weston (X11 nested)..."
     local res
     res="$(DISPLAY="${DISPLAY:-:0}" xrandr 2>/dev/null | awk '/\*/{print $1; exit}')"
     local w="${res%%x*}"
@@ -56,30 +57,47 @@ start_weston() {
         --socket="${WAYLAND_SOCKET}" \
         --shell=kiosk-shell.so \
         --fullscreen \
+        ${extra_flag:+${extra_flag}} \
         ${w:+--width="${w}"} ${h:+--height="${h}"} \
         &>/dev/null &
     WESTON_PID=$!
     for i in $(seq 1 "$((WESTON_TIMEOUT * 2))"); do
         [[ -S "${runtime_dir}/${WAYLAND_SOCKET}" ]] && {
             export WAYLAND_DISPLAY="${WAYLAND_SOCKET}"
-            log "Weston ready"
             "${HOTKEYS_BIN}" --new-context waydroid "$(cat /usr/share/hippos/hotkeys/contexts/waydroid.json)" 2>/dev/null || true
             return 0
         }
         sleep 0.5
     done
     kill "${WESTON_PID}" 2>/dev/null
+    wait "${WESTON_PID}" 2>/dev/null
     WESTON_PID=""
-    die "Weston did not start within ${WESTON_TIMEOUT}s"
+    return 1
 }
 
-# Weston must be running before session start (session needs a Wayland socket)
+# Weston must be running before session start (session needs a Wayland socket).
+# Try hardware-accelerated GL first; some AMD iGPU setups reject the render
+# context (amdgpu_cs_ctx_create2 -13) — fall back to software rendering
+# (--use-pixman) rather than failing the launch outright.
+start_weston() {
+    log "Starting Weston (X11 nested, hardware GL)..."
+    try_weston "" && { log "Weston ready"; return 0; }
+    log "Hardware GL failed to start within ${WESTON_TIMEOUT}s — retrying with --use-pixman (software rendering)"
+    try_weston "--use-pixman" && { log "Weston ready (software rendering)"; return 0; }
+    die "Weston did not start within ${WESTON_TIMEOUT}s (hardware or software)"
+}
+
 start_weston
 
 # Start session if not running
+# Needs root: waydroid's own network setup (waydroid-net.sh — creates the
+# waydroid0 bridge, runs dnsmasq/iptables) is shelled out to as the invoking
+# user, not escalated internally, even though `session start` itself isn't
+# root-gated. Without sudo here it fails silently and lxc-start later hard
+# crashes referencing a waydroid0 bridge that was never created.
 if ! waydroid status 2>/dev/null | grep -q "Session.*RUNNING"; then
     log "Starting Waydroid session..."
-    nohup waydroid session start &>/dev/null &
+    nohup sudo -n waydroid session start &>/dev/null &
     for i in $(seq 1 "${SESSION_TIMEOUT}"); do
         waydroid status 2>/dev/null | grep -q "Session.*RUNNING" && break
         [[ "${i}" -eq "${SESSION_TIMEOUT}" ]] && die "Session did not start within ${SESSION_TIMEOUT}s"
