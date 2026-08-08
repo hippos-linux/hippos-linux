@@ -66,6 +66,51 @@ ECODES_NAMES: dict[int, str] = {
     if name.startswith('KEY_') or name.startswith('BTN_')
 }
 
+# SDL2 keycode -> evdev KEY_* translation, for es_input.cfg's type="keyboard"
+# inputConfig (the id attribute there is an SDL_Keycode, not an evdev code).
+# Printable ASCII passes straight through as its own char; everything else
+# (arrows, F-keys, modifiers, backspace/tab/enter/escape/delete) is either a
+# small literal control-code table or, for keys >= SDLK_SCANCODE_MASK, an
+# SDL_Scancode offset translated via SDL_SCANCODE_TO_EVDEV.
+SDLK_SCANCODE_MASK = 1 << 30
+
+_ASCII_TO_EVDEV_NAME: dict[str, str] = {
+    ' ': 'KEY_SPACE', '-': 'KEY_MINUS', '=': 'KEY_EQUAL',
+    '[': 'KEY_LEFTBRACE', ']': 'KEY_RIGHTBRACE', '\\': 'KEY_BACKSLASH',
+    ';': 'KEY_SEMICOLON', "'": 'KEY_APOSTROPHE', '`': 'KEY_GRAVE',
+    ',': 'KEY_COMMA', '.': 'KEY_DOT', '/': 'KEY_SLASH',
+}
+for _c in 'abcdefghijklmnopqrstuvwxyz':
+    _ASCII_TO_EVDEV_NAME[_c] = f'KEY_{_c.upper()}'
+for _d in '1234567890':
+    _ASCII_TO_EVDEV_NAME[_d] = f'KEY_{_d}'
+
+_SDLK_CONTROL_TO_EVDEV_NAME: dict[int, str] = {
+    8: 'KEY_BACKSPACE', 9: 'KEY_TAB', 13: 'KEY_ENTER', 27: 'KEY_ESC', 127: 'KEY_DELETE',
+}
+
+# SDL_Scancode -> evdev KEY_* name, for id values >= SDLK_SCANCODE_MASK.
+_SDL_SCANCODE_TO_EVDEV_NAME: dict[int, str] = {
+    58: 'KEY_F1', 59: 'KEY_F2', 60: 'KEY_F3', 61: 'KEY_F4', 62: 'KEY_F5', 63: 'KEY_F6',
+    64: 'KEY_F7', 65: 'KEY_F8', 66: 'KEY_F9', 67: 'KEY_F10', 68: 'KEY_F11', 69: 'KEY_F12',
+    73: 'KEY_INSERT', 74: 'KEY_HOME', 75: 'KEY_PAGEUP', 76: 'KEY_DELETE',
+    77: 'KEY_END', 78: 'KEY_PAGEDOWN',
+    79: 'KEY_RIGHT', 80: 'KEY_LEFT', 81: 'KEY_DOWN', 82: 'KEY_UP',
+    224: 'KEY_LEFTCTRL', 225: 'KEY_LEFTSHIFT', 226: 'KEY_LEFTALT', 227: 'KEY_LEFTMETA',
+    228: 'KEY_RIGHTCTRL', 229: 'KEY_RIGHTSHIFT', 230: 'KEY_RIGHTALT', 231: 'KEY_RIGHTMETA',
+}
+
+def sdl_keycode_to_evdev(sdl_id: int) -> int | None:
+    if sdl_id & SDLK_SCANCODE_MASK:
+        name = _SDL_SCANCODE_TO_EVDEV_NAME.get(sdl_id & ~SDLK_SCANCODE_MASK)
+    elif sdl_id in _SDLK_CONTROL_TO_EVDEV_NAME:
+        name = _SDLK_CONTROL_TO_EVDEV_NAME[sdl_id]
+    elif 32 <= sdl_id <= 126:
+        name = _ASCII_TO_EVDEV_NAME.get(chr(sdl_id))
+    else:
+        name = None
+    return ecodes.ecodes.get(name) if name else None
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -160,37 +205,60 @@ def load_device_action_map(device: evdev.InputDevice) -> dict[int, str]:
         return result
     return {}
 
-def load_es_button_maps() -> dict[str, dict[int, str]]:
+def load_es_button_maps() -> tuple[dict[str, dict[int, str]], dict[int, str]]:
+    """Returns (per-device joystick button maps, generic keyboard button map).
+
+    The keyboard map comes from es_input.cfg's single type="keyboard" config
+    (deviceName="Keyboard") and applies to any real keyboard device, since ES
+    doesn't key that config by hardware name the way it does joysticks — it's
+    also how keyboard-emulating arcade encoders (IPAC/JAMMA boards configured
+    in ES as keyboard input) get their button config picked up here.
+    """
     for path in ES_INPUT_FILES:
         if path.exists():
             break
     else:
-        return {}
+        return {}, {}
     try:
         root = ET.parse(path).getroot()
     except Exception as exc:
         log(f'could not parse {path}: {exc}')
-        return {}
+        return {}, {}
     maps: dict[str, dict[int, str]] = {}
+    keyboard_map: dict[int, str] = {}
     for config in root.findall('inputConfig'):
-        if config.attrib.get('type') != 'joystick':
-            continue
-        device_name = config.attrib.get('deviceName', '')
-        by_code: dict[int, str] = {}
-        for node in config.findall('input'):
-            if node.attrib.get('type') != 'button':
-                continue
-            name = node.attrib.get('name')
-            code = node.attrib.get('id') or node.attrib.get('code')
-            if not name or code is None:
-                continue
-            try:
-                by_code[int(code)] = name
-            except ValueError:
-                continue
-        if device_name and by_code:
-            maps[device_name] = by_code
-    return maps
+        config_type = config.attrib.get('type')
+        if config_type == 'joystick':
+            device_name = config.attrib.get('deviceName', '')
+            by_code: dict[int, str] = {}
+            for node in config.findall('input'):
+                if node.attrib.get('type') != 'button':
+                    continue
+                name = node.attrib.get('name')
+                code = node.attrib.get('id') or node.attrib.get('code')
+                if not name or code is None:
+                    continue
+                try:
+                    by_code[int(code)] = name
+                except ValueError:
+                    continue
+            if device_name and by_code:
+                maps[device_name] = by_code
+        elif config_type == 'keyboard':
+            for node in config.findall('input'):
+                if node.attrib.get('type') != 'key':
+                    continue
+                name = node.attrib.get('name')
+                sdl_id = node.attrib.get('id') or node.attrib.get('code')
+                if not name or sdl_id is None:
+                    continue
+                try:
+                    evdev_code = sdl_keycode_to_evdev(int(sdl_id))
+                except ValueError:
+                    continue
+                if evdev_code is not None:
+                    keyboard_map[evdev_code] = name
+    return maps, keyboard_map
 
 def load_combo_actions() -> list[dict[str, Any]]:
     src = USER_HOTKEYS_FILE if USER_HOTKEYS_FILE.exists() else HOTKEYS_FILE
@@ -270,6 +338,7 @@ class HotkeyDaemon:
         self.common_keys: dict[str, Any] = {}
         self.default_map: dict[int, str] = {}
         self.es_button_maps: dict[str, dict[int, str]] = {}
+        self.es_keyboard_map: dict[int, str] = {}
         self.combo_actions: list[dict[str, Any]] = []
         self.require_reconfig = False
         self._reload_all()
@@ -280,7 +349,7 @@ class HotkeyDaemon:
         self.context = load_context()
         self.common_keys = load_common_context()
         self.default_map = load_default_mapping()
-        self.es_button_maps = load_es_button_maps()
+        self.es_button_maps, self.es_keyboard_map = load_es_button_maps()
         self.combo_actions = load_combo_actions()
         log(f'context={self.context.get("name", "")}')
 
@@ -378,8 +447,18 @@ class HotkeyDaemon:
             if sdl_idx < len(gamepad_btn_codes):
                 button_map[gamepad_btn_codes[sdl_idx]] = action_name
 
-        # Keyboard fallback: use default_mapping so media keys trigger actions
-        if not action_map and not button_map:
+        # Real keyboards (and keyboard-emulating arcade encoders/IPAC boards)
+        # never have BTN_GAMEPAD-range codes, so they never get an es_map
+        # entry above. Apply ES's generic type="keyboard" input config here
+        # instead, so button-hold combos (Select+Start exit, etc.) work from
+        # a keyboard the same as from a gamepad.
+        if not button_map and ecodes.KEY_ESC in keys and ecodes.KEY_A in keys:
+            button_map = {c: n for c, n in self.es_keyboard_map.items() if c in keys}
+
+        # Keyboard fallback: use default_mapping so media/single keys (Escape,
+        # F1, volume, …) still trigger their direct action. Kept independent
+        # of button_map above — combos and single-key actions both apply.
+        if not action_map:
             action_map = dict(self.default_map)
 
         self.devices[path] = DeviceState(device, button_map, action_map)
@@ -405,8 +484,15 @@ class HotkeyDaemon:
         name = state.button_map.get(event.code)
         if not name:
             return
+        names = [name]
+        # Devices with no dedicated mode/guide button (keyboards, and many
+        # cheap/older gamepads) can never satisfy a "hotkey"-gated combo.
+        # Let Select double as the hotkey modifier for them, matching the
+        # classic Batocera Select+Start exit convention.
+        if name == 'select' and 'hotkey' not in state.button_map.values():
+            names.append('hotkey')
         if event.value == 1:
-            state.pressed.add(name)
+            state.pressed.update(names)
             for combo in self.combo_actions:
                 trigger = combo.get('trigger')
                 target  = combo.get('target')
@@ -415,7 +501,7 @@ class HotkeyDaemon:
                 if all(b in state.pressed for b in trigger):
                     self.execute_combo_target(target)
         elif event.value == 0:
-            state.pressed.discard(name)
+            state.pressed.difference_update(names)
 
     def _handle_device(self, path: str) -> None:
         state = self.devices.get(path)
@@ -425,10 +511,14 @@ class HotkeyDaemon:
             for event in state.device.read():
                 if event.type != ecodes.EV_KEY:
                     continue
+                # Independent, not either/or: a keyboard-class device's key
+                # can be both a direct default_mapping action (e.g. Escape's
+                # instant "exit") and a named combo button (e.g. Select, for
+                # Select+Start) at the same time.
+                if event.code in state.button_map:
+                    self._handle_controller_button(state, event)
                 if event.code in state.action_map and event.value in (0, 1):
                     self.execute_action(state.action_map[event.code], event.value == 1)
-                elif state.button_map:
-                    self._handle_controller_button(state, event)
         except OSError:
             self._remove_device(path)
 
