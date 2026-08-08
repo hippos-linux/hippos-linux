@@ -334,6 +334,7 @@ RUN curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
         clang-21 \
         lld-21 \
         llvm-21 \
+        llvm-21-dev \
         libc++-21-dev \
         libc++abi-21-dev \
         libxinerama-dev \
