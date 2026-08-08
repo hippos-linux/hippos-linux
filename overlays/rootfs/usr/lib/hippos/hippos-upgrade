@@ -13,6 +13,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
+from dataclasses import dataclass, field
 from datetime import datetime
 
 VERSION_FILE      = "/usr/share/hippos/version"
@@ -62,10 +63,14 @@ def current_version():
         return "0.0.0"
 
 
-def current_subvol():
-    """Return the subvolume name we are currently booted into."""
-    # HippOS uses overlayfs for /; lowerdir reveals the active btrfs subvol.
-    for line in open("/proc/mounts"):
+def parse_current_subvol(mounts_text: str) -> str:
+    """Extract the active @rootfs* subvolume name from /proc/mounts content.
+
+    HippOS uses overlayfs for /; lowerdir reveals the active btrfs subvol.
+    Falls back to the bare "@rootfs" subvolume — the pre-first-update state —
+    if no overlay root is mounted (e.g. running outside the normal boot path).
+    """
+    for line in mounts_text.splitlines():
         parts = line.split()
         if len(parts) >= 4 and parts[1] == "/" and parts[2] == "overlay":
             for opt in parts[3].split(","):
@@ -75,6 +80,11 @@ def current_subvol():
                     if last.startswith("@rootfs"):
                         return last
     return "@rootfs"
+
+
+def current_subvol():
+    """Return the subvolume name we are currently booted into."""
+    return parse_current_subvol(open("/proc/mounts").read())
 
 
 def get_channel():
@@ -173,20 +183,36 @@ def umount_toplevel():
     subprocess.run(["umount", "-l", BTRFS_MNT], check=False)
 
 
-def list_deployments():
-    """Return sorted list of @rootfs-* subvolume names."""
-    r = subprocess.run(
-        ["btrfs", "subvolume", "list", "-o", BTRFS_MNT],
-        capture_output=True, text=True
-    )
+def sort_deployment_names(names) -> list[str]:
+    """Sort @rootfs-* names by parsed version, not string order.
+
+    "@rootfs-0.5.10" must sort after "@rootfs-0.5.2"; plain string sorting
+    gets that backwards once a version component reaches two digits.
+    """
+    return sorted(names, key=lambda n: ver_tuple(n[len("@rootfs-"):]))
+
+
+def parse_deployment_names(btrfs_list_output: str) -> list[str]:
+    """Parse `btrfs subvolume list -o` output into a version-sorted @rootfs-* list."""
     names = []
-    for line in r.stdout.splitlines():
+    for line in btrfs_list_output.splitlines():
         parts = line.split()
         if parts:
             name = parts[-1]
             if name.startswith("@rootfs-"):
                 names.append(name)
-    return sorted(names)
+    return sort_deployment_names(names)
+
+
+def list_deployments():
+    """Return version-sorted list of @rootfs-* subvolume names."""
+    r = subprocess.run(
+        ["btrfs", "subvolume", "list", "-o", BTRFS_MNT],
+        capture_output=True, text=True
+    )
+    if r.returncode != 0:
+        log(f"WARNING: btrfs subvolume list failed: {r.stderr.strip()}")
+    return parse_deployment_names(r.stdout)
 
 
 def _kernel_sort_key(name):
@@ -495,6 +521,40 @@ def cmd_list_deployments():
         umount_toplevel()
 
 
+def find_menuentry_index(content: str, subvol: str) -> int:
+    """Return the index of the menuentry block that boots `subvol`.
+
+    grub.cfg entries are generated in the same order list_deployments()
+    returns them, but we match on content (not position) since pruning can
+    shift indices between writes. Falls back to entry 0 if no block
+    references the subvol.
+
+    Matches only on the kernel/initrd path (`/<subvol>/boot/`), never on the
+    `rootflags=subvol=<subvol>` cmdline fragment: subvol names share a
+    "@rootfs" / "@rootfs-<version>" prefix, so an unanchored match on the
+    cmdline fragment lets "@rootfs" match the first "@rootfs-<version>"
+    block instead of the bare @rootfs one.
+    """
+    entries = content.split("menuentry")
+    for i, block in enumerate(entries[1:]):
+        if f"/{subvol}/boot/" in block:
+            return i
+    return 0
+
+
+def set_grub_default(content: str, target_idx: int) -> str:
+    """Rewrite `set default=` to target_idx and disable the 0s auto-boot timeout."""
+    new_lines = []
+    for line in content.splitlines():
+        if line.startswith("set default="):
+            new_lines.append(f"set default={target_idx}")
+        elif line.startswith("set timeout=0"):
+            new_lines.append("set timeout=5")
+        else:
+            new_lines.append(line)
+    return "\n".join(new_lines) + "\n"
+
+
 def cmd_rollback(subvol):
     """Switch grub default to subvol and reboot."""
     try:
@@ -506,39 +566,75 @@ def cmd_rollback(subvol):
         cfg_path = EFI_GRUB_CFG
         content = open(cfg_path).read()
 
-        # Find entry index for requested subvol
-        entry_idx = 0
-        target_idx = 0
-        for line in content.splitlines():
-            if line.strip().startswith("menuentry"):
-                if f"/{subvol}/" in content.split("menuentry")[entry_idx + 1] if entry_idx < content.count("menuentry") - 1 else False:
-                    target_idx = entry_idx
-                entry_idx += 1
-
-        # Simpler: find the menuentry that contains the subvol path
-        entries = content.split("menuentry")
-        for i, block in enumerate(entries[1:], 0):
-            if f"/{subvol}/boot/" in block or f"subvol={subvol}" in block:
-                target_idx = i
-                break
-
-        new_lines = []
-        for line in content.splitlines():
-            if line.startswith("set default="):
-                new_lines.append(f"set default={target_idx}")
-            elif line.startswith("set timeout=0"):
-                new_lines.append("set timeout=5")
-            else:
-                new_lines.append(line)
+        target_idx = find_menuentry_index(content, subvol)
 
         with open(cfg_path, "w") as f:
-            f.write("\n".join(new_lines) + "\n")
+            f.write(set_grub_default(content, target_idx))
 
         log(f"GRUB default set to entry {target_idx} ({subvol})")
     finally:
         umount_toplevel()
 
     log("Rollback configured. Reboot to apply.")
+
+
+@dataclass
+class ApplyPlan:
+    """Snapshot/create/prune decisions for cmd_apply.
+
+    Computed once from btrfs state as it exists before this apply run
+    touches anything, so the whole decision is a pure function of that
+    state and can be tested without btrfs, GRUB, or root.
+    """
+    backup_name: str
+    need_snapshot: bool
+    new_subvol: str
+    need_new_subvol_cleanup: bool
+    pre_prune_deployments: list = field(default_factory=list)
+    prune: list = field(default_factory=list)
+    final_deployments: list = field(default_factory=list)
+
+
+def plan_apply(running: str, cur_version: str, remote_version: str,
+               existing_deployments: list) -> ApplyPlan:
+    """Decide what cmd_apply needs to snapshot, create, and prune.
+
+    `existing_deployments` is list_deployments()'s result from *before* this
+    run creates anything. `running` may not appear in it — a fresh install's
+    running subvolume is the bare "@rootfs", which list_deployments() never
+    returns since it only matches the "@rootfs-*" naming pattern.
+    """
+    backup_name = f"@rootfs-{cur_version}"
+    new_subvol = f"@rootfs-{remote_version}"
+
+    # A subvolume named backup_name can already exist for two reasons: a
+    # previous apply run snapshotted it and was then interrupted before
+    # pruning, or it *is* the running subvolume (steady state once a system
+    # has been updated at least once, since running == f"@rootfs-{cur}").
+    # Either way there's nothing to snapshot.
+    need_snapshot = backup_name not in set(existing_deployments) | {running}
+
+    need_new_subvol_cleanup = new_subvol in existing_deployments
+
+    pre_prune_deployments = sort_deployment_names(
+        set(existing_deployments) | {backup_name, new_subvol}
+    )
+    prune = sort_deployment_names(
+        s for s in pre_prune_deployments if s not in (new_subvol, backup_name)
+    )
+    final_deployments = sort_deployment_names(
+        s for s in pre_prune_deployments if s not in prune
+    )
+
+    return ApplyPlan(
+        backup_name=backup_name,
+        need_snapshot=need_snapshot,
+        new_subvol=new_subvol,
+        need_new_subvol_cleanup=need_new_subvol_cleanup,
+        pre_prune_deployments=pre_prune_deployments,
+        prune=prune,
+        final_deployments=final_deployments,
+    )
 
 
 def cmd_apply():
@@ -588,25 +684,23 @@ def cmd_apply():
     try:
         mount_toplevel()
 
-        # Snapshot current running subvol for rollback
         running = current_subvol()
-        backup_name = f"@rootfs-{cur}"
-        backup_path = os.path.join(BTRFS_MNT, backup_name)
-        running_path = os.path.join(BTRFS_MNT, running)
+        plan = plan_apply(running, cur, remote, list_deployments())
 
-        if not os.path.exists(backup_path):
-            log(f"Snapshotting {running} → {backup_name}...")
+        backup_path = os.path.join(BTRFS_MNT, plan.backup_name)
+        running_path = os.path.join(BTRFS_MNT, running)
+        new_path = os.path.join(BTRFS_MNT, plan.new_subvol)
+
+        if plan.need_snapshot:
+            log(f"Snapshotting {running} → {plan.backup_name}...")
             subprocess.run(
                 ["btrfs", "subvolume", "snapshot", "-r", running_path, backup_path],
                 check=True
             )
 
-        # Create and populate new subvolume
-        new_subvol = f"@rootfs-{remote}"
-        new_path = os.path.join(BTRFS_MNT, new_subvol)
-        if os.path.exists(new_path):
+        if plan.need_new_subvol_cleanup:
             subprocess.run(["btrfs", "subvolume", "delete", new_path], check=True)
-        log(f"Creating {new_subvol}...")
+        log(f"Creating {plan.new_subvol}...")
         subprocess.run(["btrfs", "subvolume", "create", new_path], check=True)
 
         log(f"Extracting rootfs...")
@@ -621,14 +715,12 @@ def cmd_apply():
         shutil.copy2("/etc/fstab", os.path.join(new_path, "etc", "fstab"))
         log("fstab preserved from running system")
 
-        # Update grub.cfg in @rootfs
         uuid, partuuid = read_grub_uuid_partuuid()
         if not uuid or not partuuid:
             die("Cannot read UUID/PARTUUID from existing grub.cfg")
 
-        deployments = list_deployments()  # includes new_subvol now
-        write_grub_cfg(new_subvol, deployments, uuid, partuuid)
-        log(f"GRUB updated — default: {new_subvol}")
+        write_grub_cfg(plan.new_subvol, plan.pre_prune_deployments, uuid, partuuid)
+        log(f"GRUB updated — default: {plan.new_subvol}")
 
         # Arm the boot counter so rollback is offered after 3 failed boot attempts.
         grubenv = "/boot/efi/grub/grubenv"
@@ -636,16 +728,17 @@ def cmd_apply():
         subprocess.run(["grub-editenv", grubenv, "set", "boot_counter=3"], check=True)
         log("Boot counter armed (3 attempts before rollback)")
 
-        # Prune old deployments (keep only current + 1 rollback)
-        old = [s for s in deployments if s not in (new_subvol, backup_name)]
-        for stale in old:
+        for stale in plan.prune:
             log(f"Pruning old deployment {stale}...")
-            subprocess.run(
+            result = subprocess.run(
                 ["btrfs", "subvolume", "delete", os.path.join(BTRFS_MNT, stale)],
                 check=False,
             )
-        if old:
-            write_grub_cfg(new_subvol, list_deployments(), uuid, partuuid)
+            if result.returncode != 0:
+                log(f"WARNING: failed to prune {stale} (exit {result.returncode}) "
+                    f"— it will be retried on the next update")
+        if plan.prune:
+            write_grub_cfg(plan.new_subvol, plan.final_deployments, uuid, partuuid)
             log("GRUB updated after pruning")
     finally:
         umount_toplevel()
