@@ -11,6 +11,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import traceback
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -54,6 +55,20 @@ def log(msg):
 def die(msg):
     log(f"ERROR: {msg}")
     sys.exit(1)
+
+
+def _log_uncaught_exception(exc_type, exc_value, exc_tb):
+    # Without this, an unhandled exception anywhere below prints to stderr
+    # and vanishes — upgrade.log (what hippos-upload-logs actually collects)
+    # shows the last log() line and then nothing, with no way to tell what
+    # happened. die()'s sys.exit() doesn't hit this hook (SystemExit is
+    # handled separately by the interpreter), so expected error exits are
+    # unaffected.
+    log("CRASH: " + "".join(traceback.format_exception(exc_type, exc_value, exc_tb)).rstrip())
+    sys.__excepthook__(exc_type, exc_value, exc_tb)
+
+
+sys.excepthook = _log_uncaught_exception
 
 
 def current_version():
@@ -135,8 +150,15 @@ def fetch_manifest(channel):
             if e.code == 401:
                 die("Beta access token is invalid or has been revoked. "
                     "Contact the HippOS team to renew your access.")
+            log(f"Manifest fetch failed for {url}: HTTP {e.code}")
             continue
-        except Exception:
+        except Exception as e:
+            # Logged rather than silently swallowed — the caller's generic
+            # "check network" die() otherwise gives no way to tell a real
+            # outage apart from e.g. a malformed response on this exact URL,
+            # which matters for the dev channel since it has no fallback URL
+            # to fall through to.
+            log(f"Manifest fetch failed for {url}: {e}")
             continue
     return None
 
@@ -548,6 +570,45 @@ def sha256_file(path):
     return h.hexdigest()
 
 
+def fetch_archive(url, archive, sha256="", timeout=None):
+    """Download `url` into `archive`, reusing a cached copy if it's already valid.
+
+    Downloads to a .part sibling and only renames it into place after a full,
+    checksum-clean download. A payload dropped mid-download (interrupted
+    connection, disk full, checksum failure) must never be left sitting at
+    the final `archive` path — otherwise the next update attempt sees the
+    path already exists, skips the download, and fails the same way forever.
+    """
+    if os.path.exists(archive):
+        if not sha256 or sha256_file(archive) == sha256:
+            return
+        os.remove(archive)
+
+    part = archive + ".part"
+    log(f"Downloading {os.path.basename(archive)}...")
+    try:
+        req = _make_request(url)
+        with urllib.request.urlopen(req, timeout=timeout) as resp, open(part, "wb") as f:
+            total = int(resp.headers.get("Content-Length", 0))
+            done = 0
+            while chunk := resp.read(262144):
+                f.write(chunk)
+                done += len(chunk)
+                if total:
+                    log(f"Downloading... {done * 100 // total}%")
+
+        if sha256:
+            log("Verifying checksum...")
+            if sha256_file(part) != sha256:
+                die("SHA256 mismatch — download may be corrupt")
+            log("Checksum OK")
+
+        os.replace(part, archive)
+    finally:
+        if os.path.exists(part):
+            os.remove(part)
+
+
 # ---------------------------------------------------------------------------
 # Subcommands
 # ---------------------------------------------------------------------------
@@ -719,25 +780,7 @@ def cmd_apply():
 
     os.makedirs(CACHE_DIR, exist_ok=True)
     archive = os.path.join(CACHE_DIR, f"hippos-rootfs-{remote}.tar.zst")
-
-    if not os.path.exists(archive):
-        log("Downloading rootfs payload...")
-        req = _make_request(url)
-        with urllib.request.urlopen(req) as resp, open(archive, "wb") as f:
-            total = int(resp.headers.get("Content-Length", 0))
-            done = 0
-            while chunk := resp.read(262144):
-                f.write(chunk)
-                done += len(chunk)
-                if total:
-                    log(f"Downloading... {done * 100 // total}%")
-
-    if sha256:
-        log("Verifying checksum...")
-        if sha256_file(archive) != sha256:
-            os.remove(archive)
-            die("SHA256 mismatch — download may be corrupt")
-        log("Checksum OK")
+    fetch_archive(url, archive, sha256)
 
     try:
         mount_toplevel()
@@ -863,25 +906,7 @@ def cmd_update_kernel():
 
     os.makedirs(CACHE_DIR, exist_ok=True)
     deb = os.path.join(CACHE_DIR, f"linux-image-{remote}_{_DEB_ARCH}.deb")
-
-    if not os.path.exists(deb):
-        log("Downloading kernel deb...")
-        req = _make_request(url)
-        with urllib.request.urlopen(req, timeout=300) as resp, open(deb, "wb") as f:
-            total = int(resp.headers.get("Content-Length", 0))
-            done  = 0
-            while chunk := resp.read(262144):
-                f.write(chunk)
-                done += len(chunk)
-                if total:
-                    log(f"Downloading... {done * 100 // total}%")
-
-    if sha256:
-        log("Verifying checksum...")
-        if sha256_file(deb) != sha256:
-            os.remove(deb)
-            die("SHA256 mismatch — download may be corrupt")
-        log("Checksum OK")
+    fetch_archive(url, deb, sha256, timeout=300)
 
     try:
         mount_toplevel()
@@ -1025,24 +1050,7 @@ def cmd_update_emulator(name, force=False):
     if force and os.path.exists(archive):
         os.remove(archive)
 
-    if not os.path.exists(archive):
-        log(f"Downloading {name} {remote}...")
-        req = _make_request(url)
-        with urllib.request.urlopen(req) as resp, open(archive, "wb") as f:
-            total = int(resp.headers.get("Content-Length", 0))
-            done = 0
-            while chunk := resp.read(262144):
-                f.write(chunk)
-                done += len(chunk)
-                if total:
-                    log(f"Downloading... {done * 100 // total}%")
-
-    if sha256:
-        log("Verifying checksum...")
-        if sha256_file(archive) != sha256:
-            os.remove(archive)
-            die("SHA256 mismatch — download may be corrupt")
-        log("Checksum OK")
+    fetch_archive(url, archive, sha256)
 
     dest = os.path.join(EMULATORS_DIR, name)
     os.makedirs(dest, exist_ok=True)
@@ -1119,25 +1127,7 @@ def cmd_update_frontend(name):
 
     os.makedirs(CACHE_DIR, exist_ok=True)
     archive = os.path.join(CACHE_DIR, f"hippos-frontend-{name}-{remote}.tar.zst")
-
-    if not os.path.exists(archive):
-        log(f"Downloading {name} {remote}...")
-        req = _make_request(url)
-        with urllib.request.urlopen(req) as resp, open(archive, "wb") as f:
-            total = int(resp.headers.get("Content-Length", 0))
-            done = 0
-            while chunk := resp.read(262144):
-                f.write(chunk)
-                done += len(chunk)
-                if total:
-                    log(f"Downloading... {done * 100 // total}%")
-
-    if sha256:
-        log("Verifying checksum...")
-        if sha256_file(archive) != sha256:
-            os.remove(archive)
-            die("SHA256 mismatch — download may be corrupt")
-        log("Checksum OK")
+    fetch_archive(url, archive, sha256)
 
     log(f"Extracting {name} to /...")
     subprocess.run(
