@@ -20,6 +20,10 @@ clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
 # Build standalone
 log "Building standalone"
+# A stale CMakeCache.txt reuses cached *_DIR values from whatever prefix
+# resolved them last run instead of re-searching CMAKE_PREFIX_PATH/deps —
+# always start clean.
+rm -rf "${BUILD}"
 mkdir -p "${BUILD}/standalone" "${STAGING}/bin"
 cmake -S "${SRC}" -B "${BUILD}/standalone" \
     -DCMAKE_BUILD_TYPE=Release \

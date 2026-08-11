@@ -18,7 +18,19 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}"
 
+# A stale CMakeCache.txt caches SDL3_DIR/SDL3_image_DIR/SDL3_ttf_DIR from
+# whatever prefix resolved them last run; cmake reuses those cache entries on
+# reconfigure instead of re-searching CMAKE_PREFIX_PATH, silently pinning the
+# emulator back to Trixie's system SDL3 (3.2.10) even when SDL3_mixer
+# correctly picks up the newer shared stack. Always start clean.
+rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
+
+# hypseus-singe v3.0.1+ requires SDL3_mixer via find_package(... CONFIG REQUIRED),
+# which Trixie doesn't package (and Trixie's SDL3 is too old for any packaged
+# SDL_mixer release to build against regardless — see build/sdl3-stack-build.sh).
+# Pulls in HippOS's shared from-source static SDL3 stack.
+source "/work/build/sdl3-stack-env.sh"
 
 # cmake runs the verify script as:
 #   cd ${BUILD}/3rdparty/src && cmake -P .../libmpeg2-stamp/verify-libmpeg2.cmake
@@ -40,7 +52,8 @@ fi
 
 cmake -S "${SRC}/src" -B "${BUILD}" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX="${STAGING}"
+    -DCMAKE_INSTALL_PREFIX="${STAGING}" \
+    -DCMAKE_PREFIX_PATH="${SDL_STACK_ROOT}"
 
 cmake --build "${BUILD}" -j"$(nproc)"
 

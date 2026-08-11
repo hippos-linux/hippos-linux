@@ -25,6 +25,10 @@ while IFS= read -r target_file; do
     fi
 done < <(grep -R "std::transform" -l "${SRC}" --include='*.cpp' --include='*.h' --include='*.hpp' 2>/dev/null || true)
 
+# A stale CMakeCache.txt reuses cached *_DIR values from whatever prefix
+# resolved them last run instead of re-searching CMAKE_PREFIX_PATH/deps —
+# always start clean.
+rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 
 log "Configuring"

@@ -43,6 +43,10 @@ if [[ -f "${LOAD_SELF}" ]]; then
     sed -i 's/reinterpret_cast<const Elf32_Phdr const \*>/reinterpret_cast<const Elf32_Phdr *>/g' "${LOAD_SELF}"
 fi
 
+# A stale CMakeCache.txt reuses cached *_DIR values from whatever prefix
+# resolved them last run instead of re-searching CMAKE_PREFIX_PATH/deps —
+# always start clean.
+rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 
 if grep -q 'XXH_X86DISPATCH_ALLOW_AVX' "${SRC}/CMakeLists.txt"; then
