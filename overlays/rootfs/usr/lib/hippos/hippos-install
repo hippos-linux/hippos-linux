@@ -60,15 +60,26 @@ is_efi_partition() {
 
 # ── enumeration commands ──────────────────────────────────────────────────────
 
-cmd_list_disks() {
+# Real, installable disks: excludes optical drives (-e 11), the disk HippOS
+# itself booted from, and zram — lsblk reports zram devices as TYPE=disk same
+# as any real block device, but they're volatile RAM-backed swap, never a
+# valid install target. Echoes "name size model" per candidate.
+list_candidate_disks() {
     local boot_disk
     boot_disk=$(get_boot_disk)
     lsblk -ndo NAME,SIZE,MODEL -e 11 | while read -r name size model; do
         local dev="/dev/$name"
         [[ "$(lsblk -ndo TYPE "$dev" 2>/dev/null)" == "disk" ]] || continue
         [[ "$name" == "$boot_disk" ]] && continue
+        [[ "$name" == zram* ]] && continue
+        echo "$name $size $model"
+    done
+}
+
+cmd_list_disks() {
+    list_candidate_disks | while read -r name size model; do
         model="${model:-Unknown}"
-        echo "$dev $model ($size)"
+        echo "/dev/$name $model ($size)"
     done
 }
 
@@ -83,12 +94,8 @@ cmd_list_archs() {
 }
 
 cmd_list_hippos_disks() {
-    local boot_disk
-    boot_disk=$(get_boot_disk)
-    lsblk -ndo NAME,SIZE,MODEL -e 11 | while read -r name size model; do
+    list_candidate_disks | while read -r name size model; do
         local dev="/dev/$name"
-        [[ "$(lsblk -ndo TYPE "$dev" 2>/dev/null)" == "disk" ]] || continue
-        [[ "$name" == "$boot_disk" ]] && continue
         local found=0
         while IFS= read -r pdev; do
             local label fstype
