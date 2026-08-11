@@ -18,6 +18,10 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}"
 
+# A stale CMakeCache.txt reuses cached *_DIR values from whatever prefix
+# resolved them last run instead of re-searching CMAKE_PREFIX_PATH/deps —
+# always start clean.
+rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_BUILD_TYPE=Release \

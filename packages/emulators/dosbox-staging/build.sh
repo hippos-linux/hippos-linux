@@ -18,6 +18,9 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}"
 
+# meson setup errors outright on an existing build dir unless --wipe/--reconfigure
+# is passed; always start clean instead of special-casing the re-run path.
+rm -rf "${BUILD}"
 mkdir -p "${STAGING}/bin"
 meson setup "${BUILD}" "${SRC}" \
     --buildtype=release \

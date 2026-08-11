@@ -12,9 +12,6 @@ WX_REPO='https://github.com/wxWidgets/wxWidgets'
 # that break Cemu's GUI code. 3.2 is the LTS series and fully compatible.
 WX_TAG='v3.2.10'
 
-SDL3_REPO='https://github.com/libsdl-org/SDL'
-SDL3_TAG="$(github_latest_tag "${SDL3_REPO}")"
-
 HIDAPI_REPO='https://github.com/libusb/hidapi'
 HIDAPI_TAG="$(github_latest_tag "${HIDAPI_REPO}")"
 
@@ -33,11 +30,13 @@ WX_SRC="${WORK_ROOT}/${NAME}/wxwidgets/source"
 WX_BUILD="${WORK_ROOT}/${NAME}/wxwidgets/build"
 WX_PREFIX="${WORK_ROOT}/${NAME}/wxwidgets/install"
 
-SDL3_SRC="${WORK_ROOT}/${NAME}/sdl3/source"
-SDL3_BUILD="${WORK_ROOT}/${NAME}/sdl3/build"
-SDL3_PREFIX="${WORK_ROOT}/${NAME}/sdl3/install"
-
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
+
+# Cemu needs a newer SDL3 than Trixie packages. Pulls in HippOS's shared
+# from-source static SDL3 stack (see build/sdl3-stack-build.sh) instead of
+# building its own — also fixes a latent mismatch here: ENABLE_WAYLAND=ON
+# below was previously paired with a private SDL3 built with SDL_WAYLAND=OFF.
+source "/work/build/sdl3-stack-env.sh"
 
 log "Installing build dependencies"
 if apt-get update -qq && apt-get install -y --no-install-recommends \
@@ -59,20 +58,6 @@ cmake -S "${HIDAPI_SRC}" -B "${HIDAPI_BUILD}" \
     -DBUILD_SHARED_LIBS=OFF
 cmake --build "${HIDAPI_BUILD}" -j"$(nproc)"
 cmake --install "${HIDAPI_BUILD}"
-
-clone_source "${SDL3_REPO}" "${SDL3_TAG}" "${SDL3_SRC}"
-git config --global --add safe.directory "${SDL3_SRC}" 2>/dev/null || true
-
-cmake -S "${SDL3_SRC}" -B "${SDL3_BUILD}" \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX="${SDL3_PREFIX}" \
-    -DSDL_SHARED=OFF \
-    -DSDL_STATIC=ON \
-    -DSDL_TEST=OFF \
-    -DSDL_TESTS=OFF \
-    -DSDL_WAYLAND=OFF
-cmake --build "${SDL3_BUILD}" -j"$(nproc)"
-cmake --install "${SDL3_BUILD}"
 
 clone_source "${WX_REPO}" "${WX_TAG}" "${WX_SRC}" --submodules
 git config --global --add safe.directory "${WX_SRC}" 2>/dev/null || true
@@ -157,6 +142,11 @@ for rel in files_to_patch:
         print(f'  patched: {rel}')
 PYEOF
 
+# Stale CMakeCache.txt would pin SDL3_DIR (and friends) to whatever prefix
+# resolved them last run instead of re-searching CMAKE_PREFIX_PATH — see the
+# hypseus-singe build.sh comment for how that silently breaks a shared-stack
+# migration. Always start clean.
+rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 cmake -S "${SRC}" -B "${BUILD}" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
@@ -167,7 +157,7 @@ cmake -S "${SRC}" -B "${BUILD}" -G Ninja \
     -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld -no-pie -lm -lstdc++ -lSPIRV-Tools-opt -lSPIRV-Tools" \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
     -DCMAKE_INSTALL_RPATH="\$ORIGIN/../lib" \
-    -DCMAKE_PREFIX_PATH="${WX_PREFIX};${SDL3_PREFIX};${HIDAPI_PREFIX}" \
+    -DCMAKE_PREFIX_PATH="${WX_PREFIX};${SDL_STACK_ROOT};${HIDAPI_PREFIX}" \
     -DALLOW_PORTABLE=OFF \
     -DBUILD_SHARED_LIBS=OFF \
     -DENABLE_BLUEZ=ON \
