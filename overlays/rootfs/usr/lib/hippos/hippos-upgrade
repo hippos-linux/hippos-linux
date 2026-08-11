@@ -215,31 +215,67 @@ def list_deployments():
     return parse_deployment_names(r.stdout)
 
 
+# Two kernel variants can be installed side by side in the same /boot (see
+# build/build-kernel.sh KERNEL_VARIANT and hippos-select-kernel) — "-lts" is
+# checked before the bare "-hippos" suffix since every lts filename also ends
+# in "-hippos".
+_KERNEL_VARIANTS = ("standard", "lts")
+_KERNEL_VARIANT_SUFFIX = {"standard": "-hippos", "lts": "-hippos-lts"}
+
+
 def _kernel_sort_key(name):
-    """Sort key for vmlinuz-X.Y.Z-hippos filenames."""
-    ver = name.replace("vmlinuz-", "").replace("-hippos", "")
+    """Sort key for vmlinuz-X.Y.Z[-hippos[-lts]] filenames."""
+    ver = name[len("vmlinuz-"):] if name.startswith("vmlinuz-") else name
+    for suffix in ("-hippos-lts", "-hippos"):
+        if ver.endswith(suffix):
+            ver = ver[:-len(suffix)]
+            break
     try:
         return tuple(int(x) for x in ver.split("."))
     except ValueError:
         return (0,)
 
 
-def find_boot_files(subvol_path):
-    """Find the newest kernel and matching initrd in subvol /boot."""
+def find_kernel_files(subvol_path, variant):
+    """Find the newest installed kernel/initrd for `variant` ('standard' or
+    'lts') in subvol_path/boot. Returns None if that variant isn't installed
+    in this subvol (e.g. lts on a deployment predating the lts kernel, or on
+    a platform that doesn't build it)."""
     boot = os.path.join(subvol_path, "boot")
+    suffix = _KERNEL_VARIANT_SUFFIX[variant]
     kernels = []
     try:
         for f in os.listdir(boot):
-            if f.startswith("vmlinuz-") and f.endswith("-hippos"):
-                kernels.append(f)
+            if not (f.startswith("vmlinuz-") and f.endswith(suffix)):
+                continue
+            # "-hippos" is a substring of "-hippos-lts" — exclude lts files
+            # when collecting the standard variant.
+            if variant == "standard" and f.endswith("-hippos-lts"):
+                continue
+            kernels.append(f)
     except FileNotFoundError:
         pass
     if not kernels:
-        return "vmlinuz", "initrd.img"
+        return None
     kernel = sorted(kernels, key=_kernel_sort_key)[-1]
     kver = kernel[len("vmlinuz-"):]
     initrd = f"initrd.img-{kver}" if os.path.exists(os.path.join(boot, f"initrd.img-{kver}")) else "initrd.img"
     return kernel, initrd
+
+
+def default_kernel_variant():
+    """Return the kernel variant selected via the system.kernel setting —
+    same key and same standard/lts semantics as hippos-select-kernel, which
+    is what a user (or CRT setup) actually writes to."""
+    try:
+        result = subprocess.run(
+            ["hippos-settings", "get", "system.kernel"],
+            capture_output=True, text=True, timeout=10,
+        )
+        variant = result.stdout.strip()
+    except Exception:
+        variant = ""
+    return variant if variant in _KERNEL_VARIANTS else "standard"
 
 
 EFI_GRUB_CFG = "/boot/efi/grub/grub.cfg"
@@ -446,36 +482,55 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
         "",
     ]
 
+    # Default variant's entry is emitted first for the default subvol so it
+    # lands at "set default=0" above; the other installed variant (if any)
+    # follows as an explicitly selectable alternate — this is what actually
+    # makes system.kernel / hippos-select-kernel's choice, and manual
+    # LTS/standard selection, reach the menu (see hippos-select-kernel).
+    default_variant = default_kernel_variant()
+    variant_order = [default_variant] + [v for v in _KERNEL_VARIANTS if v != default_variant]
+
     lines = boot_counter_block
     for subvol in ordered:
         subvol_path = os.path.join(BTRFS_MNT, subvol)
-        kernel, initrd = find_boot_files(subvol_path)
         ver = subvol.replace("@rootfs-", "")
-        label = f"HippOS {ver}" if subvol != "@rootfs" else "HippOS"
+        base_label = f"HippOS {ver}" if subvol != "@rootfs" else "HippOS"
         if subvol != default_subvol:
-            label += " (rollback)"
-        cmdline_parts = [
-            f"root=PARTUUID={partuuid}",
-            "rootfstype=btrfs",
-            f"rootflags=subvol={subvol}",
-            "ro",
-            "quiet",
-            "splash",
-            *extra_args,
-        ]
-        cmdline = " ".join(cmdline_parts)
-        lines += [
-            f'menuentry "{label}" {{',
-            f'    insmod btrfs',
-            f'    insmod part_gpt',
-            f'    if ! search --no-floppy --set=root --fs-uuid {uuid} ; then',
-            f'        search --no-floppy --set=root --label HippOS',
-            f'    fi',
-            f'    linux /{subvol}/boot/{kernel} {cmdline}',
-            f'    initrd /{subvol}/boot/{initrd}',
-            f'}}',
-            '',
-        ]
+            base_label += " (rollback)"
+
+        for variant in variant_order:
+            found = find_kernel_files(subvol_path, variant)
+            if found is None:
+                if variant == "standard" and variant == variant_order[0]:
+                    # Standard is always expected to exist; fall back to a
+                    # placeholder rather than silently dropping the entry.
+                    found = "vmlinuz", "initrd.img"
+                else:
+                    continue
+            kernel, initrd = found
+            label = f"{base_label} (LTS)" if variant == "lts" else base_label
+            cmdline_parts = [
+                f"root=PARTUUID={partuuid}",
+                "rootfstype=btrfs",
+                f"rootflags=subvol={subvol}",
+                "ro",
+                "quiet",
+                "splash",
+                *extra_args,
+            ]
+            cmdline = " ".join(cmdline_parts)
+            lines += [
+                f'menuentry "{label}" {{',
+                f'    insmod btrfs',
+                f'    insmod part_gpt',
+                f'    if ! search --no-floppy --set=root --fs-uuid {uuid} ; then',
+                f'        search --no-floppy --set=root --label HippOS',
+                f'    fi',
+                f'    linux /{subvol}/boot/{kernel} {cmdline}',
+                f'    initrd /{subvol}/boot/{initrd}',
+                f'}}',
+                '',
+            ]
 
     if other_entries:
         lines += other_entries
