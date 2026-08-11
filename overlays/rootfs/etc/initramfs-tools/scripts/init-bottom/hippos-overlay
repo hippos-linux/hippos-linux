@@ -49,6 +49,18 @@ UPPER="${BTRFS_MNT}/@overlay/upper"
 WORK="${BTRFS_MNT}/@overlay/work"
 mkdir -p "${UPPER}" "${WORK}"
 
+# Overlayfs reports the mounted root's own metadata (uid/gid/mode) straight
+# from upperdir's directory entry, unconditionally, from the first mount
+# onward — mkdir -p above only sets this on first creation and never touches
+# it again. upperdir persists on disk across every boot, so anything that
+# ever chowns/chmods live "/" (a stray `sudo chown -R $USER: /` typo is the
+# classic way) bakes that into the merged root permanently, surviving every
+# future boot with no way to self-correct. Force it back to root:root/0755
+# unconditionally on every boot, before the overlay is mounted — cheap and a
+# no-op when it's already correct.
+chown 0:0 "${UPPER}"
+chmod 0755 "${UPPER}"
+
 OVERLAY_OPTS="lowerdir=${BTRFS_MNT}/${ROOT_SUBVOL},upperdir=${UPPER},workdir=${WORK}"
 if ! mount -t overlay -o "${OVERLAY_OPTS}" overlay "${rootmnt}"; then
     kmsg "overlay mount failed"
