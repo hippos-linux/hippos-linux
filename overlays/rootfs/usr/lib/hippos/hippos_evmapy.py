@@ -163,8 +163,6 @@ def evmapy_context(
     profiles: list[ESControllerProfile],
 ):
     """Start evmapy daemon for the game, stop it on exit."""
-    from emulatorlauncher_impl import _pick_es_profile
-
     started = _prepare(system, emulator, rom, controllers, profiles)
     try:
         yield
@@ -181,7 +179,10 @@ def _prepare(
     controllers: list[ControllerInfo],
     profiles: list[ESControllerProfile],
 ) -> bool:
-    from emulatorlauncher_impl import _pick_es_profile
+    # Local import: emulatorlauncher_shared imports evmapy_context from this
+    # module at load time, so importing it back at module level here would
+    # be circular. Deferred to call time instead.
+    from emulatorlauncher_shared import _pick_es_profile
 
     files = _find_keys_files(system, emulator, rom)
     if not files:
