@@ -12,7 +12,11 @@ declare -A DESKTOP_LABELS=(
 
 declare -A DESKTOP_PACKAGES=(
     [lxqt]="lxqt-core"
-    [plasma]="kde-plasma-desktop"
+    # kde-plasma-desktop doesn't pull in plasma-pa or plasma-nm — without them
+    # the Sound and Wi-Fi & Internet KCMs fail to load ("Could not resolve
+    # 'qt_plugin_instance' function") even though pipewire-pulse and
+    # NetworkManager (base-common.txt) are already providing the backend.
+    [plasma]="kde-plasma-desktop plasma-pa plasma-nm"
     [xfce]="xfce4"
     [gnome]="gnome-core"
     [mate]="mate-desktop-environment"
