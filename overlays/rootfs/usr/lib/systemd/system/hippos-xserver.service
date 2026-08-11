@@ -1,6 +1,6 @@
 [Unit]
 Description=HippOS Persistent X Server
-After=local-fs.target systemd-user-sessions.service udev.target
+After=local-fs.target systemd-user-sessions.service udev.target plymouth-quit-wait.service
 Conflicts=getty@tty7.service
 
 [Service]
