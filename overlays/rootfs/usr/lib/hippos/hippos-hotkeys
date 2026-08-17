@@ -313,12 +313,27 @@ def send_mouse_reset(uinput: evdev.UInput) -> None:
 # Device state
 # ---------------------------------------------------------------------------
 
+def is_pure_keyboard(caps: dict[int, list[int]]) -> bool:
+    """True for devices safe to grab exclusively: our own uinput (see
+    make_uinput) only declares EV_KEY (KEY_* range) and EV_REL (X/Y only) —
+    real keyboards and keyboard-emulating arcade encoders (IPAC/JAMMA) match
+    that exactly. Mice, gamepads, and combo devices carry capabilities
+    (scroll wheel, extra buttons, analog axes) our uinput can't reproduce;
+    grabbing one would silently drop whatever it can't replicate.
+    """
+    if ecodes.EV_ABS in caps or ecodes.EV_REL in caps:
+        return False
+    keys = set(caps.get(ecodes.EV_KEY, []))
+    return not any(c >= ecodes.BTN_GAMEPAD for c in keys)
+
 @dataclass(slots=True)
 class DeviceState:
     device:     evdev.InputDevice
     button_map: dict[int, str]  # evdev code → logical name (gamepads)
     action_map: dict[int, str]  # evdev code → action name (all devices)
+    grabbed:    bool = False
     pressed:    set[str] = field(default_factory=set)
+    consumed_keys: set[int] = field(default_factory=set)  # codes currently substituted, for repeat/up tracking
 
 # ---------------------------------------------------------------------------
 # Daemon
@@ -375,10 +390,13 @@ class HotkeyDaemon:
             return self.common_keys.get(action)
         return None
 
-    def execute_action(self, action: str, begin: bool) -> None:
+    def execute_action(self, action: str, begin: bool) -> bool:
+        """Returns True if this action substituted something for the
+        triggering key — the caller uses that to decide whether to
+        passthrough the raw key on a grabbed device."""
         target = self._resolve_action(action)
         if target is None:
-            return
+            return False
         # Reset cursor on key-DOWN for key targets, on key-UP for command targets.
         if action == 'exit':
             if isinstance(target, str) and not begin:
@@ -394,6 +412,7 @@ class HotkeyDaemon:
             # key(s) — send down on press, up on release
             log(f'key {action} {"dn" if begin else "up"}')
             send_keys(self.uinput, target, begin)
+        return True
 
     def execute_combo_target(self, target: str | list[str]) -> None:
         """Execute the target of a gamepad combo (synthetic key or action)."""
@@ -461,10 +480,18 @@ class HotkeyDaemon:
         if not action_map:
             action_map = dict(self.default_map)
 
-        self.devices[path] = DeviceState(device, button_map, action_map)
+        grabbed = False
+        if is_pure_keyboard(caps):
+            try:
+                device.grab()
+                grabbed = True
+            except OSError as exc:
+                log(f'could not grab {path} {device.name}: {exc} — hotkeys will not suppress raw passthrough here')
+
+        self.devices[path] = DeviceState(device, button_map, action_map, grabbed=grabbed)
         self.fd_to_path[device.fileno()] = path
         self.poll.register(device, select.POLLIN)
-        log(f'listening {path} {device.name}')
+        log(f'listening {path} {device.name}{" (grabbed)" if grabbed else ""}')
 
     def _remove_device(self, path: str) -> None:
         state = self.devices.pop(path, None)
@@ -503,6 +530,16 @@ class HotkeyDaemon:
         elif event.value == 0:
             state.pressed.difference_update(names)
 
+    def _passthrough(self, event: evdev.InputEvent) -> None:
+        """Forward a raw event from a grabbed device unchanged. Only called
+        for EV_KEY on pure-keyboard devices — exactly what our uinput's
+        declared capabilities (see make_uinput) can reproduce."""
+        try:
+            self.uinput.write(event.type, event.code, event.value)
+            self.uinput.syn()
+        except OSError:
+            pass
+
     def _handle_device(self, path: str) -> None:
         state = self.devices.get(path)
         if state is None:
@@ -517,8 +554,26 @@ class HotkeyDaemon:
                 # Select+Start) at the same time.
                 if event.code in state.button_map:
                     self._handle_controller_button(state, event)
+
                 if event.code in state.action_map and event.value in (0, 1):
-                    self.execute_action(state.action_map[event.code], event.value == 1)
+                    consumed = self.execute_action(state.action_map[event.code], event.value == 1)
+                    if consumed:
+                        if event.value == 1:
+                            state.consumed_keys.add(event.code)
+                        else:
+                            state.consumed_keys.discard(event.code)
+                        continue  # substituted — don't also deliver the raw key
+
+                if event.code in state.consumed_keys:
+                    # autorepeat (or a release whose action didn't resolve
+                    # this time) for a key we substituted on press — keep
+                    # suppressing it instead of leaking a raw repeat/release.
+                    if event.value == 0:
+                        state.consumed_keys.discard(event.code)
+                    continue
+
+                if state.grabbed:
+                    self._passthrough(event)
         except OSError:
             self._remove_device(path)
 

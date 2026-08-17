@@ -7,3 +7,5 @@ case "$1" in prereqs) prereqs; exit 0;; esac
 
 manual_add_modules overlay
 copy_exec /sbin/blkid
+copy_exec /bin/chown
+copy_exec /bin/chmod
