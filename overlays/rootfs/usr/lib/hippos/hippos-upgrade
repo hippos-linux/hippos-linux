@@ -465,25 +465,103 @@ def os_prober_entries():
     return entries
 
 
+def _grub_menuentry(label, subvol, kernel, initrd, uuid, cmdline, entry_id=None):
+    id_option = f' --id={entry_id}' if entry_id else ''
+    return [
+        f'menuentry "{label}"{id_option} {{',
+        f'    insmod btrfs',
+        f'    insmod part_gpt',
+        f'    if ! search --no-floppy --set=root --fs-uuid {uuid} ; then',
+        f'        search --no-floppy --set=root --label HippOS',
+        f'    fi',
+        f'    linux /{subvol}/boot/{kernel} {cmdline}',
+        f'    initrd /{subvol}/boot/{initrd}',
+        f'}}',
+        '',
+    ]
+
+
 def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
-    """Regenerate grub.cfg on the EFI partition with entries for each subvol."""
+    """Regenerate grub.cfg on the EFI partition.
+
+    Menu shape mirrors a normal distro grub-mkconfig layout: a single
+    top-level default entry, everything else (the other kernel variant,
+    a verbose entry, a rescue entry, and every rollback deployment) tucked
+    into an "Advanced options" submenu, plus firmware setup and any
+    os-prober entries.
+    """
     extra_args = read_grub_cmdline_args()
-
-    # Build ordered entry list: default first, rest as rollback
-    ordered = [default_subvol] + [s for s in reversed(all_subvols) if s != default_subvol]
-
-    # Menu stays visible with a short timeout on every boot — lets users pick
-    # the other kernel (see /etc/default/grub) or a rollback deployment
-    # without needing to hold Esc. os_prober_entries() below only controls
-    # whether other-OS entries get added, not menu visibility.
+    rollback_subvols = [s for s in reversed(all_subvols) if s != default_subvol]
     other_entries = os_prober_entries()
     default_timeout = "5"
     default_style   = "menu"
 
+    default_variant = default_kernel_variant()
+    variant_order = [default_variant] + [v for v in _KERNEL_VARIANTS if v != default_variant]
+
+    def base_cmdline(subvol, extra=()):
+        return " ".join([
+            f"root=PARTUUID={partuuid}",
+            "rootfstype=btrfs",
+            f"rootflags=subvol={subvol}",
+            "ro",
+            *extra,
+            *extra_args,
+        ])
+
+    def kernel_for(subvol_path, variant, required=False):
+        found = find_kernel_files(subvol_path, variant)
+        if found is None and required:
+            # Standard is always expected to exist; fall back to a
+            # placeholder rather than silently dropping the entry.
+            found = "vmlinuz", "initrd.img"
+        return found
+
+    default_subvol_path = os.path.join(BTRFS_MNT, default_subvol)
+    default_kernel, default_initrd = kernel_for(default_subvol_path, default_variant, required=True)
+
+    # Fallback target for the boot-counter (below), in the priority order a
+    # user would want: the other kernel variant on this same deployment
+    # first, then the newest rollback deployment's default variant, and
+    # finally (single-deployment, single-kernel installs) the default entry
+    # itself, which always exists — so this is never None.
+    fallback_id = "hippos_fallback"
+    fallback = next(
+        (
+            (default_subvol, v) for v in variant_order[1:]
+            if kernel_for(default_subvol_path, v)
+        ),
+        None,
+    ) or next(
+        (
+            (subvol, v)
+            for subvol in rollback_subvols[:1]
+            for v in variant_order
+            if kernel_for(os.path.join(BTRFS_MNT, subvol), v)
+        ),
+        (default_subvol, default_variant),
+    )
+
     # Boot-counter logic: grubenv holds boot_counter (set to 3 on each update).
-    # Each failed boot decrements it; when it hits 0 the rollback entry is shown.
+    # Each failed boot decrements it; when it hits 0 the fallback entry is
+    # selected by id (see fallback_id above) instead of a positional index,
+    # so it keeps pointing at the right entry regardless of submenu nesting.
     # A successful boot clears it via hippos-boot-success.service.
-    boot_counter_block = [
+    lines = [
+        "insmod all_video",
+        "insmod gfxterm",
+        "insmod png",
+        "insmod jpeg",
+        # auto, not a hardcoded 1080p mode — this must stay safe for CRT
+        # rigs going through a VGA-DAC (see kb/guidance/crt-support-plan.md),
+        # which advertise a different GOP mode list than a normal monitor
+        # and boot long before that doc's kernel/DRM-level EDID logic runs.
+        "set gfxmode=auto",
+        "terminal_output gfxterm",
+        "if [ -f /grub/themes/hippos/theme.txt ] ; then",
+        "    set theme=/grub/themes/hippos/theme.txt",
+        "fi",
+        "",
         "load_env",
         "set default=0",
         f"set timeout={default_timeout}",
@@ -491,7 +569,7 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
         "",
         "if [ \"${boot_counter}\" ] ; then",
         "    if [ \"${boot_counter}\" = \"0\" ] ; then",
-        "        set default=1",
+        f"        set default=\"{fallback_id}\"",
         "        set timeout=10",
         "        set timeout_style=menu",
         "        set boot_counter=",
@@ -504,55 +582,81 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
         "",
     ]
 
-    # Default variant's entry is emitted first for the default subvol so it
-    # lands at "set default=0" above; the other installed variant (if any)
-    # follows as an explicitly selectable alternate — this is what actually
-    # makes system.kernel / hippos-select-kernel's choice, and manual
-    # LTS/standard selection, reach the menu (see hippos-select-kernel).
-    default_variant = default_kernel_variant()
-    variant_order = [default_variant] + [v for v in _KERNEL_VARIANTS if v != default_variant]
+    def id_if_fallback(subvol, variant):
+        return fallback_id if (subvol, variant) == fallback else None
 
-    lines = boot_counter_block
-    for subvol in ordered:
+    lines += _grub_menuentry(
+        "HippOS", default_subvol, default_kernel, default_initrd, uuid,
+        base_cmdline(default_subvol, ("quiet", "splash")),
+        entry_id=id_if_fallback(default_subvol, default_variant),
+    )
+
+    advanced = []
+    for variant in variant_order[1:]:
+        found = kernel_for(default_subvol_path, variant)
+        if found is None:
+            continue
+        kernel, initrd = found
+        advanced += _grub_menuentry(
+            f"HippOS ({variant.upper() if variant == 'lts' else variant})",
+            default_subvol, kernel, initrd, uuid,
+            base_cmdline(default_subvol, ("quiet", "splash")),
+            entry_id=id_if_fallback(default_subvol, variant),
+        )
+
+    for variant in variant_order:
+        found = kernel_for(default_subvol_path, variant)
+        if found is None:
+            continue
+        kernel, initrd = found
+        # Boots the normal graphical.target chain (unlike the rescue entry
+        # below) so hangs in hippos-* units between sysinit.target and
+        # basic.target still reproduce, just with full unit status visible.
+        suffix = " (LTS, verbose)" if variant == "lts" else " (verbose)"
+        advanced += _grub_menuentry(
+            f"HippOS{suffix}", default_subvol, kernel, initrd, uuid,
+            base_cmdline(default_subvol, ("systemd.log_level=debug",)),
+        )
+
+    for variant in variant_order:
+        found = kernel_for(default_subvol_path, variant)
+        if found is None:
+            continue
+        kernel, initrd = found
+        suffix = " (LTS, debug)" if variant == "lts" else " (debug)"
+        advanced += _grub_menuentry(
+            f"HippOS{suffix}", default_subvol, kernel, initrd, uuid,
+            base_cmdline(default_subvol, ("systemd.log_level=debug", "systemd.unit=rescue.target")),
+        )
+
+    for subvol in rollback_subvols:
         subvol_path = os.path.join(BTRFS_MNT, subvol)
         ver = subvol.replace("@rootfs-", "")
-        base_label = f"HippOS {ver}" if subvol != "@rootfs" else "HippOS"
-        if subvol != default_subvol:
-            base_label += " (rollback)"
-
+        base_label = f"HippOS {ver} (rollback)"
         for variant in variant_order:
-            found = find_kernel_files(subvol_path, variant)
+            found = kernel_for(subvol_path, variant)
             if found is None:
-                if variant == "standard" and variant == variant_order[0]:
-                    # Standard is always expected to exist; fall back to a
-                    # placeholder rather than silently dropping the entry.
-                    found = "vmlinuz", "initrd.img"
-                else:
-                    continue
+                continue
             kernel, initrd = found
             label = f"{base_label} (LTS)" if variant == "lts" else base_label
-            cmdline_parts = [
-                f"root=PARTUUID={partuuid}",
-                "rootfstype=btrfs",
-                f"rootflags=subvol={subvol}",
-                "ro",
-                "quiet",
-                "splash",
-                *extra_args,
-            ]
-            cmdline = " ".join(cmdline_parts)
-            lines += [
-                f'menuentry "{label}" {{',
-                f'    insmod btrfs',
-                f'    insmod part_gpt',
-                f'    if ! search --no-floppy --set=root --fs-uuid {uuid} ; then',
-                f'        search --no-floppy --set=root --label HippOS',
-                f'    fi',
-                f'    linux /{subvol}/boot/{kernel} {cmdline}',
-                f'    initrd /{subvol}/boot/{initrd}',
-                f'}}',
-                '',
-            ]
+            advanced += _grub_menuentry(
+                label, subvol, kernel, initrd, uuid,
+                base_cmdline(subvol, ("quiet", "splash")),
+                entry_id=id_if_fallback(subvol, variant),
+            )
+
+    lines += [
+        'submenu "Advanced options for HippOS" {',
+        *(f"    {l}" if l else "" for l in advanced),
+        '}',
+        '',
+        'if fwsetup --is-supported ; then',
+        '    menuentry "UEFI Firmware Settings" {',
+        '        fwsetup',
+        '    }',
+        'fi',
+        '',
+    ]
 
     if other_entries:
         lines += other_entries
@@ -938,6 +1042,24 @@ def cmd_update_kernel():
                 ["chroot", subvol_path, "dpkg", "-i", "--force-confold", deb_in_chroot],
                 check=True,
             )
+            # Don't trust the kernel package's own postinst hooks to have run
+            # depmod/update-initramfs correctly inside this bind-mounted chroot —
+            # a machine that hit this silently boots with modules.dep missing or
+            # stale for the new kernel, which surfaces as every loadable
+            # filesystem/module failing to resolve ("unknown filesystem type")
+            # despite /lib/modules/<kver> itself existing. Regenerate explicitly.
+            log("Regenerating module dependencies and initramfs...")
+            subprocess.run(["chroot", subvol_path, "depmod", "-a", remote], check=True)
+            # -c (create) fails if the postinst hook already made one; -u (update)
+            # fails if it didn't. Try create first since that's the common case,
+            # fall back to update rather than guessing which already ran.
+            if subprocess.run(
+                ["chroot", subvol_path, "update-initramfs", "-c", "-k", remote],
+            ).returncode != 0:
+                subprocess.run(
+                    ["chroot", subvol_path, "update-initramfs", "-u", "-k", remote],
+                    check=True,
+                )
         finally:
             for fs in reversed(("proc", "sys", "dev/pts", "dev", "run")):
                 subprocess.run(

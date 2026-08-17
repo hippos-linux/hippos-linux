@@ -18,8 +18,14 @@ GRUB_DEFAULT=0
 GRUB_TIMEOUT=5
 GRUB_TIMEOUT_STYLE=menu
 GRUB_DISTRIBUTOR="HippOS"
+# default_timeout_start_sec/default_device_timeout_sec bound below (default
+# 90s) turn a silently-stuck unit into a visible [FAILED] within 15s instead
+# of a boot that hangs forever with no error — several beta reports (AMD
+# APU hardware, ACPI firmware bugs absent from our QEMU test image) freeze
+# solid between sysinit.target and basic.target with no failing unit ever
+# printed, which this can't fix but at least surfaces.
 GRUB_CMDLINE_LINUX_DEFAULT="quiet loglevel=3"
-GRUB_CMDLINE_LINUX="rootfstype=btrfs rw console=tty0 console=ttyS0,115200 vt.global_cursor_default=0"
+GRUB_CMDLINE_LINUX="rootfstype=btrfs rw console=tty0 console=ttyS0,115200 vt.global_cursor_default=0 systemd.default_timeout_start_sec=15s systemd.default_device_timeout_sec=15s"
 GRUB_DISABLE_OS_PROBER=false
 GRUB_DISABLE_SUBMENU=y
 GRUB_TERMINAL="console serial"
