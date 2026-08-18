@@ -6,7 +6,7 @@
 set -euo pipefail
 
 LOG="/var/log/hippos-gpu.log"
-mkdir -p /var/log /var/tmp /run/hippos/modprobe
+mkdir -p /var/log /var/tmp /run/hippos/modprobe /var/lib/hippos
 
 log() { printf '[hippos-gpu] %s\n' "$*" | tee -a "${LOG}"; }
 
@@ -15,6 +15,54 @@ get_conf() {
 }
 
 # ── NVIDIA driver selection ────────────────────────────────────────────────
+#
+# Newest-first fallback chain: nvidia-open (installed at build time from
+# NVIDIA's own repo — Turing/RTX 20xx and newer only) -> legacy .run
+# installers fetched on demand, newest branch first (470 -> 390 -> 340,
+# see hippos-nvidia-legacy-resolve for exact versions/checksums) ->
+# nouveau. Debian doesn't package any of the legacy branches for Trixie —
+# confirmed against packages.debian.org, not assumed — so they can't be
+# apt-installed; NVIDIA's own installers are the only route and are the
+# same distribution pattern already used for nvidia-open.
+#
+# The legacy install/DKMS-build path needs network and can take minutes,
+# so it never runs inline here (see boot-flow.md: never block boot on
+# internet access). This function only ever does a fast, offline probe of
+# whatever's already installed/cached; resolving a not-yet-tried legacy
+# tier happens in hippos-nvidia-legacy-resolve.service, kicked off async,
+# and takes effect on the next boot once it writes NVIDIA_TIER_STATE.
+
+NVIDIA_TIER_STATE="/var/lib/hippos/nvidia-driver-tier"
+
+nvidia_load_and_probe() {
+    modprobe nvidia         2>>"${LOG}" || true
+    modprobe nvidia-modeset 2>>"${LOG}" || true
+    modprobe nvidia-drm     2>>"${LOG}" || true
+    modprobe nvidia-uvm     2>>"${LOG}" || true
+    # modprobe returns as soon as the module is in the kernel, but udev
+    # creates /dev/nvidia* asynchronously, and a module that doesn't
+    # actually support this card loads fine without ever creating it —
+    # that's how an unsupported tier is detected, not a modprobe failure.
+    local _i
+    for _i in $(seq 1 40); do
+        [[ -c /dev/nvidia0 ]] && return 0
+        sleep 0.25
+    done
+    return 1
+}
+
+nvidia_use_proprietary() {
+    printf 'blacklist nouveau\noptions nouveau modeset=0\n' \
+        > /etc/modprobe.d/hippos-nvidia-blacklist.conf
+    printf 'options nvidia-drm modeset=1\n' \
+        > /etc/modprobe.d/hippos-nvidia-drm.conf
+}
+
+nvidia_use_nouveau() {
+    rm -f /etc/modprobe.d/hippos-nvidia-blacklist.conf \
+          /etc/modprobe.d/hippos-nvidia-drm.conf
+    modprobe nouveau 2>>"${LOG}" || true
+}
 
 nvidia_init() {
     local mode
@@ -39,45 +87,41 @@ nvidia_init() {
             return
         fi
         log "NVIDIA GPU at: ${nvidia_pci}"
-        mode="current"
-        if command -v nvidia-detect >/dev/null 2>&1; then
-            local detected
-            detected="$(nvidia-detect 2>/dev/null || true)"
-            if printf '%s' "${detected}" | grep -q "legacy-470"; then
-                mode="legacy470"
-            elif printf '%s' "${detected}" | grep -q "nouveau"; then
+
+        local resolved=""
+        [[ -f "${NVIDIA_TIER_STATE}" ]] && resolved="$(cat "${NVIDIA_TIER_STATE}" 2>/dev/null || true)"
+
+        if [[ -n "${resolved}" ]]; then
+            mode="${resolved}"
+            log "Using previously resolved NVIDIA tier: ${mode}"
+        else
+            nvidia_use_proprietary
+            if nvidia_load_and_probe; then
+                log "nvidia-open works for this GPU"
+                echo "open" > "${NVIDIA_TIER_STATE}"
+                mode="open"
+            else
+                log "nvidia-open did not bind ${nvidia_pci} — using nouveau for this boot, resolving a legacy driver in the background"
                 mode="nouveau"
+                # Deliberately not cached: hippos-nvidia-legacy-resolve
+                # writes NVIDIA_TIER_STATE itself once it finds a working
+                # tier, or gives up and writes 'nouveau' — either way the
+                # next boot reads that instead of probing 'open' again.
+                systemctl start --no-block hippos-nvidia-legacy-resolve.service 2>>"${LOG}" || true
             fi
-            log "nvidia-detect recommends: ${mode}"
         fi
     fi
 
     log "NVIDIA driver mode: ${mode}"
     case "${mode}" in
-        current|open|legacy470)
-            printf 'blacklist nouveau\noptions nouveau modeset=0\n' \
-                > /etc/modprobe.d/hippos-nvidia-blacklist.conf
-            printf 'options nvidia-drm modeset=1\n' \
-                > /etc/modprobe.d/hippos-nvidia-drm.conf
-            modprobe nvidia         2>>"${LOG}" || true
-            modprobe nvidia-modeset 2>>"${LOG}" || true
-            modprobe nvidia-drm     2>>"${LOG}" || true
-            modprobe nvidia-uvm     2>>"${LOG}" || true
-            # modprobe returns as soon as the module is in the kernel, but udev
-            # creates /dev/nvidia* asynchronously. Wait for the device node so
-            # hippos-xserver doesn't start before Xorg can open /dev/nvidia0.
-            local _i
-            for _i in $(seq 1 40); do
-                [[ -c /dev/nvidia0 ]] && break
-                sleep 0.25
-            done
-            [[ -c /dev/nvidia0 ]] && log "NVIDIA device nodes ready" \
+        open|current|470|legacy470|390|340)
+            nvidia_use_proprietary
+            nvidia_load_and_probe \
+                && log "NVIDIA device nodes ready" \
                 || log "WARNING: /dev/nvidia0 not found after 10s — Xorg may retry"
             ;;
         nouveau)
-            rm -f /etc/modprobe.d/hippos-nvidia-blacklist.conf \
-                  /etc/modprobe.d/hippos-nvidia-drm.conf
-            modprobe nouveau 2>>"${LOG}" || true
+            nvidia_use_nouveau
             ;;
         *)
             log "Unknown mode '${mode}' — skipping"
