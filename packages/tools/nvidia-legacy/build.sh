@@ -64,6 +64,23 @@ for entry in "${NVIDIA_LEGACY_TIERS[@]}"; do
     chmod +x "${RUN_CACHE}"
     "${RUN_CACHE}" --extract-only --target "${EXTRACT_DIR}"
 
+    # kernel/Kbuild accumulates every module's -I/-D flags into EXTRA_CFLAGS
+    # (used since pre-2.6.24) and its own comment claims "newer kernels
+    # append $(EXTRA_CFLAGS) to ccflags-y for compatibility" — that
+    # compat shim no longer exists anywhere in current mainline kbuild, so
+    # EXTRA_CFLAGS silently never reaches the real per-object compile.
+    # Confirmed by direct iteration: this alone was the root cause of three
+    # separate-looking failures — nvmisc.h not found (needs
+    # -I$(src)/common/inc), stdarg.h not found (nv_stdarg.h's correct
+    # <linux/stdarg.h> path is gated behind -DNV_KERNEL_INTERFACE_LAYER),
+    # and bogus uint32_t/stdint.h errors (nv-ioctl-numa.h's correct
+    # <linux/types.h> path is gated behind the same macro). Forwarding
+    # EXTRA_CFLAGS into ccflags-y (kbuild's actual always-applied
+    # mechanism) fixes all three at once, and is the fix NVIDIA's own
+    # comment already describes as the intended behavior.
+    sed -i '/^EXTRA_CFLAGS += -DNV_KERNEL_INTERFACE_LAYER$/a\
+ccflags-y += $(EXTRA_CFLAGS)' "${EXTRACT_DIR}/kernel/Kbuild"
+
     if [[ "${_sgpu_json_installed}" -eq 0 && -f "${EXTRACT_DIR}/supported-gpus/supported-gpus.json" ]]; then
         # Cumulative device database bundled in every NVIDIA .run installer
         # (RIVA TNT through RTX 50-series in the copy this was verified
@@ -141,14 +158,14 @@ for entry in "${NVIDIA_LEGACY_TIERS[@]}"; do
         # #include "conftest.h" fails outright. Confirmed by direct
         # iteration against a real build.
         #
-        # nvmisc.h (kernel/common/inc/nvmisc.h) was unresolved under the
-        # previous chroot-based build (nvidia.Kbuild's own
-        # `EXTRA_CFLAGS += -I$(src)/common/inc` didn't reach the compile
-        # there) — not yet re-tested against this build image, which uses
-        # its own gcc directly instead of chrooting into the target rootfs.
-        # If it recurs here, tiers needing it fail this step and fall back
-        # to nouveau at runtime, same safe degradation as before, not a
-        # regression.
+        # See the ccflags-y sed patch above for the EXTRA_CFLAGS fix — this
+        # single driver source tree still isn't guaranteed to build clean
+        # against every kernel HippOS ships (470.256.02 predates some 2025+
+        # kernel API churn, e.g. timespec_to_ns/efi_enabled signature
+        # changes) — that's real upstream driver/kernel version drift, not
+        # a build-plumbing bug, and the per-release WARNING below already
+        # degrades that tier to nouveau gracefully rather than failing the
+        # whole build.
         if ARCH=x86_64 make -C "${EXTRACT_DIR}/kernel" \
                 SYSSRC="${KERNEL_SOURCE_DIR}" \
                 SYSOUT="${KERNEL_SOURCE_DIR}" \
