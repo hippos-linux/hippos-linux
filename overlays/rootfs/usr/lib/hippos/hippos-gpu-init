@@ -6,7 +6,7 @@
 set -euo pipefail
 
 LOG="/var/log/hippos-gpu.log"
-mkdir -p /var/log /var/tmp /run/hippos/modprobe
+mkdir -p /var/log /var/tmp /run/hippos/modprobe /var/lib/hippos
 
 log() { printf '[hippos-gpu] %s\n' "$*" | tee -a "${LOG}"; }
 
@@ -15,6 +15,173 @@ get_conf() {
 }
 
 # ── NVIDIA driver selection ────────────────────────────────────────────────
+#
+# nvidia-open (installed at build time from NVIDIA's own repo) only binds
+# Turing/RTX 20xx and newer. Legacy tiers 470/390/340 are baked into every
+# image too (see configure-rootfs.sh) — Debian doesn't package any legacy
+# branch for Trixie at all (confirmed against packages.debian.org, not
+# assumed), so they come from NVIDIA's own official .run installers, same
+# distribution channel already used for nvidia-open.
+#
+# All four coexist on disk without conflict because every userspace file
+# keeps its full version suffix (libGLX_nvidia.so.470.256.02 vs .390.157
+# vs .340.108 vs nvidia-open's own version never collide) and every legacy
+# tier's kernel module was renamed at build time before it could overwrite
+# nvidia-open's or another tier's. The only thing that actually needs
+# switching is a handful of *unversioned* symlinks that the real consumers
+# (libglvnd, Xorg, depmod) look up by exact name — this function is the
+# only thing that ever touches those, via NVIDIA_ACTIVE_DIR (tmpfs, so
+# it's naturally reset every boot, no cleanup step needed).
+
+NVIDIA_ACTIVE_DIR="/run/hippos/nvidia-active"
+NVIDIA_XORG_OUTPUTCLASS="/etc/X11/xorg.conf.d/nvidia-drm-outputclass.conf"
+NVIDIA_XORG_OUTPUTCLASS_OPEN_BACKUP="/usr/share/nvidia/nvidia-drm-outputclass.conf.orig"
+
+# Only the files something actually looks up by a fixed soname need
+# switching. libnvidia-{glcore,eglcore,glsi,tls}.so have no unversioned
+# symlink at all in the real Debian nvidia-open install (checked directly
+# against the built rootfs, not assumed) — NVIDIA's own libraries dlopen
+# them by the exact version string matching whichever libGLX_nvidia.so.0/
+# libEGL_nvidia.so.0 loaded them, so they resolve correctly on their own
+# as long as those two are pointed at the right tier; every tier already
+# installs them under their real versioned name, nothing else to do.
+#
+# Xorg's driver module is looked up by filename, not soname, so it isn't
+# listed here either — nvidia_switch_tier handles it (and the OutputClass
+# conf) directly.
+NVIDIA_ACTIVE_LIBS=(
+    libGLX_nvidia.so.0
+    libEGL_nvidia.so.0
+    libGLESv1_CM_nvidia.so.1
+    libGLESv2_nvidia.so.2
+    libnvidia-cfg.so.1
+    libnvidia-ml.so.1
+    libnvidia-allocator.so.1
+)
+
+nvidia_switch_tier() {
+    # "" = nvidia-open (default apt install, its own dpkg-owned files are
+    # already correct — nothing to relink). Non-empty = a legacy tier
+    # ("470"/"390"/"340"); $2 is that tier's exact driver version string.
+    local tier="$1" version="$2"
+
+    rm -rf "${NVIDIA_ACTIVE_DIR}"
+    mkdir -p "${NVIDIA_ACTIVE_DIR}"
+
+    if [[ -z "${tier}" ]]; then
+        # The real path for each of these is itself the redirect symlink
+        # into NVIDIA_ACTIVE_DIR (see configure-rootfs.sh) — resolving
+        # against it here would just symlink into itself. Find nvidia-
+        # open's actual versioned file by globbing instead (excludes the
+        # .0/.1/.2 soname redirect and anything already inside the active
+        # dir); there's only ever one nvidia-open install, no ambiguity.
+        for name in "${NVIDIA_ACTIVE_LIBS[@]}"; do
+            local base="${name%.so*}"
+            local real
+            real="$(compgen -G "/usr/lib/x86_64-linux-gnu/${base}.so.*" \
+                | grep -vE '\.so\.[0-9]+$' | head -1)" || true
+            [[ -n "${real}" ]] && ln -sf "${real}" "${NVIDIA_ACTIVE_DIR}/${name}"
+        done
+        local vdpau_real
+        vdpau_real="$(compgen -G "/usr/lib/x86_64-linux-gnu/vdpau/libvdpau_nvidia.so.*" \
+            | grep -vE '\.so\.[0-9]+$' | head -1)" || true
+        [[ -n "${vdpau_real}" ]] && { mkdir -p "${NVIDIA_ACTIVE_DIR}/vdpau"; \
+            ln -sf "${vdpau_real}" "${NVIDIA_ACTIVE_DIR}/vdpau/libvdpau_nvidia.so.1"; }
+
+        [[ -f "${NVIDIA_XORG_OUTPUTCLASS_OPEN_BACKUP}" ]] \
+            && cp "${NVIDIA_XORG_OUTPUTCLASS_OPEN_BACKUP}" "${NVIDIA_XORG_OUTPUTCLASS}"
+        local dkms_dir="/lib/modules/$(uname -r)/updates/dkms"
+        for mod in nvidia nvidia-modeset nvidia-drm nvidia-uvm; do
+            rm -f "/lib/modules/$(uname -r)/updates/${mod}.ko"
+            for f in "${dkms_dir}/${mod}.ko.hippos-disabled" "${dkms_dir}/${mod}.ko.xz.hippos-disabled" "${dkms_dir}/${mod}.ko.zst.hippos-disabled"; do
+                [[ -f "${f}" ]] && mv "${f}" "${f%.hippos-disabled}"
+            done
+        done
+        depmod -a 2>>"${LOG}" || true
+        return 0
+    fi
+
+    if [[ -z "${version}" ]]; then
+        log "No version recorded for legacy tier ${tier} (build didn't produce it?) — cannot use it"
+        return 1
+    fi
+
+    # Kernel modules are stored per kernel release (standard and lts get
+    # built separately at image-build time — they aren't ABI-compatible
+    # with each other) — this boot's uname -r picks the matching set.
+    local ko_dir="/usr/share/nvidia/modules/$(uname -r)"
+    _nvidia_legacy_ko() {
+        case "$1" in
+            nvidia)         printf '%s' "${ko_dir}/nvidia${tier}-legacy.ko" ;;
+            nvidia-modeset) printf '%s' "${ko_dir}/nvidia${tier}-modeset-legacy.ko" ;;
+            nvidia-drm)     printf '%s' "${ko_dir}/nvidia${tier}-drm-legacy.ko" ;;
+            nvidia-uvm)     printf '%s' "${ko_dir}/nvidia${tier}-uvm-legacy.ko" ;;
+        esac
+    }
+    for mod in nvidia nvidia-modeset nvidia-drm nvidia-uvm; do
+        [[ -f "$(_nvidia_legacy_ko "${mod}")" ]] \
+            || { log "Missing $(_nvidia_legacy_ko "${mod}") — tier ${tier} not built for $(uname -r)"; return 1; }
+    done
+
+    for name in "${NVIDIA_ACTIVE_LIBS[@]}"; do
+        local base="${name%.so*}"
+        local versioned="/usr/lib/x86_64-linux-gnu/${base}.so.${version}"
+        [[ -f "${versioned}" ]] && ln -sf "${versioned}" "${NVIDIA_ACTIVE_DIR}/${name}"
+    done
+    local vdpau_versioned="/usr/lib/x86_64-linux-gnu/vdpau/libvdpau_nvidia.so.${version}"
+    [[ -f "${vdpau_versioned}" ]] && { mkdir -p "${NVIDIA_ACTIVE_DIR}/vdpau"; \
+        ln -sf "${vdpau_versioned}" "${NVIDIA_ACTIVE_DIR}/vdpau/libvdpau_nvidia.so.1"; }
+
+    local drv="/usr/lib/xorg/modules/drivers/nvidia${tier}_legacy_drv.so"
+    if [[ -f "${drv}" ]]; then
+        sed "s/nvidia_drv\\.so/nvidia${tier}_legacy_drv.so/; s/\"nvidia\"/\"nvidia${tier}_legacy\"/" \
+            "${NVIDIA_XORG_OUTPUTCLASS_OPEN_BACKUP}" > "${NVIDIA_XORG_OUTPUTCLASS}" 2>>"${LOG}" \
+            || log "WARNING: could not write legacy Xorg OutputClass conf for tier ${tier}"
+    fi
+
+    # nvidia-open's own DKMS-built module is still sitting in
+    # updates/dkms/ regardless of tier — depmod has no defined tie-
+    # breaker for two files both declaring module name "nvidia", so it
+    # has to be put beyond depmod's reach, not just outranked, while a
+    # legacy tier is active. Suffix rather than delete: trivial to put
+    # back, and an interrupted switch fails safe (module missing, caught
+    # by nvidia_load_and_probe) instead of silently loading the wrong one.
+    local dkms_dir="/lib/modules/$(uname -r)/updates/dkms"
+    for mod in nvidia nvidia-modeset nvidia-drm nvidia-uvm; do
+        for f in "${dkms_dir}/${mod}.ko" "${dkms_dir}/${mod}.ko.xz" "${dkms_dir}/${mod}.ko.zst"; do
+            [[ -f "${f}" ]] && mv "${f}" "${f}.hippos-disabled"
+        done
+        ln -sf "$(_nvidia_legacy_ko "${mod}")" "/lib/modules/$(uname -r)/updates/${mod}.ko"
+    done
+    unset -f _nvidia_legacy_ko
+    depmod -a 2>>"${LOG}" || true
+}
+
+nvidia_load_and_probe() {
+    modprobe nvidia         2>>"${LOG}" || true
+    modprobe nvidia-modeset 2>>"${LOG}" || true
+    modprobe nvidia-drm     2>>"${LOG}" || true
+    modprobe nvidia-uvm     2>>"${LOG}" || true
+    local _i
+    for _i in $(seq 1 40); do
+        [[ -c /dev/nvidia0 ]] && return 0
+        sleep 0.25
+    done
+    return 1
+}
+
+nvidia_use_proprietary() {
+    printf 'blacklist nouveau\noptions nouveau modeset=0\n' \
+        > /etc/modprobe.d/hippos-nvidia-blacklist.conf
+    printf 'options nvidia-drm modeset=1\n' \
+        > /etc/modprobe.d/hippos-nvidia-drm.conf
+}
+
+nvidia_use_nouveau() {
+    rm -f /etc/modprobe.d/hippos-nvidia-blacklist.conf \
+          /etc/modprobe.d/hippos-nvidia-drm.conf
+    modprobe nouveau 2>>"${LOG}" || true
+}
 
 nvidia_init() {
     local mode
@@ -30,54 +197,66 @@ nvidia_init() {
         return
     fi
 
+    local nvidia_pci=""
     if [[ "${mode}" == "auto" ]]; then
-        local nvidia_pci
         nvidia_pci="$(lspci -mn 2>/dev/null \
-            | awk '{ gsub("\"",""); if (($2~/030[0-2]/) && ($3=="10de"||$3=="12d2")) print $1 }')"
+            | awk '{ gsub("\"",""); if (($2~/030[0-2]/) && ($3=="10de"||$3=="12d2")) print $1 }' | head -1)"
         if [[ -z "${nvidia_pci}" ]]; then
             log "No NVIDIA GPU detected"
             return
         fi
         log "NVIDIA GPU at: ${nvidia_pci}"
-        mode="current"
-        if command -v nvidia-detect >/dev/null 2>&1; then
-            local detected
-            detected="$(nvidia-detect 2>/dev/null || true)"
-            if printf '%s' "${detected}" | grep -q "legacy-470"; then
-                mode="legacy470"
-            elif printf '%s' "${detected}" | grep -q "nouveau"; then
-                mode="nouveau"
-            fi
-            log "nvidia-detect recommends: ${mode}"
+
+        # Exact PCI-ID lookup against NVIDIA's own device database (ships
+        # in every .run installer — see configure-rootfs.sh) rather than
+        # loading a driver and seeing what happens: precise, instant, and
+        # never risks leaving a half-working wrong-tier module loaded.
+        mode="open"
+        if [[ -f /usr/share/nvidia/supported-gpus.json ]] && command -v jq >/dev/null 2>&1; then
+            local pcidevid legacybranch
+            pcidevid="0x$(lspci -mn -s "${nvidia_pci}" 2>/dev/null | awk '{ gsub("\"",""); print toupper($4) }')" || true
+            legacybranch="$(jq -r --arg id "${pcidevid}" \
+                '[.chips[] | select(.devid == $id)][0].legacybranch // "null"' \
+                /usr/share/nvidia/supported-gpus.json 2>/dev/null)" || true
+            log "GPU ${pcidevid} legacy branch: ${legacybranch}"
+            case "${legacybranch}" in
+                470.*) mode="470" ;;
+                390.*) mode="390" ;;
+                340.*) mode="340" ;;
+                null|"") mode="open" ;;
+                # Older than what HippOS ships (304.xx and below) — that
+                # hardware predates the OpenGL/DRM feature floor this OS
+                # targets anyway; nouveau is the honest answer, not a gap.
+                *) mode="nouveau" ;;
+            esac
         fi
     fi
 
     log "NVIDIA driver mode: ${mode}"
     case "${mode}" in
-        current|open|legacy470)
-            printf 'blacklist nouveau\noptions nouveau modeset=0\n' \
-                > /etc/modprobe.d/hippos-nvidia-blacklist.conf
-            printf 'options nvidia-drm modeset=1\n' \
-                > /etc/modprobe.d/hippos-nvidia-drm.conf
-            modprobe nvidia         2>>"${LOG}" || true
-            modprobe nvidia-modeset 2>>"${LOG}" || true
-            modprobe nvidia-drm     2>>"${LOG}" || true
-            modprobe nvidia-uvm     2>>"${LOG}" || true
-            # modprobe returns as soon as the module is in the kernel, but udev
-            # creates /dev/nvidia* asynchronously. Wait for the device node so
-            # hippos-xserver doesn't start before Xorg can open /dev/nvidia0.
-            local _i
-            for _i in $(seq 1 40); do
-                [[ -c /dev/nvidia0 ]] && break
-                sleep 0.25
-            done
-            [[ -c /dev/nvidia0 ]] && log "NVIDIA device nodes ready" \
+        open|current)
+            nvidia_use_proprietary
+            nvidia_switch_tier "" ""
+            nvidia_load_and_probe \
+                && log "NVIDIA device nodes ready" \
                 || log "WARNING: /dev/nvidia0 not found after 10s — Xorg may retry"
             ;;
+        470|legacy470|390|340)
+            local tier="${mode#legacy}"
+            local version
+            version="$(cat "/usr/share/nvidia/legacy${tier}.version" 2>/dev/null || true)"
+            nvidia_use_proprietary
+            if nvidia_switch_tier "${tier}" "${version}"; then
+                nvidia_load_and_probe \
+                    && log "NVIDIA device nodes ready (legacy ${tier})" \
+                    || log "WARNING: /dev/nvidia0 not found after 10s — Xorg may retry"
+            else
+                log "Legacy tier ${tier} unavailable — falling back to nouveau"
+                nvidia_use_nouveau
+            fi
+            ;;
         nouveau)
-            rm -f /etc/modprobe.d/hippos-nvidia-blacklist.conf \
-                  /etc/modprobe.d/hippos-nvidia-drm.conf
-            modprobe nouveau 2>>"${LOG}" || true
+            nvidia_use_nouveau
             ;;
         *)
             log "Unknown mode '${mode}' — skipping"
