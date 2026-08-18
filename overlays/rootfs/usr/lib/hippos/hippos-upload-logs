@@ -138,6 +138,16 @@ journalctl -b --no-pager \
     2>/dev/null > "${LOGS}/journal-hippos-services.txt" || true
 echo " done"
 
+echo -n "  Plymouth debug log...   "
+# plymouthd doesn't log its own internal state (DRM calls, quit handshake,
+# theme rendering) to the journal at all — only to this file, and only
+# when Debug=yes is set (see /etc/plymouth/plymouthd.conf). Without it, a
+# plymouth-quit-wait hang shows up in journal-boot.txt as pure silence —
+# see DISC-001, 2026-08-17, where this was the actual missing piece.
+cp /var/log/plymouth-debug.log "${LOGS}/plymouth-debug.log" 2>/dev/null || \
+    echo "(not present — Debug=yes not set, or plymouth never ran)" > "${LOGS}/plymouth-debug.log"
+echo "done"
+
 echo -n "  Xorg log...            "
 if [[ -f /tmp/Xorg.0.log ]]; then
     cp /tmp/Xorg.0.log "${LOGS}/"
