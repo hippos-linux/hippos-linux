@@ -19,6 +19,17 @@ export DISPLAY=:0
 export SDL_JOYSTICK_HIDAPI_STEAM=1
 unset XAUTHORITY
 
+# ES's own gettext lookup honors system.language directly (LANGUAGE env var,
+# set in EsLocale::init), but LC_ALL/LANG drives everything else locale-
+# dependent (date/number formatting, sorting) and nothing else in this
+# launch chain sets it. Leave unset when no preference is saved — the OS-
+# wide default locale (see configure-rootfs.sh) already covers that case.
+hippos_lang="$(hippos-settings get system.language 2>/dev/null)"
+if [[ -n "${hippos_lang}" ]]; then
+    export LC_ALL="${hippos_lang}.UTF-8"
+    export LANG="${LC_ALL}"
+fi
+
 dbus-update-activation-environment --systemd DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS HOME 2>/dev/null || true
 
 /usr/lib/hippos/hippos-audio-setup

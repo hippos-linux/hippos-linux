@@ -23,9 +23,20 @@ export XDG_DATA_DIRS="/var/lib/flatpak/exports/share:${HOME}/.local/share/flatpa
 export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus"
 export XDG_CONFIG_HOME=/userdata/system/.config
 export DISPLAY=:0
-export LANG=C.UTF-8
-export LC_ALL=C.UTF-8
 export QT_QPA_PLATFORM=xcb
+
+# C.UTF-8 was previously hardcoded here regardless of system.language — see
+# session-es for the same fix and why LC_ALL/LANG matter beyond ES's own
+# gettext lookup (date/number formatting, sorting, and here also whatever
+# the desktop environment itself localizes from the shell environment).
+hippos_lang="$(hippos-settings get system.language 2>/dev/null)"
+if [[ -n "${hippos_lang}" ]]; then
+    export LC_ALL="${hippos_lang}.UTF-8"
+    export LANG="${LC_ALL}"
+else
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+fi
 unset XAUTHORITY
 
 # shellcheck disable=SC1091
