@@ -13,6 +13,13 @@ kmsg "starting (rootmnt=${rootmnt})"
 
 modprobe overlay 2>/dev/null || true
 
+# Bounded wait for device enumeration before the label lookup below — without
+# it, a not-yet-settled boot (slow USB enumeration, or a udev remove/re-add
+# right after hippos-grow-userdata's blockdev --rereadpt on a previous boot)
+# falls through to "booting without overlay" and pushes the mount onto the
+# racier systemd/fstab path instead.
+udevadm settle --timeout=5 2>/dev/null || true
+
 MAIN_DEV="$(blkid -L HippOS 2>/dev/null)"
 if [ -z "${MAIN_DEV}" ]; then
     kmsg "HippOS partition not found — booting without overlay"
