@@ -646,7 +646,18 @@ def hotkey_context(name: str):
             cmd = [str(HOTKEYS_BIN), '--new-context', name, json.dumps(keys)]
             if exit_hotkey_only:
                 cmd.append('--disable-common')
-            subprocess.run(cmd, capture_output=True)
+            # capture_output was previously discarded — --new-context failing
+            # (bad json, daemon not running, stale pid) left no trace anywhere,
+            # so a stuck-on-previous-context bug looked identical to a working
+            # switch from the logs alone.
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                _log.warning("hotkey context '%s' request failed (rc=%s): %s",
+                             name, result.returncode, result.stderr.strip())
+            else:
+                _log.info("hotkey context -> '%s' (keys=%s)", name, sorted(keys))
+        else:
+            _log.warning("no hotkey context file for '%s' (%s) — daemon stays on whatever context was already active", name, source)
     except Exception as exc:
         _log.warning("Could not set hotkey context '%s': %s", name, exc)
 
@@ -654,10 +665,15 @@ def hotkey_context(name: str):
         yield
     finally:
         try:
-            subprocess.run(
+            result = subprocess.run(
                 [str(HOTKEYS_BIN), '--default-context'],
-                capture_output=True,
+                capture_output=True, text=True,
             )
+            if result.returncode != 0:
+                _log.warning("hotkey context reset failed (rc=%s): %s",
+                             result.returncode, result.stderr.strip())
+            else:
+                _log.info("hotkey context -> default")
         except Exception as exc:
             _log.warning("Could not reset hotkey context: %s", exc)
 
