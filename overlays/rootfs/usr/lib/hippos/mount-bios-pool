@@ -8,12 +8,22 @@ MEDIA=/media
 
 log() { printf '[hippos-bios-pool] %s\n' "$*"; }
 
+# All discovered branches are writable, not just the internal one — an
+# external drive being used as a BIOS store should be a valid write target
+# too, not just merged in read-only.
 add_branch() {
     local branch="$1"
     [[ -d "${branch}" ]] || return 0
     [[ "${branch}" == "${RW}" || "${branch}" == "${POOL}" ]] && return 0
-    [[ ":${branches}:" == *":${branch}=RO:"* ]] && return 0
-    branches="${branches}:${branch}=RO"
+    [[ ":${branches}:" == *":${branch}=RW:"* ]] && return 0
+    # Claim just the branch root for uid 1000, and only if it isn't already
+    # — new top-level entries need it writable, but nothing below it is
+    # touched, and drives already set up correctly (FAT mounted with
+    # uid=1000, or already-1000-owned) get left alone entirely.
+    if [[ "$(stat -c '%u' "${branch}" 2>/dev/null)" != "1000" ]]; then
+        chown 1000:1000 "${branch}" 2>/dev/null || true
+    fi
+    branches="${branches}:${branch}=RW"
 }
 
 if findmnt "${POOL}" >/dev/null 2>&1; then
