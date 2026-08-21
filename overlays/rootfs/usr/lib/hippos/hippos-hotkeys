@@ -369,15 +369,18 @@ class HotkeyDaemon:
         log(f'context={self.context.get("name", "")}')
 
     def _handle_sighup(self, signum: int, frame: Any) -> None:
+        log('SIGHUP received, reconfig queued')
         self.require_reconfig = True
 
     def _do_reconfig(self) -> None:
+        old = self.context.get('name', '')
         self._reload_all()
         # Re-add all devices so mappings refresh
         for path in list(self.devices):
             self._remove_device(path)
         for dev_path in sorted(Path('/dev/input').glob('event*')):
             self._add_device(str(dev_path))
+        log(f'reconfig done: context {old!r} -> {self.context.get("name", "")!r}, {len(self.devices)} devices')
 
     # --- action execution ----------------------------------------------------
 
@@ -422,6 +425,7 @@ class HotkeyDaemon:
             else:
                 codes = [ecodes.ecodes[t] for t in target if t in ecodes.ecodes]
                 if codes:
+                    log(f'combo -> raw multi-key {target}')
                     send_key_combo(self.uinput, codes)
                 return
 
@@ -433,11 +437,16 @@ class HotkeyDaemon:
             if action:
                 ctx_target = self._resolve_action(action)
                 if ctx_target is not None and not isinstance(ctx_target, str):
+                    log(f'combo -> action {action!r} -> key {ctx_target}')
                     send_key_combo(self.uinput, ctx_target)
                     return
                 elif ctx_target is not None:
+                    log(f'combo -> action {action!r} -> cmd {ctx_target!r}')
                     subprocess.Popen(ctx_target, shell=True, start_new_session=True)
                     return
+                log(f'combo -> action {action!r} not bound in context {self.context.get("name", "")!r} — no-op')
+                return  # named action with nothing bound in this context — do nothing
+            log(f'combo -> raw key {target} (no default_mapping entry)')
             send_key_combo(self.uinput, code)
 
     # --- device management ---------------------------------------------------
@@ -492,6 +501,9 @@ class HotkeyDaemon:
         self.fd_to_path[device.fileno()] = path
         self.poll.register(device, select.POLLIN)
         log(f'listening {path} {device.name}{" (grabbed)" if grabbed else ""}')
+        if button_map:
+            named = {n: ECODES_NAMES.get(c, c) for c, n in button_map.items()}
+            log(f'  button_map: {named}')
 
     def _remove_device(self, path: str) -> None:
         state = self.devices.pop(path, None)
@@ -516,9 +528,13 @@ class HotkeyDaemon:
         # cheap/older gamepads) can never satisfy a "hotkey"-gated combo.
         # Let Select double as the hotkey modifier for them, matching the
         # classic Batocera Select+Start exit convention.
-        if name == 'select' and 'hotkey' not in state.button_map.values():
+        select_fallback = name == 'select' and 'hotkey' not in state.button_map.values()
+        if select_fallback:
             names.append('hotkey')
         if event.value == 1:
+            log(f'button {ECODES_NAMES.get(event.code, event.code)} -> {names}'
+                f'{" (select-as-hotkey fallback)" if select_fallback else ""}'
+                f' [context={self.context.get("name", "")}]')
             state.pressed.update(names)
             for combo in self.combo_actions:
                 trigger = combo.get('trigger')
@@ -526,6 +542,7 @@ class HotkeyDaemon:
                 if not isinstance(trigger, list) or target is None:
                     continue
                 if all(b in state.pressed for b in trigger):
+                    log(f'combo trigger={trigger} target={target} -> dispatching')
                     self.execute_combo_target(target)
         elif event.value == 0:
             state.pressed.difference_update(names)
