@@ -37,9 +37,12 @@ for dir in "${MEDIA}"/*/; do
     [[ -d "${dir}" ]] || continue
     add_branch "${dir%/}/saves"
     add_branch "${dir%/}/userdata/saves"
+
+    # Bounded discovery for nested layouts such as /media/USB/userdata/saves.
+    # See mount-bios-pool for why this is maxdepth 2, not 4.
     while IFS= read -r -d '' saves_dir; do
         add_branch "${saves_dir}"
-    done < <(find "${dir%/}" -mindepth 1 -maxdepth 4 -type d -iname saves -print0 2>/dev/null)
+    done < <(find "${dir%/}" -mindepth 1 -maxdepth 2 -type d -iname saves -print0 2>/dev/null)
 done
 
 log "branches: ${branches}"
