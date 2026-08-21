@@ -207,10 +207,15 @@ nvidia_init() {
         fi
         log "NVIDIA GPU at: ${nvidia_pci}"
 
-        # Exact PCI-ID lookup against NVIDIA's own device database (ships
-        # in every .run installer — see configure-rootfs.sh) rather than
-        # loading a driver and seeing what happens: precise, instant, and
-        # never risks leaving a half-working wrong-tier module loaded.
+        # Exact PCI-ID lookup against NVIDIA's own device database, rather
+        # than loading a driver and seeing what happens: precise, instant,
+        # and never risks leaving a half-working wrong-tier module loaded.
+        # This has to be the CURRENT driver's own copy (overlays/rootfs/usr/
+        # share/nvidia/supported-gpus.json, pulled from the matching
+        # NVIDIA-Linux-x86_64-<version>.run) — legacybranch is "which branch
+        # does *this* driver defer this chip to", so an older tier's own
+        # bundled copy shows its own natively-supported chips as not-legacy
+        # and is missing entries for anything reclassified since.
         mode="open"
         if [[ -f /usr/share/nvidia/supported-gpus.json ]] && command -v jq >/dev/null 2>&1; then
             local pcidevid legacybranch
@@ -220,6 +225,13 @@ nvidia_init() {
                 /usr/share/nvidia/supported-gpus.json 2>/dev/null)" || true
             log "GPU ${pcidevid} legacy branch: ${legacybranch}"
             case "${legacybranch}" in
+                # 580.xx: Maxwell/Pascal/Volta (GeForce 900/10-series, TITAN
+                # X/Xp, etc.) — the current driver's device DB now redirects
+                # this generation here. Kept as its own tier rather than
+                # aliased to 470: same GPU generation being listed as
+                # supported on an older driver's product page doesn't mean
+                # that driver is still the maintained/recommended one for it.
+                580.*) mode="580" ;;
                 470.*) mode="470" ;;
                 390.*) mode="390" ;;
                 340.*) mode="340" ;;
@@ -241,7 +253,7 @@ nvidia_init() {
                 && log "NVIDIA device nodes ready" \
                 || log "WARNING: /dev/nvidia0 not found after 10s — Xorg may retry"
             ;;
-        470|legacy470|390|340)
+        580|legacy580|470|legacy470|390|340)
             local tier="${mode#legacy}"
             local version
             version="$(cat "/usr/share/nvidia/legacy${tier}.version" 2>/dev/null || true)"

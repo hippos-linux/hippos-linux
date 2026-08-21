@@ -26,6 +26,7 @@ ARCH="${ARCH:-amd64}"
 # collides with nvidia-open's files or another tier's. hippos-gpu-init is the
 # only thing that switches between them at boot — see that script.
 NVIDIA_LEGACY_TIERS=(
+    "580:580.173.02:8d8eb9001e05a9a8a663d3d5d304feb64ef2844ee185ccdfd952786820f46e1b"
     "470:470.256.02:d6451862deb695bb0447f3b7cd6268f73e81168c10e2c10597ff3fa01349b1de"
     "390:390.157:5bebbca6e8fed5d6b9d81070fb9e351f18edc534952553cbdc71e8fd0b9b328a"
     "340:340.108:c671d4f1b7c09bc1af079b98b447adb06d704b04f802f7045a611fa50133b71b"
@@ -42,12 +43,34 @@ NVIDIA_LEGACY_TIERS=(
 # prepare() order (reaches 7.0); 340's is archlinux-jerry/nvidia-340xx's
 # numbered series (only reaches 6.15 — the current AUR nvidia-340xx-utils
 # package ships no compat patches at all, 340.108 is the least maintained of
-# the three branches). Patch paths are "a/kernel/..." for 390 and 340 (apply
-# from the extracted driver's top dir) but bare "a/conftest.sh" etc for 470
-# (apply from its kernel/ subdir) — an artifact of how each upstream
-# generated its diffs, not something to normalize away.
+# the three branches). 580 is pinned to 580.173.02, not the first 580.x
+# release — 580.126.09 fails to build against HippOS's kernel (7.1.8):
+# kernel/common/inc/nv-linux.h unconditionally includes <linux/of_gpio.h>,
+# which upstream dropped entirely, and nv-mmap.c's hand-rolled VMA locking
+# fallback (VMA_LOCK_OFFSET, __is_vma_write_locked) targets an older kernel
+# VMA-lock internal representation than 7.1.8 actually has — both confirmed
+# by attempting the build against HippOS's real kernel-headers package, not
+# assumed from changelog reading. Patching driver-side reimplementations of
+# kernel-internal locking is exactly the kind of fix to get from upstream
+# rather than hand-roll: got worse (not better) with more digging, since a
+# subtly-wrong VMA lock patch fails silently under load, not at compile
+# time. 580.173.02 has NVIDIA's own proper fix for both (conftest-guarded
+# <linux/of_gpio.h> with a real of_get_named_gpio() compat shim, and a
+# VM_REFCNT_EXCLUDE_READERS_FLAG-aware nv_is_vma_write_locked()) — verified
+# against HippOS's actual kernel headers, not just release-note reading.
+# 580's patch list is just the one generic LDFLAGS fix every tier here
+# could arguably use (upstream nvidia.ko/nvidia-modeset.ko Kbuild links
+# with bare $(LD) instead of $(LD) $(LDFLAGS), which only bites cross-arch
+# toolchains — harmless either way, kept for parity). Patch paths are
+# "a/kernel/..." for 390/340/580 (apply from the extracted driver's top
+# dir) but bare "a/conftest.sh" etc for 470 (apply from its
+# kernel/ subdir) — an artifact of how each upstream generated its diffs,
+# not something to normalize away.
 nvidia_legacy_patch_order() {
     case "$1" in
+        580)
+            printf '%s\n' 0001-use-LDFLAGS.patch
+            ;;
         470)
             printf '%s\n' \
                 0001-Fix-conftest-to-ignore-implicit-function-declaration.patch \
@@ -131,7 +154,6 @@ mkdir -p "${STAGING}/usr/lib/x86_64-linux-gnu/vdpau" \
          "${STAGING}/usr/share/vulkan/icd.d" \
          "${STAGING}/usr/share/nvidia/modules"
 
-_sgpu_json_installed=0
 BUILT_ANY=0
 
 for entry in "${NVIDIA_LEGACY_TIERS[@]}"; do
@@ -192,14 +214,6 @@ for entry in "${NVIDIA_LEGACY_TIERS[@]}"; do
 ccflags-y += $(EXTRA_CFLAGS)' "${EXTRACT_DIR}/kernel/Kbuild"
     elif [[ -f "${EXTRACT_DIR}/kernel/nvidia-modules-common.mk" ]]; then
         printf '\nccflags-y += $(EXTRA_CFLAGS)\n' >> "${EXTRACT_DIR}/kernel/nvidia-modules-common.mk"
-    fi
-
-    if [[ "${_sgpu_json_installed}" -eq 0 && -f "${EXTRACT_DIR}/supported-gpus/supported-gpus.json" ]]; then
-        # Cumulative device database bundled in every NVIDIA .run installer
-        # (RIVA TNT through RTX 50-series in the copy this was verified
-        # against) — not version-specific, any tier's copy works.
-        cp "${EXTRACT_DIR}/supported-gpus/supported-gpus.json" "${STAGING}/usr/share/nvidia/supported-gpus.json"
-        _sgpu_json_installed=1
     fi
 
     log "Staging tier ${tier} userspace libraries"
