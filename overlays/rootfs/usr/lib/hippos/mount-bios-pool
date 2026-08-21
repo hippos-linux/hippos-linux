@@ -37,9 +37,14 @@ for dir in "${MEDIA}"/*/; do
     [[ -d "${dir}" ]] || continue
     add_branch "${dir%/}/bios"
     add_branch "${dir%/}/userdata/bios"
+
+    # Bounded discovery for nested layouts such as /media/USB/userdata/bios.
+    # maxdepth 4 was too permissive and picked up unrelated dirs named "bios"
+    # further down a ROM tree (e.g. a MAME romset's own bios/ subfolder),
+    # polluting the system bios pool with non-system files.
     while IFS= read -r -d '' bios_dir; do
         add_branch "${bios_dir}"
-    done < <(find "${dir%/}" -mindepth 1 -maxdepth 4 -type d -iname bios -print0 2>/dev/null)
+    done < <(find "${dir%/}" -mindepth 1 -maxdepth 2 -type d -iname bios -print0 2>/dev/null)
 done
 
 log "branches: ${branches}"
