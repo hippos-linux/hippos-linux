@@ -11,7 +11,25 @@ case "${1:-}" in
         xrandr --query 2>/dev/null | awk '/connected/{print $1}'
         ;;
     getRootPassword)
-        echo ""
+        # Content only needs to be non-empty/empty for the ES password-field
+        # mask — actual value is a debugging aid, not a secret worth reading
+        # back. "linux" is root's real account password until changed (set
+        # at build time, see configure-rootfs.sh).
+        if [[ -f /userdata/system/.root-password-custom ]]; then
+            echo "custom"
+        else
+            echo "linux"
+        fi
+        ;;
+    setRootPassword)
+        [[ "${EUID}" -ne 0 ]] && exec sudo "$0" "$@"
+        pw="${2:-}"
+        [[ -n "${pw}" ]] || { echo "Usage: hippos-config setRootPassword <password>" >&2; exit 1; }
+        # hippos shares root's password since it already has passwordless
+        # sudo ALL — a different password on hippos wouldn't gate anything,
+        # just move the same access to a different login name.
+        printf 'root:%s\nhippos:%s\n' "${pw}" "${pw}" | chpasswd
+        touch /userdata/system/.root-password-custom
         ;;
     overscan)
         export DISPLAY="${DISPLAY:-:0}"
