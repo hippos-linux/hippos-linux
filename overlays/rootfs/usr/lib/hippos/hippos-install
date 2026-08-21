@@ -536,6 +536,17 @@ install_to_partition() {
     log "Mounting source EFI..."
     mount "$SRC_EFI" "$SRC_EFI_MNT" -o ro
 
+    # Unlike clone_disk's freshly-created target EFI, this partition is an
+    # existing one that may be a shared ESP with other OSes — desktop
+    # automount (udisks2) can pick it back up during the btrfs clone above.
+    # Re-check and free it right before claiming it.
+    if findmnt -n -o TARGET --source "$TGT_EFI_PART" >/dev/null 2>&1; then
+        log "Target EFI partition already mounted elsewhere, unmounting..."
+        while IFS= read -r mnt; do
+            umount "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
+        done < <(findmnt -n -o TARGET --source "$TGT_EFI_PART" 2>/dev/null)
+    fi
+
     log "Mounting target EFI partition ($TGT_EFI_PART)..."
     mount "$TGT_EFI_PART" "$TGT_EFI_MNT"
 
