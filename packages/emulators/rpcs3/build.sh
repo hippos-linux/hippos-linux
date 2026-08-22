@@ -91,10 +91,20 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DUSE_SYSTEM_LIBUSB=ON \
     -DUSE_SYSTEM_OPENCV=OFF \
     -DUSE_SYSTEM_SDL=ON \
-    -DUSE_VULKAN=ON
+    -DUSE_VULKAN=ON \
+    -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+    -DCMAKE_INSTALL_RPATH="\$ORIGIN/../lib"
 cmake --build "${BUILD}" -j"$(nproc)"
 cmake --install "${BUILD}"
 find "${BUILD}" -maxdepth 4 -name 'rpcs3' -type f -perm /111 -exec cp {} "${STAGING}/bin/" \; 2>/dev/null || true
+
+# rpcs3's LLVM recompiler backend links libLLVM.so.21.1 from the build
+# container's apt.llvm.org llvm-21 toolchain (LLVM_DIR above) — the shipped
+# rootfs only carries Trixie's own llvm-19, and per package-policy.md a
+# build-only toolchain dependency has no business becoming a base-OS package
+# just for this one emulator, so vendor it next to the binary instead.
+mkdir -p "${STAGING}/lib"
+cp "/usr/lib/${GNU_ARCH}/libLLVM.so.21.1" "${STAGING}/lib/"
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"
