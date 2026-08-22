@@ -187,6 +187,26 @@ if [[ -f /tmp/Xorg.0.log ]]; then
 fi
 
 # ===========================================================================
+# Previous boot
+#
+# A hang/panic/hard-reset happens before this boot's own capture ever runs —
+# this boot's journal.log is silent on the crash. journald.conf.d already
+# sets Storage=persistent, so the crashed boot's own journal survives to this
+# one as long as it makes it back up at all; capture it here rather than
+# leaving it to only ever be found by someone manually running
+# `journalctl -b -1` after the fact.
+# ===========================================================================
+
+capture "boot-history.txt" \
+    journalctl --list-boots --no-pager
+
+journalctl -b -1 --no-pager \
+    > "${OUT_DIR}/previous-boot-journal.log" 2>&1 || true
+
+journalctl -k -b -1 --no-pager \
+    > "${OUT_DIR}/previous-boot-dmesg.log" 2>&1 || true
+
+# ===========================================================================
 # HippOS / OS information
 # ===========================================================================
 
