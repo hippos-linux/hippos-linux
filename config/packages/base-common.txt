@@ -2,6 +2,7 @@
 usrmerge
 systemd
 systemd-sysv
+systemd-coredump
 dbus
 udev
 sudo

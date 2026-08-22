@@ -5,30 +5,975 @@ LOG_DIR=/userdata/system/logs/boot
 BOOT_ID="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || date +%s)"
 OUT_DIR="${LOG_DIR}/${BOOT_ID}"
 
+# One directory per boot, forever, with nothing to bound it otherwise
+# (filesystem-layout.md: "Logs must be rotated or bounded"). boot_id is a
+# random UUID, not chronological, so pruning has to sort by mtime rather
+# than by name.
+LOG_RETENTION_COUNT=20
+
 mkdir -p "${OUT_DIR}"
 
-# hippos-es.service is started dynamically (not statically pulled into the
-# boot transaction), so ordering alone doesn't guarantee it has even been
-# asked to start yet, let alone reached its actual outcome. Poll until the
-# session settles one way or another before snapshotting, so the capture
-# reflects what actually happened instead of a mid-dispatch snapshot.
-for _ in $(seq 1 100); do
-    systemctl is-active --quiet hippos-es.service && break
-    systemctl is-active --quiet hippos-desktop.service && break
-    systemctl is-failed --quiet hippos-es.service && break
-    systemctl is-failed --quiet hippos-desktop.service && break
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+capture() {
+    local name="$1"
+    shift
+
+    {
+        echo "===== COMMAND ====="
+        printf '%q ' "$@"
+        echo
+        echo "===== START ====="
+        date --iso-8601=seconds
+        echo
+
+        set +e
+        "$@"
+        rc=$?
+        set -e
+
+        echo
+        echo "===== EXIT CODE: ${rc} ====="
+        echo "===== END ====="
+        date --iso-8601=seconds
+    } > "${OUT_DIR}/${name}" 2>&1 || true
+}
+
+capture_shell() {
+    local name="$1"
+    shift
+    local cmd="$*"
+
+    {
+        echo "===== COMMAND ====="
+        echo "${cmd}"
+        echo "===== START ====="
+        date --iso-8601=seconds
+        echo
+
+        set +e
+        bash -c "${cmd}"
+        rc=$?
+        set -e
+
+        echo
+        echo "===== EXIT CODE: ${rc} ====="
+        echo "===== END ====="
+        date --iso-8601=seconds
+    } > "${OUT_DIR}/${name}" 2>&1 || true
+}
+
+prune_old_boot_logs() {
+    local dirs=()
+    while IFS= read -r dir; do
+        dirs+=("${dir}")
+    done < <(
+        find "${LOG_DIR}" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' 2>/dev/null |
+        sort -rn |
+        cut -d' ' -f2-
+    )
+
+    local i=0
+    for dir in "${dirs[@]}"; do
+        i=$((i + 1))
+        [[ ${i} -gt ${LOG_RETENTION_COUNT} ]] && rm -rf "${dir}"
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Wait for frontend / desktop session
+#
+# hippos-es.service is dynamically started, so wait for the selected frontend
+# to either become active or fail.
+#
+# Maximum: 180 seconds.
+# ---------------------------------------------------------------------------
+
+SESSION_STATE="timeout"
+
+for _ in $(seq 1 360); do
+    if systemctl is-active --quiet hippos-es.service; then
+        SESSION_STATE="hippos-es active"
+        break
+    fi
+
+    if systemctl is-active --quiet hippos-desktop.service; then
+        SESSION_STATE="hippos-desktop active"
+        break
+    fi
+
+    if systemctl is-failed --quiet hippos-es.service; then
+        SESSION_STATE="hippos-es failed"
+        break
+    fi
+
+    if systemctl is-failed --quiet hippos-desktop.service; then
+        SESSION_STATE="hippos-desktop failed"
+        break
+    fi
+
     sleep 0.5
 done
-# Give the session a moment to finish logging its own startup sequence.
+
+SESSION_SETTLED_AT="$(date --iso-8601=seconds)"
+
+# ---------------------------------------------------------------------------
+# Wait for the overall boot transaction to settle.
+#
+# ES can become active while graphical.target and other boot jobs are still
+# pending. Waiting here makes systemd-analyze useful and prevents the capture
+# from being merely a mid-boot snapshot.
+#
+# Maximum additional wait: 120 seconds.
+# ---------------------------------------------------------------------------
+
+BOOT_STATE="timeout"
+
+for _ in $(seq 1 240); do
+    if systemctl is-active --quiet graphical.target; then
+        BOOT_STATE="graphical.target active"
+        break
+    fi
+
+    # If graphical.target isn't going to complete because the boot genuinely
+    # failed, don't wait forever once there are no remaining start jobs.
+    if ! systemctl list-jobs --no-legend 2>/dev/null | grep -q ' start '; then
+        BOOT_STATE="no pending start jobs"
+        break
+    fi
+
+    sleep 0.5
+done
+
+BOOT_SETTLED_AT="$(date --iso-8601=seconds)"
+
+# Give services a final moment to flush startup messages.
 sleep 3
 
-journalctl -b --no-pager > "${OUT_DIR}/journal.log" 2>&1 || true
-journalctl -b -p warning..alert --no-pager > "${OUT_DIR}/warnings.log" 2>&1 || true
-journalctl -b -u hippos-es.service -u hippos-xserver.service -u hippos-hotkeys.service --no-pager > "${OUT_DIR}/frontend.log" 2>&1 || true
+{
+    echo "boot_id=${BOOT_ID}"
+    echo "captured_at=$(date --iso-8601=seconds)"
+    echo "session_state=${SESSION_STATE}"
+    echo "session_settled_at=${SESSION_SETTLED_AT}"
+    echo "boot_state=${BOOT_STATE}"
+    echo "boot_settled_at=${BOOT_SETTLED_AT}"
+    echo "uptime=$(cat /proc/uptime 2>/dev/null || true)"
+} > "${OUT_DIR}/capture-info.txt"
+
+# ===========================================================================
+# Core logs
+# ===========================================================================
+
+journalctl -b --no-pager \
+    > "${OUT_DIR}/journal.log" 2>&1 || true
+
+journalctl -b -p warning..alert --no-pager \
+    > "${OUT_DIR}/warnings.log" 2>&1 || true
+
+journalctl -b \
+    -u hippos-es.service \
+    -u hippos-desktop.service \
+    -u hippos-xserver.service \
+    -u hippos-hotkeys.service \
+    --no-pager \
+    > "${OUT_DIR}/frontend.log" 2>&1 || true
+
 dmesg -T > "${OUT_DIR}/dmesg.log" 2>&1 || true
 
 if [[ -f /tmp/Xorg.0.log ]]; then
     cp -f /tmp/Xorg.0.log "${OUT_DIR}/Xorg.0.log" || true
 fi
 
+# ===========================================================================
+# HippOS / OS information
+# ===========================================================================
+
+capture_shell "version.txt" \
+    'cat /etc/hippos-version 2>/dev/null || true;
+     echo;
+     cat /etc/os-release 2>/dev/null || true;
+     echo;
+     uname -a'
+
+capture "cmdline.txt" \
+    cat /proc/cmdline
+
+capture "default-target.txt" \
+    systemctl get-default
+
+capture_shell "hippos-services.txt" \
+    'systemctl list-units --all --no-pager --full | grep -i hippos || true'
+
+# Confirms the atomic-write fix in practice: this should never be truncated
+# or empty while hippos-hotkeys.service is running.
+capture_shell "hotkeys-context.txt" \
+    'echo "===== /run/hippos/hotkeys.context =====";
+     ls -la /run/hippos/hotkeys.context 2>/dev/null || echo "(absent)";
+     echo;
+     cat /run/hippos/hotkeys.context 2>/dev/null || true'
+
+# ===========================================================================
+# systemd boot analysis
+# ===========================================================================
+
+capture "failed-services.txt" \
+    systemctl --failed --no-pager --full
+
+capture "systemd-jobs.txt" \
+    systemctl list-jobs --no-pager
+
+capture "systemd-time.txt" \
+    systemd-analyze time
+
+capture "systemd-blame.txt" \
+    systemd-analyze blame
+
+capture "systemd-critical-chain.txt" \
+    systemd-analyze critical-chain
+
+capture_shell "systemd-manager-timeouts.txt" \
+    'systemctl show \
+        -p DefaultTimeoutStartUSec \
+        -p DefaultTimeoutStopUSec \
+        -p DefaultDeviceTimeoutUSec \
+        2>&1 || true'
+
+capture_shell "systemd-config.txt" \
+    'systemd-analyze cat-config systemd/system.conf 2>&1 || true'
+
+# ===========================================================================
+# Failed unit details
+# ===========================================================================
+
+{
+    echo "===== FAILED UNIT DETAILS ====="
+
+    while read -r unit; do
+        [[ -n "${unit}" ]] || continue
+
+        echo
+        echo "================================================================"
+        echo "UNIT: ${unit}"
+        echo "================================================================"
+
+        echo
+        echo "----- STATUS -----"
+        systemctl status "${unit}" --no-pager -l 2>&1 || true
+
+        echo
+        echo "----- UNIT FILE / DROP-INS -----"
+        systemctl cat "${unit}" 2>&1 || true
+
+        echo
+        echo "----- EFFECTIVE PROPERTIES -----"
+        systemctl show "${unit}" \
+            -p LoadState \
+            -p ActiveState \
+            -p SubState \
+            -p Result \
+            -p ExecMainCode \
+            -p ExecMainStatus \
+            -p TimeoutStartUSec \
+            -p TimeoutStopUSec \
+            2>&1 || true
+
+    done < <(
+        systemctl --failed --no-legend --plain 2>/dev/null |
+        awk '{print $1}'
+    )
+
+} > "${OUT_DIR}/failed-unit-details.log" 2>&1 || true
+
+# ===========================================================================
+# Coredumps
+#
+# A crashed process (e.g. Xorg segfaulting mid driver-init) otherwise only
+# shows up as grep'd log text elsewhere ("Segmentation fault", "Caught signal
+# 11") — this is the actual backtrace, straight from systemd-coredump.
+# ===========================================================================
+
+capture "coredumps.txt" \
+    coredumpctl list --no-pager --boot
+
+capture_shell "coredumps-detail.txt" \
+    'coredumpctl --boot -F pid 2>/dev/null | while read -r pid; do
+        [ -n "$pid" ] || continue;
+        echo;
+        echo "================================================================";
+        echo "PID: $pid";
+        echo "================================================================";
+        coredumpctl info "$pid" --no-pager 2>&1 || true;
+     done'
+
+# ===========================================================================
+# Critical services
+# ===========================================================================
+
+capture "critical-services.txt" \
+    systemctl status \
+        dbus.service \
+        systemd-logind.service \
+        udisks2.service \
+        NetworkManager.service \
+        wpa_supplicant.service \
+        bluetooth.service \
+        hippos-bluetooth-agent.service \
+        nvidia-persistenced.service \
+        hippos-es.service \
+        hippos-desktop.service \
+        hippos-xserver.service \
+        hippos-hotkeys.service \
+        --no-pager -l
+
+capture "critical-services-journal.txt" \
+    journalctl -b \
+        -u dbus.service \
+        -u systemd-logind.service \
+        -u udisks2.service \
+        -u NetworkManager.service \
+        -u wpa_supplicant.service \
+        -u bluetooth.service \
+        -u hippos-bluetooth-agent.service \
+        -u nvidia-persistenced.service \
+        --no-pager
+
+# ===========================================================================
+# HippOS boot-time initialisation
+#
+# hippos-hardware-init -> hippos-system-init -> hippos-migrate -> ES/desktop,
+# plus hippos-grow-userdata (WantedBy=local-fs-pre.target, runs before
+# local-fs.target — a first-boot btrfs partition resize). hippos-migrate in
+# particular runs userdata version migration before ES/desktop ever starts —
+# a silent failure here is a data-integrity risk, not just a slow boot.
+# ===========================================================================
+
+capture "hippos-init-status.txt" \
+    systemctl status \
+        hippos-hardware-init.service \
+        hippos-system-init.service \
+        hippos-migrate.service \
+        hippos-grow-userdata.service \
+        --no-pager -l
+
+capture "hippos-init-journal.txt" \
+    journalctl -b \
+        -u hippos-hardware-init.service \
+        -u hippos-system-init.service \
+        -u hippos-migrate.service \
+        -u hippos-grow-userdata.service \
+        --no-pager
+
+# ===========================================================================
+# ROM / BIOS / Saves storage
+#
+# hippos-es.service's own After=/Wants= is directly gated on the pool
+# services (see hippos-es.service) — a hang/failure here is a direct
+# contributor to ES startup delay, not a side issue.
+# ===========================================================================
+
+capture "hippos-storage-status.txt" \
+    systemctl status \
+        hippos-storage.service \
+        hippos-storage-scan.service \
+        hippos-rom-scan.service \
+        hippos-roms-pool.service \
+        hippos-bios-pool.service \
+        hippos-saves-pool.service \
+        hippos-network-roms.service \
+        hippos-network-roms-discover.service \
+        --no-pager -l
+
+capture "hippos-storage-journal.txt" \
+    journalctl -b \
+        -u hippos-storage.service \
+        -u hippos-storage-scan.service \
+        -u hippos-rom-scan.service \
+        -u hippos-roms-pool.service \
+        -u hippos-bios-pool.service \
+        -u hippos-saves-pool.service \
+        -u hippos-network-roms.service \
+        -u hippos-network-roms-discover.service \
+        --no-pager
+
+# ===========================================================================
+# First-boot Flatpak install
+#
+# Network-dependent (see hippos-firstboot-flatpak.service) — a plausible
+# slow-boot contributor in its own right, independent of storage speed.
+# ===========================================================================
+
+capture "hippos-firstboot-flatpak.txt" \
+    systemctl status hippos-firstboot-flatpak.service --no-pager -l
+
+capture_shell "hippos-firstboot-flatpak-journal.txt" \
+    'journalctl -b -u hippos-firstboot-flatpak.service --no-pager'
+
+# ===========================================================================
+# LXC / Waydroid
+#
+# lxc-net.service/lxc.service/waydroid-container.service are deferred to
+# After=graphical.target (see configure-rootfs.sh) — this is the direct way
+# to see their actual start time/order/failures instead of digging them out
+# of the full journal.log dump.
+# ===========================================================================
+
+capture "lxc-waydroid-status.txt" \
+    systemctl status \
+        lxc-net.service \
+        lxc.service \
+        waydroid-container.service \
+        hippos-waydroid-init.service \
+        var-lib-waydroid.mount \
+        opt-emulators.mount \
+        --no-pager -l
+
+capture "lxc-waydroid-journal.txt" \
+    journalctl -b \
+        -u lxc-net.service \
+        -u lxc.service \
+        -u waydroid-container.service \
+        -u hippos-waydroid-init.service \
+        --no-pager
+
+# ===========================================================================
+# Plymouth
+# ===========================================================================
+
+capture "plymouth-status.txt" \
+    systemctl status \
+        plymouth-start.service \
+        plymouth-quit.service \
+        plymouth-quit-wait.service \
+        --no-pager -l
+
+capture "plymouth-journal.txt" \
+    journalctl -b \
+        -u plymouth-start.service \
+        -u plymouth-quit.service \
+        -u plymouth-quit-wait.service \
+        --no-pager
+
+capture_shell "plymouth-config.txt" \
+    'echo "===== /etc/plymouth/plymouthd.conf =====";
+     cat /etc/plymouth/plymouthd.conf 2>/dev/null || true;
+     echo;
+     echo "===== DEFAULT THEME =====";
+     plymouth-set-default-theme 2>/dev/null || true'
+
+capture_shell "plymouth-initramfs.txt" \
+    'for initrd in /boot/initrd.img-*; do
+        [[ -f "$initrd" ]] || continue;
+        echo;
+        echo "================================================================";
+        echo "$initrd";
+        echo "================================================================";
+        lsinitramfs "$initrd" 2>&1 | grep -i plymouth || true;
+     done'
+
+# plymouthd only traces its own internal state (DRM calls, the quit/quit-wait
+# handshake, theme rendering) here, and only because Debug=yes is set in
+# plymouthd.conf (see configure-rootfs.sh, DISC-001) — the only way to tell
+# whether a splash that "started" per systemd ever actually reached the screen.
+if [[ -f /var/log/plymouth-debug.log ]]; then
+    cp -f /var/log/plymouth-debug.log "${OUT_DIR}/plymouth-debug.log" || true
+fi
+
+# ===========================================================================
+# Boot / GRUB / fstab
+# ===========================================================================
+
+capture_shell "fstab.txt" \
+    'cat /etc/fstab 2>&1'
+
+capture_shell "grub-config.txt" \
+    'echo "===== /etc/default/grub =====";
+     cat /etc/default/grub 2>/dev/null || true;
+     echo;
+     echo "===== /boot/efi/grub/grub.cfg =====";
+     # HippOS writes grub.cfg straight to the ESP (see hippos-upgrade
+     # EFI_GRUB_CFG) — grub-mkconfig never runs, so /boot/grub/grub.cfg is
+     # not the file that matters. Full file, not a keyword grep: a
+     # grep-by-keyword here would have missed nvidia-drm.modeset=1 not
+     # matching any of the previous keywords, same class of blind spot.
+     cat /boot/efi/grub/grub.cfg 2>/dev/null || true'
+
+# hippos-select-kernel syncs GRUB_DEFAULT to the system.kernel setting every
+# boot; hippos-update-grub is the first-boot regen. Both write the file
+# above — this is whether/why that write happened, not just its result.
+capture "grub-services.txt" \
+    systemctl status \
+        hippos-select-kernel.service \
+        hippos-update-grub.service \
+        --no-pager -l
+
+capture_shell "grub-services-journal.txt" \
+    'journalctl -b \
+        -u hippos-select-kernel.service \
+        -u hippos-update-grub.service \
+        --no-pager'
+
+# ===========================================================================
+# Storage / partition / mount state
+# ===========================================================================
+
+capture "lsblk.txt" \
+    lsblk -o \
+    NAME,PATH,SIZE,TYPE,FSTYPE,LABEL,UUID,PARTUUID,MODEL,TRAN,RO,MOUNTPOINTS
+
+capture "df.txt" \
+    df -h
+
+capture "blkid.txt" \
+    blkid
+
+capture "findmnt.txt" \
+    findmnt
+
+capture_shell "partuuid-links.txt" \
+    'ls -la /dev/disk/by-partuuid 2>&1'
+
+capture_shell "uuid-links.txt" \
+    'ls -la /dev/disk/by-uuid 2>&1'
+
+capture "mount-units.txt" \
+    systemctl list-units --type=mount --all --no-pager --full
+
+capture "device-units.txt" \
+    systemctl list-units --type=device --all --no-pager --full
+
+# ===========================================================================
+# UDisks / desktop mounting
+# ===========================================================================
+
+capture "udisks-service.txt" \
+    systemctl status udisks2.service --no-pager -l
+
+capture "udisks-journal.txt" \
+    journalctl -b -u udisks2.service --no-pager
+
+capture "udisks-status.txt" \
+    udisksctl status
+
+capture "udisks-dump.txt" \
+    udisksctl dump
+
+capture_shell "polkit-journal.txt" \
+    'journalctl -b --no-pager |
+     grep -iE "polkit|authorization|not authorized|permission denied" || true'
+
+# ===========================================================================
+# Btrfs
+#
+# HippOS uses an overlay root, so "/" itself is not the Btrfs mount.
+# /userdata is the persistent Btrfs-backed filesystem.
+# ===========================================================================
+
+capture "btrfs-filesystems.txt" \
+    btrfs filesystem show
+
+capture "btrfs-usage.txt" \
+    btrfs filesystem usage /userdata
+
+capture "btrfs-device-stats.txt" \
+    btrfs device stats /userdata
+
+capture "btrfs-subvolumes.txt" \
+    btrfs subvolume list /userdata
+
+capture_shell "btrfs-userdata-properties.txt" \
+    'btrfs subvolume show /userdata 2>&1 || true;
+     echo;
+     btrfs property get /userdata 2>&1 || true'
+
+# ===========================================================================
+# Runtime/user filesystem state
+#
+# Captures ownership, mount options and writability of the runtime directory.
+# This is useful for PulseAudio/PipeWire/FluidSynth/session failures.
+# ===========================================================================
+
+capture_shell "runtime-user-1000.txt" \
+    'echo "===== FINDMNT =====";
+     findmnt /run/user/1000 2>&1 || true;
+     echo;
+     echo "===== DIRECTORY =====";
+     ls -ld /run/user/1000 2>&1 || true;
+     stat /run/user/1000 2>&1 || true;
+     echo;
+     echo "===== PULSE =====";
+     ls -ld /run/user/1000/pulse 2>&1 || true;
+     stat /run/user/1000/pulse 2>&1 || true;
+     echo;
+     echo "===== MOUNTINFO =====";
+     grep -F "/run/user/1000" /proc/self/mountinfo 2>&1 || true'
+
+capture_shell "audio-session-errors.txt" \
+    'journalctl -b --no-pager |
+     grep -iE "pipewire|wireplumber|pulse|pulseaudio|fluidsynth|audio|alsa" || true'
+
+# PipeWire/WirePlumber are hippos user-level units, not system units — this
+# script runs as root, so query the hippos user's own systemd instance
+# directly rather than relying on the journal grep above to have caught
+# everything.
+capture_shell "pipewire-status.txt" \
+    'XDG_RUNTIME_DIR=/run/user/1000 runuser -u hippos -- \
+        systemctl --user status pipewire.service wireplumber.service \
+        --no-pager -l 2>&1 || true'
+
+# ===========================================================================
+# Hardware
+# ===========================================================================
+
+capture "lspci.txt" \
+    lspci -nnk
+
+capture "lsusb.txt" \
+    lsusb
+
+capture "lsusb-tree.txt" \
+    lsusb -t
+
+capture "lsmod.txt" \
+    lsmod
+
+capture_shell "cpu.txt" \
+    'lscpu 2>&1'
+
+capture_shell "memory.txt" \
+    'free -h;
+     echo;
+     cat /proc/meminfo'
+
+# ===========================================================================
+# Controller / Input
+#
+# 70-hippos-controllers.rules is what actually grants gamepad hidraw/input
+# permissions — nothing else captures whether it fired or what devices
+# evdev/hidraw actually see, and "controller-first" is a stated core product
+# principle, not a side feature.
+# ===========================================================================
+
+capture_shell "input-devices.txt" \
+    'echo "===== /proc/bus/input/devices =====";
+     cat /proc/bus/input/devices 2>/dev/null || true;
+     echo;
+     echo "===== /dev/input =====";
+     ls -la /dev/input 2>&1;
+     echo;
+     echo "===== /dev/hidraw* =====";
+     ls -la /dev/hidraw* 2>&1'
+
+capture_shell "controller-udev-rules.txt" \
+    'cat /etc/udev/rules.d/70-hippos-controllers.rules 2>/dev/null || true'
+
+# ===========================================================================
+# Graphics / NVIDIA / DRM
+# ===========================================================================
+
+# hippos-gpu-init's own log: driver mode chosen (open/legacy tier/nouveau),
+# the PCI-ID -> legacybranch lookup against supported-gpus.json, and why —
+# the only way to tell "no NVIDIA GPU detected" from "detected but the tier
+# lookup/switch silently fell through to nvidia-open" from the outside.
+if [[ -f /var/log/hippos-gpu.log ]]; then
+    cp -f /var/log/hippos-gpu.log "${OUT_DIR}/hippos-gpu.log" || true
+fi
+
+# What HippOS actually wrote under /etc/modprobe.d (nvidia_use_proprietary/
+# nvidia_switch_tier's two files, plus anything else hippos-prefixed) rather
+# than inferring it from hippos-gpu.log's prose.
+capture_shell "hippos-modprobe-conf.txt" \
+    'for f in /etc/modprobe.d/hippos-*.conf; do
+        [[ -f "$f" ]] || continue;
+        echo "===== $f =====";
+        cat "$f" 2>/dev/null || true;
+        echo;
+     done'
+
+capture "nvidia-smi.txt" \
+    nvidia-smi
+
+capture_shell "graphics-pci.txt" \
+    'lspci -nnk | grep -A5 -Ei "VGA|3D|Display" || true'
+
+capture_shell "drm-state.txt" \
+    'for card in /sys/class/drm/card*; do
+        [[ -e "$card" ]] || continue;
+
+        echo;
+        echo "================================================================";
+        echo "$card";
+        echo "================================================================";
+
+        if [[ -f "$card/device/uevent" ]]; then
+            cat "$card/device/uevent" 2>/dev/null || true;
+        fi;
+     done'
+
+capture_shell "drm-connectors.txt" \
+    'for status in /sys/class/drm/card*-*/status; do
+        [[ -f "$status" ]] || continue;
+        printf "%s: " "$status";
+        cat "$status" 2>/dev/null || true;
+     done'
+
+capture_shell "edid.txt" \
+    'for edid in /sys/class/drm/*/edid; do
+        conn="${edid%/edid}";
+        size="$(wc -c < "$edid" 2>/dev/null || echo 0)";
+        if [[ "$size" -gt 0 ]]; then
+            printf "%s: %d bytes\n" "$conn" "$size";
+            edid-decode "$edid" 2>/dev/null || true;
+        else
+            printf "%s: no EDID\n" "$conn";
+        fi;
+     done'
+
+capture_shell "xrandr.txt" \
+    'DISPLAY=:0 xrandr 2>&1 || echo "xrandr not available"'
+
+capture_shell "prime-sentinels.txt" \
+    'ls -la /var/tmp/hippos-*.prime 2>/dev/null || echo "none"'
+
+# ===========================================================================
+# Network
+# ===========================================================================
+
+capture "ip-addresses.txt" \
+    ip addr
+
+capture "ip-routes.txt" \
+    ip route
+
+capture "networkmanager.txt" \
+    nmcli device
+
+capture_shell "networkmanager-general.txt" \
+    'nmcli general 2>&1 || true'
+
+capture_shell "resolv.conf.txt" \
+    'ls -l /etc/resolv.conf 2>&1;
+     echo;
+     cat /etc/resolv.conf 2>&1'
+
+# ===========================================================================
+# Sessions / user state
+# ===========================================================================
+
+capture "loginctl.txt" \
+    loginctl
+
+capture_shell "sessions.txt" \
+    'loginctl list-sessions --no-pager 2>&1;
+     echo;
+     loginctl list-users --no-pager 2>&1'
+
+capture_shell "user-journal.txt" \
+    'journalctl -b _UID=1000 --no-pager 2>&1'
+
+capture_shell "user-1000.txt" \
+    'getent passwd 1000 2>&1 || true;
+     echo;
+     id hippos 2>&1 || true'
+
+# ===========================================================================
+# Targeted error extraction
+# ===========================================================================
+
+capture_shell "timeout-errors.txt" \
+    'journalctl -b --no-pager |
+     grep -iE "timed out|timeout|dependency failed|ordering cycle|job .*failed" ||
+     true'
+
+# Deliberately target kernel/block-layer errors rather than generic words such
+# as "disconnected", which otherwise produce false positives from networking.
+capture_shell "storage-errors.txt" \
+    'journalctl -k -b --no-pager |
+     grep -iE "I/O error|Buffer I/O|blk_update_request|critical medium|medium error|end_request|device offline|rejecting I/O|reset (high-speed|SuperSpeed|full-speed|low-speed) USB device|USB disconnect|uas_eh_abort_handler|FAILED Result: hostbyte|Sense Key.*(Medium Error|Hardware Error)" ||
+     true'
+
+capture_shell "btrfs-errors.txt" \
+    'journalctl -k -b --no-pager |
+     grep -iE "BTRFS.*(error|warning|corrupt|checksum|csum|failed|replay)" ||
+     true'
+
+capture_shell "mount-errors.txt" \
+    'journalctl -b --no-pager |
+     grep -iE "mount|umount|udisks|filesystem|file system|PARTUUID|UUID=|polkit|authorization|permission denied" ||
+     true'
+
+capture_shell "firmware-errors.txt" \
+    'journalctl -k -b --no-pager |
+     grep -iE "firmware|failed to load|module.*not found" ||
+     true'
+
+capture_shell "graphics-errors.txt" \
+    'journalctl -b --no-pager |
+     grep -iE "nvidia|nouveau|drm|Xorg|X11|GPU|VGA|EDID|modeset" ||
+     true'
+
+# ===========================================================================
+# Emulator ELF dependency audit
+#
+# HippOS emulator payloads:
+#
+#     /userdata/emulators/<emulator>/bin/
+#
+# Every executable ELF beneath an emulator bin directory is checked.
+# ldd runs once per ELF and feeds both reports.
+# ===========================================================================
+
+EMULATOR_ROOT="/userdata/emulators"
+LDD_LOG="${OUT_DIR}/emulator-ldd.log"
+MISSING_LOG="${OUT_DIR}/emulator-missing-libraries.log"
+
+{
+    echo "===== EMULATOR ELF DEPENDENCY AUDIT ====="
+    echo
+} > "${LDD_LOG}"
+
+{
+    echo "===== EMULATOR MISSING SHARED LIBRARIES ====="
+    echo
+} > "${MISSING_LOG}"
+
+TOTAL_FILES=0
+ELF_TOTAL=0
+MISSING_TOTAL=0
+
+if [[ ! -d "${EMULATOR_ROOT}" ]]; then
+
+    echo "Emulator root does not exist: ${EMULATOR_ROOT}" \
+        >> "${LDD_LOG}"
+
+    echo "Emulator root does not exist: ${EMULATOR_ROOT}" \
+        >> "${MISSING_LOG}"
+
+else
+
+    while IFS= read -r -d '' exe; do
+        ((TOTAL_FILES+=1))
+
+        file_output="$(file -L "$exe" 2>/dev/null || true)"
+
+        [[ "$file_output" == *ELF* ]] || continue
+
+        ((ELF_TOTAL+=1))
+
+        ldd_output="$(ldd "$exe" 2>&1 || true)"
+
+        {
+            echo "================================================================"
+            echo "BINARY: $exe"
+            echo "================================================================"
+            echo "$file_output"
+            echo
+            echo "$ldd_output"
+            echo
+        } >> "${LDD_LOG}"
+
+        missing="$(
+            printf '%s\n' "$ldd_output" |
+            grep 'not found' || true
+        )"
+
+        if [[ -n "$missing" ]]; then
+            ((MISSING_TOTAL+=1))
+
+            {
+                echo "================================================================"
+                echo "BINARY: $exe"
+                echo "================================================================"
+                echo "$missing"
+                echo
+            } >> "${MISSING_LOG}"
+        fi
+
+    done < <(
+        find "${EMULATOR_ROOT}" \
+            -path '*/bin/*' \
+            -type f \
+            -perm /111 \
+            -print0 2>/dev/null
+    )
+
+fi
+
+{
+    echo
+    echo "================================================================"
+    echo "SUMMARY"
+    echo "================================================================"
+    echo "Executable files discovered: ${TOTAL_FILES}"
+    echo "ELF binaries checked:        ${ELF_TOTAL}"
+    echo "Binaries missing libraries:  ${MISSING_TOTAL}"
+} >> "${LDD_LOG}"
+
+{
+    echo
+    echo "================================================================"
+    echo "SUMMARY"
+    echo "================================================================"
+
+    if [[ "${MISSING_TOTAL}" -eq 0 ]]; then
+        echo "No missing shared libraries detected."
+    else
+        echo "${MISSING_TOTAL} ELF binaries have unresolved shared libraries."
+    fi
+} >> "${MISSING_LOG}"
+
+# ===========================================================================
+# Process snapshot
+# ===========================================================================
+
+capture "processes.txt" \
+    ps auxww
+
+# ===========================================================================
+# Final human-readable summary
+# ===========================================================================
+
+{
+    echo "===== HippOS BOOT CAPTURE SUMMARY ====="
+    echo
+    echo "Boot ID:       ${BOOT_ID}"
+    echo "Captured:      $(date --iso-8601=seconds)"
+    echo "Session state: ${SESSION_STATE}"
+    echo "Boot state:    ${BOOT_STATE}"
+    echo
+
+    echo "===== FAILED UNITS ====="
+    systemctl --failed --no-pager --full 2>&1 || true
+
+    echo
+    echo "===== STORAGE ====="
+    lsblk -o NAME,SIZE,FSTYPE,LABEL,MODEL,TRAN,MOUNTPOINTS 2>&1 || true
+
+    echo
+    echo "===== EMULATOR LIBRARIES ====="
+    echo "Executable files discovered: ${TOTAL_FILES}"
+    echo "ELF binaries checked:        ${ELF_TOTAL}"
+    echo "Missing-library binaries:    ${MISSING_TOTAL}"
+
+    echo
+    echo "===== BOOT TIME ====="
+    systemd-analyze time 2>&1 || true
+
+    echo
+    echo "===== CRITICAL CHAIN ====="
+    systemd-analyze critical-chain 2>&1 || true
+
+} > "${OUT_DIR}/summary.txt" 2>&1
+
+# ===========================================================================
+# latest -> this boot
+# ===========================================================================
+
 ln -sfn "${OUT_DIR}" "${LOG_DIR}/latest"
+
+# ===========================================================================
+# Retention
+# ===========================================================================
+
+prune_old_boot_logs

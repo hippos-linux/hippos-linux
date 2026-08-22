@@ -43,81 +43,24 @@ fi
 echo ""
 
 # ── Collect ───────────────────────────────────────────────────────────────────
+#
+# capture-boot-logs (runs automatically at boot, into
+# /userdata/system/logs/boot/<boot_id>/) is the canonical, comprehensive
+# system snapshot — version/kernel/CPU/memory/PCI/storage/GPU/display/EDID/
+# service status+journals/GRUB/modprobe conf/coredumps/and more. This tool
+# used to re-collect most of that itself by hand, duplicating it and drifting
+# out of sync (e.g. stale unit names journalctl'd here that no longer exist).
+# Re-run it now rather than trust whatever the boot-time run already wrote:
+# boot_id is stable for the whole session, so this overwrites that same
+# directory with a fresh, up-to-the-moment capture (journalctl -b covers the
+# whole current boot regardless of when it's invoked) — meaningfully better
+# for a runtime issue reported hours into a session, not just a boot issue.
 
 WORK="$(mktemp -d /tmp/hippos-upload.XXXXXX)"
 trap 'rm -rf "${WORK}"' EXIT
 LOGS="${WORK}/logs"
 mkdir -p "${LOGS}"
 printf '%s\n' "${ISSUE}" > "${LOGS}/issue.txt"
-
-echo -n "  System info...         "
-{
-    echo "=== HippOS Version ==="
-    cat /usr/share/hippos/version 2>/dev/null || echo "unknown"
-
-    echo ""
-    echo "=== Kernel ==="
-    uname -a
-
-    echo ""
-    echo "=== CPU ==="
-    lscpu 2>/dev/null | head -30 || head -40 /proc/cpuinfo || true
-
-    echo ""
-    echo "=== Memory ==="
-    free -h
-
-    echo ""
-    echo "=== PCI Devices ==="
-    lspci -nn 2>/dev/null || true
-
-    echo ""
-    echo "=== Block Devices ==="
-    lsblk 2>/dev/null || true
-
-    echo ""
-    echo "=== Disk Usage ==="
-    df -h 2>/dev/null || true
-
-    echo ""
-    echo "=== GPU Modules ==="
-    lsmod 2>/dev/null | grep -E "nvidia|nouveau|amdgpu|radeon|i915|xe|drm" || echo "none matched"
-
-    echo ""
-    echo "=== PRIME Sentinels ==="
-    ls -la /var/tmp/hippos-*.prime 2>/dev/null || echo "none"
-
-    echo ""
-    echo "=== Display (xrandr) ==="
-    DISPLAY=:0 xrandr 2>/dev/null || echo "xrandr not available"
-
-    echo ""
-    echo "=== Connector Status ==="
-    for _status in /sys/class/drm/*/status; do
-        printf '%s: %s\n' "${_status%/status}" "$(cat "${_status}" 2>/dev/null)"
-    done 2>/dev/null || echo "none"
-
-    echo ""
-    echo "=== EDID ==="
-    for _edid in /sys/class/drm/*/edid; do
-        _conn="${_edid%/edid}"
-        _size="$(wc -c < "${_edid}" 2>/dev/null || echo 0)"
-        if [[ "${_size}" -gt 0 ]]; then
-            printf '%s: %d bytes\n' "${_conn}" "${_size}"
-            edid-decode "${_edid}" 2>/dev/null || true
-        else
-            printf '%s: no EDID\n' "${_conn}"
-        fi
-    done 2>/dev/null || echo "none"
-
-    echo ""
-    echo "=== Service Status ==="
-    systemctl status --no-pager \
-        hippos-xserver hippos-es hippos-gpu-init \
-        hippos-userdata hippos-update-grub-first-boot \
-        2>/dev/null || true
-} > "${LOGS}/system-info.txt" 2>&1
-echo "done"
 
 echo -n "  Settings...            "
 {
@@ -127,77 +70,22 @@ echo -n "  Settings...            "
 } > "${LOGS}/settings.txt" 2>&1
 echo "done"
 
-echo -n "  Journal (current boot)..."
-journalctl -b --no-pager 2>/dev/null > "${LOGS}/journal-boot.txt" || true
+echo -n "  Refreshing boot capture..."
+# capture-boot-logs normally runs as root via its systemd service and writes
+# into a root-owned directory — needs sudo here since this tool runs as the
+# interactive hippos user (which already has passwordless sudo, see
+# /etc/sudoers.d/hippos).
+sudo /usr/lib/hippos/capture-boot-logs 2>/dev/null || true
 echo " done"
 
-echo -n "  HippOS service journal..."
-journalctl -b --no-pager \
-    -u hippos-xserver -u hippos-es -u hippos-gpu-init \
-    -u hippos-userdata -u hippos-update-grub-first-boot \
-    2>/dev/null > "${LOGS}/journal-hippos-services.txt" || true
-echo " done"
-
-echo -n "  Plymouth debug log...   "
-# plymouthd doesn't log its own internal state (DRM calls, quit handshake,
-# theme rendering) to the journal at all — only to this file, and only
-# when Debug=yes is set (see /etc/plymouth/plymouthd.conf). Without it, a
-# plymouth-quit-wait hang shows up in journal-boot.txt as pure silence —
-# see DISC-001, 2026-08-17, where this was the actual missing piece.
-cp /var/log/plymouth-debug.log "${LOGS}/plymouth-debug.log" 2>/dev/null || \
-    echo "(not present — Debug=yes not set, or plymouth never ran)" > "${LOGS}/plymouth-debug.log"
-echo "done"
-
-echo -n "  Xorg log...            "
-if [[ -f /tmp/Xorg.0.log ]]; then
-    cp /tmp/Xorg.0.log "${LOGS}/"
-    echo "done"
-else
-    echo "not found"
-fi
-
-echo -n "  GPU init log...        "
-if [[ -f /var/log/hippos-gpu.log ]]; then
-    cp /var/log/hippos-gpu.log "${LOGS}/"
-    echo "done"
-else
-    echo "not found"
-fi
-
-echo -n "  GRUB config...         "
-if [[ -f /boot/efi/grub/grub.cfg ]]; then
-    cp /boot/efi/grub/grub.cfg "${LOGS}/grub.cfg"
-    echo "done"
-else
-    echo "not found"
-fi
-
-echo -n "  GRUB defaults...       "
-{
-    for _f in /etc/default/grub /etc/default/grub.d/*.cfg; do
-        [[ -f "${_f}" ]] || continue
-        echo "=== ${_f} ==="
-        cat "${_f}"
-        echo ""
-    done
-} > "${LOGS}/grub-defaults.txt" 2>/dev/null
-[[ -s "${LOGS}/grub-defaults.txt" ]] && echo "done" || echo "not found"
-
-echo -n "  modprobe conf...       "
-{
-    for _f in /etc/modprobe.d/hippos-*.conf; do
-        [[ -f "${_f}" ]] || continue
-        echo "=== ${_f} ==="
-        cat "${_f}"
-        echo ""
-    done
-} > "${LOGS}/modprobe-hippos.txt" 2>/dev/null
-[[ -s "${LOGS}/modprobe-hippos.txt" ]] && echo "done" || echo "not found"
-
-echo -n "  /userdata/system/logs..."
-if [[ -d /userdata/system/logs ]]; then
-    cp -r /userdata/system/logs "${LOGS}/userdata-system-logs"
-    _count="$(find /userdata/system/logs -type f | wc -l)"
+echo -n "  Boot capture...        "
+# Just this boot's capture, not the whole retained history under
+# /userdata/system/logs/boot/ (up to 20 boots — see LOG_RETENTION_COUNT in
+# capture-boot-logs) — a support bundle needs the current issue, not a
+# multi-boot log archive.
+if [[ -d /userdata/system/logs/boot/latest ]]; then
+    cp -r /userdata/system/logs/boot/latest "${LOGS}/boot-capture"
+    _count="$(find /userdata/system/logs/boot/latest -type f | wc -l)"
     echo " ${_count} file(s)"
 else
     echo " directory not found"
