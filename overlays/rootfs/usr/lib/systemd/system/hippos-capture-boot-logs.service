@@ -9,7 +9,9 @@ Wants=userdata.mount
 
 [Service]
 Type=oneshot
-TimeoutStartSec=120
+# Script polls session state (up to 180s) then graphical.target (up to 120s)
+# before capturing; 600s leaves headroom for the full diagnostic sweep after.
+TimeoutStartSec=600
 ExecStart=/usr/lib/hippos/capture-boot-logs
 
 [Install]

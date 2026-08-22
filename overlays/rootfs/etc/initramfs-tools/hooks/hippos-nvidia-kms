@@ -1,0 +1,42 @@
+#!/bin/sh
+# HippOS: force NVIDIA DRM/KMS modules (+ whatever firmware they declare) into
+# the initramfs, so Plymouth has a usable KMS device during early boot on
+# hardware where the NVIDIA GPU drives the physical display — see
+# kb/guidance/gpu-strategy.md ("KMS Must Be Enabled Before Plymouth Runs").
+# nvidia-drm.modeset=1 on the kernel command line only sets the parameter for
+# whenever nvidia_drm first loads; without this hook that first load happened
+# post-switch_root via hippos-gpu-init.service, racing (and usually losing)
+# against plymouth-quit.service — too late for Plymouth to ever see a KMS
+# device. This hook is what makes the load happen early enough instead.
+#
+# nvidia-open is DKMS-built per kernel variant by configure-rootfs.sh, not a
+# stock Debian package, and may not exist for every ${version} this hook runs
+# for (Intel/AMD-only images, or a kernel variant nvidia-open failed to build
+# against — see gpu-strategy.md's Legacy Hardware Fallback notes). This must
+# be a clean no-op whenever any of the three modules is missing, not a failure.
+
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in prereqs) prereqs; exit 0;; esac
+
+. /usr/share/initramfs-tools/hook-functions
+
+NVIDIA_MODULES="nvidia nvidia-modeset nvidia-drm"
+
+for _mod in ${NVIDIA_MODULES}; do
+    modinfo -k "${version}" "${_mod}" >/dev/null 2>&1 || exit 0
+done
+
+for _mod in ${NVIDIA_MODULES}; do
+    force_load "${_mod}"
+done
+
+# Read the firmware paths straight out of each module's own modinfo instead
+# of assuming a driver version/path — nvidia-open's version isn't pinned
+# (configure-rootfs.sh tracks whatever NVIDIA's repo currently ships), and
+# this way the hook keeps working unmodified across driver/kernel updates.
+for _mod in ${NVIDIA_MODULES}; do
+    modinfo -k "${version}" -F firmware "${_mod}" 2>/dev/null
+done | sort -u | while read -r _fw; do
+    [ -n "${_fw}" ] && add_firmware "${_fw}" || true
+done

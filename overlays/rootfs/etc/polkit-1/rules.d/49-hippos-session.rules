@@ -1,7 +1,37 @@
-// Allow the hippos user to create transient systemd units (for emulator launching)
+// ES <-> desktop mode switching (switch-to-desktop / switch-to-es) — both run
+// `systemd-run --no-block --collect bash -c "systemctl stop ...; systemctl
+// start ..."` against the SYSTEM manager (no --user) as the hippos user, to
+// stop/start hippos-es.service/hippos-desktop.service from outside their own
+// cgroup. That StartTransientUnit call is what needs manage-units; nothing
+// in the switching path touches unit *files* (enable/disable/mask) or asks
+// for a daemon-reload, so this stays scoped to manage-units only — see the
+// separate, untouched rule below for manage-unit-files/reload-daemon.
+//
+// No subject.user check, for the same reason as the udisks2 rule further
+// down: manage-units defaults to allow_active=auth_admin_keep (interactive
+// admin authentication) whenever this rule doesn't match. switch-to-desktop
+// runs from inside hippos-es.service's bare X11 session — no window manager,
+// no XDG autostart, so no polkit agent (lxpolkit) is ever running there to
+// answer that prompt — the D-Bus call just sits until something times it
+// out. Matches real-hardware reports of ES<->desktop switching occasionally
+// failing or taking an abnormally long time. `systemd-run --no-block`
+// already returns as soon as the job is queued, so this authorization
+// round-trip is the only place that wait can come from. HippOS is
+// single-user (no other account exists to withhold this from), same as the
+// udisks2 case — drop the check rather than chase session resolution, and
+// do not replace it with an interactive prompt: mode switching must work
+// unattended from a session where no agent can ever be present.
+polkit.addRule(function(action) {
+    if (action.id == "org.freedesktop.systemd1.manage-units") {
+        return polkit.Result.YES;
+    }
+});
+
+// Allow the hippos user to manage unit files / trigger a daemon-reload.
+// Not currently exercised by ES<->desktop switching (that only needs
+// manage-units, above) — left as-is, unrelated to this investigation.
 polkit.addRule(function(action, subject) {
-    if ((action.id == "org.freedesktop.systemd1.manage-units" ||
-         action.id == "org.freedesktop.systemd1.manage-unit-files" ||
+    if ((action.id == "org.freedesktop.systemd1.manage-unit-files" ||
          action.id == "org.freedesktop.systemd1.reload-daemon") &&
         subject.user == "hippos") {
         return polkit.Result.YES;
@@ -16,10 +46,24 @@ polkit.addRule(function(action, subject) {
     }
 });
 
-// Allow hippos to mount/unmount/eject removable drives via udisks2 (hot-plug).
+// Allow mount/unmount/eject of removable drives via udisks2 (hot-plug).
 // btrfs drives are still blocked by 90-btrfs-no-udisks2.rules so hippos-storage
 // handles them instead.
-polkit.addRule(function(action, subject) {
+//
+// No subject.user check: hippos-automount (see 80-hippos-storage.rules) mounts
+// drives directly via `mount`, as root, straight from udev — outside udisks2's
+// own bookkeeping. When the desktop file manager later asks udisks2 to
+// unmount/eject one of those mounts, udisks2 treats it as unmounting a mount
+// it doesn't own, which requires filesystem-unmount-others/eject-media/
+// power-off-drive rather than the free self-service path. Confirmed failing
+// even with the previous subject.user === "hippos" check in place (real
+// hardware report, "Not authorized to perform operation" from PCManFM-Qt) —
+// hippos-desktop.service/hippos-es.service have no PAMName= and never
+// register a real logind session, so subject.user may not be resolving the
+// way this assumed. HippOS is single-user (no other account exists to
+// withhold this from), so drop the check rather than chase session
+// resolution for it.
+polkit.addRule(function(action) {
     var udisksActions = [
         "org.freedesktop.udisks2.filesystem-mount",
         "org.freedesktop.udisks2.filesystem-mount-system",
@@ -27,7 +71,7 @@ polkit.addRule(function(action, subject) {
         "org.freedesktop.udisks2.eject-media",
         "org.freedesktop.udisks2.power-off-drive"
     ];
-    if (udisksActions.indexOf(action.id) >= 0 && subject.user === "hippos") {
+    if (udisksActions.indexOf(action.id) >= 0) {
         return polkit.Result.YES;
     }
 });

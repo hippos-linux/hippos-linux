@@ -645,9 +645,27 @@ def _read_pid() -> int:
 
 def _signal_daemon(sig: int = signal.SIGHUP) -> None:
     try:
-        os.kill(_read_pid(), sig)
-    except (FileNotFoundError, ValueError, ProcessLookupError):
+        pid = _read_pid()
+    except (FileNotFoundError, ValueError):
+        return
+    try:
+        os.kill(pid, sig)
+    except ProcessLookupError:
         pass
+    except PermissionError:
+        # hippos-hotkeys.service runs as root (needs /dev/input, /dev/uinput);
+        # --new-context/--default-context/--reload are invoked as the hippos
+        # user (emulatorlauncher, waydroid-launcher run under User=hippos) —
+        # a plain os.kill() against a root-owned PID is rejected by the
+        # kernel regardless of what wrote CONTEXT_FILE, so the daemon never
+        # actually reconfigures: the file is right, the running process just
+        # never hears about it. hippos already has NOPASSWD sudo for
+        # everything (see /etc/sudoers.d/hippos) — use it for the one
+        # privileged step this needs.
+        subprocess.run(
+            ['sudo', '-n', 'kill', f'-{signal.Signals(sig).name}', str(pid)],
+            capture_output=True,
+        )
 
 def cmd_send(action: str) -> None:
     """Inject a named action into the currently active context."""
@@ -663,7 +681,22 @@ def cmd_send(action: str) -> None:
     if isinstance(target, str):
         subprocess.run(target, shell=True)
         return
-    uinput = make_uinput()
+    try:
+        uinput = make_uinput()
+    except PermissionError:
+        # /dev/uinput is root:root by default — only the daemon (runs as
+        # root) can normally open it. --send creates its own transient
+        # uinput device rather than going through the daemon, so callers
+        # invoked as the hippos user (hippos-swissknife, run from
+        # EmulationStation's own User=hippos process) hit the same
+        # root-vs-non-root gap _signal_daemon() had. Re-invoke this one
+        # send under sudo rather than trying to grant /dev/uinput access
+        # more broadly.
+        subprocess.run(
+            ['sudo', '-n', str(Path(__file__).resolve()), '--send', action],
+            capture_output=True,
+        )
+        return
     time.sleep(0.1)
     send_key_combo(uinput, target)
     time.sleep(0.3)
@@ -674,7 +707,12 @@ def cmd_new_context(name: str, json_str: str, disable_common: bool = False) -> N
     data: dict[str, Any] = {'name': name, 'keys': json.loads(json_str)}
     if disable_common:
         data['common_disabled'] = True
-    CONTEXT_FILE.write_text(json.dumps(data))
+    # Atomic write: a reader (the daemon reloading on SIGHUP, or anything else
+    # that reads CONTEXT_FILE) must never observe a truncated-but-not-yet-written
+    # file mid-update.
+    tmp_path = CONTEXT_FILE.with_suffix('.tmp')
+    tmp_path.write_text(json.dumps(data))
+    os.replace(tmp_path, CONTEXT_FILE)
     _signal_daemon()
 
 def cmd_default_context() -> None:
