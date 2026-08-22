@@ -294,11 +294,13 @@ capture_shell "systemd-config.txt" \
 # 11") — this is the actual backtrace, straight from systemd-coredump.
 # ===========================================================================
 
+# coredumpctl has no --boot flag (it errors with "unrecognized option") —
+# scope to this boot the same way journalctl matches do, via _BOOT_ID=.
 capture "coredumps.txt" \
-    coredumpctl list --no-pager --boot
+    coredumpctl list --no-pager "_BOOT_ID=${BOOT_ID}"
 
 capture_shell "coredumps-detail.txt" \
-    'coredumpctl --boot -F pid 2>/dev/null | while read -r pid; do
+    'coredumpctl -F pid "_BOOT_ID='"${BOOT_ID}"'" 2>/dev/null | while read -r pid; do
         [ -n "$pid" ] || continue;
         echo;
         echo "================================================================";
