@@ -84,7 +84,11 @@ echo -n "  Boot capture...        "
 # capture-boot-logs) — a support bundle needs the current issue, not a
 # multi-boot log archive.
 if [[ -d /userdata/system/logs/boot/latest ]]; then
-    cp -r /userdata/system/logs/boot/latest "${LOGS}/boot-capture"
+    # -L: `latest` is itself a symlink (see capture-boot-logs); plain `cp -r`
+    # copies the symlink itself rather than dereferencing it, so the bundle
+    # ends up with a dangling link to a path that doesn't exist off-device
+    # instead of the actual capture files.
+    cp -rL /userdata/system/logs/boot/latest "${LOGS}/boot-capture"
     _count="$(find /userdata/system/logs/boot/latest -type f | wc -l)"
     echo " ${_count} file(s)"
 else
