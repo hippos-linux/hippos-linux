@@ -7,6 +7,13 @@ Conflicts=hippos-es.service
 [Service]
 Type=simple
 User=hippos
+# Without this, systemd never registers a logind session for this login —
+# subject.user goes unresolved for polkit checks (see 49-hippos-session.rules)
+# and the KDE polkit agent can't register at all ("Cannot create unix
+# session: No session for pid ..."), so no future polkit-gated prompt in
+# desktop mode can ever be answered. systemd-user is the same no-interactive-
+# auth PAM service user@1000.service already uses for this exact purpose.
+PAMName=systemd-user
 ExecStartPre=/bin/sh -c 'prev=""; for i in $(seq 1 30); do cur=$(DISPLAY=:0 xrandr --current 2>/dev/null | sed -n "/^Screen/s/.*current \\([0-9]*\\) x \\([0-9]*\\).*/\\1x\\2/p"); [ "$cur" = "$prev" ] && [ -n "$cur" ] && exit 0; prev=$cur; sleep 1; done; exit 0'
 ExecStart=/usr/lib/hippos/session-desktop
 ExecStopPost=/bin/sh -c 'XDG_RUNTIME_DIR=/run/user/1000 systemctl --user stop plasmashell.service ksmserver.service "plasma-*.service" 2>/dev/null; pkill -TERM -u hippos -f "kwin|plasmashell|startplasma|ksmserver|lxqt|xfce|gnome-session|mate-session|cinnamon" 2>/dev/null; sleep 1; pkill -KILL -u hippos -f "kwin|plasmashell|startplasma|ksmserver|lxqt|xfce|gnome-session|mate-session|cinnamon" 2>/dev/null; true'
