@@ -139,7 +139,15 @@ for _ in $(seq 1 240); do
 
     # If graphical.target isn't going to complete because the boot genuinely
     # failed, don't wait forever once there are no remaining start jobs.
-    if ! systemctl list-jobs --no-legend 2>/dev/null | grep -q ' start '; then
+    # Exclude our own unit: this script IS hippos-capture-boot-logs.service's
+    # ExecStart, so its "start running" job is always present in the list
+    # while this loop runs — without the exclusion, this check can never
+    # fire and every capture silently burns the full 120s here regardless
+    # of whether anything is actually still pending (boot-hang investigation,
+    # 2026-08-23).
+    if ! systemctl list-jobs --no-legend 2>/dev/null |
+            grep -vE 'hippos-capture-boot-logs\.service[[:space:]]' |
+            grep -q ' start '; then
         BOOT_STATE="no pending start jobs"
         break
     fi

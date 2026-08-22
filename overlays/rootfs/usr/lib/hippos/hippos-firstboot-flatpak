@@ -6,6 +6,13 @@
 set -euo pipefail
 
 MARKER="/userdata/.config/hippos/flatpak-apps-installed"
+ATTEMPTS_FILE="/userdata/.config/hippos/flatpak-firstboot-attempts"
+# One permanently-broken app ID must not retry the whole set forever — cap
+# it. Apps that already installed are skipped on retry (idempotent check
+# below), so this only bounds how many boots we keep retrying whatever's
+# still missing (real hardware report: com.localsend.localsend, wrong app
+# ID, retried every single boot indefinitely — 2026-08-23).
+MAX_ATTEMPTS=5
 
 log() { echo "[hippos-firstboot-flatpak] $*"; }
 
@@ -32,7 +39,7 @@ APPS=(
     com.vysp3r.ProtonPlus
     com.github.tchx84.Flatseal
     it.mijorus.gearlever
-    com.localsend.localsend
+    org.localsend.localsend_app
     io.missioncenter.MissionCenter
 )
 
@@ -46,8 +53,15 @@ runuser -l hippos -c "flatpak update --appstream --user flathub" \
 
 log "Installing ${#APPS[@]} flatpak apps to /userdata"
 
+mkdir -p "$(dirname "${ATTEMPTS_FILE}")"
+attempt="$(( $(cat "${ATTEMPTS_FILE}" 2>/dev/null || echo 0) + 1 ))"
+echo "${attempt}" > "${ATTEMPTS_FILE}"
+
 failed=0
 for app in "${APPS[@]}"; do
+    if runuser -l hippos -c "flatpak info --user '${app}' >/dev/null 2>&1"; then
+        continue  # already installed from a prior boot's partial success
+    fi
     log "Installing ${app}"
     runuser -l hippos -c "flatpak install --user --noninteractive --assumeyes flathub '${app}'" \
         && log "  OK: ${app}" \
@@ -57,8 +71,13 @@ done
 if [[ "${failed}" -eq 0 ]]; then
     mkdir -p "$(dirname "${MARKER}")"
     touch "${MARKER}"
+    rm -f "${ATTEMPTS_FILE}"
     log "Done"
+elif [[ "${attempt}" -ge "${MAX_ATTEMPTS}" ]]; then
+    mkdir -p "$(dirname "${MARKER}")"
+    touch "${MARKER}"
+    log "Done with ${failed} failure(s) after ${attempt} attempts — giving up, not retrying further"
 else
-    log "Done with ${failed} failure(s) — marker not written, will retry next boot"
+    log "Done with ${failed} failure(s) (attempt ${attempt}/${MAX_ATTEMPTS}) — will retry next boot"
     exit 1
 fi
