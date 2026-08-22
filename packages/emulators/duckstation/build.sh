@@ -128,7 +128,7 @@ else
 fi
 
 chmod +x "${STAGING}/bin/duckstation"
-strip "${STAGING}/bin/duckstation" || true
+# Stripping is now handled centrally by strip_payload_dir (build/configure-rootfs.sh).
 
 cp -r "${BUILD}/bin/resources" "${STAGING}/bin/"
 
@@ -146,6 +146,18 @@ done
 (cd "${STAGING}/lib" && \
     versioned="$(ls libplutosvg.so.0.* 2>/dev/null | head -1)" && \
     [[ -n "${versioned}" ]] && ln -sf "${versioned}" libplutosvg.so.0 || true)
+
+# The prebuilt libpng16 carries the (unofficial) APNG patch — png_get_acTL/
+# png_get_num_frames/png_get_num_plays/png_set_acTL — which Debian's stock
+# libpng16 package never ships, at any version. Falling through to the
+# system libpng16.so.16 is therefore always a hard `undefined symbol` crash
+# at launch, not a version-skew issue a newer Trixie package would fix.
+for f in "${PREBUILT_LIB}"/libpng16.so.16*; do
+    [[ -f "$f" ]] && cp "$f" "${STAGING}/lib/"
+done
+(cd "${STAGING}/lib" && \
+    versioned="$(ls libpng16.so.16.* 2>/dev/null | head -1)" && \
+    [[ -n "${versioned}" ]] && ln -sf "${versioned}" libpng16.so.16 || true)
 
 write_artifact_version "${STAGING}" "$(git -C "${SRC}" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d)"
 log "Done. Artifact at ${STAGING}"
