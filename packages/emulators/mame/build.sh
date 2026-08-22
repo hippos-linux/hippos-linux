@@ -18,7 +18,15 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}"
 
-if [[ "${ARCH:-amd64}" == "arm64" ]]; then
+TARGET_ARCH="${ARCH:-amd64}"
+
+# GroovyMAME's own makefile uses $(ARCH) as a compiler flag (e.g. -m64), and
+# make auto-imports env vars over its `?=` default. Our ARCH="amd64"/"arm64"
+# env var leaks in and gets fed to the linker as a literal token, so unset it
+# before invoking GroovyMAME's make.
+unset ARCH
+
+if [[ "${TARGET_ARCH}" == "arm64" ]]; then
     make -C "${SRC}" -j"$(nproc)" NOWERROR=1 \
         CROSS_BUILD=1 \
         OVERRIDE_CC=aarch64-linux-gnu-gcc \
