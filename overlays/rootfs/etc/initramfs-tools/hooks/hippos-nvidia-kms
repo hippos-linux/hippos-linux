@@ -13,7 +13,8 @@
 # stock Debian package, and may not exist for every ${version} this hook runs
 # for (Intel/AMD-only images, or a kernel variant nvidia-open failed to build
 # against — see gpu-strategy.md's Legacy Hardware Fallback notes). This must
-# be a clean no-op whenever any of the three modules is missing, not a failure.
+# be a clean no-op whenever NVIDIA simply isn't installed for this kernel,
+# not a failure.
 
 PREREQ=""
 prereqs() { echo "$PREREQ"; }
@@ -23,9 +24,29 @@ case "$1" in prereqs) prereqs; exit 0;; esac
 
 NVIDIA_MODULES="nvidia nvidia-modeset nvidia-drm"
 
+# Probe the core module first: if it doesn't resolve, NVIDIA isn't installed
+# for this kernel at all (Intel/AMD-only image, or a variant nvidia-open
+# didn't build against) — nothing unusual, silent no-op.
+modinfo -k "${version}" nvidia >/dev/null 2>&1 || exit 0
+
+# The core module resolved, so NVIDIA is genuinely expected here. If any of
+# the three doesn't resolve past this point, something's actually wrong —
+# e.g. modinfo's index (/lib/modules/<version>/modules.dep) went stale
+# relative to what's installed, which is exactly what silently dropped
+# NVIDIA out of both initrds on a reused build root even though the modules
+# themselves were valid (see kb/guidance/gpu-strategy.md). Warn loudly so
+# that doesn't happen silently again, but stay non-fatal: early KMS is a
+# Plymouth-visibility enhancement, not a boot requirement, and this hook has
+# no safe way to fix a stale index — that's handled by ensuring depmod runs
+# before update-initramfs, not by this hook rebuilding anything.
+_missing=""
 for _mod in ${NVIDIA_MODULES}; do
-    modinfo -k "${version}" "${_mod}" >/dev/null 2>&1 || exit 0
+    modinfo -k "${version}" "${_mod}" >/dev/null 2>&1 || _missing="${_missing} ${_mod}"
 done
+if [ -n "${_missing}" ]; then
+    echo "hippos-nvidia-kms: WARNING: NVIDIA driver present for kernel ${version} but modinfo cannot resolve:${_missing} — skipping NVIDIA early KMS for this initramfs (module dependency metadata may be stale; boot will proceed without NVIDIA in initramfs)" >&2
+    exit 0
+fi
 
 for _mod in ${NVIDIA_MODULES}; do
     force_load "${_mod}"
