@@ -1,7 +1,15 @@
 [Unit]
 Description=HippOS Waydroid first-boot initialisation
-After=network-online.target var-lib-waydroid.mount
-Wants=network-online.target
+# network.target, not network-online.target: this must not gate multi-user.target/
+# graphical.target on real connectivity (see hippos-firstboot-flatpak.service, the
+# same pattern for a first-boot job that needs the network but must not block boot).
+# The GAPPS fetch itself will fail until the network is actually up; Restart=on-failure
+# below just keeps retrying in the background — but with a Wants=network-online.target
+# ordering the whole thing waited for the first RestartSec cycle to finish (and, on a
+# machine with no network at boot at all, could sit "activating" — keeping
+# graphical.target unreached, which power-profiles-daemon/waydroid-container/lxc-net
+# all gate on — for hours until connectivity showed up: real hardware report, 2026-08-23).
+After=network.target var-lib-waydroid.mount
 Requires=var-lib-waydroid.mount
 ConditionPathExists=!/userdata/system/waydroid/waydroid.cfg
 StartLimitIntervalSec=0
