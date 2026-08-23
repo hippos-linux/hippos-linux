@@ -16,7 +16,13 @@ ExecStart=/usr/lib/xorg/Xorg :0 vt7 -nolisten tcp -logfile /tmp/Xorg.0.log -ac
 # this, that hang gets resolved by systemd force-killing the whole unit mid
 # driver init instead, which is what crashed Xorg (see hippos-capture-boot-logs
 # incident, 0.5.9 slow-USB2 hardware test).
-ExecStartPost=/bin/sh -c 'for i in $(seq 1 40); do [ -S /tmp/.X11-unix/X0 ] && break; sleep 0.25; done; DISPLAY=:0 timeout -k 5 20 xrandr --auto 2>/dev/null || true'
+# Bounded wait for the X socket, and a hard failure if it never appears —
+# without this, a dead Xorg (e.g. killed by SIGHUP, see TTYVHangup= below)
+# fell through into the xrandr call below, which silently swallows its own
+# failure, so the unit reported successful startup with no X server actually
+# running and every downstream consumer of X0 waited forever.
+ExecStartPost=/bin/sh -c 'for i in $(seq 1 40); do [ -S /tmp/.X11-unix/X0 ] && exit 0; sleep 0.25; done; echo "hippos-xserver: /tmp/.X11-unix/X0 did not appear within 10s — Xorg failed to start or died" >&2; exit 1'
+ExecStartPost=/bin/sh -c 'DISPLAY=:0 timeout -k 5 20 xrandr --auto 2>/dev/null || true'
 Restart=on-failure
 RestartSec=2
 StandardInput=tty
@@ -24,7 +30,15 @@ StandardOutput=journal
 StandardError=journal
 TTYPath=/dev/tty7
 TTYReset=yes
-TTYVHangup=yes
+# Must be "no": this Xorg is a persistent server, not a one-shot login shell.
+# TTYVHangup=yes sends the TTY a vhangup() on every start, which delivers
+# SIGHUP to any process already holding /dev/tty7 open — including Xorg
+# itself once it has taken the VT, killing it (code=killed, signal=HUP)
+# before /tmp/.X11-unix/X0 is ever created. Confirmed on real hardware:
+# flipping this to "no" is the only change needed for Xorg to survive and
+# X0 to appear. TTYReset=yes (line-discipline reset, no hangup) is enough
+# for our purposes here.
+TTYVHangup=no
 TTYVTDisallocate=no
 PAMName=login
 User=root
