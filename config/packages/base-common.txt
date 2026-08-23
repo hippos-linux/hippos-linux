@@ -133,6 +133,10 @@ wireplumber
 rtkit
 alsa-utils
 brightnessctl
+# pactl — hippos-audio, hippos-bluetooth-agent, hippos-audio-recover,
+# hippos-audio-setup, and `hippos audio` all shell out to it; pipewire-pulse
+# only provides the compatibility daemon, not the client binary.
+pulseaudio-utils
 
 # Bluetooth
 bluez
