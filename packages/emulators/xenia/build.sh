@@ -89,7 +89,7 @@ fi
 rm -rf "${STAGING}/emulator"
 mkdir -p "${STAGING}/emulator"
 
-unzip -o "${ARCHIVE}" -d "${STAGING}/emulator" >/dev/null
+unzip -o "${ARCHIVE}" -d "${STAGING}/emulator" -x '*.pdb' >/dev/null
 
 if ! find "${STAGING}/emulator" -type f -iname 'xenia*.exe' | grep -q .; then
     die "Xenia archive extracted but no xenia exe was found"
