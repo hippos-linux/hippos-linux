@@ -577,6 +577,7 @@ def _launch_duckstation(ctx: LaunchContext) -> int:
 
     env = _build_game_env(conf, ctx)
     env['SDL_JOYSTICK_HIDAPI'] = '0'
+    env['QT_QPA_PLATFORM'] = 'xcb'
     result = _run_game_command(ctx, 'duckstation', cmd, env)
     return result.returncode
 
