@@ -35,7 +35,17 @@ GRUB_DISTRIBUTOR="HippOS"
 # TimeoutStartSec= if it specifically needs a shorter bound instead of
 # lowering this for every service/device on the system.
 GRUB_CMDLINE_LINUX_DEFAULT="quiet loglevel=3"
-GRUB_CMDLINE_LINUX="rootfstype=btrfs rw console=tty0 console=ttyS0,115200 vt.global_cursor_default=0 nvidia-drm.modeset=1"
+# console=ttyS0,115200 used to be enabled by default here. Real-hardware
+# testing found PID 1 permanently blocked in n_tty_write() writing a routine
+# status message to /dev/console whenever both tty0 and ttyS0 were registered
+# consoles: the manager's own IPC socket (/run/systemd/private) went
+# unresponsive (systemctl/busctl calls failed with "Transport endpoint is not
+# connected") even though PID 1 was alive and the socket was listening. An A/B
+# boot with only console=tty0 did not reproduce this; systemctl/busctl worked
+# normally and plymouth-quit(-wait) both completed. Serial console is opt-in
+# diagnostic only now — pass console=ttyS0,115200 by hand (or via a dedicated
+# recovery entry, if one is added) rather than by default.
+GRUB_CMDLINE_LINUX="rootfstype=btrfs rw console=tty0 vt.global_cursor_default=0 nvidia-drm.modeset=1"
 GRUB_DISABLE_OS_PROBER=false
 GRUB_DISABLE_SUBMENU=y
 GRUB_TERMINAL="console serial"
