@@ -33,7 +33,7 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DBUILD_SA2=ON
 cmake --build "${BUILD}" -j"$(nproc)"
 cmake --install "${BUILD}"
-find "${BUILD}" -maxdepth 4 -type f -perm /111 -exec cp {} "${STAGING}/bin/" \; 2>/dev/null || true
+find "${BUILD}" -maxdepth 4 -type f -perm /111 -not -path '*/CMakeFiles/*' -exec cp {} "${STAGING}/bin/" \; 2>/dev/null || true
 
 mkdir -p "${STAGING}/lib"
 cp /usr/lib/x86_64-linux-gnu/libminizip.so.1* "${STAGING}/lib/" 2>/dev/null || true
