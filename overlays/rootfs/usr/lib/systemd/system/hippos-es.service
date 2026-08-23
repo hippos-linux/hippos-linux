@@ -7,14 +7,21 @@ Conflicts=hippos-desktop.service
 [Service]
 Type=simple
 User=hippos
-# See hippos-desktop.service for why this is needed — same missing-session
-# gap, same fix.
-PAMName=systemd-user
-ExecStartPre=/bin/sh -c 'until [ -S /tmp/.X11-unix/X0 ]; do sleep 0.5; done'
+# See hippos-desktop.service for why this is needed and why it's
+# PAMName=hippos-session rather than the stock systemd-user PAM service.
+PAMName=hippos-session
+# Bounded fallback check: After=hippos-xserver.service (below) already means
+# X0 exists by the time we get here on the normal path, since hippos-xserver
+# now fails its own start job if X0 never appears (see that unit). This just
+# guards races/manual starts instead of hanging forever the way an
+# unconditional `until` loop under TimeoutStartSec=infinity did — that combo
+# let a dead Xorg leave this unit stuck in "activating (start-pre)" forever,
+# which in turn wedged hippos-session.service and graphical.target.
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do [ -S /tmp/.X11-unix/X0 ] && exit 0; sleep 0.5; done; echo "hippos-es: /tmp/.X11-unix/X0 did not appear within 15s — hippos-xserver.service did not provide a usable X server" >&2; exit 1'
 ExecStart=/usr/lib/hippos/hippos-es
 Restart=on-failure
 RestartSec=3
-TimeoutStartSec=infinity
+TimeoutStartSec=30
 TimeoutStopSec=10
 StandardOutput=journal
 StandardError=journal

@@ -1,0 +1,23 @@
+# Used by hippos-desktop.service and hippos-es.service (PAMName=hippos-session)
+# to open their own graphical login sessions.
+#
+# Deliberately NOT the stock systemd-user PAM service, despite the identical
+# shape below (no auth stack — same reason: an unattended autologin session
+# can't answer a password prompt). pam_systemd treats the PAM service name
+# "systemd-user" as the sentinel for user@.service's own manager-bookkeeping
+# session (it registers via logind's manager path rather than a normal
+# login), which forces Class=manager regardless of which unit actually
+# invoked it. A manager-class session isn't a valid subject for polkit's
+# sd_pid_get_session()-based agent registration, which is why
+# plasma-polkit-agent kept failing to register ("Cannot create unix session:
+# No session for pid ...") even after PAMName=systemd-user was added (see
+# desktop_session_pam KB note). Using our own PAM service name here lets
+# pam_systemd register a normal Class=user session instead.
+account    include    common-account
+
+session    required   pam_loginuid.so
+session    optional   pam_keyinit.so       force revoke
+session    include    common-session
+session    optional   pam_umask.so
+session    optional   pam_systemd.so
+session    required   pam_env.so
