@@ -120,6 +120,11 @@ systems:
     as_core:
       - fbneo
       - fbalpha
+      - fbalpha2012
+      - fbalpha2012_cps1
+      - fbalpha2012_cps2
+      - fbalpha2012_cps3
+      - fbalpha2012_neogeo
   - name: fds
     as_core:
       - fceumm
@@ -162,7 +167,13 @@ systems:
       - handy
       - mednafen_lynx
   - name: mame
-    as_core: mame
+    as_core:
+      - mame
+      - mame2010
+      - mame2003_plus
+      - mame2003
+      - mame2003_midway
+      - mame2000
   - name: mastersystem
     as_core:
       - genesis_plus_gx
@@ -195,6 +206,7 @@ systems:
     as_core:
       - fbneo
       - fbalpha
+      - fbalpha2012_neogeo
   - name: neogeocd
     as_core: neocd
   - name: nes
@@ -300,6 +312,11 @@ systems:
     as_core:
       - fbneo
       - mame
+      - mame2010
+      - mame2003_plus
+      - mame2003
+      - mame2003_midway
+      - mame2000
   - name: cannonball
     as_core: cannonball
   - name: dice
