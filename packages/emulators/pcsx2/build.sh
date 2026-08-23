@@ -131,7 +131,8 @@ if [[ ! -x "${BUILD}/bin/pcsx2-qt" ]]; then
 fi
 
 cp "${BUILD}/bin/pcsx2-qt" "${STAGING}/bin/pcsx2-qt"
-strip "${STAGING}/bin/pcsx2-qt" || true
+# Stripping (including bundled Qt libs) is now handled centrally by
+# build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
 log "Staging runtime data directories alongside binary"
 for dir in resources translations; do

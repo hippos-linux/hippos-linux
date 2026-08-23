@@ -99,7 +99,9 @@ fi
 
 cp "${BUILD}/VPinballX_GL" "${STAGING}/bin/vpinball"
 chmod +x "${STAGING}/bin/vpinball"
-strip "${STAGING}/bin/vpinball" || true
+# Stripping (including the bundled lib/*.so fetched by external.sh) is now
+# handled centrally by build/strip-emulator-payload.sh (called from both
+# configure-rootfs.sh and build-emulators.sh).
 
 # Copy external shared libs that POST_BUILD_COPY_EXT_LIBS=OFF skipped
 EXT_LIB="${SRC}/standalone/linux-x64/external/lib"

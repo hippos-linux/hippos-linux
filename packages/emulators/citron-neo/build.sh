@@ -84,8 +84,7 @@ fi
 
 [[ -x "${STAGING}/bin/citron" || -x "${STAGING}/bin/citron-neo" ]] \
     || die "Citron Neo executable was not produced"
-
-find "${STAGING}/bin" -maxdepth 1 -type f -perm /111 -exec strip {} \; 2>/dev/null || true
+# Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"

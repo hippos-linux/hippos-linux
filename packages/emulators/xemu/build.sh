@@ -63,7 +63,7 @@ fi
 log "Staging binary"
 cp "${SRC}/dist/xemu" "${STAGING}/bin/xemu"
 chmod +x "${STAGING}/bin/xemu"
-strip "${STAGING}/bin/xemu" || true
+# Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
 mkdir -p "${STAGING}/lib"
 cp /usr/lib/${GNU_ARCH}/libtomlplusplus.so.3* "${STAGING}/lib/" 2>/dev/null || true
