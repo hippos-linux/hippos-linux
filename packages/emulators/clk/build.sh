@@ -28,7 +28,7 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_INSTALL_PREFIX="${STAGING}"
 cmake --build "${BUILD}" -j"$(nproc)"
 cmake --install "${BUILD}"
-find "${BUILD}" -maxdepth 4 -type f -perm /111 -exec cp {} "${STAGING}/bin/" \; 2>/dev/null || true
+find "${BUILD}" -maxdepth 4 -type f -perm /111 -not -path '*/CMakeFiles/*' -exec cp {} "${STAGING}/bin/" \; 2>/dev/null || true
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"
