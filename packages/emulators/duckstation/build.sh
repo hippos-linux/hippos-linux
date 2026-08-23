@@ -128,7 +128,7 @@ else
 fi
 
 chmod +x "${STAGING}/bin/duckstation"
-# Stripping is now handled centrally by strip_payload_dir (build/configure-rootfs.sh).
+# Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
 cp -r "${BUILD}/bin/resources" "${STAGING}/bin/"
 

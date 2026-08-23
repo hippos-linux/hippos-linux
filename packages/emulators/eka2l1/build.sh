@@ -61,7 +61,7 @@ if [[ ! -x "${BUILD}/bin/eka2l1_qt" ]]; then
 fi
 
 cp -a "${BUILD}/bin/." "${STAGING}/bin/"
-find "${STAGING}/bin" -maxdepth 1 -type f -perm /111 -exec strip {} \; 2>/dev/null || true
+# Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
 write_artifact_version "${STAGING}" "$(git -C "${SRC}" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d)"
 log "Done. Artifact at ${STAGING}"

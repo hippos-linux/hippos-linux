@@ -180,7 +180,7 @@ found_bin="$(find "${SRC}/bin" "${BUILD}" \
 [[ -n "${found_bin}" ]] || die "Cemu binary was not produced"
 cp "${found_bin}" "${STAGING}/bin/Cemu"
 chmod +x "${STAGING}/bin/Cemu"
-strip "${STAGING}/bin/Cemu" || true
+# Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
 mkdir -p "${STAGING}/lib"
 for f in /usr/lib/x86_64-linux-gnu/libboost_atomic.so.1.83.0 \

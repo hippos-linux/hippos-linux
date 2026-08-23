@@ -49,7 +49,7 @@ else
     cp "${found_bin}" "${STAGING}/bin/supermodel"
 fi
 
-strip "${STAGING}/bin/supermodel" || true
+# Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
 write_artifact_version "${STAGING}" "$(git -C "${SRC}" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d)"
 log "Done. Artifact at ${STAGING}"

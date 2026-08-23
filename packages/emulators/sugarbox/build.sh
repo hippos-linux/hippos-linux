@@ -80,7 +80,7 @@ fi
 
 cp "${candidate}" "${STAGING}/bin/sugarbox"
 chmod +x "${STAGING}/bin/sugarbox"
-strip "${STAGING}/bin/sugarbox" || true
+# Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"
