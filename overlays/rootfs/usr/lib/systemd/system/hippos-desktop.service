@@ -3,6 +3,21 @@ Description=HippOS Desktop Session
 After=local-fs.target userdata.mount hippos-xserver.service user@1000.service
 Wants=hippos-xserver.service
 Conflicts=hippos-es.service
+# A mode switch can start this while Xorg is still settling from the outgoing
+# ES session — confirmed real-world (0.6.1 beta boot capture, 2026-08-23):
+# session-desktop's own ExecStartPre saw a stable xrandr reading, but the
+# desktop command it then exec'd still failed to connect ("$DISPLAY is not
+# set or cannot connect to the X server") while Xorg itself stayed up the
+# whole time — a transient connect race, not a crash, and Restart=on-failure
+# below already recovers from it within one RestartSec. This only widens the
+# retry budget so a run of these in a row can't exhaust systemd's default
+# (5 within 10s) and strand the user on the bare tty getty underneath with
+# no further recovery; it doesn't address the race itself, which needs
+# Xorg's own log from the moment of a failure to actually diagnose (see
+# hippos-session-failure-capture@.service, wired below).
+StartLimitIntervalSec=60
+StartLimitBurst=8
+OnFailure=hippos-session-failure-capture@%n.service
 
 [Service]
 Type=simple

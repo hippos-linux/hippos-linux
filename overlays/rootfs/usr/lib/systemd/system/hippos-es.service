@@ -3,6 +3,12 @@ Description=HippOS EmulationStation Session
 After=local-fs.target systemd-user-sessions.service userdata.mount plymouth-quit-wait.service hippos-roms-pool.service hippos-bios-pool.service hippos-saves-pool.service hippos-xserver.service user@1000.service opt-emulators.mount
 Wants=local-fs.target userdata.mount hippos-roms-pool.service hippos-bios-pool.service hippos-saves-pool.service hippos-xserver.service opt-emulators.mount
 Conflicts=hippos-desktop.service
+# Same transient-restart headroom as hippos-desktop.service — see that unit
+# for the confirmed real-world race this guards against on the way back
+# from a mode switch.
+StartLimitIntervalSec=60
+StartLimitBurst=8
+OnFailure=hippos-session-failure-capture@%n.service
 
 [Service]
 Type=simple

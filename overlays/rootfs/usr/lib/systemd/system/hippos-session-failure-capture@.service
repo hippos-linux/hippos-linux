@@ -1,0 +1,10 @@
+[Unit]
+Description=Capture HippOS session diagnostics after %i failed
+# Diagnostics only — must never itself become another reason the graphical
+# session doesn't come back.
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/hippos/hippos-session-failure-capture %i
+TimeoutStartSec=30
