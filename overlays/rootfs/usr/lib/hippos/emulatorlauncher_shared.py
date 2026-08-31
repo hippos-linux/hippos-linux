@@ -850,6 +850,13 @@ def _run_game_command(
 
 def _build_game_env(conf: dict[str, str], ctx: Optional[LaunchContext] = None) -> dict[str, str]:
     env = dict(os.environ)
+    # hippos-gpu-init's own /dev/nvidia0 wait is bounded and can still lose
+    # the race on some hardware (see that script) — this doesn't retry or
+    # block the launch, just records whether the device was actually there
+    # the moment a PRIME-offload game started, so a graphics-init failure
+    # reported later can be checked against this instead of guessed at.
+    if Path('/var/tmp/hippos-nvidia.prime').exists() and not Path('/dev/nvidia0').exists():
+        _log.warning("NVIDIA PRIME is configured but /dev/nvidia0 is missing at launch time")
     prime_env = Path('/run/hippos/prime.env')
     if prime_env.exists():
         for line in prime_env.read_text().splitlines():

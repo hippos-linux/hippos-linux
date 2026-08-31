@@ -169,8 +169,18 @@ nvidia_load_and_probe() {
     modprobe nvidia-modeset 2>>"${LOG}" || true
     modprobe nvidia-drm     2>>"${LOG}" || true
     modprobe nvidia-uvm     2>>"${LOG}" || true
+    # modprobe returning doesn't mean /dev/nvidia0 exists yet — the node is
+    # created by udev reacting to the modules' uevents, and on a hybrid
+    # AMD+NVIDIA board that uevent can sit queued behind everything else
+    # udevd is processing at this point in boot (confirmed real hardware,
+    # 2026-08-23, RTX 4080 SUPER + Ryzen APU: the polling loop below ran out
+    # its full budget with the node still missing, even though the GPU came
+    # up fine minutes later per that same boot's own nvidia-smi capture —
+    # this was udev backlog, not a driver failure). Settling first drains
+    # that queue instead of racing it.
+    udevadm settle --timeout=10 2>>"${LOG}" || true
     local _i
-    for _i in $(seq 1 40); do
+    for _i in $(seq 1 80); do
         [[ -c /dev/nvidia0 ]] && return 0
         sleep 0.25
     done
