@@ -58,6 +58,24 @@ is_efi_partition() {
     [[ "$parttype" == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" ]]
 }
 
+# The source EFI partition is the running system's own boot disk, which is
+# normally already mounted at /boot/efi — a second real `mount` of the same
+# device can be refused ("already mounted on /boot/efi") depending on how
+# udisks2/the kernel is holding it. Bind-mount the existing mountpoint
+# instead of remounting the device when there is one; nothing under the
+# result is ever written to, so losing the explicit `-o ro` on that path
+# doesn't matter.
+mount_src_efi() {
+    local src_efi="$1" mnt="$2"
+    local existing
+    existing=$(findmnt -n -o TARGET --source "$src_efi" 2>/dev/null | head -1)
+    if [[ -n "$existing" ]]; then
+        mount --bind "$existing" "$mnt"
+    else
+        mount "$src_efi" "$mnt" -o ro
+    fi
+}
+
 # ── enumeration commands ──────────────────────────────────────────────────────
 
 # Real, installable disks: excludes optical drives (-e 11), the disk HippOS
@@ -410,7 +428,7 @@ clone_disk() {
 
     # 6. Clone EFI partition
     log "Cloning EFI partition..."
-    mount "$SRC_EFI" "$SRC_EFI_MNT" -o ro
+    mount_src_efi "$SRC_EFI" "$SRC_EFI_MNT"
     mount "$TGT_EFI" "$TGT_EFI_MNT"
     rsync -rlt --delete "$SRC_EFI_MNT/" "$TGT_EFI_MNT/"
 
@@ -534,7 +552,7 @@ install_to_partition() {
 
     # 6. Set up GRUB in EFI/HippOS/ (non-destructive to existing EFI contents)
     log "Mounting source EFI..."
-    mount "$SRC_EFI" "$SRC_EFI_MNT" -o ro
+    mount_src_efi "$SRC_EFI" "$SRC_EFI_MNT"
 
     # Unlike clone_disk's freshly-created target EFI, this partition is an
     # existing one that may be a shared ESP with other OSes — desktop
