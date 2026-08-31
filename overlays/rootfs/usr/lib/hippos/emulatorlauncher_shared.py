@@ -802,6 +802,27 @@ def _gamescope_wrap(cmd: list[str], conf: dict[str, str]) -> list[str]:
     return gs + cmd
 
 
+def _restore_crt_resolution() -> None:
+    """Restore the CRT session's boot resolution after an emulator exits.
+
+    RetroArch/MAME switchres leaves whatever game-specific modeline it last
+    set active — without this, ES comes back on a black screen (game
+    resolution the CRT hasn't synced to, or one it can't display at all).
+    Only does anything when CRT is actually enabled (/etc/switchres.ini is
+    only ever written by hippos-crt-setup under crt.enabled=true); a no-op
+    for every non-CRT user. Reuses hippos-resolution's existing
+    minTomaxResolution/_crt_restore path rather than reimplementing the
+    switchres call here.
+    """
+    if not Path('/etc/switchres.ini').exists():
+        return
+    try:
+        subprocess.run(['/usr/lib/hippos/hippos-resolution', 'minTomaxResolution'],
+                        timeout=10, check=False)
+    except Exception as exc:
+        _log.warning("CRT resolution restore failed: %s", exc)
+
+
 def _run_game_command(
     ctx: LaunchContext,
     hotkey_name: str,
@@ -813,11 +834,18 @@ def _run_game_command(
     cmd = _gamescope_wrap(cmd, conf)
     if _hud_config_path() is not None and ctx.emulator in _HUD_NEEDS_WRAPPER and _hud_supported(ctx.system):
         cmd = ['mangohud'] + cmd
-    with wheel_proxy_context(ctx, env):
-        with hotkey_context(hotkey_name):
-            profiles = _load_es_input_configs()
-            with evmapy_context(ctx.system, ctx.emulator, ctx.rom, ctx.controllers, profiles):
-                return subprocess.run(cmd, env=env, text=True, cwd=str(cwd) if cwd is not None else None)
+    try:
+        with wheel_proxy_context(ctx, env):
+            with hotkey_context(hotkey_name):
+                profiles = _load_es_input_configs()
+                with evmapy_context(ctx.system, ctx.emulator, ctx.rom, ctx.controllers, profiles):
+                    return subprocess.run(cmd, env=env, text=True, cwd=str(cwd) if cwd is not None else None)
+    finally:
+        # Runs on normal exit, non-zero exit, and process crash alike
+        # (subprocess.run itself doesn't raise for any of those) — the one
+        # gap is cmd never actually starting (e.g. FileNotFoundError), which
+        # also never touched the display, so nothing to restore either way.
+        _restore_crt_resolution()
 
 
 def _build_game_env(conf: dict[str, str], ctx: Optional[LaunchContext] = None) -> dict[str, str]:
