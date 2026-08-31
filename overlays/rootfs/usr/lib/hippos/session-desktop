@@ -42,7 +42,13 @@ unset XAUTHORITY
 # shellcheck disable=SC1091
 [[ -f /run/hippos/prime.env ]] && source /run/hippos/prime.env
 
-dbus-update-activation-environment --systemd DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS XDG_CONFIG_HOME HOME 2>/dev/null || true
+# XDG_SESSION_ID must reach user@1000.service's own activation environment —
+# see session-es for the full explanation. This is the desktop-mode half of
+# the same fix; plasma-polkit-agent.service is the concrete unit this was
+# confirmed against (0.6.1 beta boot captures: registration failing with
+# "Cannot create unix session" despite hippos-desktop.service's own
+# PAMName=hippos-session session registering correctly).
+dbus-update-activation-environment --systemd DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS XDG_CONFIG_HOME HOME XDG_SESSION_ID 2>/dev/null || true
 
 # Ensure wifi radio is on when entering desktop (NM may have saved a disabled state at boot)
 if [[ "$(/usr/lib/hippos/hippos-planemode status 2>/dev/null)" != "on" ]]; then

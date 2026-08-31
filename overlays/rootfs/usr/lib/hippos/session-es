@@ -30,7 +30,20 @@ if [[ -n "${hippos_lang}" ]]; then
     export LANG="${LC_ALL}"
 fi
 
-dbus-update-activation-environment --systemd DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS HOME 2>/dev/null || true
+# XDG_SESSION_ID must reach user@1000.service's own activation environment,
+# not just this process — plasma-polkit-agent.service and friends run as
+# systemd --user units under user@1000.service's cgroup, not under this
+# service's, so sd_pid_get_session() can never resolve them to our PAMName=
+# hippos-session login via cgroup lookup alone (see hippos-desktop.service
+# for that half of the fix). Without XDG_SESSION_ID in their environment,
+# polkit agent registration fails with "Cannot create unix session: No
+# session for pid ..." even though our own session is registered correctly
+# (confirmed via a 0.6.1 beta boot capture: loginctl showed our PAMName=
+# hippos-session session live and correctly classed, right alongside the
+# still-failing agent). systemd already puts XDG_SESSION_ID in this
+# process's own environment via the PAMName=hippos-session session open —
+# it just was never forwarded on.
+dbus-update-activation-environment --systemd DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS HOME XDG_SESSION_ID 2>/dev/null || true
 
 /usr/lib/hippos/hippos-audio-setup
 /usr/lib/hippos/hippos-display-setup
