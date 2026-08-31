@@ -1,7 +1,12 @@
 [Unit]
 Description=HippOS network ROM shares
-After=network-online.target userdata.mount hippos-roms-pool.service
-Wants=network-online.target
+# network.target, not network-online.target — WantedBy=multi-user.target means
+# multi-user.target/graphical.target waited for this unit's job regardless of
+# Wants= being soft, so a real-connectivity wait here delayed the whole boot
+# (same shape as hippos-save-sync-restore.service/hippos-waydroid-init.service).
+# hippos-network-roms-discover.service (path/timer/dispatcher-triggered, not
+# boot-pulled) is what re-mounts shares once connectivity actually shows up.
+After=network.target userdata.mount hippos-roms-pool.service
 
 [Service]
 Type=oneshot
