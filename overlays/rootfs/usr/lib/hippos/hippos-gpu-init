@@ -132,9 +132,16 @@ nvidia_switch_tier() {
     [[ -f "${vdpau_versioned}" ]] && { mkdir -p "${NVIDIA_ACTIVE_DIR}/vdpau"; \
         ln -sf "${vdpau_versioned}" "${NVIDIA_ACTIVE_DIR}/vdpau/libvdpau_nvidia.so.1"; }
 
-    local drv="/usr/lib/xorg/modules/drivers/nvidia${tier}_legacy_drv.so"
+    # No underscore between the tier number and "legacy": Xorg normalizes
+    # driver names by stripping internal underscores before searching for
+    # the module file (confirmed real-hardware, tier 580 — config said
+    # Driver "nvidia580_legacy", Xorg's own log showed `LoadModule:
+    # "nvidia580legacy"` and then "module does not exist" for the
+    # underscored filename we'd staged). Name the file to match what Xorg
+    # actually searches for, rather than relying on the config value.
+    local drv="/usr/lib/xorg/modules/drivers/nvidia${tier}legacy_drv.so"
     if [[ -f "${drv}" ]]; then
-        sed "s/nvidia_drv\\.so/nvidia${tier}_legacy_drv.so/; s/\"nvidia\"/\"nvidia${tier}_legacy\"/" \
+        sed "s/nvidia_drv\\.so/nvidia${tier}legacy_drv.so/; s/\"nvidia\"/\"nvidia${tier}legacy\"/" \
             "${NVIDIA_XORG_OUTPUTCLASS_OPEN_BACKUP}" > "${NVIDIA_XORG_OUTPUTCLASS}" 2>>"${LOG}" \
             || log "WARNING: could not write legacy Xorg OutputClass conf for tier ${tier}"
     fi
