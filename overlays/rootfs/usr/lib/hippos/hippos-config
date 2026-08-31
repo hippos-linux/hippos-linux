@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ES API: config canupdate/lsoutputs/getRootPassword/overscan/forgetBT/storage
+# ES API: config canupdate/lsoutputs/lscrtoutputs/getRootPassword/overscan/forgetBT/storage
 export DISPLAY="${DISPLAY:-:0}"
 
 case "${1:-}" in
@@ -9,6 +9,29 @@ case "${1:-}" in
         ;;
     lsoutputs)
         xrandr --query 2>/dev/null | awk '/connected/{print $1}'
+        ;;
+    lscrtoutputs)
+        # Canonical DRM connector names (VGA-1, DVI-I-1, DP-1, HDMI-A-1, ...) —
+        # NOT lsoutputs' X11/DDX names. hippos-crt-setup stores and consumes
+        # crt.output as a DRM name (it's what GRUB's video= kernel parameter
+        # needs), so a picker backed by lsoutputs would silently persist the
+        # wrong namespace (e.g. "DisplayPort-0" instead of "DP-1").
+        #
+        # Lists every connector that exists in /sys/class/drm/, not just
+        # currently-connected ones: a passive DP/HDMI-to-VGA DAC doesn't
+        # always trigger hotplug detection, so filtering to "connected" risks
+        # hiding the exact port a CRT user needs to pick. Each line is
+        # "name:name (connected)" or "name:name (disconnected)" — id:label,
+        # same convention hippos-resolution listCrtBootModes uses — so the
+        # UI can show the status without it ever being part of the stored
+        # crt.output value.
+        for p in /sys/class/drm/card[0-9]*-*; do
+            [[ -f "${p}/status" ]] || continue
+            name="${p##*/}"; name="${name#card*-}"
+            status="disconnected"
+            [[ "$(< "${p}/status")" == "connected" ]] && status="connected"
+            printf '%s:%s (%s)\n' "${name}" "${name}" "${status}"
+        done
         ;;
     getRootPassword)
         # Content only needs to be non-empty/empty for the ES password-field

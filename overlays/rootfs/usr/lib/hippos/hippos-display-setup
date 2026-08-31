@@ -7,30 +7,15 @@ export DISPLAY="${DISPLAY:-:0}"
 _CRT_ENABLED="$(hippos-settings get crt.enabled 2>/dev/null || true)"
 _CRT_ACTIVE="$(test -f /etc/X11/xorg.conf.d/90-crt-gpu.conf && echo true || echo false)"
 
-_crt_auto_detect() {
-    # Return the first connected VGA or DVI-I output with no EDID, or empty string.
-    # LCDs on VGA send EDID; CRTs typically don't — zero-byte edid file = CRT.
-    local p name edid_size
-    for p in /sys/class/drm/card[0-9]*-*; do
-        [[ -f "${p}/status" ]] || continue
-        [[ "$(< "${p}/status")" == "connected" ]] || continue
-        name="${p##*/}"; name="${name#card*-}"
-        case "${name}" in VGA-*|DVI-I-*) ;; *) continue ;; esac
-        edid_size=0
-        [[ -f "${p}/edid" ]] && edid_size="$(wc -c < "${p}/edid")"
-        [[ "${edid_size}" -eq 0 ]] && echo "${name}" && return
-    done
-}
-
+# CRT activation is explicit-only — crt.enabled=true is the only thing that
+# ever turns it on. There is no "auto" mode: a VGA/DVI-I connection or EDID
+# heuristic must never decide this by itself, so unset/false/anything else
+# just tears down a stale CRT config if one was previously active (e.g. the
+# user just flipped crt.enabled back to false). Old crt.enabled=auto configs
+# are migrated to false by hippos-migrate; this treats a leftover "auto" the
+# same way as a defensive fallback.
 if [[ "${_CRT_ENABLED}" == "true" ]]; then
     sudo /usr/lib/hippos/hippos-crt-setup 2>&1 || true
-elif [[ "${_CRT_ENABLED}" == "auto" || -z "${_CRT_ENABLED}" ]]; then
-    _detected="$(_crt_auto_detect)"
-    if [[ -n "${_detected}" ]]; then
-        sudo /usr/lib/hippos/hippos-crt-setup 2>&1 || true
-    elif [[ "${_CRT_ACTIVE}" == "true" ]]; then
-        sudo /usr/lib/hippos/hippos-crt-teardown 2>&1 || true
-    fi
 elif [[ "${_CRT_ACTIVE}" == "true" ]]; then
     sudo /usr/lib/hippos/hippos-crt-teardown 2>&1 || true
 fi

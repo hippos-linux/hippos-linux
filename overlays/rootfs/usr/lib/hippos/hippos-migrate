@@ -36,6 +36,23 @@ version_lt() {
 #     sed -i 's/^foo=/bar=/' /userdata/system/hippos.conf 2>/dev/null || true
 # fi
 
+if version_lt "$APPLIED" "0.6.1"; then
+    log "0.6.1: CRT activation is now manual-only — migrate crt.enabled=auto"
+    # Auto-detection used to decide FOR the user whether to turn CRT mode on
+    # (VGA/DVI-I presence + an EDID-absence heuristic). That's gone — an old
+    # "auto" can't be safely translated into an explicit crt.output selection
+    # (we don't know the hardware/cabling is still the same), so this lands
+    # on disabled rather than guessing a connector and applying CRT timings
+    # to what might now be a normal LCD/TV. The user re-enables explicitly
+    # via System Settings → CRT if they still want it.
+    if [[ "$(hippos-settings get crt.enabled 2>/dev/null)" == "auto" ]]; then
+        hippos-settings set crt.enabled false
+    fi
+    if [[ "$(hippos-settings get crt.output 2>/dev/null)" == "auto" ]]; then
+        hippos-settings del crt.output
+    fi
+fi
+
 # Storage manager state files are intentionally plain text and safe to create
 # before any external media has been mounted.
 HIPPOS_CONFIG=/userdata/system/configs/hippos
