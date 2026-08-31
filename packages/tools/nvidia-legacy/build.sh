@@ -230,9 +230,15 @@ ccflags-y += $(EXTRA_CFLAGS)' "${EXTRACT_DIR}/kernel/Kbuild"
     [[ -f "${_vdpau}" ]] && cp "${_vdpau}" "${STAGING}/usr/lib/x86_64-linux-gnu/vdpau/$(basename "${_vdpau}")"
 
     # Xorg driver + GLX extension module — tier-prefixed filenames so they
-    # never collide with nvidia-open's or each other's.
+    # never collide with nvidia-open's or each other's. No underscore before
+    # "legacy": Xorg strips internal underscores from a Driver name before
+    # searching for its module file, so hippos-gpu-init's OutputClass rewrite
+    # (nvidia_switch_tier) ends up asking for "nvidia${tier}legacy_drv.so" —
+    # stage it under that exact name or Xorg's LoadModule reports "module
+    # does not exist" and silently falls back to nvidia-open's driver
+    # (real hardware, tier 580: GTX 970 forced onto swrast the whole session).
     [[ -f "${EXTRACT_DIR}/nvidia_drv.so" ]] && \
-        cp "${EXTRACT_DIR}/nvidia_drv.so" "${STAGING}/usr/lib/xorg/modules/drivers/nvidia${tier}_legacy_drv.so"
+        cp "${EXTRACT_DIR}/nvidia_drv.so" "${STAGING}/usr/lib/xorg/modules/drivers/nvidia${tier}legacy_drv.so"
     _glxserver="${EXTRACT_DIR}/libglxserver_nvidia.so.${version}"
     [[ -f "${_glxserver}" ]] && cp "${_glxserver}" "${STAGING}/usr/lib/xorg/modules/extensions/$(basename "${_glxserver}")"
 
