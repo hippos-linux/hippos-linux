@@ -18,6 +18,10 @@ rfkill
 wireless-tools
 wireless-regdb
 iputils-ping
+# Cheap USB WiFi dongles that enumerate as a fake CD-ROM installer until
+# mode-switched into WLAN mode — see 50-hippos-usb-modeswitch.rules.
+usb-modeswitch
+usb-modeswitch-data
 
 # WiFi & audio firmware (non-free — broad hardware coverage)
 firmware-linux
