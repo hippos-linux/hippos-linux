@@ -334,6 +334,7 @@ class DeviceState:
     grabbed:    bool = False
     pressed:    set[str] = field(default_factory=set)
     consumed_keys: set[int] = field(default_factory=set)  # codes currently substituted, for repeat/up tracking
+    active_combos: set[frozenset[str]] = field(default_factory=set)  # triggers already dispatched, held down
 
 # ---------------------------------------------------------------------------
 # Daemon
@@ -541,11 +542,23 @@ class HotkeyDaemon:
                 target  = combo.get('target')
                 if not isinstance(trigger, list) or target is None:
                     continue
+                # Some devices resend value=1 repeatedly while a button stays
+                # held, without an intervening value=0 — track combos already
+                # dispatched for the current hold so those don't refire.
+                trigger_key = frozenset(trigger)
+                if trigger_key in state.active_combos:
+                    continue
                 if all(b in state.pressed for b in trigger):
+                    state.active_combos.add(trigger_key)
                     log(f'combo trigger={trigger} target={target} -> dispatching')
                     self.execute_combo_target(target)
         elif event.value == 0:
             state.pressed.difference_update(names)
+            # Releasing any trigger button re-arms that combo for the next hold.
+            state.active_combos = {
+                trigger_key for trigger_key in state.active_combos
+                if trigger_key.issubset(state.pressed)
+            }
 
     def _passthrough(self, event: evdev.InputEvent) -> None:
         """Forward a raw event from a grabbed device unchanged. Only called

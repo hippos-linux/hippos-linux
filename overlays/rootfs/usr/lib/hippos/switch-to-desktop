@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# A misbehaving input device can dispatch this multiple times for one
+# button press; without the lock, concurrent runs race their `systemctl
+# stop hippos-es`/`start hippos-desktop` calls against each other and the
+# switch silently fails.
+exec 9>/run/hippos/switch-to-desktop.lock
+flock -n 9 || exit 0
+
 DESKTOP="${1:-$(hippos-settings get system.desktop)}"
 
 desktop_session_cmd() {
