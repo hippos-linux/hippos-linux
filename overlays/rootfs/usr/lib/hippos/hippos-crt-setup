@@ -92,24 +92,6 @@ _detect_sea_islands() {
         "1002:66[45][0-9a-f]|1002:67[ab][0-9a-f]|1002:13[01][0-9a-f]|1002:98[34][0-9a-f]"
 }
 
-_auto_crt_output() {
-    # Prefer a connected native analog output (VGA, DVI-I) with no EDID.
-    # LCDs on VGA/DVI-I send EDID; CRTs typically don't — zero-byte edid = CRT.
-    # Fall back to any connected output (for DP2VGA/HDMI2VGA DAC setups).
-    # Users with a DAC on a specific port should set crt.output explicitly.
-    local p name edid_size
-    for p in /sys/class/drm/card[0-9]*-*; do
-        [[ -f "${p}/status" ]] || continue
-        [[ "$(< "${p}/status")" == "connected" ]] || continue
-        name="${p##*/}"; name="${name#card*-}"
-        case "${name}" in VGA-*|DVI-I-*) ;; *) continue ;; esac
-        edid_size=0
-        [[ -f "${p}/edid" ]] && edid_size="$(wc -c < "${p}/edid")"
-        [[ "${edid_size}" -eq 0 ]] && echo "${name}" && return
-    done
-    _connected_outputs | head -1
-}
-
 _drm_to_x11_name() {
     # Map a DRM sysfs connector name (e.g. DVI-I-1) to the X11 DDX output name
     # (e.g. DVI-I-0). On amdgpu the DDX uses 0-based per-type indexing while DRM
@@ -151,24 +133,19 @@ SUPER_WIDTH="$(get crt.super_width)";       SUPER_WIDTH="${SUPER_WIDTH:-auto}"
 DOTCLOCK_MIN="$(get crt.dotclock_min)";     DOTCLOCK_MIN="${DOTCLOCK_MIN:-auto}"
 BOOT_RES="$(get crt.boot_resolution)";      BOOT_RES="${BOOT_RES:-640x480i}"
 
-# ── Resolve output ────────────────────────────────────────────────────────────
+# ── Resolve output (manual only) ─────────────────────────────────────────────
+# CRT activation is explicit-only: crt.output must be a connector the user
+# actually picked (System Settings → CRT). A VGA/DVI-I connection or an
+# EDID-absence heuristic must never decide this on its own — connector
+# discovery (_connected_outputs, hippos-config lsoutputs) exists to populate
+# that picker's choices, not to activate CRT mode by itself. "auto" is
+# treated the same as unset rather than re-detecting, as a safety net for
+# any config that predates this (see hippos-migrate's crt.enabled=auto
+# migration, which is the normal path for that).
 
 if [[ -z "${CRT_OUTPUT}" || "${CRT_OUTPUT}" == "auto" ]]; then
-    CRT_OUTPUT="$(_auto_crt_output)"
-    if [[ -z "${CRT_OUTPUT}" ]]; then
-        warn "No connected display detected. Cannot determine CRT output."
-        exit 1
-    fi
-    log "auto-detected output: ${CRT_OUTPUT}"
-
-    # Pin the result to crt.output rather than re-running detection every
-    # boot. _auto_crt_output's heuristic treats a zero-byte EDID as "this is
-    # a CRT" — but once this script installs drm.edid_firmware for that same
-    # output (below), the port legitimately reports a (synthetic) EDID on
-    # every later boot, so re-detection with crt.output still "auto" would
-    # then see a non-zero EDID and stop finding its own CRT. Once resolved,
-    # stay resolved; the user can set crt.output back to "auto" to re-probe.
-    hippos-settings set crt.output "${CRT_OUTPUT}" 2>/dev/null || true
+    warn "crt.output is not set — select CRT VIDEO OUTPUT in System Settings → CRT"
+    exit 1
 fi
 
 # Derive X11 DDX name for xorg.conf and switchres.ini.
