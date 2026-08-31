@@ -83,8 +83,25 @@ for _ in {1..30}; do
     sleep 1
 done
 
+# steamwebhelper is designed to outlive the main window closing (background
+# updates, friends list, overlay) — this can't use a short timeout without
+# risking cutting off a game that's still genuinely being played. The real
+# exit path is the controller hotkey (contexts/steam.json runs `steam
+# -shutdown` directly, since Alt+F4 only closes Steam's window rather than
+# quitting the client — confirmed real-world: tangocat, antaeusdk hit a
+# black screen with no way back to ES after Alt+F4 alone). This loop is
+# only the fallback once that's actually been used; the bound below exists
+# purely so a genuinely stuck/orphaned helper can never wedge the display
+# forever requiring a hard reboot, not as a way to end a real session.
+STEAM_WAIT_LIMIT=$((12 * 60 * 60))  # 12h
+elapsed=0
 while steam_running; do
     sleep 5
+    elapsed=$((elapsed + 5))
+    if [[ ${elapsed} -ge ${STEAM_WAIT_LIMIT} ]]; then
+        echo "[hippos-steam] steamwebhelper still running after ${STEAM_WAIT_LIMIT}s — returning control without killing it" >&2
+        break
+    fi
 done
 
 /usr/lib/hippos/hippos-steam-sync sync >/userdata/system/logs/steam-sync.log 2>&1 || true

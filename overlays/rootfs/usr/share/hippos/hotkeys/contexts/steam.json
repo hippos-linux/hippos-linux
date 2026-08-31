@@ -1,0 +1,6 @@
+{
+  "name": "steam",
+  "keys": {
+    "exit": "steam -shutdown"
+  }
+}
