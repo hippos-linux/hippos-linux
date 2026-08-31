@@ -8,6 +8,13 @@ Type=simple
 User=hippos
 RuntimeDirectory=hippos-bt
 RuntimeDirectoryPreserve=yes
+# Same hardware check bluetooth.service itself uses (ConditionPathIsDirectory=
+# /sys/class/bluetooth). Without this, a machine with no Bluetooth hardware
+# at all still starts this script, which then crash-loops forever trying to
+# reach org.bluez (see hippos-bluetooth-agent's own name_has_owner comment) —
+# a plain skip here is cheaper and cleaner than relying on that script-level
+# guard alone.
+ExecCondition=/bin/sh -c '[ -d /sys/class/bluetooth ]'
 ExecStart=/usr/lib/hippos/hippos-bluetooth-agent
 Restart=on-failure
 RestartSec=5

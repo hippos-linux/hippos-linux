@@ -413,6 +413,27 @@ if __name__ == '__main__':
         path_keyword='path',
     )
 
+    # bluetooth.service reaching "active" only means its own process started —
+    # bluetoothd claiming the org.bluez bus name is a separate, slightly later
+    # step. bus.get_object()/RegisterAgent() below eagerly trigger D-Bus
+    # activation of a missing name and block for dbus-daemon's own 25s
+    # service_start_timeout before raising, uncaught — with
+    # Restart=on-failure/RestartSec=5 that became a crash-restart loop every
+    # ~30s forever (25s block dominates the cycle, so it never falls inside
+    # systemd's own 10s StartLimitIntervalSec window and never trips the
+    # default burst limit either). The systemd unit's own ExecCondition skips
+    # this whole script when there's no Bluetooth hardware at all, but poll
+    # name_has_owner (a local, non-activating query) here too for the
+    # narrower race where hardware exists but bluetoothd hasn't claimed the
+    # name yet (real hardware report, 2026-08-23).
+    for _ in range(15):
+        if bus.name_has_owner('org.bluez'):
+            break
+        time.sleep(2)
+    else:
+        logging.error('org.bluez never appeared on the bus — bluetoothd not running, giving up')
+        sys.exit(1)
+
     # Register BlueZ agent
     obj     = bus.get_object('org.bluez', '/org/bluez')
     manager = dbus.Interface(obj, 'org.bluez.AgentManager1')
@@ -424,9 +445,6 @@ if __name__ == '__main__':
     # Unix signal handlers for live_devices IPC
     signal.signal(signal.SIGUSR1, signal_start_discovery)
     signal.signal(signal.SIGUSR2, signal_stop_discovery)
-
-    # Allow BT hardware to settle
-    time.sleep(5)
 
     # Find adapter and power it on so ES can see it without a desktop BT manager
     try:
