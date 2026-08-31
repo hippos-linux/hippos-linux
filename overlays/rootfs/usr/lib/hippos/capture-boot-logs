@@ -78,7 +78,23 @@ prune_old_boot_logs() {
     local i=0
     for dir in "${dirs[@]}"; do
         i=$((i + 1))
-        [[ ${i} -gt ${LOG_RETENTION_COUNT} ]] && rm -rf "${dir}"
+        # Not "[[ ... ]] && rm -rf ..." — bash's set -e exempts a false
+        # left-hand side of && from killing the script *at that point*, but
+        # this function's own return status is still whatever its last
+        # command returned (1, from the false test). prune_old_boot_logs is
+        # called bare (no if/&&/|| around it) at the very end of the script,
+        # so set -e fires THERE instead, on that plain function-call
+        # statement. Below the retention count (the common case — most
+        # systems never accumulate LOG_RETENTION_COUNT boots), every
+        # iteration hits this, so the function always returned 1 and the
+        # script always died on its last line — after every real capture
+        # step had already finished (real hardware report, 2026-08-23: this
+        # service showed Main process exited, status=1/FAILURE despite a
+        # complete, correct diagnostic bundle already on disk). Confirmed by
+        # reproducing both the failure and the fix in isolation.
+        if [[ ${i} -gt ${LOG_RETENTION_COUNT} ]]; then
+            rm -rf "${dir}"
+        fi
     done
 }
 
