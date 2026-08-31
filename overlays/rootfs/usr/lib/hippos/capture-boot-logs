@@ -277,6 +277,23 @@ capture "systemd-blame.txt" \
 capture "systemd-critical-chain.txt" \
     systemd-analyze critical-chain
 
+# The system-level blame/critical-chain above only accounts for PID 1's own
+# units — plasma-polkit-agent.service, gvfs-daemon.service, and everything
+# else started via `systemctl --user` runs under hippos's own systemd
+# instance (user@1000.service) and never appears there. A 0.6.1 beta boot
+# capture showed graphical.target reaching active ~2.5 minutes after boot
+# with nothing in the system-level critical chain accounting for most of
+# that gap — the user-manager's own timing is the missing half needed to
+# tell a real startup delay in a --user unit apart from ordinary session
+# activity (an app opening a file dialog, etc.) that happens to land late.
+capture_shell "systemd-user-blame.txt" \
+    'XDG_RUNTIME_DIR=/run/user/1000 runuser -u hippos -- \
+        systemd-analyze --user blame 2>&1 || true'
+
+capture_shell "systemd-user-critical-chain.txt" \
+    'XDG_RUNTIME_DIR=/run/user/1000 runuser -u hippos -- \
+        systemd-analyze --user critical-chain 2>&1 || true'
+
 capture_shell "systemd-manager-timeouts.txt" \
     'systemctl show \
         -p DefaultTimeoutStartUSec \
