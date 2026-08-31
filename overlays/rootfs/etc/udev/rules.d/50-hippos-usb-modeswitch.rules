@@ -1,0 +1,12 @@
+# Some cheap Realtek USB WiFi dongles (confirmed: RTL8188GU; the same
+# 0bda:1a2b ID is also used by RTL8821CU-based dongles) enumerate as a fake
+# CD-ROM carrying a Windows driver installer on first plug-in, not as a
+# network adapter — lsusb shows them as "(Driver CDROM Mode)" and the kernel
+# binds usb-storage to them instead of any WiFi driver. Windows' installer
+# sends a mode-switch command to flip them into WLAN mode; usb_modeswitch's
+# "-K" method (a standard SCSI eject-style trigger, no per-model config
+# needed) does the same thing on Linux, after which the device re-enumerates
+# with its real WLAN descriptor (real hardware report, 2026-08-24).
+ACTION!="add", GOTO="hippos_usb_modeswitch_end"
+ATTR{idVendor}=="0bda", ATTR{idProduct}=="1a2b", RUN+="/usr/sbin/usb_modeswitch -K -v 0bda -p 1a2b"
+LABEL="hippos_usb_modeswitch_end"
