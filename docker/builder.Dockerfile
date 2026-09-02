@@ -49,4 +49,12 @@ RUN apt-get update \
         zstd \
     && rm -rf /var/lib/apt/lists/*
 
+# The repo is bind-mounted host-owned (see relaunch_in_docker) but this
+# container always runs as root — git refuses to touch it ("detected
+# dubious ownership") without this, and build-rootfs.sh's `git rev-parse
+# HEAD 2>/dev/null || echo unknown` silently swallows that failure, so
+# every release's /etc/hippos-version has shipped with GIT_COMMIT=unknown
+# instead of a real commit hash.
+RUN git config --system --add safe.directory /work
+
 WORKDIR /repo
