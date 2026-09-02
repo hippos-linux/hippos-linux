@@ -58,10 +58,27 @@ NVIDIA_LEGACY_TIERS=(
 # <linux/of_gpio.h> with a real of_get_named_gpio() compat shim, and a
 # VM_REFCNT_EXCLUDE_READERS_FLAG-aware nv_is_vma_write_locked()) — verified
 # against HippOS's actual kernel headers, not just release-note reading.
-# 580's patch list is just the one generic LDFLAGS fix every tier here
+# 580's patch list was just the one generic LDFLAGS fix every tier here
 # could arguably use (upstream nvidia.ko/nvidia-modeset.ko Kbuild links
 # with bare $(LD) instead of $(LD) $(LDFLAGS), which only bites cross-arch
-# toolchains — harmless either way, kept for parity). Patch paths are
+# toolchains — harmless either way, kept for parity) until kernel 7.2's
+# strncpy removal broke both 580 and 390 against HippOS's `standard`
+# kernel (confirmed via a real 0.6.2 release build) — no upstream community
+# patch set exists yet for 580 (too new to be "legacy" in the community's
+# sense), and 390's own set stops at kernel 7.0. Both got a hand-ported
+# fix (kernel-7.2-strncpy-removal.patch in each tier's directory),
+# adapted line-for-line from 470's own already-vendored fix for the exact
+# same kernel commit against the same four files — see that patch's own
+# header comment. 390 also appeared to need a second, much bigger fix (the
+# DRM subsystem's own struct drm_atomic_state -> drm_atomic_commit
+# rename) — a hand-ported version of that was tried and built clean in
+# isolated testing, but reproducibly failed to apply inside the actual
+# builder container on two separate full release builds, and — the
+# important part — 390 built successfully on both kernels in both of
+# those same runs regardless of that patch never applying. Evidence says
+# it isn't actually needed against HippOS's real target kernels; removed
+# rather than shipped as a patch that reliably logs a scary warning and
+# does nothing. Patch paths are
 # "a/kernel/..." for 390/340/580 (apply from the extracted driver's top
 # dir) but bare "a/conftest.sh" etc for 470 (apply from its
 # kernel/ subdir) — an artifact of how each upstream generated its diffs,
@@ -69,7 +86,9 @@ NVIDIA_LEGACY_TIERS=(
 nvidia_legacy_patch_order() {
     case "$1" in
         580)
-            printf '%s\n' 0001-use-LDFLAGS.patch
+            printf '%s\n' \
+                0001-use-LDFLAGS.patch \
+                0002-fix-linux-7.2-strncpy-removal.patch
             ;;
         470)
             printf '%s\n' \
@@ -111,7 +130,8 @@ nvidia_legacy_patch_order() {
                 kernel-6.17.patch \
                 kernel-6.19.patch \
                 kernel-6.18-nv_workqueue_flush.patch \
-                kernel-7.0.patch
+                kernel-7.0.patch \
+                kernel-7.2-strncpy-removal.patch
             ;;
         340)
             # Numbered 0001-0019, filename sort is the correct apply order.
