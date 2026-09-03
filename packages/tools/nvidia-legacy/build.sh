@@ -176,6 +176,21 @@ mkdir -p "${STAGING}/usr/lib/x86_64-linux-gnu/vdpau" \
 
 BUILT_ANY=0
 
+# Per-tier regression tracking: a tier that never worked (340, permanently
+# EOL — see comment above) must not block every future release, but a tier
+# that DID work last time (build-machine-local state, not committed —
+# WORK_ROOT is bind-mounted from the host, same pattern as this script's
+# other WORK_ROOT paths) silently going to zero working kernels is exactly
+# the kind of regression release.sh's exit-on-failure is supposed to catch.
+STATUS_FILE="${WORK_ROOT}/${NAME}/.tier-status"
+declare -A TIER_BUILT_PREV=()
+if [[ -f "${STATUS_FILE}" ]]; then
+    while read -r _tier _status; do
+        [[ -n "${_tier}" ]] && TIER_BUILT_PREV["${_tier}"]="${_status}"
+    done < "${STATUS_FILE}"
+fi
+declare -A TIER_BUILT_THIS_RUN=()
+
 for entry in "${NVIDIA_LEGACY_TIERS[@]}"; do
     tier="${entry%%:*}"
     rest="${entry#*:}"
@@ -345,10 +360,32 @@ ccflags-y += $(EXTRA_CFLAGS)' "${EXTRACT_DIR}/kernel/Kbuild"
     done
 
     [[ "${_built_any_release}" -eq 1 ]] && echo "${version}" > "${STAGING}/usr/share/nvidia/legacy${tier}.version"
+    TIER_BUILT_THIS_RUN["${tier}"]="${_built_any_release}"
 
     rm -rf "${EXTRACT_DIR}"
 done
 
 [[ "${BUILT_ANY}" -eq 1 ]] || log "WARNING: no legacy NVIDIA tier produced a working kernel module — older GPUs will fall back to nouveau"
+
+# A tier that skipped its build step entirely (download failure, checksum
+# mismatch — see the "continue"s above) never reaches the
+# TIER_BUILT_THIS_RUN assignment at all; treat that the same as an explicit
+# 0, since it's just as real a regression as a compile failure.
+regressed=()
+for tier in "${!TIER_BUILT_PREV[@]}"; do
+    if [[ "${TIER_BUILT_PREV[${tier}]}" == "1" && "${TIER_BUILT_THIS_RUN[${tier}]:-0}" != "1" ]]; then
+        regressed+=("${tier}")
+    fi
+done
+
+if [[ "${#regressed[@]}" -gt 0 ]]; then
+    die "NVIDIA legacy tier(s) regressed — built successfully last run, failed this run: ${regressed[*]}. Not updating ${STATUS_FILE} — fix the regression (or, if it's now expected to be permanently broken like tier 340, edit ${STATUS_FILE} by hand) before re-running."
+fi
+
+mkdir -p "$(dirname "${STATUS_FILE}")"
+: > "${STATUS_FILE}"
+for tier in "${!TIER_BUILT_THIS_RUN[@]}"; do
+    echo "${tier} ${TIER_BUILT_THIS_RUN[${tier}]}" >> "${STATUS_FILE}"
+done
 
 log "Done. Artifact at ${STAGING}"
