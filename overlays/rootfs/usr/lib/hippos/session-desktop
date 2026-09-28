@@ -17,6 +17,10 @@ if [[ ! -x "$SESSION_CMD" ]]; then
 fi
 
 export HOME=/userdata
+# systemd's manager PATH doesn't include /usr/games — Lutris' shortcut/menu
+# launch and gamemoderun (both installed there by their Debian packages) fail
+# silently without this, since desktop app launchers exec by bare name.
+export PATH="${PATH}:/usr/local/games:/usr/games"
 export XDG_RUNTIME_DIR=/run/user/1000
 export XDG_SESSION_TYPE=x11
 export XDG_DATA_DIRS="/var/lib/flatpak/exports/share:${HOME}/.local/share/flatpak/exports/share:/usr/local/share:/usr/share"
