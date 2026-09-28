@@ -1054,15 +1054,16 @@ def block_devices() -> list[dict[str, str]]:
 
 
 def is_system_device(devname: str) -> bool:
+    # Matches the system mountpoints' own partitions only — a sibling
+    # partition on the same physical disk (e.g. a user-created ROMS
+    # partition alongside the HippOS install) is a normal, expected layout
+    # and must stay mountable. A same-disk blanket exclusion previously
+    # caught those too (beta report: atari1050, "Disk Roms partition not
+    # recognized — same disk as HippOS install").
     dev = f"/dev/{devname}"
     for mountpoint in ("/", "/boot", "/boot/efi", "/userdata"):
         source = run_text(["findmnt", "-n", "-o", "SOURCE", mountpoint]).strip()
-        if not source:
-            continue
-        if source == dev:
-            return True
-        source_parent = run_text(["lsblk", "-no", "PKNAME", source]).strip()
-        if source_parent and source_parent == parent_disk(devname):
+        if source and source == dev:
             return True
     return False
 
@@ -1094,11 +1095,6 @@ def rom_branch_for_mount(mount_path: Path) -> Optional[Path]:
 def list_mountable_devices() -> list[str]:
     out: list[str] = []
     rows = block_devices()
-    system_parents = {
-        parent_disk(row.get("name", ""))
-        for row in rows
-        if row.get("mountpoint") and not str(row.get("mountpoint", "")).startswith(f"{MEDIA_ROOT}/")
-    }
     for row in rows:
         name = row.get("name", "")
         path = row.get("path", f"/dev/{name}")
@@ -1110,7 +1106,6 @@ def list_mountable_devices() -> list[str]:
             or name.startswith(("loop", "ram", "zram"))
             or fstype == "swap"
             or is_system_device(name)
-            or parent_disk(name) in system_parents
             or (mounted and not mounted.startswith(f"{MEDIA_ROOT}/"))
         ):
             continue
