@@ -692,14 +692,17 @@ def fetch_archive(url, archive, sha256="", timeout=None):
     log(f"Downloading {os.path.basename(archive)}...")
     try:
         req = _make_request(url)
-        with urllib.request.urlopen(req, timeout=timeout) as resp, open(part, "wb") as f:
-            total = int(resp.headers.get("Content-Length", 0))
-            done = 0
-            while chunk := resp.read(262144):
-                f.write(chunk)
-                done += len(chunk)
-                if total:
-                    log(f"Downloading... {done * 100 // total}%")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp, open(part, "wb") as f:
+                total = int(resp.headers.get("Content-Length", 0))
+                done = 0
+                while chunk := resp.read(262144):
+                    f.write(chunk)
+                    done += len(chunk)
+                    if total:
+                        log(f"Downloading... {done * 100 // total}%")
+        except OSError as e:
+            die(f"Download interrupted ({e}) — check your connection and free space, then retry")
 
         if sha256:
             log("Verifying checksum...")

@@ -54,14 +54,11 @@ if [[ "${_CRT_ENABLED}" != "true" && "${_CRT_ACTIVE}" != "true" ]]; then
     [[ "$RES" == max-* ]] && RES="${RES#max-}"
 
     if [[ -z "$RES" || "$RES" == "preferred" ]]; then
-        # Prefer 1920x1080@60 when unconfigured (safe default for TVs),
-        # fall back to --auto if the output doesn't advertise that mode.
-        if xrandr --listModes "$OUTPUT" 2>/dev/null | grep -qE '^[[:space:]]*1920x1080[[:space:]]+60\.[0-9]+'; then
+        # Prefer 1920x1080@60 when unconfigured — many TVs advertise a 4K@30
+        # EDID preferred mode that --preferred would otherwise pick.
+        if hippos-resolution --screen "$OUTPUT" listModes 2>/dev/null | grep -q '^1920x1080\.60:'; then
             RES="1920x1080"
             echo "[hippos-display-setup] $OUTPUT defaulting to 1920x1080 (safe default)"
-        else
-            xrandr --output "$OUTPUT" --auto 2>/dev/null || true
-            echo "[hippos-display-setup] $OUTPUT --auto (1920x1080@60 not advertised)"
         fi
     fi
 
