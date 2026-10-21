@@ -1,0 +1,7 @@
+# Plasma's session restore relaunches whatever was open at logout — and
+# leaving desktop mode via the EmulationStation launcher is itself a logout,
+# so hippos-switch-to-es gets saved and replayed on the next login, bouncing
+# straight back to ES. Desktop mode is entered and left constantly; start
+# every Plasma login empty.
+[General]
+loginMode=emptySession
