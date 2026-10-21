@@ -21,6 +21,7 @@ VERSION_FILE      = "/usr/share/hippos/version"
 SYSCONF           = "/userdata/system/hippos.conf"
 CACHE_DIR         = "/userdata/system/cache/update"
 BTRFS_MNT         = "/tmp/hippos-btrfs-update"
+BARE_ROOTFS       = "@rootfs"
 LOG_FILE          = "/userdata/system/logs/upgrade.log"
 PATCHES_STATE_FILE = "/userdata/system/applied-patches.json"
 
@@ -94,7 +95,7 @@ def parse_current_subvol(mounts_text: str) -> str:
                     last = lowerdir.rstrip("/").split("/")[-1]
                     if last.startswith("@rootfs"):
                         return last
-    return "@rootfs"
+    return BARE_ROOTFS
 
 
 def current_subvol():
@@ -786,7 +787,7 @@ def cmd_rollback(subvol):
     try:
         mount_toplevel()
         available = list_deployments()
-        if subvol not in available and subvol != "@rootfs":
+        if subvol not in available and subvol != BARE_ROOTFS:
             die(f"Deployment '{subvol}' not found. Available: {available}")
 
         cfg_path = EFI_GRUB_CFG
@@ -815,20 +816,24 @@ class ApplyPlan:
     backup_name: str
     need_snapshot: bool
     new_subvol: str
-    need_new_subvol_cleanup: bool
-    pre_prune_deployments: list = field(default_factory=list)
     prune: list = field(default_factory=list)
+    retained_deployments: list = field(default_factory=list)
     final_deployments: list = field(default_factory=list)
 
 
 def plan_apply(running: str, cur_version: str, remote_version: str,
-               existing_deployments: list) -> ApplyPlan:
+               existing_deployments: list, bare_rootfs_exists: bool = False) -> ApplyPlan:
     """Decide what cmd_apply needs to snapshot, create, and prune.
 
     `existing_deployments` is list_deployments()'s result from *before* this
     run creates anything. `running` may not appear in it — a fresh install's
     running subvolume is the bare "@rootfs", which list_deployments() never
     returns since it only matches the "@rootfs-*" naming pattern.
+
+    Everything except the running subvolume and its backup slot is pruned
+    up front, before the download: the rootfs archive and the new subvolume
+    land on the same btrfs volume, and small disks run out of space if old
+    deployments are only removed after extraction succeeds.
     """
     backup_name = f"@rootfs-{cur_version}"
     new_subvol = f"@rootfs-{remote_version}"
@@ -840,27 +845,36 @@ def plan_apply(running: str, cur_version: str, remote_version: str,
     # Either way there's nothing to snapshot.
     need_snapshot = backup_name not in set(existing_deployments) | {running}
 
-    need_new_subvol_cleanup = new_subvol in existing_deployments
-
-    pre_prune_deployments = sort_deployment_names(
-        set(existing_deployments) | {backup_name, new_subvol}
-    )
-    prune = sort_deployment_names(
-        s for s in pre_prune_deployments if s not in (new_subvol, backup_name)
-    )
-    final_deployments = sort_deployment_names(
-        s for s in pre_prune_deployments if s not in prune
-    )
+    keep = {backup_name, running}
+    # Includes new_subvol when a previous apply attempt left it half-extracted.
+    prune = sort_deployment_names(s for s in existing_deployments if s not in keep)
+    # The install-time "@rootfs" stays behind after the first update — its
+    # content lives on in the @rootfs-<version> snapshot taken from it, and
+    # nothing boots it once GRUB points at versioned deployments. Left alone
+    # it stops sharing extents as soon as that snapshot is pruned, and holds
+    # a full extra rootfs copy forever.
+    if bare_rootfs_exists and running != BARE_ROOTFS:
+        prune.insert(0, BARE_ROOTFS)
 
     return ApplyPlan(
         backup_name=backup_name,
         need_snapshot=need_snapshot,
         new_subvol=new_subvol,
-        need_new_subvol_cleanup=need_new_subvol_cleanup,
-        pre_prune_deployments=pre_prune_deployments,
         prune=prune,
-        final_deployments=final_deployments,
+        retained_deployments=sort_deployment_names(
+            s for s in existing_deployments if s in keep
+        ),
+        final_deployments=sort_deployment_names({backup_name, new_subvol}),
     )
+
+
+def remove_stale_archives(keep_archive):
+    """Delete cached rootfs archives (complete or partial) for other versions."""
+    for name in os.listdir(CACHE_DIR):
+        path = os.path.join(CACHE_DIR, name)
+        if name.startswith("hippos-rootfs-") and path not in (keep_archive, keep_archive + ".part"):
+            log(f"Removing stale update download {name}")
+            os.remove(path)
 
 
 def cmd_apply():
@@ -887,13 +901,35 @@ def cmd_apply():
 
     os.makedirs(CACHE_DIR, exist_ok=True)
     archive = os.path.join(CACHE_DIR, f"hippos-rootfs-{remote}.tar.zst")
-    fetch_archive(url, archive, sha256)
+    remove_stale_archives(archive)
 
     try:
         mount_toplevel()
 
+        uuid, partuuid = read_grub_uuid_partuuid()
+        if not uuid or not partuuid:
+            die("Cannot read UUID/PARTUUID from existing grub.cfg")
+
         running = current_subvol()
-        plan = plan_apply(running, cur, remote, list_deployments())
+        plan = plan_apply(
+            running, cur, remote, list_deployments(),
+            bare_rootfs_exists=os.path.isdir(os.path.join(BTRFS_MNT, BARE_ROOTFS)),
+        )
+
+        for stale in plan.prune:
+            log(f"Pruning old deployment {stale}...")
+            result = subprocess.run(
+                ["btrfs", "subvolume", "delete", os.path.join(BTRFS_MNT, stale)],
+                check=False,
+            )
+            if result.returncode != 0:
+                log(f"WARNING: failed to prune {stale} (exit {result.returncode}) "
+                    f"— it will be retried on the next update")
+        if plan.prune:
+            write_grub_cfg(running, plan.retained_deployments, uuid, partuuid)
+            log("GRUB updated after pruning")
+
+        fetch_archive(url, archive, sha256)
 
         backup_path = os.path.join(BTRFS_MNT, plan.backup_name)
         running_path = os.path.join(BTRFS_MNT, running)
@@ -906,8 +942,6 @@ def cmd_apply():
                 check=True
             )
 
-        if plan.need_new_subvol_cleanup:
-            subprocess.run(["btrfs", "subvolume", "delete", new_path], check=True)
         log(f"Creating {plan.new_subvol}...")
         subprocess.run(["btrfs", "subvolume", "create", new_path], check=True)
 
@@ -923,11 +957,7 @@ def cmd_apply():
         shutil.copy2("/etc/fstab", os.path.join(new_path, "etc", "fstab"))
         log("fstab preserved from running system")
 
-        uuid, partuuid = read_grub_uuid_partuuid()
-        if not uuid or not partuuid:
-            die("Cannot read UUID/PARTUUID from existing grub.cfg")
-
-        write_grub_cfg(plan.new_subvol, plan.pre_prune_deployments, uuid, partuuid)
+        write_grub_cfg(plan.new_subvol, plan.final_deployments, uuid, partuuid)
         log(f"GRUB updated — default: {plan.new_subvol}")
 
         # Arm the boot counter so rollback is offered after 3 failed boot attempts.
@@ -935,19 +965,6 @@ def cmd_apply():
         subprocess.run(["grub-editenv", grubenv, "create"], check=False)
         subprocess.run(["grub-editenv", grubenv, "set", "boot_counter=3"], check=True)
         log("Boot counter armed (3 attempts before rollback)")
-
-        for stale in plan.prune:
-            log(f"Pruning old deployment {stale}...")
-            result = subprocess.run(
-                ["btrfs", "subvolume", "delete", os.path.join(BTRFS_MNT, stale)],
-                check=False,
-            )
-            if result.returncode != 0:
-                log(f"WARNING: failed to prune {stale} (exit {result.returncode}) "
-                    f"— it will be retried on the next update")
-        if plan.prune:
-            write_grub_cfg(plan.new_subvol, plan.final_deployments, uuid, partuuid)
-            log("GRUB updated after pruning")
     finally:
         umount_toplevel()
 

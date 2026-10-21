@@ -169,7 +169,6 @@ class PlanApplyTests(unittest.TestCase):
         self.assertEqual(plan.backup_name, "@rootfs-0.1.0")
         self.assertTrue(plan.need_snapshot)
         self.assertEqual(plan.new_subvol, "@rootfs-0.2.0")
-        self.assertFalse(plan.need_new_subvol_cleanup)
         self.assertEqual(plan.prune, [])
         self.assertEqual(plan.final_deployments, ["@rootfs-0.1.0", "@rootfs-0.2.0"])
 
@@ -185,7 +184,7 @@ class PlanApplyTests(unittest.TestCase):
         self.assertEqual(plan.prune, [])
         self.assertEqual(plan.final_deployments, ["@rootfs-0.5.1", "@rootfs-0.5.2"])
 
-    def test_retrying_a_failed_apply_cleans_up_the_partial_subvol(self):
+    def test_retrying_a_failed_apply_prunes_the_partial_subvol(self):
         # A previous apply attempt created @rootfs-0.6.0 but didn't finish
         # (e.g. extraction failed). Retrying must delete-then-recreate it,
         # not skip creation because it "already exists".
@@ -194,51 +193,47 @@ class PlanApplyTests(unittest.TestCase):
             existing_deployments=["@rootfs-0.5.1", "@rootfs-0.6.0"],
         )
         self.assertFalse(plan.need_snapshot)
-        self.assertTrue(plan.need_new_subvol_cleanup)
+        self.assertEqual(plan.prune, ["@rootfs-0.6.0"])
+        self.assertEqual(plan.retained_deployments, ["@rootfs-0.5.1"])
 
     def test_prunes_the_oldest_deployment_not_the_current_or_new_one(self):
-        # Simulates cruft left behind by a previously failed (check=False)
-        # prune: three deployments exist where only two should. The correct
-        # one to remove is the old rollback slot, not backup_name/new_subvol.
         plan = hu.plan_apply(
             running="@rootfs-0.5.1", cur_version="0.5.1", remote_version="0.5.2",
             existing_deployments=["@rootfs-0.4.0", "@rootfs-0.5.1"],
         )
         self.assertEqual(plan.prune, ["@rootfs-0.4.0"])
+        self.assertEqual(plan.retained_deployments, ["@rootfs-0.5.1"])
         self.assertEqual(plan.final_deployments, ["@rootfs-0.5.1", "@rootfs-0.5.2"])
-        self.assertNotIn("@rootfs-0.5.1", plan.prune)
-        self.assertNotIn("@rootfs-0.5.2", plan.prune)
 
-    def test_pre_prune_order_uses_numeric_not_lexicographic_order(self):
+    def test_prune_order_uses_numeric_not_lexicographic_order(self):
         # Lexicographically, "@rootfs-0.5.2" sorts *after* "@rootfs-0.5.10"
-        # and "@rootfs-0.5.11" (comparing the '2' against '1'). If
-        # pre_prune_deployments used string order, write_grub_cfg's first
-        # (pre-prune) GRUB write — the one made before the boot counter is
-        # armed — would put the wrong deployment at the boot-counter's
-        # hardcoded fallback slot (menu entry 1).
+        # and "@rootfs-0.5.11"; write_grub_cfg relies on version order to put
+        # the right deployment at the boot counter's fallback slot.
         plan = hu.plan_apply(
             running="@rootfs-0.5.10", cur_version="0.5.10", remote_version="0.5.11",
-            existing_deployments=["@rootfs-0.5.2", "@rootfs-0.5.10"],
+            existing_deployments=["@rootfs-0.5.2", "@rootfs-0.5.9", "@rootfs-0.5.10"],
         )
-        self.assertEqual(
-            plan.pre_prune_deployments,
-            ["@rootfs-0.5.2", "@rootfs-0.5.10", "@rootfs-0.5.11"],
-        )
-        self.assertEqual(plan.prune, ["@rootfs-0.5.2"])
+        self.assertEqual(plan.prune, ["@rootfs-0.5.2", "@rootfs-0.5.9"])
         self.assertEqual(plan.final_deployments, ["@rootfs-0.5.10", "@rootfs-0.5.11"])
 
-    def test_pre_prune_deployments_include_the_about_to_be_pruned_entry(self):
-        # The first GRUB write happens before pruning runs, so the bootable
-        # menu must still list the not-yet-deleted old deployment.
+    def test_prunes_bare_rootfs_left_behind_by_the_first_update(self):
+        # Fresh 0.6.1 install updated to 0.6.2 leaves @rootfs, its snapshot
+        # @rootfs-0.6.1, and the running @rootfs-0.6.2.
         plan = hu.plan_apply(
-            running="@rootfs-0.5.1", cur_version="0.5.1", remote_version="0.5.2",
-            existing_deployments=["@rootfs-0.4.0", "@rootfs-0.5.1"],
+            running="@rootfs-0.6.2", cur_version="0.6.2", remote_version="0.6.3",
+            existing_deployments=["@rootfs-0.6.1", "@rootfs-0.6.2"],
+            bare_rootfs_exists=True,
         )
-        self.assertEqual(
-            plan.pre_prune_deployments,
-            ["@rootfs-0.4.0", "@rootfs-0.5.1", "@rootfs-0.5.2"],
-        )
+        self.assertEqual(plan.prune, ["@rootfs", "@rootfs-0.6.1"])
+        self.assertEqual(plan.final_deployments, ["@rootfs-0.6.2", "@rootfs-0.6.3"])
 
+    def test_never_prunes_bare_rootfs_while_it_is_running(self):
+        plan = hu.plan_apply(
+            running="@rootfs", cur_version="0.6.1", remote_version="0.6.2",
+            existing_deployments=[], bare_rootfs_exists=True,
+        )
+        self.assertEqual(plan.prune, [])
+        self.assertTrue(plan.need_snapshot)
 
 if __name__ == "__main__":
     unittest.main()
