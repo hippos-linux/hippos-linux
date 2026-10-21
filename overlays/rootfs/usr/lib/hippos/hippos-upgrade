@@ -22,6 +22,7 @@ SYSCONF           = "/userdata/system/hippos.conf"
 CACHE_DIR         = "/userdata/system/cache/update"
 BTRFS_MNT         = "/tmp/hippos-btrfs-update"
 BARE_ROOTFS       = "@rootfs"
+KERNEL_SNAPSHOT_PREFIX = "@rootfs-kernel-"
 LOG_FILE          = "/userdata/system/logs/upgrade.log"
 PATCHES_STATE_FILE = "/userdata/system/applied-patches.json"
 
@@ -206,13 +207,24 @@ def umount_toplevel():
     subprocess.run(["umount", "-l", BTRFS_MNT], check=False)
 
 
+def _deployment_sort_key(name):
+    # Kernel-update snapshots carry a kernel version, not an OS version, and
+    # are only ever taken of the running deployment just before its kernel is
+    # replaced. Sorting them after every OS deployment makes the snapshot the
+    # newest rollback slot, which write_grub_cfg uses as the boot-counter
+    # fallback when the new kernel fails to boot.
+    if name.startswith(KERNEL_SNAPSHOT_PREFIX):
+        return (1, name)
+    return (0, ver_tuple(name[len("@rootfs-"):]))
+
+
 def sort_deployment_names(names) -> list[str]:
     """Sort @rootfs-* names by parsed version, not string order.
 
     "@rootfs-0.5.10" must sort after "@rootfs-0.5.2"; plain string sorting
     gets that backwards once a version component reaches two digits.
     """
-    return sorted(names, key=lambda n: ver_tuple(n[len("@rootfs-"):]))
+    return sorted(names, key=_deployment_sort_key)
 
 
 def parse_deployment_names(btrfs_list_output: str) -> list[str]:
@@ -748,57 +760,20 @@ def cmd_list_deployments():
         umount_toplevel()
 
 
-def find_menuentry_index(content: str, subvol: str) -> int:
-    """Return the index of the menuentry block that boots `subvol`.
-
-    grub.cfg entries are generated in the same order list_deployments()
-    returns them, but we match on content (not position) since pruning can
-    shift indices between writes. Falls back to entry 0 if no block
-    references the subvol.
-
-    Matches only on the kernel/initrd path (`/<subvol>/boot/`), never on the
-    `rootflags=subvol=<subvol>` cmdline fragment: subvol names share a
-    "@rootfs" / "@rootfs-<version>" prefix, so an unanchored match on the
-    cmdline fragment lets "@rootfs" match the first "@rootfs-<version>"
-    block instead of the bare @rootfs one.
-    """
-    entries = content.split("menuentry")
-    for i, block in enumerate(entries[1:]):
-        if f"/{subvol}/boot/" in block:
-            return i
-    return 0
-
-
-def set_grub_default(content: str, target_idx: int) -> str:
-    """Rewrite `set default=` to target_idx and disable the 0s auto-boot timeout."""
-    new_lines = []
-    for line in content.splitlines():
-        if line.startswith("set default="):
-            new_lines.append(f"set default={target_idx}")
-        elif line.startswith("set timeout=0"):
-            new_lines.append("set timeout=5")
-        else:
-            new_lines.append(line)
-    return "\n".join(new_lines) + "\n"
-
-
 def cmd_rollback(subvol):
-    """Switch grub default to subvol and reboot."""
+    """Make `subvol` the default boot entry; takes effect on next boot."""
     try:
         mount_toplevel()
         available = list_deployments()
-        if subvol not in available and subvol != BARE_ROOTFS:
+        if subvol not in available:
             die(f"Deployment '{subvol}' not found. Available: {available}")
 
-        cfg_path = EFI_GRUB_CFG
-        content = open(cfg_path).read()
+        uuid, partuuid = read_grub_uuid_partuuid()
+        if not uuid or not partuuid:
+            die("Cannot read UUID/PARTUUID from existing grub.cfg")
 
-        target_idx = find_menuentry_index(content, subvol)
-
-        with open(cfg_path, "w") as f:
-            f.write(set_grub_default(content, target_idx))
-
-        log(f"GRUB default set to entry {target_idx} ({subvol})")
+        write_grub_cfg(subvol, available, uuid, partuuid)
+        log(f"GRUB default set to {subvol}")
     finally:
         umount_toplevel()
 
@@ -1039,7 +1014,7 @@ def cmd_update_kernel():
 
         # Snapshot current subvol for rollback before touching /boot
         if installed:
-            snap_name = f"@rootfs-kernel-{installed}"
+            snap_name = f"{KERNEL_SNAPSHOT_PREFIX}{installed}"
             snap_path = os.path.join(BTRFS_MNT, snap_name)
             if not os.path.exists(snap_path):
                 log(f"Snapshotting {running} → {snap_name}...")
@@ -1108,7 +1083,7 @@ def cmd_update_kernel():
         keep = {snap_name} if installed else set()
         pruned = False
         for sv in deployments:
-            if sv.startswith("@rootfs-kernel-") and sv not in keep:
+            if sv.startswith(KERNEL_SNAPSHOT_PREFIX) and sv not in keep:
                 log(f"Pruning old kernel snapshot {sv}...")
                 subprocess.run(
                     ["btrfs", "subvolume", "delete", os.path.join(BTRFS_MNT, sv)],

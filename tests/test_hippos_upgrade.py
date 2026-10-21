@@ -29,17 +29,6 @@ def _load_hippos_upgrade():
 hu = _load_hippos_upgrade()
 
 
-def _menuentry(subvol: str) -> str:
-    """Build a menuentry block shaped like write_grub_cfg's real output."""
-    return (
-        f'menuentry "HippOS {subvol}" {{\n'
-        f'    insmod btrfs\n'
-        f'    linux /{subvol}/boot/vmlinuz root=PARTUUID=xxx rootflags=subvol={subvol}\n'
-        f'    initrd /{subvol}/boot/initrd.img\n'
-        f'}}\n'
-    )
-
-
 class VerTupleTests(unittest.TestCase):
     def test_equal_length_versions_compare_normally(self):
         self.assertLess(hu.ver_tuple("0.5.1"), hu.ver_tuple("0.5.10"))
@@ -61,55 +50,6 @@ class VerTupleTests(unittest.TestCase):
         self.assertEqual(hu.ver_tuple("1.2.3.4"), hu.ver_tuple("1.2.3"))
 
 
-class FindMenuentryIndexTests(unittest.TestCase):
-    def test_matches_the_correct_block_among_several(self):
-        content = "".join(
-            _menuentry(s) for s in ("@rootfs-0.6.0", "@rootfs-0.5.1", "@rootfs")
-        )
-        self.assertEqual(hu.find_menuentry_index(content, "@rootfs-0.6.0"), 0)
-        self.assertEqual(hu.find_menuentry_index(content, "@rootfs-0.5.1"), 1)
-        self.assertEqual(hu.find_menuentry_index(content, "@rootfs"), 2)
-
-    def test_no_match_falls_back_to_entry_zero(self):
-        content = _menuentry("@rootfs-0.6.0")
-        self.assertEqual(hu.find_menuentry_index(content, "@rootfs-9.9.9"), 0)
-
-    def test_does_not_confuse_a_subvol_name_that_prefixes_another(self):
-        # "@rootfs" must not match the "@rootfs-0.5.1" block it's a prefix of.
-        content = _menuentry("@rootfs-0.5.1") + _menuentry("@rootfs")
-        self.assertEqual(hu.find_menuentry_index(content, "@rootfs"), 1)
-
-
-class SetGrubDefaultTests(unittest.TestCase):
-    def test_rewrites_default_and_relaxes_zero_timeout(self):
-        content = "set default=0\nset timeout=0\nset timeout_style=hidden\n"
-        result = hu.set_grub_default(content, 2)
-        self.assertIn("set default=2", result)
-        self.assertIn("set timeout=5", result)
-        self.assertNotIn("set timeout=0", result)
-        self.assertIn("set timeout_style=hidden", result)
-
-    def test_leaves_nonzero_timeout_untouched(self):
-        content = "set default=0\nset timeout=10\n"
-        result = hu.set_grub_default(content, 1)
-        self.assertIn("set timeout=10", result)
-
-    def test_does_not_touch_indented_default_lines_inside_boot_counter_block(self):
-        # write_grub_cfg's boot-counter block has an indented "set default=1"
-        # inside the failed-boot branch; only the top-level line is the
-        # active default and should be the one rewritten.
-        content = (
-            "set default=0\n"
-            "if [ \"${boot_counter}\" = \"0\" ] ; then\n"
-            "    set default=1\n"
-            "fi\n"
-        )
-        result = hu.set_grub_default(content, 3)
-        lines = result.splitlines()
-        self.assertEqual(lines[0], "set default=3")
-        self.assertEqual(lines[2].strip(), "set default=1")
-
-
 def _subvol_list_output(names) -> str:
     """Build fake `btrfs subvolume list -o` output for the given subvol names."""
     return "\n".join(
@@ -124,6 +64,15 @@ class SortDeploymentNamesTests(unittest.TestCase):
         self.assertEqual(
             hu.sort_deployment_names(names),
             ["@rootfs-0.5.1", "@rootfs-0.5.2", "@rootfs-0.5.10"],
+        )
+
+    def test_kernel_snapshots_sort_after_os_deployments(self):
+        # Kernel snapshot names carry a kernel version that ver_tuple can't
+        # parse; they must sort last so they become the boot-counter fallback.
+        names = ["@rootfs-kernel-6.12.1-hippos", "@rootfs-0.6.3", "@rootfs-0.6.2"]
+        self.assertEqual(
+            hu.sort_deployment_names(names),
+            ["@rootfs-0.6.2", "@rootfs-0.6.3", "@rootfs-kernel-6.12.1-hippos"],
         )
 
 
@@ -225,6 +174,14 @@ class PlanApplyTests(unittest.TestCase):
             bare_rootfs_exists=True,
         )
         self.assertEqual(plan.prune, ["@rootfs", "@rootfs-0.6.1"])
+        self.assertEqual(plan.final_deployments, ["@rootfs-0.6.2", "@rootfs-0.6.3"])
+
+    def test_os_update_prunes_kernel_snapshots(self):
+        plan = hu.plan_apply(
+            running="@rootfs-0.6.2", cur_version="0.6.2", remote_version="0.6.3",
+            existing_deployments=["@rootfs-0.6.2", "@rootfs-kernel-6.12.1-hippos"],
+        )
+        self.assertEqual(plan.prune, ["@rootfs-kernel-6.12.1-hippos"])
         self.assertEqual(plan.final_deployments, ["@rootfs-0.6.2", "@rootfs-0.6.3"])
 
     def test_never_prunes_bare_rootfs_while_it_is_running(self):
