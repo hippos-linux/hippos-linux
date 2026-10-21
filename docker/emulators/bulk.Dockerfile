@@ -40,6 +40,8 @@ RUN apt-get update \
         glslang-tools \
         golang-go \
         libtool \
+        libltdl-dev \
+        libasio-dev \
         libcereal-dev \
         libcxxopts-dev \
         libglm-dev \
@@ -352,6 +354,22 @@ RUN if [ "${TARGETARCH}" = "arm64" ]; then \
         printf '[target.aarch64-unknown-linux-gnu]\nlinker = "aarch64-linux-gnu-gcc"\n' \
             >> /root/.cargo/config.toml; \
     fi
+
+# ── Step 7b: DXC (DirectX Shader Compiler) host tool (always amd64) ──────────
+# Ymir compiles its HLSL shaders to SPIR-V with DXC (glslc lacks the HLSL
+# features it needs); Debian doesn't package it. Build-time only — shaders
+# ship precompiled, nothing from DXC is needed at runtime.
+ARG DXC_RELEASE=v1.9.2609
+ARG DXC_TARBALL=linux_dxc_2026_09_28.x86_x64.tar.gz
+ARG DXC_SHA256=96faadc7f5c282d2ffda49804beb4c3ee38127bc252b723234e3c5cdf7aa39a1
+RUN curl -fsSL -o /tmp/dxc.tar.gz \
+        "https://github.com/microsoft/DirectXShaderCompiler/releases/download/${DXC_RELEASE}/${DXC_TARBALL}" \
+    && echo "${DXC_SHA256}  /tmp/dxc.tar.gz" | sha256sum --check --strict \
+    && mkdir -p /opt/dxc \
+    && tar -xzf /tmp/dxc.tar.gz -C /opt/dxc \
+    && rm /tmp/dxc.tar.gz
+
+ENV PATH="/opt/dxc/bin:${PATH}"
 
 # ── Step 8: cmake and meson wrappers ─────────────────────────────────────────
 # When ARCH=arm64 these wrappers transparently inject the toolchain/cross files

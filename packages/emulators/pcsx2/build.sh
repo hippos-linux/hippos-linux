@@ -27,6 +27,10 @@ PLUTOSVG_SRC="${DEPS_ROOT}/plutosvg/source"
 PLUTOSVG_BUILD="${DEPS_ROOT}/plutosvg/build"
 PLUTOSVG_PREFIX="${DEPS_ROOT}/plutosvg/install"
 
+RYML_SRC="${DEPS_ROOT}/rapidyaml/source"
+RYML_BUILD="${DEPS_ROOT}/rapidyaml/build"
+RYML_PREFIX="${DEPS_ROOT}/rapidyaml/install"
+
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 if [[ -d "${SRC}/.git" ]]; then
@@ -97,6 +101,36 @@ cmake -S "${PLUTOSVG_SRC}" -B "${PLUTOSVG_BUILD}" \
 cmake --build "${PLUTOSVG_BUILD}" -j"$(nproc)"
 cmake --install "${PLUTOSVG_BUILD}"
 
+# PCSX2 2.8 stopped bundling rapidyaml and requires it as a dependency.
+# Track the exact version (and checksum) PCSX2's own Linux deps script pins,
+# so a PCSX2 tag bump picks up its matching rapidyaml without editing this.
+PCSX2_DEPS_SCRIPT="${SRC}/.github/workflows/scripts/linux/build-dependencies-qt.sh"
+RYML_VERSION="$(sed -n 's/^RAPIDYAML=//p' "${PCSX2_DEPS_SCRIPT}")"
+RYML_TARBALL="rapidyaml-${RYML_VERSION}-src.tgz"
+RYML_SHA256="$(awk -v t='rapidyaml-$RAPIDYAML-src.tgz' '$2 == t {print $1}' "${PCSX2_DEPS_SCRIPT}")"
+[[ -n "${RYML_VERSION}" && -n "${RYML_SHA256}" ]] || { log "Could not read rapidyaml pin from ${PCSX2_DEPS_SCRIPT}"; exit 1; }
+
+if [[ "$(cat "${RYML_SRC}/.hippos-version" 2>/dev/null)" != "${RYML_VERSION}" ]]; then
+    log "Fetching rapidyaml ${RYML_VERSION}"
+    rm -rf "${RYML_SRC}"
+    mkdir -p "${RYML_SRC}"
+    curl -fsSL -o "${DEPS_ROOT}/${RYML_TARBALL}" \
+        "https://github.com/biojppm/rapidyaml/releases/download/v${RYML_VERSION}/${RYML_TARBALL}"
+    echo "${RYML_SHA256}  ${DEPS_ROOT}/${RYML_TARBALL}" | sha256sum --check --strict
+    tar -xzf "${DEPS_ROOT}/${RYML_TARBALL}" -C "${RYML_SRC}" --strip-components=1
+    rm -f "${DEPS_ROOT}/${RYML_TARBALL}"
+    echo "${RYML_VERSION}" > "${RYML_SRC}/.hippos-version"
+fi
+
+rm -rf "${RYML_BUILD}"
+cmake -S "${RYML_SRC}" -B "${RYML_BUILD}" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX="${RYML_PREFIX}" \
+    -DBUILD_SHARED_LIBS=OFF
+
+cmake --build "${RYML_BUILD}" -j"$(nproc)"
+cmake --install "${RYML_BUILD}"
+
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 
@@ -109,7 +143,7 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld" \
     -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld" \
     -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld" \
-    -DCMAKE_PREFIX_PATH="${QT_ROOT};${PLUTOVG_PREFIX};${PLUTOSVG_PREFIX};${KDDW_PREFIX}" \
+    -DCMAKE_PREFIX_PATH="${QT_ROOT};${PLUTOVG_PREFIX};${PLUTOSVG_PREFIX};${KDDW_PREFIX};${RYML_PREFIX}" \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
     -DCMAKE_INSTALL_RPATH="/opt/hippos/qt/6.11/lib:\$ORIGIN/../lib" \
     -DSHADERC_LIBRARY=/usr/lib/${GNU_ARCH}/libshaderc_combined.a \

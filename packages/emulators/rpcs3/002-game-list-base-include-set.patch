@@ -1,0 +1,11 @@
+--- a/rpcs3/rpcs3qt/game_list_base.h
++++ b/rpcs3/rpcs3qt/game_list_base.h
+@@ -5,6 +5,8 @@
+ #include <QIcon>
+ #include <QWidget>
+ 
++#include <set>
++
+ class game_list_base
+ {
+ public:
