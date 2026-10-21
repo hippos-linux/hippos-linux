@@ -41,7 +41,6 @@ RUN apt-get update \
         golang-go \
         libtool \
         libltdl-dev \
-        libasio-dev \
         libcereal-dev \
         libcxxopts-dev \
         libglm-dev \
