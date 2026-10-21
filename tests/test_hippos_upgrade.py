@@ -192,5 +192,28 @@ class PlanApplyTests(unittest.TestCase):
         self.assertEqual(plan.prune, [])
         self.assertTrue(plan.need_snapshot)
 
+class UpdateSpaceShortfallTests(unittest.TestCase):
+    GB = 1024 ** 3
+    PAYLOAD = {"size": 2 * GB, "installed_size": 6 * GB}
+
+    def test_fits_with_room_for_archive_extraction_and_reserve(self):
+        free = 8 * self.GB + hu.UPDATE_SPACE_RESERVE
+        self.assertEqual(hu.update_space_shortfall(free, self.PAYLOAD, False), 0)
+
+    def test_reports_missing_bytes_when_archive_must_still_be_downloaded(self):
+        free = 7 * self.GB
+        self.assertEqual(
+            hu.update_space_shortfall(free, self.PAYLOAD, False),
+            1 * self.GB + hu.UPDATE_SPACE_RESERVE,
+        )
+
+    def test_cached_archive_no_longer_needs_space(self):
+        free = 6 * self.GB + hu.UPDATE_SPACE_RESERVE
+        self.assertEqual(hu.update_space_shortfall(free, self.PAYLOAD, True), 0)
+
+    def test_manifest_without_sizes_skips_the_check(self):
+        self.assertEqual(hu.update_space_shortfall(0, {"url": "x"}, False), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
