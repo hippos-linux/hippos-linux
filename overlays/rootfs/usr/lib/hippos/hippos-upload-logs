@@ -17,7 +17,8 @@ echo "==================="
 TOKEN="$(hippos-settings get updates.token 2>/dev/null || true)"
 if [[ -z "${TOKEN}" ]]; then
     echo "Error: No beta token configured."
-    echo "Add 'updates.token=<your-token>' to /userdata/system/hippos.conf"
+    echo "Set it in EmulationStation under UPDATES & DOWNLOADS > ACCESS TOKEN,"
+    echo "or add 'updates.token=<your-token>' to /userdata/system/hippos.conf"
     echo "Your token was sent by DM when you received the Early Access role."
     exit 1
 fi
