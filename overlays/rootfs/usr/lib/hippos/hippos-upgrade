@@ -843,6 +843,27 @@ def plan_apply(running: str, cur_version: str, remote_version: str,
     )
 
 
+# Kept free on top of the update itself so /userdata (configs, logs, saves)
+# stays writable while the old and new deployments coexist until reboot.
+UPDATE_SPACE_RESERVE = 512 * 1024 * 1024
+
+
+def update_space_shortfall(free_bytes, payload, archive_cached):
+    """Bytes missing for downloading and extracting `payload`, or 0 if it fits.
+
+    The archive and its extracted tree share the btrfs volume until apply
+    deletes the archive at the end. Manifests published before the payload
+    sizes were added carry neither field; those skip the check (return 0).
+    """
+    installed = payload.get("installed_size")
+    if installed is None:
+        return 0
+    needed = installed + UPDATE_SPACE_RESERVE
+    if not archive_cached:
+        needed += payload.get("size", 0)
+    return max(0, needed - free_bytes)
+
+
 def remove_stale_archives(keep_archive):
     """Delete cached rootfs archives (complete or partial) for other versions."""
     for name in os.listdir(CACHE_DIR):
@@ -901,8 +922,19 @@ def cmd_apply():
                 log(f"WARNING: failed to prune {stale} (exit {result.returncode}) "
                     f"— it will be retried on the next update")
         if plan.prune:
+            # Deleted subvolumes are only reclaimed by the btrfs cleaner
+            # thread afterwards; wait so the free-space check sees the result.
+            subprocess.run(["btrfs", "subvolume", "sync", BTRFS_MNT], check=False)
             write_grub_cfg(running, plan.retained_deployments, uuid, partuuid)
             log("GRUB updated after pruning")
+
+        shortfall = update_space_shortfall(
+            shutil.disk_usage(BTRFS_MNT).free, payload, os.path.exists(archive),
+        )
+        if shortfall:
+            shortfall_mb = (shortfall + 1024 * 1024 - 1) // (1024 * 1024)
+            die(f"Not enough free space for this update — free at least "
+                f"{shortfall_mb} MB under /userdata (e.g. ROMs or media) and retry")
 
         fetch_archive(url, archive, sha256)
 
