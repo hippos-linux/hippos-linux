@@ -62,7 +62,18 @@ fi
 /usr/lib/hippos/hippos-audio-setup
 /usr/lib/hippos/hippos-display-setup
 
+# hippos-hotkeys otherwise keeps the emulationstation context into the desktop:
+# F1 is swallowed (re-running switch-to-desktop) and gamepad combos type Esc and
+# Space into whatever window has focus. Bind nothing so keys pass through;
+# common keys (volume, brightness) still apply. session-es restores the default.
+/usr/lib/hippos/hippos-hotkeys --new-context desktop '{}' || true
+
 xset -dpms 2>/dev/null || true
 xset s off 2>/dev/null || true
 
-exec "$SESSION_CMD"
+# A desktop's own Log Out ends its session cleanly, and with nothing else on
+# VT1 that would strand the user on a dead screen until reboot — return to ES
+# instead. A crash still exits non-zero for Restart=on-failure, and a switch
+# to ES started elsewhere stops this unit (SIGTERM) before reaching this.
+"$SESSION_CMD" || exit
+exec /usr/lib/hippos/switch-to-es
