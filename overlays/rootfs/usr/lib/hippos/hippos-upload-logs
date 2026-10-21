@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # hippos-upload-logs — collect system logs and post them to Discord.
+# Usage: hippos-upload-logs [issue description]
 # Requires updates.token in /userdata/system/hippos.conf (sent via Discord DM
 # when you received Early Access or Dev Access). Beta tokens post to your beta
 # thread; the shared dev token posts to the dev channel instead.
@@ -25,15 +26,22 @@ echo "Server: ${UPLOAD_URL}"
 echo ""
 
 # ── Issue description ─────────────────────────────────────────────────────────
+#
+# Passed as arguments by EmulationStation's UPLOAD LOGS menu entry, which has
+# no terminal to prompt on; prompted for interactively otherwise.
 
-echo "Describe the issue (press Enter twice when done):"
-ISSUE=""
-while IFS= read -r _line; do
-    [[ -z "${_line}" && -z "${ISSUE}" ]] && continue   # skip leading blanks
-    [[ -z "${_line}" ]] && break                        # blank line = done
-    ISSUE="${ISSUE}${_line}"$'\n'
-done
-ISSUE="${ISSUE%$'\n'}"
+if [[ $# -gt 0 ]]; then
+    ISSUE="$*"
+else
+    echo "Describe the issue (press Enter twice when done):"
+    ISSUE=""
+    while IFS= read -r _line; do
+        [[ -z "${_line}" && -z "${ISSUE}" ]] && continue   # skip leading blanks
+        [[ -z "${_line}" ]] && break                        # blank line = done
+        ISSUE="${ISSUE}${_line}"$'\n'
+    done
+    ISSUE="${ISSUE%$'\n'}"
+fi
 ISSUE="${ISSUE#"${ISSUE%%[! $'\t']*}"}"  # ltrim
 ISSUE="${ISSUE%"${ISSUE##*[! $'\t']}"}"  # rtrim
 if [[ -z "${ISSUE}" ]]; then
