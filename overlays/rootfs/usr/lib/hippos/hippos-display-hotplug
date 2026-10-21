@@ -11,5 +11,25 @@ export XAUTHORITY=""
 # Wait for the kernel to finish enumerating the new display
 sleep 2
 
+# TVs drop hotplug detect for a moment on every modeset, so a mode change
+# itself raises a drm change event. With nothing connected there is nothing
+# to configure; the reconnect raises its own event.
+xrandr_state="$(xrandr 2>/dev/null)"
+if ! grep -q ' connected' <<< "${xrandr_state}"; then
+    echo "[hippos-display-hotplug] no output connected, skipping"
+    exit 0
+fi
+
+# Desktop environments keep their own (often multi-monitor) layouts, which
+# the single-output hippos.conf config would overwrite. Plasma, XFCE and GNOME
+# also handle hotplug themselves; LXQt and Openbox don't, and leave a newly
+# connected screen dark — so only step in when a connected output has no mode.
+if systemctl is-active --quiet hippos-desktop.service; then
+    if ! grep -E ' connected' <<< "${xrandr_state}" | grep -qvE ' connected (primary )?[0-9]+x[0-9]+\+'; then
+        echo "[hippos-display-hotplug] desktop session, all connected outputs active, leaving layout alone"
+        exit 0
+    fi
+fi
+
 echo "[hippos-display-hotplug] display change detected, re-applying display config"
 exec /usr/lib/hippos/hippos-display-setup
