@@ -3,14 +3,23 @@ set -euo pipefail
 
 mkdir -p /userdata/system /run/hippos
 
+# A killed WM leaves _NET_SUPPORTING_WM_CHECK on the root window pointing at
+# its destroyed check window, so the property alone doesn't prove a WM is
+# still running — the window it names has to exist too.
+wm_running() {
+    local check_window
+    check_window=$(DISPLAY=:0 xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | awk '/window id/ {print $NF}')
+    [[ -n "${check_window}" ]] && DISPLAY=:0 xprop -id "${check_window}" >/dev/null 2>&1
+}
+
 while true; do
     # Stop any Plasma/desktop WM user services left from a previous desktop session.
     XDG_RUNTIME_DIR=/run/user/1000 systemctl --user stop \
         plasmashell.service ksmserver.service 'plasma-*.service' 2>/dev/null || true
     pkill -KILL -u hippos -f "ksmserver|startplasma" 2>/dev/null || true
-    # Wait for the WM selection to clear; force-kill if it lingers.
+    # Wait for the previous WM to exit; force-kill if it lingers.
     for _ in $(seq 1 20); do
-        DISPLAY=:0 xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q "no such atom" && break
+        wm_running || break
         pkill -KILL -u hippos kwin_x11 2>/dev/null || true
         sleep 0.5
     done
