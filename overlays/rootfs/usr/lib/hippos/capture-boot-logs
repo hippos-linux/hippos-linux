@@ -796,6 +796,11 @@ capture_shell "edid.txt" \
 capture_shell "xrandr.txt" \
     'DISPLAY=:0 xrandr 2>&1 || echo "xrandr not available"'
 
+# With prime.env sourced, as the desktop session does, so this is the
+# renderer hippos-picom bases its backend choice on.
+capture_shell "glxinfo.txt" \
+    '[[ -f /run/hippos/prime.env ]] && . /run/hippos/prime.env; DISPLAY=:0 glxinfo -B 2>&1 || echo "glxinfo not available"'
+
 capture_shell "prime-sentinels.txt" \
     'ls -la /var/tmp/hippos-*.prime 2>/dev/null || echo "none"'
 
