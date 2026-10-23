@@ -53,6 +53,16 @@ if version_lt "$APPLIED" "0.6.1"; then
     fi
 fi
 
+if version_lt "$APPLIED" "0.6.5"; then
+    log "0.6.5: disable picom damage tracking (stale black regions in desktop mode)"
+    # The userdata overlay only seeds fresh images, so existing installs need
+    # the setting added to their copy. Left alone if the user already set it.
+    PICOM_CONF=/userdata/system/.config/picom/picom.conf
+    if [[ -f "${PICOM_CONF}" ]] && ! grep -qE '^\s*use-damage\s*=' "${PICOM_CONF}"; then
+        printf '\nuse-damage = false;\n' >> "${PICOM_CONF}"
+    fi
+fi
+
 # Storage manager state files are intentionally plain text and safe to create
 # before any external media has been mounted.
 HIPPOS_CONFIG=/userdata/system/configs/hippos
