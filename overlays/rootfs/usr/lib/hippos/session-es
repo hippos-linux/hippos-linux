@@ -91,7 +91,9 @@ fi
 # Switch to VT7 once ES is running. Plymouth retains its last frame on VT1
 # while we're here, hiding GPU log text that would otherwise flash on screen.
 # Poll for the ES process, then give it a moment to render its first frame.
-( until pgrep -x emulationstation > /dev/null 2>&1; do sleep 0.1; done
+# Matched by full command line: the kernel truncates its process name to
+# "emulationstatio", so pgrep -x emulationstation never matches.
+( until pgrep -f '^/usr/bin/emulationstation' > /dev/null 2>&1; do sleep 0.1; done
   sleep 0.5
   chvt 7 2>/dev/null || true ) &
 
