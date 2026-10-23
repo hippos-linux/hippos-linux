@@ -19,12 +19,21 @@ _hdmi_sink() {
     LC_ALL=C pactl list sinks short 2>/dev/null | awk '/hdmi/{print $2; exit}'
 }
 
+# The HDMI codec reports a connected display (ELD monitor_present) as soon as
+# the kernel driver binds, well before PipeWire creates the matching sink.
+# Without one there's no HDMI sink worth waiting for, and waiting would add
+# the full timeout to every session start on machines with no HDMI audio.
+_hdmi_monitor_present() {
+    grep -qsE '^monitor_present[[:space:]]+1' /proc/asound/card*/eld#*
+}
+
 _wait_hdmi_sink() {
-    local sink
-    for _ in $(seq 1 15); do
+    local sink attempt attempts=1
+    _hdmi_monitor_present && attempts=15
+    for attempt in $(seq 1 "$attempts"); do
         sink="$(_hdmi_sink)"
         [[ -n "$sink" ]] && echo "$sink" && return
-        sleep 1
+        (( attempt < attempts )) && sleep 1
     done
 }
 
