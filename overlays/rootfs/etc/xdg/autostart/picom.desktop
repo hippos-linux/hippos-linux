@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=picom
+GenericName=X compositor
+Comment=An X compositor
+TryExec=picom
+Exec=/usr/lib/hippos/hippos-picom
+NoDisplay=true
+StartupNotify=false
+Terminal=false

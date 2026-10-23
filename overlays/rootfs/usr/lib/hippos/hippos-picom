@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Start picom with the glx backend when OpenGL is hardware-accelerated, and
+# xrender otherwise. On a software renderer (QEMU's VGA, a GPU without a
+# working driver) glx is drawn by llvmpipe on the CPU and is slower than
+# xrender. Matched by renderer name because NVIDIA's proprietary GLX doesn't
+# report Mesa's "Accelerated:" field.
+backend=xrender
+renderer=$(glxinfo -B 2>/dev/null | sed -n 's/^OpenGL renderer string: //p')
+if [[ -n "${renderer}" && ! "${renderer}" =~ llvmpipe|softpipe|swrast ]]; then
+    backend=glx
+fi
+exec picom --backend "${backend}" "$@"
