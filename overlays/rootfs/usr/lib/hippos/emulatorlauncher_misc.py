@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
+from dataclasses import dataclass
 from pathlib import Path
+
+from evdev import InputDevice, ecodes
 
 from emulatorlauncher_shared import (
     LaunchContext,
@@ -21,51 +25,149 @@ from emulatorlauncher_shared import (
 from HipposPaths import BIOS, CONFIGS, SAVES, USERDATA
 
 
-# Vice joystick action mapping
-# Format: "# inputindex action / port_pin"  (# = pad.index, ? = button.id)
-_VICE_JOY_MAP: dict[str, str] = {
-    'up':       '# 2 0 1 / 1',
-    'down':     '# 2 1 1 / 2',
-    'left':     '# 2 2 1 / 4',
-    'right':    '# 2 3 1 / 8',
-    'start':    '# 1 ? 0',
-    'select':   '# 1 ? 4',
-    'hotkey':   '# 1 ? 5 Quit emulator',
-    'a':        '# 1 ? 1 / 32',
-    'b':        '# 1 ? 1 / 16',
-    'x':        '# 1 ? 0',
-    'y':        '# 1 ? 1 / 64',
-    'pageup':   '# 1 ? 0',
-    'pagedown': '# 1 ? 0',
+_VICE_MACHINE_NAMES: dict[str, str] = {
+    'x64':     'C64SC',
+    'x64sc':   'C64SC',
+    'x64dtv':  'C64DTV',
+    'xscpu64': 'SCPU64',
+    'x128':    'C128',
+    'xvic':    'VIC20',
+    'xplus4':  'PLUS4',
+    'xpet':    'PET',
+    'xcbm2':   'CBM-II',
+    'xcbm5x0': 'CBM-II-5x0',
 }
 
+# Joystick port for each player. Most C64-family games read port 2; the
+# VIC-20 has a single port; the PET and CBM-II 600/700 have none.
+_VICE_PLAYER_PORTS: dict[str, tuple[int, ...]] = {
+    'x64':     (2, 1),
+    'x64sc':   (2, 1),
+    'x64dtv':  (2, 1),
+    'xscpu64': (2, 1),
+    'x128':    (2, 1),
+    'xcbm5x0': (2, 1),
+    'xplus4':  (1, 2),
+    'xvic':    (1,),
+}
 
-def _write_vice_joymap(ctx: LaunchContext) -> None:
-    """Write VICE SDL joystick mapping file."""
-    vice_cfg_dir = CONFIGS / 'vice'
-    vice_cfg_dir.mkdir(parents=True, exist_ok=True)
-    vjm_path = vice_cfg_dir / 'sdl-joymap.vjm'
+_VICE_BORDER_OPTION: dict[str, str] = {
+    'x64':     '-VICIIborders',
+    'x64sc':   '-VICIIborders',
+    'x64dtv':  '-VICIIborders',
+    'xscpu64': '-VICIIborders',
+    'x128':    '-VICIIborders',
+    'xcbm5x0': '-VICIIborders',
+    'xvic':    '-VICborders',
+    'xplus4':  '-TEDborders',
+}
+_VICE_BORDER_NONE = '3'
 
-    profiles = _load_es_input_configs()
-    joy_port = '0' if (ctx.core or '').startswith('xvic') else '1'
+# VICE's -joydevN numbering: 0 none, 1 numpad, 2-3 keysets, then host devices.
+_VICE_JOYDEV_FIRST_HOST = 4
 
-    lines = ['# HippOS configured controllers', '', '!CLEAR']
-    for ctrl in ctx.controllers:
-        profile = _pick_es_profile(profiles, ctrl)
-        if profile is None:
+# .vjm columns: device input-type input-index action [pin]
+_VICE_INPUT_AXIS, _VICE_INPUT_BUTTON = 0, 1
+_VICE_ACTION_JOYSTICK, _VICE_ACTION_UI_ACTIVATE = 1, 4
+_VICE_PIN_UP, _VICE_PIN_DOWN, _VICE_PIN_LEFT, _VICE_PIN_RIGHT = 1, 2, 4, 8
+_VICE_PIN_FIRE1, _VICE_PIN_FIRE2, _VICE_PIN_FIRE3 = 16, 32, 64
+
+_VICE_BUTTON_ACTIONS: tuple[tuple[int, int, int], ...] = (
+    (ecodes.BTN_SOUTH,      _VICE_ACTION_JOYSTICK,    _VICE_PIN_FIRE1),
+    (ecodes.BTN_EAST,       _VICE_ACTION_JOYSTICK,    _VICE_PIN_FIRE2),
+    (ecodes.BTN_WEST,       _VICE_ACTION_JOYSTICK,    _VICE_PIN_FIRE3),
+    (ecodes.BTN_DPAD_UP,    _VICE_ACTION_JOYSTICK,    _VICE_PIN_UP),
+    (ecodes.BTN_DPAD_DOWN,  _VICE_ACTION_JOYSTICK,    _VICE_PIN_DOWN),
+    (ecodes.BTN_DPAD_LEFT,  _VICE_ACTION_JOYSTICK,    _VICE_PIN_LEFT),
+    (ecodes.BTN_DPAD_RIGHT, _VICE_ACTION_JOYSTICK,    _VICE_PIN_RIGHT),
+    (ecodes.BTN_SELECT,     _VICE_ACTION_UI_ACTIVATE, 0),  # opens VICE's menu
+)
+
+# (axis, pin when negative, pin when positive)
+_VICE_AXIS_ACTIONS: tuple[tuple[int, int, int], ...] = (
+    (ecodes.ABS_HAT0X, _VICE_PIN_LEFT, _VICE_PIN_RIGHT),
+    (ecodes.ABS_HAT0Y, _VICE_PIN_UP,   _VICE_PIN_DOWN),
+    (ecodes.ABS_X,     _VICE_PIN_LEFT, _VICE_PIN_RIGHT),
+    (ecodes.ABS_Y,     _VICE_PIN_UP,   _VICE_PIN_DOWN),
+)
+
+_VICE_GAMEPAD_BUTTONS = frozenset({
+    ecodes.BTN_SOUTH, ecodes.BTN_EAST, ecodes.BTN_NORTH, ecodes.BTN_WEST,
+    ecodes.BTN_START, ecodes.BTN_SELECT, ecodes.BTN_TL, ecodes.BTN_TR,
+    ecodes.BTN_JOYSTICK,
+})
+_VICE_GAMEPAD_AXES = frozenset({
+    ecodes.ABS_X, ecodes.ABS_Y, ecodes.ABS_RX, ecodes.ABS_RY,
+    ecodes.ABS_HAT0X, ecodes.ABS_HAT0Y,
+})
+
+
+@dataclass(frozen=True)
+class _ViceJoystick:
+    path: str
+    buttons: tuple[int, ...]
+    axes: tuple[int, ...]
+
+
+def _vice_joysticks() -> list[_ViceJoystick]:
+    """Host joysticks numbered the way VICE's Linux evdev driver numbers
+    them: /dev/input entries in alphabetical order, keeping the ones it can
+    open that have a gamepad button and a stick or hat axis. Buttons are the
+    key codes from BTN_JOYSTICK up and axes every ABS code, hats included,
+    each in code order."""
+    joysticks = []
+    for node in sorted(Path('/dev/input').glob('event*')):
+        try:
+            with InputDevice(str(node)) as device:
+                caps = device.capabilities()
+        except OSError:
             continue
-        lines.append('')
-        lines.append(f'# {ctrl.name}')
-        for es_name, template in _VICE_JOY_MAP.items():
-            binding = profile.inputs.get(es_name)
-            if binding is None:
-                continue
-            line = template.replace('#', str(ctrl.index)).replace('?', str(binding.code)).replace('/', joy_port)
-            lines.append(line)
-        lines.append('')
+        keys = set(caps.get(ecodes.EV_KEY, ()))
+        axes = {code for code, _info in caps.get(ecodes.EV_ABS, ())}
+        if keys & _VICE_GAMEPAD_BUTTONS and axes & _VICE_GAMEPAD_AXES:
+            joysticks.append(_ViceJoystick(
+                path=str(node),
+                buttons=tuple(sorted(c for c in keys if c >= ecodes.BTN_JOYSTICK)),
+                axes=tuple(sorted(c for c in axes if c < ecodes.ABS_RESERVED)),
+            ))
+    return joysticks
 
-    vjm_path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
-    _log.info("Wrote Vice joymap: %s", vjm_path)
+
+def _vice_joymap_lines(device: int, joystick: _ViceJoystick) -> list[str]:
+    lines = []
+    for code, action, pin in _VICE_BUTTON_ACTIONS:
+        if code in joystick.buttons:
+            entry = f'{device} {_VICE_INPUT_BUTTON} {joystick.buttons.index(code)} {action}'
+            lines.append(f'{entry} {pin}' if action == _VICE_ACTION_JOYSTICK else entry)
+    for code, negative_pin, positive_pin in _VICE_AXIS_ACTIONS:
+        if code in joystick.axes:
+            row = 2 * joystick.axes.index(code)
+            lines.append(f'{device} {_VICE_INPUT_AXIS} {row} {_VICE_ACTION_JOYSTICK} {positive_pin}')
+            lines.append(f'{device} {_VICE_INPUT_AXIS} {row + 1} {_VICE_ACTION_JOYSTICK} {negative_pin}')
+    return lines
+
+
+def _configure_vice_joysticks(ctx: LaunchContext, binary: str) -> list[str]:
+    """Write VICE's default joymap for the binary's machine (it reads
+    $XDG_CONFIG_HOME/vice/gtk3-joymap-<machine>.vjm) and return the -joydevN
+    arguments putting each player's controller in its joystick port."""
+    joysticks = _vice_joysticks()
+    device_by_path = {joystick.path: index for index, joystick in enumerate(joysticks)}
+    ports = _VICE_PLAYER_PORTS.get(binary, ())
+
+    lines = ['!CLEAR']
+    args: list[str] = []
+    for ctrl, port in zip(sorted(ctx.controllers, key=lambda c: c.player), ports):
+        device = device_by_path.get(os.path.realpath(ctrl.device_path)) if ctrl.device_path else None
+        if device is None:
+            continue
+        lines += ['', f'# Player {ctrl.player}: {ctrl.name}', *_vice_joymap_lines(device, joysticks[device])]
+        args += [f'-joydev{port}', str(_VICE_JOYDEV_FIRST_HOST + device)]
+
+    joymap = CONFIGS / 'vice' / f'gtk3-joymap-{_VICE_MACHINE_NAMES[binary]}.vjm'
+    joymap.parent.mkdir(parents=True, exist_ok=True)
+    joymap.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    return args
 
 
 def launch_vice(ctx: LaunchContext) -> int:
@@ -75,8 +177,15 @@ def launch_vice(ctx: LaunchContext) -> int:
         return 1
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
     conf = _load_hippos_conf()
-    _write_vice_joymap(ctx)
-    cmd = [str(bin_path), str(ctx.rom)]
+    # System ROMs from the artifact the binary came from (it may be an updated
+    # copy, not the compiled-in /opt/emulators/vice).
+    system_files = bin_path.parent.parent / 'share' / 'vice'
+    cmd = [str(bin_path), '-directory', str(system_files),
+           *_configure_vice_joysticks(ctx, binary)]
+    border_option = _VICE_BORDER_OPTION.get(binary)
+    if border_option and _conf_bool(conf, f'{ctx.system}.noborder'):
+        cmd += [border_option, _VICE_BORDER_NONE]
+    cmd.append(str(ctx.rom))
     env = _build_game_env(conf, ctx)
     result = _run_game_command(ctx, 'vice', cmd, env)
     return result.returncode

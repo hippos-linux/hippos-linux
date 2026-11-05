@@ -218,9 +218,9 @@ def launch_scummvm(ctx: LaunchContext) -> int:
     saves_dir   = SAVES / 'scummvm'
     extra_dir   = BIOS / 'scummvm' / 'extra'
     cfg_dir     = CONFIGS / 'scummvm'
-    saves_dir.mkdir(parents=True, exist_ok=True)
-    extra_dir.mkdir(parents=True, exist_ok=True)
-    cfg_dir.mkdir(parents=True, exist_ok=True)
+    # ScummVM refuses to start if any of its path options doesn't exist.
+    for directory in (saves_dir, extra_dir, cfg_dir, SCREENSHOTS):
+        directory.mkdir(parents=True, exist_ok=True)
 
     bin_path = _find_emulator_bin('scummvm')
     if bin_path is None:
@@ -232,9 +232,6 @@ def launch_scummvm(ctx: LaunchContext) -> int:
     if not ini.exists():
         ini.write_text('[scummvm]\ngui_browser_native=false\n')
 
-    resolution = ctx.resolution or (1920, 1080)
-    w, h = resolution
-
     renderer = _conf_value(conf, 'scummvm.renderer', 'opengl')
     scaler   = _conf_value(conf, 'scummvm.scaler', 'normal')
     lang     = _conf_value(conf, f'{ctx.system}.language', '')
@@ -244,7 +241,6 @@ def launch_scummvm(ctx: LaunchContext) -> int:
     cmd = [
         str(bin_path),
         '-f',
-        f'--window-size={w}x{h}',
         f'--renderer={renderer}',
         f'--scaler={scaler}',
         f'--screenshotpath={SCREENSHOTS}',
@@ -258,11 +254,10 @@ def launch_scummvm(ctx: LaunchContext) -> int:
     if p1 is not None:
         cmd += [f'--joystick={p1.index}']
 
-    # Resolve game — .scummvm file contains game ID, directory = auto-detect
+    # A .scummvm file holds the game id, or is empty and named after it.
     if rom.suffix.lower() == '.scummvm':
-        game_id = rom.read_text().strip()
-        rom_dir = rom.parent
-        cmd += [f'--path={rom_dir}', game_id]
+        game_id = rom.read_text(encoding='utf-8', errors='replace').strip() or rom.stem
+        cmd += [f'--path={rom.parent}', game_id]
     elif rom.is_dir():
         cmd += [f'--path={rom}', '--auto-detect']
     else:
@@ -443,6 +438,42 @@ def launch_fsuae(ctx: LaunchContext) -> int:
     return _run_game_command(ctx, 'fsuae', cmd, env).returncode
 
 
+# ── Basilisk II (68k Macintosh) ────────────────────────────────────────────────
+
+_BASILISK2_ROM_DIR = BIOS / 'macintosh'
+
+
+def launch_basilisk2(ctx: LaunchContext) -> int:
+    bin_path = _find_emulator_bin('basilisk2')
+    if bin_path is None:
+        _log.error("basilisk2: binary not found")
+        return 1
+    # Basilisk II needs a Mac II-class ROM image; names vary by model.
+    mac_rom = next((path for path in sorted(_BASILISK2_ROM_DIR.glob('*'))
+                    if path.suffix.lower() == '.rom'), None)
+    if mac_rom is None:
+        _log.error("basilisk2: no Macintosh ROM (*.rom) in %s", _BASILISK2_ROM_DIR)
+        return 1
+    # Settings go in the prefs file: the GTK build hands --screen to GTK
+    # (X screen number), and Basilisk II rewrites the file on exit, so only
+    # the keys set here are replaced.
+    prefs = CONFIGS / 'basilisk2' / 'prefs'
+    prefs.parent.mkdir(parents=True, exist_ok=True)
+    managed = {
+        'rom': str(mac_rom),
+        'disk': str(ctx.rom),
+        'nogui': 'true',      # otherwise it opens its settings window
+        'screen': 'dga/0/0',  # fullscreen at the display's size
+    }
+    kept = [line for line in (prefs.read_text(encoding='utf-8').splitlines() if prefs.exists() else [])
+            if line.split(' ', 1)[0] not in managed]
+    prefs.write_text('\n'.join([*kept, *(f'{key} {value}' for key, value in managed.items())]) + '\n',
+                     encoding='utf-8')
+    cmd = [str(bin_path), '--config', str(prefs)]
+    env = _build_game_env(_load_hippos_conf(), ctx)
+    return _run_game_command(ctx, 'basilisk2', cmd, env).returncode
+
+
 # ── OpenMSX ────────────────────────────────────────────────────────────────────
 
 # Machines shipped in openMSX's share/machines. An MSX2 runs MSX1 software, and
@@ -589,7 +620,8 @@ def launch_openmsx(ctx: LaunchContext) -> int:
 
     env = _build_game_env(conf, ctx)
     # User data (settings.xml, script.tcl) under cfg_dir/share; system data
-    # (machines, extensions) from the installed artifact.
+    # from the artifact the binary was resolved from, which may be an updated
+    # copy rather than the build's compiled-in /opt/emulators path.
     env['OPENMSX_HOME'] = str(cfg_dir)
     env['OPENMSX_SYSTEM_DATA'] = str(system_share)
     return _run_game_command(ctx, 'openmsx', cmd, env).returncode

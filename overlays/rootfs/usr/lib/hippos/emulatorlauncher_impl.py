@@ -494,6 +494,7 @@ from emulatorlauncher_computers import (
     launch_mupen64plus,
     launch_fsuae,
     launch_openmsx,
+    launch_basilisk2,
 )
 from emulatorlauncher_extras import (
     launch_xenia_edge,
@@ -647,7 +648,7 @@ GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'vice':        _launch_vice,
     'vita3k':      _launch_vita3k,
     'melonds':     _launch_melonds,
-    'basilisk2':   _launch_standalone,
+    'basilisk2':   launch_basilisk2,
     'desmume':     _launch_standalone,
     'nestopia':    _launch_standalone,
     'virtualjaguar': _launch_standalone,
