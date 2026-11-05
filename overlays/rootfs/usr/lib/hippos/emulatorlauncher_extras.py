@@ -637,7 +637,12 @@ def launch_sugarbox(ctx: LaunchContext) -> int:
         _log.error("sugarbox: binary not found")
         return 1
 
-    cmd = [str(bin_path), str(ctx.rom)]
+    # Sugarbox (Amstrad CPC/GX4000) loads a game only through --cart (.cpr)
+    # or a CSL script; it ignores a bare file argument.
+    if ctx.rom.suffix.lower() != '.cpr':
+        _log.error("sugarbox: only .cpr cartridges can be started directly: %s", ctx.rom)
+        return 1
+    cmd = [str(bin_path), '--cart', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['XDG_CONFIG_HOME'] = str(cfg_dir)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)

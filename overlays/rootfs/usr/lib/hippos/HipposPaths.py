@@ -32,7 +32,11 @@ HIPPOS_CONF: Final = HOME / 'hippos.conf'
 
 USER_ES_DIR: Final = CONFIGS / 'emulationstation'
 HIPPOS_ES_DIR: Final = Path('/usr/share/emulationstation')
-CONFIGGEN_DATA_DIR: Final = HIPPOS_SHARE_DIR / 'configgen' / 'data'
+EMULATORLAUNCHER_SHARE_DIR: Final = HIPPOS_SHARE_DIR / 'emulatorlauncher'
+EMULATORLAUNCHER_DATA_DIR: Final = EMULATORLAUNCHER_SHARE_DIR / 'data'
+# Per-system emulator, core and options; generated at build time from
+# packages/frontend/systems.yml's _emulator_defaults, which ES also shows.
+EMULATORLAUNCHER_DEFAULTS: Final = EMULATORLAUNCHER_SHARE_DIR / 'defaults.yml'
 
 _ES_RESOURCES_DIR: Final = HIPPOS_ES_DIR / 'resources'
 
@@ -40,9 +44,6 @@ ES_SETTINGS: Final = USER_ES_DIR / 'es_settings.cfg'
 ES_GUNS_METADATA: Final = _ES_RESOURCES_DIR / 'gungames.xml'
 ES_WHEELS_METADATA: Final = _ES_RESOURCES_DIR / 'wheelgames.xml'
 ES_GAMES_METADATA: Final = _ES_RESOURCES_DIR / 'gamesdb.xml'
-ES_GUNS_ART_METADATA: Final = CONFIGGEN_DATA_DIR / 'gamesbuttonsdb.xml'
-
-DEFAULTS_DIR: Final = HIPPOS_SHARE_DIR / 'configgen'
 
 USER_SHADERS: Final = USERDATA / 'shaders'
 HIPPOS_SHADERS: Final = Path('/usr/share/libretro/shaders')
@@ -51,7 +52,6 @@ USER_DECORATIONS: Final = USERDATA / 'decorations'
 SYSTEM_DECORATIONS: Final = DATAINIT_DIR / 'decorations'
 
 USER_SCRIPTS: Final = HOME / 'scripts'
-SYSTEM_SCRIPTS: Final = DEFAULTS_DIR / 'scripts'
 
 
 def configure_emulator(rom: Path, /) -> bool:

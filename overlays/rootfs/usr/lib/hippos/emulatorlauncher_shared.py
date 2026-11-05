@@ -26,7 +26,7 @@ except ImportError:
 from hippos_evmapy import evmapy_context
 
 from HipposPaths import (
-    CONFIGS, DEFAULTS_DIR, HIPPOS_CONF, HIPPOS_SHARE_DIR, USERDATA, USER_ES_DIR,
+    CONFIGS, EMULATORLAUNCHER_DEFAULTS, HIPPOS_CONF, HIPPOS_SHARE_DIR, USERDATA, USER_ES_DIR,
 )
 
 STANDALONE_BINARIES: dict[str, tuple[str, ...]] = {
@@ -102,7 +102,7 @@ ARTIFACT_PACKAGE_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 
-DEFAULTS_FILE      = DEFAULTS_DIR / 'configgen-defaults.yml'
+DEFAULTS_FILE      = EMULATORLAUNCHER_DEFAULTS
 
 
 HIPPOS_DEFAULTS    = HIPPOS_SHARE_DIR / 'hippos-defaults.conf'
@@ -217,7 +217,7 @@ def _load_yaml_defaults() -> dict:
 
 
 def _get_yaml_system_options(system: str) -> dict:
-    """Return the options block from configgen-defaults.yml for a system."""
+    """Return the options block from the emulator defaults for a system."""
     entry = _load_yaml_defaults().get(system)
     if not entry:
         return {}

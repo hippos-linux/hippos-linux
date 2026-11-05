@@ -49,7 +49,7 @@ _emulator_defaults:
   cplus4:        { emulator: vice,               core: xplus4             }
   crvision:      { emulator: mame,               core: mame               }
   ctvboy:        { emulator: mame,               core: mame               }
-  daphne:        { emulator: hypseus-singe,      core: hypseus-singe      }
+  daphne:        { emulator: hypseus-singe,      core: hypseus-singe, options: { hud_support: false } }
   dice:          { emulator: retroarch,          core: dice               }
   dos:           { emulator: dosbox-staging,     core: dosbox_staging     }
   dragon64:      { emulator: xroar,              core: xroar              }
@@ -60,12 +60,12 @@ _emulator_defaults:
   enterprise:    { emulator: clk,                core: clk                }
   fbneo:         { emulator: retroarch,          core: fbneo              }
   fds:           { emulator: retroarch,          core: fceumm             }
-  flash:         { emulator: ruffle,             core: ruffle             }
+  flash:         { emulator: ruffle,             core: ruffle, options: { hud_support: false } }
   fm7:           { emulator: mame,               core: mame               }
   fmtowns:       { emulator: tsugaru,            core: tsugaru            }
   gaelco:        { emulator: demul,              core: demul              }
   gamate:        { emulator: mame,               core: mame               }
-  gameandwatch:  { emulator: mame,               core: mame               }
+  gameandwatch:  { emulator: mame,               core: mame, options: { forceNoBezel: true } }
   gamecom:       { emulator: mame,               core: mame               }
   gamecube:      { emulator: dolphin-emu,        core: dolphin-emu        }
   gamegear:      { emulator: retroarch,          core: genesis_plus_gx      }
@@ -76,13 +76,13 @@ _emulator_defaults:
   gmaster:       { emulator: mame,               core: mame               }
   gp32:          { emulator: mame,               core: mame               }
   hikaru:        { emulator: demul,              core: demul              }
-  ikemen:        { emulator: ikemen,             core: ikemen             }
+  ikemen:        { emulator: ikemen,             core: ikemen, options: { videomode: max-720x480 } }
   intellivision: { emulator: retroarch,          core: freeintv           }
   jaguar:        { emulator: bigpemu,            core: bigpemu            }
   jaguarcd:      { emulator: bigpemu,            core: bigpemu            }
   laser310:      { emulator: mame,               core: mame               }
-  lcdgames:      { emulator: mame,               core: mame               }
-  lindbergh:     { emulator: lindbergh-loader,   core: lindbergh          }
+  lcdgames:      { emulator: mame,               core: mame, options: { forceNoBezel: true } }
+  lindbergh:     { emulator: lindbergh-loader,   core: lindbergh, options: { hud_support: false } }
   loopy:         { emulator: mame,               core: mame               }
   lutro:         { emulator: retroarch,          core: lutro              }
   lowresnx:      { emulator: retroarch,          core: lowresnx           }
@@ -96,7 +96,7 @@ _emulator_defaults:
   megadrive-msu: { emulator: retroarch,          core: genesis_plus_gx    }
   megaduck:      { emulator: mame,               core: mame               }
   mrboom:        { emulator: retroarch,          core: mrboom             }
-  model2:        { emulator: model2emu,          core: model2emu          }
+  model2:        { emulator: model2emu,          core: model2emu, options: { videomode: max-1920x1080, hud_support: false } }
   model3:        { emulator: supermodel,         core: supermodel         }
   multivision:   { emulator: retroarch,          core: gearsystem         }
   msx1:          { emulator: openmsx,            core: openmsx            }
@@ -108,8 +108,8 @@ _emulator_defaults:
   mz700:         { emulator: mame,               core: mame               }
   mz800:         { emulator: mame,               core: mame               }
   mz80k:         { emulator: mame,               core: mame               }
-  n64:           { emulator: retroarch,          core: mupen64plus_next   }
-  n64dd:         { emulator: mupen64plus,        core: mupen64plus        }
+  n64:           { emulator: retroarch,          core: mupen64plus_next, options: { videomode: max-1920x1080 } }
+  n64dd:         { emulator: mupen64plus,        core: mupen64plus, options: { videomode: max-1920x1080 } }
   namco22:       { emulator: mame,               core: mame               }
   namco2x6:      { emulator: play,               core: play               }
   naomi:         { emulator: flycast,            core: flycast            }
@@ -122,7 +122,7 @@ _emulator_defaults:
   ngp:           { emulator: retroarch,          core: mednafen_ngp       }
   ngpc:          { emulator: retroarch,          core: mednafen_ngp       }
   odyssey2:      { emulator: retroarch,          core: o2em               }
-  openbor:       { emulator: openbor,            core: openbor            }
+  openbor:       { emulator: openbor,            core: openbor, options: { bezel: none, hud_support: false } }
   oricatmos:     { emulator: clk,                core: clk                }
   pc60:          { emulator: mame,               core: mame               }
   pc80:          { emulator: mame,               core: mame               }
@@ -138,13 +138,13 @@ _emulator_defaults:
   pico:          { emulator: retroarch,          core: genesis_plus_gx    }
   pico8:         { emulator: lexaloffle-pico8,   core: pico8              }
   pokemini:      { emulator: retroarch,          core: pokemini           }
-  ports:         { emulator: sh,                 core: sh                 }
+  ports:         { emulator: sh,                 core: sh, options: { bezel: none } }
   prboom:        { emulator: retroarch,          core: prboom             }
-  ps2:           { emulator: pcsx2,              core: pcsx2              }
-  ps3:           { emulator: rpcs3,              core: rpcs3              }
+  ps2:           { emulator: pcsx2,              core: pcsx2, options: { fullboot: true } }
+  ps3:           { emulator: rpcs3,              core: rpcs3, options: { hud_support: false } }
   ps4:           { emulator: shadps4,            core: shadps4            }
   psp:           { emulator: ppsspp,             core: ppsspp             }
-  psvita:        { emulator: vita3k,             core: vita3k             }
+  psvita:        { emulator: vita3k,             core: vita3k, options: { hud_support: false } }
   psx:           { emulator: duckstation,        core: duckstation        }
   pv1000:        { emulator: mame,               core: mame               }
   pv2000:        { emulator: mame,               core: mame               }
@@ -164,8 +164,8 @@ _emulator_defaults:
   sg1000:        { emulator: retroarch,          core: genesis_plus_gx      }
   sgb:           { emulator: retroarch,          core: mgba               }
   sgb-msu1:      { emulator: retroarch,          core: bsnes              }
-  singe:         { emulator: hypseus-singe,      core: hypseus-singe      }
-  snes:          { emulator: snes9x,             core: snes9x             }
+  singe:         { emulator: hypseus-singe,      core: hypseus-singe, options: { hud_support: false } }
+  snes:          { emulator: retroarch,          core: snes9x             }
   snes-msu1:     { emulator: retroarch,          core: bsnes_mercury_balanced }
   socrates:      { emulator: mame,               core: mame               }
   solarus:       { emulator: solarus-engine,     core: solarus            }
@@ -179,9 +179,9 @@ _emulator_defaults:
   superbroswar:  { emulator: retroarch,          core: superbroswar       }
   supracan:      { emulator: mame,               core: mame               }
   sv8000:        { emulator: mame,               core: mame               }
-  switch:        { emulator: citron-neo,          core: citron-neo         }
+  switch:        { emulator: citron-neo,          core: citron-neo, options: { hud_support: false } }
   systemsp:      { emulator: flycast,            core: flycast            }
-  thextech:      { emulator: thextech,           core: thextech           }
+  thextech:      { emulator: thextech,           core: thextech, options: { bezel: none } }
   thomson:       { emulator: retroarch,          core: theodore           }
   ti99:          { emulator: mame,               core: mame               }
   tic80:         { emulator: tic80,              core: tic80              }
@@ -204,9 +204,9 @@ _emulator_defaults:
   vsmile:        { emulator: mame,               core: mame               }
   wasm4:         { emulator: retroarch,          core: wasm4              }
   wii:           { emulator: dolphin-emu,        core: dolphin-emu        }
-  wiiu:          { emulator: cemu,               core: cemu               }
-  windows:       { emulator: wine,               core: wine-tkg           }
-  windows_installers: { emulator: wine,          core: wine-tkg           }
+  wiiu:          { emulator: cemu,               core: cemu, options: { hud_support: false } }
+  windows:       { emulator: wine,               core: wine-tkg, options: { hud_support: false } }
+  windows_installers: { emulator: wine,          core: wine-tkg, options: { hud_support: false } }
   wswan:         { emulator: retroarch,          core: mednafen_wswan     }
   wswanc:        { emulator: retroarch,          core: mednafen_wswan     }
   x1:            { emulator: retroarch,          core: x1                 }
@@ -214,9 +214,14 @@ _emulator_defaults:
   xegs:          { emulator: mame,               core: mame               }
   xrick:         { emulator: retroarch,          core: xrick              }
   xbox:          { emulator: xemu,               core: xemu               }
-  xbox360:       { emulator: xenia-canary,       core: xenia_canary       }
-  zx81:          { emulator: retroarch,          core: 81                 }
-  zxspectrum:    { emulator: sugarbox,           core: sugarbox           }
+  xbox360:       { emulator: xenia-canary,       core: xenia_canary, options: { hud_support: false } }
+  zx81:          { emulator: retroarch,          core: "81"                 }
+  zxspectrum:    { emulator: retroarch,          core: fuse               }
+  gb2players:    { emulator: retroarch,          core: tgbdual          }
+  gbc2players:   { emulator: retroarch,          core: tgbdual          }
+  gx4000:        { emulator: retroarch,          core: cap32            }
+  cassettevision: { emulator: retroarch,          core: mame             }
+  flatpak:       { emulator: flatpak,            core: flatpak, options: { hud_support: false } }
 
 3ds:
   extensions:

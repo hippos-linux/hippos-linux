@@ -56,26 +56,6 @@ LINDBERGH_BUNDLE_DIR = Path('/opt/emulators/lindbergh-loader')
 # builds, such as flycast and snes9x, can be used without copying artifacts.
 
 
-BUILTIN_DEFAULTS: dict[str, dict[str, str]] = {
-    'snes':         {'emulator': 'libretro', 'core': 'bsnes_mercury_balanced'},
-    'gba':          {'emulator': 'libretro', 'core': 'mgba'},
-    'megadrive':    {'emulator': 'libretro', 'core': 'genesis_plus_gx'},
-    'gb':           {'emulator': 'libretro', 'core': 'gambatte'},
-    'gbc':          {'emulator': 'libretro', 'core': 'gambatte'},
-    'nes':          {'emulator': 'libretro', 'core': 'nestopia'},
-    'n64':          {'emulator': 'libretro', 'core': 'mupen64plus_next'},
-    'psx':          {'emulator': 'libretro', 'core': 'pcsx_rearmed'},
-    'mastersystem': {'emulator': 'libretro', 'core': 'genesis_plus_gx'},
-    'gamegear':     {'emulator': 'libretro', 'core': 'genesis_plus_gx'},
-    'atari2600':    {'emulator': 'libretro', 'core': 'stella'},
-    'neogeo':       {'emulator': 'libretro', 'core': 'fbneo'},
-    'openbor':      {'emulator': 'openbor', 'core': 'openbor6412'},
-    'xbox':         {'emulator': 'xemu', 'core': 'xemu'},
-    'chihiro':      {'emulator': 'xemu', 'core': 'xemu'},
-    'ps3':          {'emulator': 'rpcs3', 'core': 'rpcs3'},
-}
-
-
 # ── Logging ────────────────────────────────────────────────────────────────────
 
 logging.basicConfig(
@@ -193,7 +173,7 @@ def resolve_emulator_core(
         game_co   = conf.get(f'{system}["{gsname}"].core')     or None
 
     defaults = _load_yaml_defaults()
-    sys_def  = defaults.get(system) or BUILTIN_DEFAULTS.get(system) or {}
+    sys_def  = defaults.get(system) or {}
 
     # Resolution order: CLI > game > folder > system > global > defaults
     emulator = forced_emulator or game_em or folder_em or user_em or global_em or sys_def.get('emulator') or 'libretro'
@@ -661,6 +641,8 @@ GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'eden':        launch_eden,
     'ioquake3':    _launch_ioquake3,
     'lexaloffle':  _launch_lexaloffle,
+    'lexaloffle-pico8':    _launch_lexaloffle,
+    'lexaloffle-voxatron': _launch_lexaloffle,
     'uqm':         _launch_uqm,
 }
 

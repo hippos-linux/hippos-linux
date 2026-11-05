@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from xml.dom import minidom
 
+from HipposPaths import EMULATORLAUNCHER_DATA_DIR
 from emulatorlauncher_shared import (
     ESBinding,
     ESControllerProfile,
@@ -17,7 +18,7 @@ from emulatorlauncher_shared import (
 
 _log = logging.getLogger(__name__)
 
-HIPPOS_MAME_DATA = Path('/usr/share/hippos/configgen/data/mame')
+HIPPOS_MAME_DATA = EMULATORLAUNCHER_DATA_DIR / 'mame'
 
 _SPECIAL_CONTROL_LIST = [
     'cdimono1', 'apfm1000', 'astrocde', 'adam', 'arcadia', 'gamecom', 'tutor',
