@@ -28,7 +28,7 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER=clang \
     -DCMAKE_CXX_COMPILER=clang++ \
-    -DCMAKE_INSTALL_PREFIX="${STAGING}" \
+    -DCMAKE_INSTALL_PREFIX="${EMULATOR_RUNTIME_ROOT}/${NAME}" \
     -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
     -DCMAKE_INSTALL_RPATH="\$ORIGIN/../lib/lightspark:\$ORIGIN/../lib" \
@@ -36,7 +36,7 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCOMPILE_PLUGIN=OFF
 
 cmake --build "${BUILD}" -j"$(nproc)"
-cmake --install "${BUILD}"
+install_staged "${NAME}" "${STAGING}" "${BUILD}/destdir" cmake --install "${BUILD}"
 
 find "${STAGING}" "${BUILD}" \
     -maxdepth 5 \

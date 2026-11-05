@@ -23,7 +23,7 @@ mkdir -p "${BUILD}" "${STAGING}"
 log "Configuring"
 cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX="${STAGING}" \
+    -DCMAKE_INSTALL_PREFIX="${EMULATOR_RUNTIME_ROOT}/${NAME}" \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
     -DCMAKE_INSTALL_RPATH="\$ORIGIN/../lib" \
     -DSOLARUS_LIBRARY_INSTALL=ON \
@@ -36,7 +36,7 @@ log "Building"
 cmake --build "${BUILD}" -j"$(nproc)"
 
 log "Installing"
-cmake --install "${BUILD}"
+install_staged "${NAME}" "${STAGING}" "${BUILD}/destdir" cmake --install "${BUILD}"
 
 if ! find "${STAGING}" -type f -perm /111 | grep -q .; then
     die "solarus-engine produced no executable artifact"

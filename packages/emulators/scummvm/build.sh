@@ -23,9 +23,9 @@ cd "${SRC}"
 _host_args=()
 [[ "${ARCH:-amd64}" == "arm64" ]] && [[ "$(uname -m)" == "x86_64" ]] && \
     _host_args=(--host=aarch64-linux-gnu)
-./configure --prefix="${STAGING}" "${_host_args[@]}"
+./configure --prefix="${EMULATOR_RUNTIME_ROOT}/${NAME}" "${_host_args[@]}"
 make -j"$(nproc)"
-make install
+install_staged "${NAME}" "${STAGING}" "${BUILD}/destdir" make install
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"

@@ -29,9 +29,9 @@ fi
 _host_args=()
 [[ "${ARCH:-amd64}" == "arm64" ]] && [[ "$(uname -m)" == "x86_64" ]] && \
     _host_args=(--host=aarch64-linux-gnu --build=x86_64-linux-gnu)
-./configure --enable-sdl2 --prefix="${STAGING}" "${_host_args[@]}"
+./configure --enable-sdl2 --prefix="${EMULATOR_RUNTIME_ROOT}/${NAME}" "${_host_args[@]}"
 make -j"$(nproc)"
-make install
+install_staged "${NAME}" "${STAGING}" "${BUILD}/destdir" make install
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"

@@ -49,14 +49,25 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" \
     -DCMAKE_FIND_PACKAGE_PREFER_CONFIG=ON \
-    -DCMAKE_INSTALL_PREFIX="${STAGING}" \
+    -DCMAKE_INSTALL_PREFIX="${EMULATOR_RUNTIME_ROOT}/${NAME}" \
     -DOPT_TESTS=OFF
 
 log "Building"
 cmake --build "${BUILD}" -j"$(nproc)"
 
 log "Installing"
-cmake --install "${BUILD}"
+install_staged "${NAME}" "${STAGING}" "${BUILD}/destdir" cmake --install "${BUILD}"
+
+# The install puts data under share/dosbox-staging/resources/, but the binary
+# looks for share/dosbox-staging/<shaders|freedos-cpi|...>, so without this it
+# aborts on its default CRT shader.
+RESOURCES="${STAGING}/share/dosbox-staging/resources"
+if [[ -d "${RESOURCES}" ]]; then
+    cp -a "${RESOURCES}/." "${STAGING}/share/dosbox-staging/"
+    rm -rf "${RESOURCES}"
+fi
+[[ -f "${STAGING}/share/dosbox-staging/shaders/crt/crt-hyllian.glsl" ]] \
+    || { log "shaders missing from share/dosbox-staging after install"; exit 1; }
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"

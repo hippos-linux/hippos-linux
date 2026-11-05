@@ -34,8 +34,7 @@ mkdir -p "${STAGING}/bin"
         _host_args=(--host=aarch64-linux-gnu --build=x86_64-linux-gnu)
     ./configure \
         "${_host_args[@]}" \
-        --prefix="${STAGING}" \
-        --enable-sdlui2 \
+        --prefix="${EMULATOR_RUNTIME_ROOT}/${NAME}" \
         --without-oss
 
     # GCC 10+ changed -fno-common default; old VICE has z80_regs as a tentative global
@@ -43,7 +42,7 @@ mkdir -p "${STAGING}/bin"
     find "${SRC}/src" -name 'Makefile' -exec sed -i 's/^CFLAGS = /CFLAGS = -fcommon /' {} \;
 
     make -j"$(nproc)"
-    make install
+    install_staged "${NAME}" "${STAGING}" "${BUILD}/destdir" make install
 )
 
 write_artifact_version "${STAGING}" "${VERSION}"

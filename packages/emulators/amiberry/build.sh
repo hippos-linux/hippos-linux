@@ -25,10 +25,10 @@ rm -rf "${BUILD}"
 mkdir -p "${STAGING}/bin"
 cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX="${STAGING}" \
+    -DCMAKE_INSTALL_PREFIX="${EMULATOR_RUNTIME_ROOT}/${NAME}" \
     -DUSE_VULKAN=OFF
 cmake --build "${BUILD}" -j"$(nproc)"
-cmake --install "${BUILD}"
+install_staged "${NAME}" "${STAGING}" "${BUILD}/destdir" cmake --install "${BUILD}"
 find "${BUILD}" "${STAGING}" -maxdepth 4 -name 'amiberry' -type f -perm /111 \
     -exec install -m 0755 {} "${STAGING}/bin/" \; -quit
 

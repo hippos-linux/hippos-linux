@@ -25,24 +25,21 @@ clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 
-# On arm64 cross-compile the host LLVM (/usr/lib/llvm-19) is x86_64; linking it
-# against aarch64 objects fails with "file in wrong format". Disable LLVM detection;
-# dolphin falls back to the interpreter-based DSP without it.
-_llvm_flag=()
-[[ "${ARCH:-amd64}" == "arm64" ]] && _llvm_flag=(-DCMAKE_DISABLE_FIND_PACKAGE_LLVM=ON)
-
+# LLVM only provides the debugger's disassembler. The build image's newest
+# LLVM (21) isn't in the runtime OS, and on arm64 cross builds the host LLVM is
+# the wrong architecture, so leave it out.
 cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX="${STAGING}" \
+    -DCMAKE_INSTALL_PREFIX="${EMULATOR_RUNTIME_ROOT}/${NAME}" \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
     -DCMAKE_INSTALL_RPATH="/opt/hippos/qt/6.11/lib" \
     -DENABLE_QT=ON \
     -DENABLE_NOGUI=ON \
     -DENABLE_TESTS=OFF \
     -DUSE_SHARED_ENET=OFF \
-    "${_llvm_flag[@]}"
+    -DCMAKE_DISABLE_FIND_PACKAGE_LLVM=ON
 cmake --build "${BUILD}" -j"$(nproc)"
-cmake --install "${BUILD}"
+install_staged "${NAME}" "${STAGING}" "${BUILD}/destdir" cmake --install "${BUILD}"
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING} (version ${TAG})"
