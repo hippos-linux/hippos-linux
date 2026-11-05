@@ -1144,6 +1144,20 @@ def installed_emulator_version(name):
         return None
 
 
+# sha256 of the tarball an emulator was installed from. A packaging fix can
+# keep the upstream version, so the version alone doesn't say it's current.
+INSTALLED_SHA256_FILE = ".hippos-sha256"
+
+
+def emulator_up_to_date(name, info):
+    try:
+        installed_sha = open(os.path.join(EMULATORS_DIR, name, INSTALLED_SHA256_FILE)).read().strip()
+    except FileNotFoundError:
+        installed_sha = None
+    return (installed_emulator_version(name) == info.get("version", "")
+            and installed_sha == info.get("sha256", ""))
+
+
 def installed_frontend_version(name):
     # Version file is placed by pack-frontend.sh inside the tarball at ./version
     # and extracted to the install root, so it lands at /version — use a dedicated
@@ -1167,7 +1181,7 @@ def cmd_list_emulator_updates():
     for name, info in sorted(emulators.items()):
         remote = info.get("version", "")
         installed = installed_emulator_version(name)
-        if installed != remote:
+        if not emulator_up_to_date(name, info):
             status = f"{installed or 'not installed'} → {remote}"
             print(f"{name}\t{status}")
 
@@ -1187,7 +1201,7 @@ def cmd_update_emulator(name, force=False):
     sha256 = info.get("sha256", "")
 
     installed = installed_emulator_version(name)
-    if installed == remote and not force:
+    if emulator_up_to_date(name, info) and not force:
         log(f"{name} is already at {remote}")
         sys.exit(0)
 
@@ -1202,14 +1216,27 @@ def cmd_update_emulator(name, force=False):
     fetch_archive(url, archive, sha256)
 
     dest = os.path.join(EMULATORS_DIR, name)
-    os.makedirs(dest, exist_ok=True)
+    # Extract beside the old copy and swap, so files the new package dropped
+    # don't linger and a failed extraction leaves the old copy working.
+    staging = dest + ".new"
+    shutil.rmtree(staging, ignore_errors=True)
+    os.makedirs(staging)
 
     log(f"Extracting {name} to {dest}...")
     subprocess.run(
         ["tar", "--xattrs", "--acls", "--numeric-owner",
-         "-I", "zstd -d", "-xf", archive, "-C", dest],
+         "-I", "zstd -d", "-xf", archive, "-C", staging],
         check=True
     )
+    with open(os.path.join(staging, INSTALLED_SHA256_FILE), "w") as f:
+        f.write(sha256 + "\n")
+    # current/ is a launcher runtime folder (model2emu, xenia) holding the
+    # user's configs and caches, not part of the package.
+    runtime = os.path.join(dest, "current")
+    if os.path.isdir(runtime):
+        os.rename(runtime, os.path.join(staging, "current"))
+    shutil.rmtree(dest, ignore_errors=True)
+    os.rename(staging, dest)
 
     try:
         os.remove(archive)
@@ -1228,10 +1255,8 @@ def cmd_update_all_emulators():
         log("No emulator payloads in manifest")
         return
     for name, info in sorted(emulators.items()):
-        remote = info.get("version", "")
-        installed = installed_emulator_version(name)
-        if installed == remote:
-            log(f"{name}: already at {remote}")
+        if emulator_up_to_date(name, info):
+            log(f"{name}: already at {info.get('version', '')}")
         else:
             cmd_update_emulator(name)
 
