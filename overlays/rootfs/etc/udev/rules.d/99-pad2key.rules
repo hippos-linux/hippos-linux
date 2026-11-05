@@ -1,3 +1,6 @@
+# Arcade encoders in keyboard mode become virtual pads through pad2key/evsieve.
+# Only with evsieve installed: the rules hide the keyboard from ES and the
+# emulators, so without the replacement pad the encoder would do nothing.
 # filter on ID_INPUT_KEYBOARD, cause the mouse and the leds have the same name/vid/pid...
 #
 # "Ultimarc Mini-PAC" 		    : Xtention 2 players
@@ -5,13 +8,13 @@
 # "Ultimarc I-PAC 2"                : (twisted)
 # "Ultimarc IPAC 2 Ultimarc IPAC 2" : (dandc)
 # "Ultimarc I-PAC Ultimate I/O"     : (s3nt3nza)
-SUBSYSTEM=="input", KERNEL=="event*", ACTION=="add", ATTRS{name}=="Ultimarc*PAC*", ENV{ID_INPUT_KEYBOARD}=="1", ENV{ID_INPUT_KEYBOARD}="0", ENV{ID_INPUT_KEY}="0", ENV{ID_INPUT_PAD2KEY}="1", RUN+="/usr/bin/pad2keyLauncher $env{DEVNAME} run"
+SUBSYSTEM=="input", KERNEL=="event*", ACTION=="add", TEST=="/usr/bin/evsieve", ATTRS{name}=="Ultimarc*PAC*", ENV{ID_INPUT_KEYBOARD}=="1", ENV{ID_INPUT_KEYBOARD}="0", ENV{ID_INPUT_KEY}="0", ENV{ID_INPUT_PAD2KEY}="1", TAG+="systemd", ENV{SYSTEMD_WANTS}+="hippos-pad2key@%k.service"
 
 # xarcade
-SUBSYSTEM=="input", KERNEL=="event*", ACTION=="add", ATTRS{name}=="XGaming*X-Arcade*", ATTRS{phys}=="*/input0", ENV{ID_INPUT_KEYBOARD}=="1", ENV{ID_INPUT_KEYBOARD}="0", ENV{ID_INPUT_KEY}="0", ENV{ID_INPUT_PAD2KEY}="1", RUN+="/usr/bin/pad2keyLauncher $env{DEVNAME} run"
+SUBSYSTEM=="input", KERNEL=="event*", ACTION=="add", TEST=="/usr/bin/evsieve", ATTRS{name}=="XGaming*X-Arcade*", ATTRS{phys}=="*/input0", ENV{ID_INPUT_KEYBOARD}=="1", ENV{ID_INPUT_KEYBOARD}="0", ENV{ID_INPUT_KEY}="0", ENV{ID_INPUT_PAD2KEY}="1", TAG+="systemd", ENV{SYSTEMD_WANTS}+="hippos-pad2key@%k.service"
 
 # arcade2tv-xr
-SUBSYSTEM=="input", KERNEL=="event*", ACTION=="add", ATTRS{name}=="*Baolian industry*Arcade2TV*", ATTRS{phys}=="*/input0", ENV{ID_INPUT_KEYBOARD}=="1", ENV{ID_INPUT_KEYBOARD}="0", ENV{ID_INPUT_KEY}="0", ENV{ID_INPUT_PAD2KEY}="1", RUN+="/usr/bin/pad2keyLauncher $env{DEVNAME} run"
+SUBSYSTEM=="input", KERNEL=="event*", ACTION=="add", TEST=="/usr/bin/evsieve", ATTRS{name}=="*Baolian industry*Arcade2TV*", ATTRS{phys}=="*/input0", ENV{ID_INPUT_KEYBOARD}=="1", ENV{ID_INPUT_KEYBOARD}="0", ENV{ID_INPUT_KEY}="0", ENV{ID_INPUT_PAD2KEY}="1", TAG+="systemd", ENV{SYSTEMD_WANTS}+="hippos-pad2key@%k.service"
 
 # JammaSD
-SUBSYSTEM=="input", KERNEL=="event*", ACTION=="add", ATTRS{name}=="ASD JammASD Interface Keyboard", ENV{ID_INPUT_JOYSTICK}="0", ENV{ID_INPUT_KEYBOARD}="0", ENV{ID_INPUT_KEY}="0", ENV{ID_INPUT_PAD2KEY}="1", RUN+="/usr/bin/pad2keyLauncher $env{DEVNAME} run"
+SUBSYSTEM=="input", KERNEL=="event*", ACTION=="add", TEST=="/usr/bin/evsieve", ATTRS{name}=="ASD JammASD Interface Keyboard", ENV{ID_INPUT_JOYSTICK}="0", ENV{ID_INPUT_KEYBOARD}="0", ENV{ID_INPUT_KEY}="0", ENV{ID_INPUT_PAD2KEY}="1", TAG+="systemd", ENV{SYSTEMD_WANTS}+="hippos-pad2key@%k.service"

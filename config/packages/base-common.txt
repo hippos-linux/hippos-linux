@@ -216,7 +216,9 @@ smartmontools
 # Debug tools
 binutils
 strace
+# evtest is also used by pad2key-launcher; libevdev2 is evsieve's runtime library.
 evtest
+libevdev2
 xinput
 mesa-utils
 usbutils

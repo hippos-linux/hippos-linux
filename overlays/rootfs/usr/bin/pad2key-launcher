@@ -1,13 +1,7 @@
 #!/bin/bash
-
-reportOnceConfigurationAvailable() {
-    STARTFILE="/var/run/virtual-events.started"
-    LOADERFILE="/var/run/virtual-events.waiting"
-
-    test -e "${STARTFILE}" && return # normal behavior
-    echo "keboardtopads ${ACTION} ${DEVNAME} ${DEVPATH} pad2keyLauncher ${1} run" >> "${LOADERFILE}"
-    exit 0
-}
+# pad2key-launcher <event device> <run|checkconfig|checkconfigsys>
+# run is started by hippos-pad2key@<event>.service (99-pad2key.rules), after
+# /userdata is mounted, and stays in the foreground for as long as the device.
 
 getConfigName() {
     SAFENAME=$(echo "${1}" | sed -e s+'[^a-zA-Z0-9]'++g) # keep only letters and integers
@@ -15,7 +9,7 @@ getConfigName() {
 }
 
 doHelp() {
-    echo "pad2keyLauncher <event> <run|checkconfig>" >&2
+    echo "pad2key-launcher <event> <run|checkconfig|checkconfigsys>" >&2
 }
 
 PHYSDEV=$1
@@ -25,13 +19,11 @@ then
     exit 1
 fi
 
-# handle de device at boot : wait /userdata is available
-reportOnceConfigurationAvailable "${PHYSDEV}"
-
-# get the name / vid / pid
-PHYSNAME=$(evtest --info "${PHYSDEV}" | grep -E '^Input device name:' | sed -e s+"^Input device name: \"\(.*\)\"$"+"\1"+)
-PHYSVID=$( evtest --info "${PHYSDEV}" | grep -E '^Input device ID:'   | sed -e s+"^Input device ID: bus.*vendor 0x\([a-f0-9]*\) product .*$"+"\1"+  | sed -e s+'^\(...\)$'+'0\1'+)
-PHYSPID=$( evtest --info "${PHYSDEV}" | grep -E '^Input device ID:'   | sed -e s+"^Input device ID: bus.*product 0x\([a-f0-9]*\) version .*$"+"\1"+ | sed -e s+'^\(...\)$'+'0\1'+)
+# Name and ids from sysfs; ids are 4-digit lowercase hex, as in the config names.
+INPUT_SYSFS="/sys/class/input/$(basename "${PHYSDEV}")/device"
+PHYSNAME=$(cat "${INPUT_SYSFS}/name")
+PHYSVID=$(cat "${INPUT_SYSFS}/id/vendor")
+PHYSPID=$(cat "${INPUT_SYSFS}/id/product")
 
 CONFIGNAME=$(getConfigName "${PHYSNAME}" "${PHYSVID}" "${PHYSPID}")
 CONFIGFILE=""
@@ -82,21 +74,11 @@ else
 	    echo "using config file ${CONFIGFILE}" >&2
 	    pad2key --config "${CONFIGFILE}" --rules > "/run/udev/rules.d/99_${CONFIGNAME}.rules" || exit 1
 	    udevadm control --reload-rules || exit 1
-	    if test -t 1 # check output is a tty
-	    then
-		pad2key --config "${CONFIGFILE}" --input "${1}" --run
-	    else
-		nohup pad2key --config "${CONFIGFILE}" --input "${1}" --run >/dev/null 2>/dev/null &
-	    fi
+	    exec pad2key --config "${CONFIGFILE}" --input "${1}" --run
 	else
 	    # no config file found, do 1 to 1 mapping to enable keyboard
 	    # map the same, but this one will have ID_INPUT_KEYBOARD set to 1
-	    if test -t 1 # check output is a tty
-	    then
-		evsieve --input "${1}" --output name="Default virtual keyboard"
-	    else
-		nohup evsieve --input "${1}" --output name="Default virtual keyboard" &
-	    fi
+	    exec evsieve --input "${1}" --output name="Default virtual keyboard"
 	fi
     else
 	doHelp
