@@ -159,7 +159,7 @@ def launch_cemu(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     _write_cemu_config(conf)
     _write_cemu_controller_profiles(ctx)
-    cmd = [str(bin_path), '-f', '-g', str(ctx.rom), '--force-no-menubar']
+    cmd = [str(bin_path), '-f', '-g', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['XDG_CONFIG_HOME'] = str(USERDATA / '.config')
     env['SDL_JOYSTICK_HIDAPI'] = '0'

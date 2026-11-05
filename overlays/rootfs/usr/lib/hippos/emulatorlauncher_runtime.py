@@ -263,16 +263,14 @@ def launch_solarus(ctx: LaunchContext) -> int:
                         fh.write(f'{reverse_axis[key]}={_solarus_key_val(binding, True)}\n')
 
     cmd: list[str] = [str(bin_path), '-fullscreen=yes', '-cursor-visible=no', '-lua-console=no']
-    for nplayer, ctrl in enumerate(ctx.controllers, start=1):
-        if nplayer == 1:
-            p1_profile = _pick_es_profile(profiles, ctrl) if profiles else None
-            hotkey = p1_profile.inputs.get('hotkey') if p1_profile else None
-            start  = p1_profile.inputs.get('start')  if p1_profile else None
-            if hotkey and start:
-                cmd.append(f'-quit-combo={hotkey.code}+{start.code}')
-            else:
-                cmd.append('-quit-combo=0+1')
-        cmd.append(f'-joypad-num{nplayer}={ctrl.index}')
+    if ctx.controllers:
+        p1_profile = _pick_es_profile(profiles, ctx.controllers[0]) if profiles else None
+        hotkey = p1_profile.inputs.get('hotkey') if p1_profile else None
+        start  = p1_profile.inputs.get('start')  if p1_profile else None
+        if hotkey and start:
+            cmd.append(f'-quit-combo={hotkey.code}+{start.code}')
+        else:
+            cmd.append('-quit-combo=0+1')
     cmd.append(str(ctx.rom))
     _log = __import__('logging').getLogger('hippos.emulatorlauncher')
     _log.info("Launching solarus: %s", ' '.join(cmd))

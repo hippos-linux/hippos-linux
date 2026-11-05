@@ -350,7 +350,7 @@ def launch_tic80(ctx: LaunchContext) -> int:
         _log.error("tic80: binary not found")
         return 1
 
-    cmd = [str(bin_path), '--fullscreen', str(ctx.rom)]
+    cmd = [str(bin_path), str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     return _run_game_command(ctx, 'tic80', cmd, env).returncode
 
@@ -637,7 +637,7 @@ def launch_sugarbox(ctx: LaunchContext) -> int:
         _log.error("sugarbox: binary not found")
         return 1
 
-    cmd = [str(bin_path), '--fullscreen', str(ctx.rom)]
+    cmd = [str(bin_path), str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['XDG_CONFIG_HOME'] = str(cfg_dir)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)

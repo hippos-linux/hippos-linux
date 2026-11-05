@@ -145,7 +145,9 @@ def launch_hatari(ctx: LaunchContext) -> int:
     cfg_dir.mkdir(parents=True, exist_ok=True)
     cfg_file = cfg_dir / 'hatari.cfg'
 
-    parser = configparser.ConfigParser(strict=False)
+    # Hatari matches keys case-sensitively (cfgopts.c strcmp), so keep their case.
+    parser = configparser.ConfigParser(strict=False, interpolation=None)
+    parser.optionxform = str
     if cfg_file.exists():
         parser.read(str(cfg_file))
 
@@ -192,7 +194,7 @@ def launch_hatari(ctx: LaunchContext) -> int:
     if tos:
         cmd += ['--tos', str(tos)]
 
-    cmd += ['--configdir', str(cfg_dir)]
+    cmd += ['--configfile', str(cfg_file)]
 
     ext = rom.suffix.lower()
     if ext in _HATARI_EXTS_FLOPPY:
@@ -245,7 +247,7 @@ def launch_scummvm(ctx: LaunchContext) -> int:
         f'--window-size={w}x{h}',
         f'--renderer={renderer}',
         f'--scaler={scaler}',
-        f'--screenshotspath={SCREENSHOTS}',
+        f'--screenshotpath={SCREENSHOTS}',
         f'--extrapath={extra_dir}',
         f'--savepath={saves_dir}',
         f'--config={ini}',
@@ -403,7 +405,7 @@ def launch_fsuae(ctx: LaunchContext) -> int:
     cfg_dir.mkdir(parents=True, exist_ok=True)
     saves_dir.mkdir(parents=True, exist_ok=True)
 
-    bin_path = _find_emulator_bin('fs-uae')
+    bin_path = _find_emulator_bin('fsuae')
     if bin_path is None:
         _log.error("fs-uae: binary not found")
         return 1
