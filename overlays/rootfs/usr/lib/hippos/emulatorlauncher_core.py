@@ -2,6 +2,9 @@ from __future__ import annotations
 from typing import Optional
 
 import configparser
+import csv
+from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 
 from emulatorlauncher_shared import (
@@ -26,7 +29,7 @@ from emulatorlauncher_shared import (
     generate_sdl_game_controller_config,
 )
 
-from HipposPaths import BIOS, CONFIGS, SAVES, SCREENSHOTS, USERDATA
+from HipposPaths import BIOS, CONFIGS, EMULATORLAUNCHER_DATA_DIR, SAVES, SCREENSHOTS, USERDATA
 
 
 def _write_mame_config(conf: dict[str, str]) -> None:
@@ -74,6 +77,57 @@ def _write_mame_config(conf: dict[str, str]) -> None:
             fh.write(f'{key:<{col}}{value}\n')
 
 
+@dataclass(frozen=True)
+class _MessMachine:
+    machine: str
+    media: str
+    autoboot: str
+
+
+@cache
+def _mess_machines() -> dict[str, _MessMachine]:
+    """messSystems.csv: system;MAME machine;default media switch;autoboot
+    command (typed on start, e.g. CLOAD). Systems with no machine there are
+    run like arcade sets."""
+    machines = {}
+    with (EMULATORLAUNCHER_DATA_DIR / 'mame' / 'messSystems.csv').open(encoding='utf-8') as fh:
+        for row in csv.reader(fh, delimiter=';', quotechar="'"):
+            if len(row) >= 3 and row[1]:
+                machines[row[0]] = _MessMachine(row[1], row[2], row[3] if len(row) > 3 else '')
+    return machines
+
+
+# Systems whose games come on more than one medium: extension -> media switch,
+# anything else uses the messSystems.csv default.
+_MESS_MEDIA_BY_EXTENSION: dict[str, dict[str, str]] = {
+    'adam':     {'.ddp': 'cass1', '.dsk': 'flop1'},
+    'coco':     {'.cas': 'cass', '.dsk': 'flop1'},
+    'dragon64': {'.cas': 'cass', '.dsk': 'flop1'},
+    'mc10':     {'.cas': 'cass'},
+    'sc3000':   {'.cas': 'cass', '.wav': 'cass', '.bit': 'cass'},
+    'segaai':   {'.wav': 'cass', '.flac': 'cass', '.cas': 'cass'},
+}
+# Slot options a machine needs for the media its games come on.
+_MESS_MACHINE_OPTIONS: dict[str, list[str]] = {
+    'enterprise': ['-exp', 'exdos'],  # the floppy drive is the EXDOS expansion
+}
+# The machine's default for the other extensions, where it differs from the CSV.
+_MESS_MEDIA_DEFAULT: dict[str, str] = {'adam': 'cart1', 'coco': 'cart', 'dragon64': 'cart', 'mc10': 'cart', 'sc3000': 'cart'}
+
+
+def _mess_args(system: str, rom: Path) -> list[str] | None:
+    """Machine, media switch and ROM for a computer/console system; None for arcade."""
+    mess = _mess_machines().get(system)
+    if mess is None:
+        return None
+    ext = rom.suffix.lower()
+    media = _MESS_MEDIA_BY_EXTENSION.get(system, {}).get(ext) or _MESS_MEDIA_DEFAULT.get(system) or mess.media
+    args = [mess.machine, *_MESS_MACHINE_OPTIONS.get(system, []), f'-{media}', str(rom)]
+    if mess.autoboot:
+        args += ['-autoboot_delay', '3', '-autoboot_command', mess.autoboot]
+    return args
+
+
 def launch_mame(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('mame')
     if bin_path is None:
@@ -96,7 +150,12 @@ def launch_mame(ctx: LaunchContext) -> int:
     elif ctx.wheel:
         game_flags += ['-dial_device', 'mouse', '-trackball_device', 'mouse', '-paddle_device', 'mouse', '-positional_device', 'mouse', '-mouse_device', 'mouse', '-ui_mouse']
 
-    cmd = [str(bin_path), '-inipath', f'{MAME_CONFIG_DIR};/etc/mame', *game_flags, str(ctx.rom)]
+    # The ROM's own folder, then BIOS sets (e.g. bios/coco.zip) and arcade ROMs.
+    rompath = ';'.join(str(p) for p in (ctx.rom.parent, BIOS, BIOS / 'mame', MAME_ROMS))
+    cmd = [str(bin_path), '-inipath', f'{MAME_CONFIG_DIR};/etc/mame', '-rompath', rompath, *game_flags]
+    # Arcade sets are run by path; computers and consoles need the machine
+    # and a media switch, or MAME reports an unknown system.
+    cmd += _mess_args(ctx.system, ctx.rom) or [str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     result = _run_game_command(ctx, 'mame', cmd, env)
     return result.returncode
