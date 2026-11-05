@@ -22,6 +22,9 @@
 # All subcommands serialise on a lock: the launcher runs restore detached, and
 # a quick relaunch's set must not land before it.
 
+# Called by emulatorlauncher, which runs as hippos; sysfs and ryzenadj need root.
+[[ "${EUID}" -ne 0 ]] && exec sudo -n "$0" "$@"
+
 log() { printf '[hippos-tdp] %s\n' "$*"; }
 
 LOCK=/run/hippos/tdp.lock
