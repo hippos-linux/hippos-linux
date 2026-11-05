@@ -11,6 +11,7 @@ import time
 import tomllib
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
+from functools import cache
 from dataclasses import dataclass, field
 from pathlib import Path
 from shutil import copyfile, which
@@ -119,6 +120,8 @@ ES_INPUT_FILES = (
     USER_ES_DIR / 'es_input.cfg',
     Path('/usr/share/emulationstation/es_input.cfg'),
 )
+# Written by ES at every launch: the input configs it resolved for each player.
+ES_PLAYERS_INPUT = Path('/tmp/es_input_players.cfg')
 
 
 _log = logging.getLogger('emulatorlauncher')
@@ -346,15 +349,15 @@ def _normalize(value: str) -> str:
     return ''.join(ch for ch in value.strip().casefold() if ch.isalnum())
 
 
-def _load_es_input_configs() -> list[ESControllerProfile]:
-    es_path = next((path for path in ES_INPUT_FILES if path.exists()), None)
-    if es_path is None:
-        return []
+@cache
+def _parse_es_input_file(path: Path, mtime_ns: int) -> tuple[ESControllerProfile, ...]:
+    """Cached per file version: launchers and the controller monitor each ask
+    for the profiles, and ES may rewrite the files between asks."""
     try:
-        root = ET.parse(es_path).getroot()
+        root = ET.parse(path).getroot()
     except ET.ParseError as exc:
-        _log.warning("Could not parse %s: %s", es_path, exc)
-        return []
+        _log.warning("Could not parse %s: %s", path, exc)
+        return ()
 
     configs: list[ESControllerProfile] = []
     for node in root.findall('inputConfig'):
@@ -382,7 +385,18 @@ def _load_es_input_configs() -> list[ESControllerProfile]:
                 inputs=inputs,
             )
         )
-    return configs
+    return tuple(configs)
+
+
+def _load_es_input_configs() -> list[ESControllerProfile]:
+    """ES's per-player resolved configs first, so _pick_es_profile prefers
+    them, then the full es_input.cfg as the fallback."""
+    es_input = next((path for path in ES_INPUT_FILES if path.exists()), None)
+    profiles: list[ESControllerProfile] = []
+    for path in (ES_PLAYERS_INPUT, es_input):
+        if path is not None and path.exists():
+            profiles.extend(_parse_es_input_file(path, path.stat().st_mtime_ns))
+    return profiles
 
 
 def _pick_es_profile(
