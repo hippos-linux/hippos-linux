@@ -1,12 +1,48 @@
 #!/usr/bin/env bash
-# hippos-xorg-setup — runs as ExecStartPre for hippos-xserver.service.
+# hippos-xorg-setup — Xorg configuration for hippos-xserver.service.
+#   hippos-xorg-setup        ExecStartPre: write xorg.conf.d snippets
+#   hippos-xorg-setup post   ExecStartPost: settings applied over the running server
 # NVIDIA Xorg driver assignment is handled by the nvidia package's own
 # /usr/share/X11/xorg.conf.d/nvidia-drm-outputclass.conf (OutputClass approach).
-# No custom conf generation needed.
 
-# Clean up any conf written by older versions of this script.
-rm -f /etc/X11/xorg.conf.d/91-gpu-setup.conf \
-      /etc/X11/xorg.conf.d/90-hippos-prime.conf
+XORG_CONF_D=/etc/X11/xorg.conf.d
 
 log() { printf '[hippos-xorg-setup] %s\n' "$*"; }
-log "done (nvidia OutputClass handled by package)"
+
+# display.vrr (ES: System Settings > Variable Refresh Rate), on unless set to 0.
+vrr_enabled() { [[ "$(hippos-settings get display.vrr 2>/dev/null)" != 0 ]]; }
+
+write_conf() {
+    # Clean up any conf written by older versions of this script.
+    rm -f "${XORG_CONF_D}/91-gpu-setup.conf" \
+          "${XORG_CONF_D}/90-hippos-prime.conf"
+
+    local vrr=false
+    vrr_enabled && vrr=true
+    # MatchDriver is the kernel driver; Intel and nouveau run the modesetting DDX.
+    cat > "${XORG_CONF_D}/21-hippos-vrr.conf" <<EOF
+# Written by hippos-xorg-setup from display.vrr
+Section "OutputClass"
+    Identifier  "HippOS VRR"
+    MatchDriver "amdgpu|i915|xe|nouveau"
+    Option      "VariableRefresh" "${vrr}"
+EndSection
+EOF
+    log "VariableRefresh=${vrr}"
+}
+
+# The NVIDIA driver ignores VariableRefresh; G-SYNC is an X screen attribute.
+apply_nvidia_vrr() {
+    command -v nvidia-settings >/dev/null || return 0
+    DISPLAY=:0 nvidia-settings -t -q AllowVRR >/dev/null 2>&1 || return 0
+
+    local allow=0
+    vrr_enabled && allow=1
+    DISPLAY=:0 nvidia-settings -a "AllowVRR=${allow}" >/dev/null && log "NVIDIA AllowVRR=${allow}"
+}
+
+case "${1:-}" in
+    "") write_conf ;;
+    post) apply_nvidia_vrr ;;
+    *) echo "Usage: hippos-xorg-setup [post]" >&2; exit 1 ;;
+esac

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ES API: resolution listModes/setMode/currentMode/currentResolution/listOutputs/currentOutput/setOutput
+# ES API: resolution listModes/setMode/currentMode/currentResolution/listOutputs/currentOutput/setOutput/supportVrr
 export DISPLAY="${DISPLAY:-:0}"
 
 _current_output() {
@@ -130,6 +130,24 @@ case "${1:-}" in
             /^[^ ]+ connected/ { in_s=($1==s) }
             /\*/ && in_s { for(i=1;i<=NF;i++) if($i~/\*/) { gsub(/[*+]/,"",$i); print $i; exit } }
         '
+        ;;
+    supportVrr)
+        # amdgpu and modesetting (Intel, nouveau) expose the kernel's vrr_capable
+        # property. It comes from the display's EDID, so it stays 1 with VRR off.
+        vrr_capable=$(xrandr --prop 2>/dev/null | awk -v s="$PSCREEN" '
+            /^[^ \t]+ (connected|disconnected)/ { in_s=($1==s) }
+            in_s && $1=="vrr_capable:" { print $2; exit }
+        ')
+        if [[ -n "$vrr_capable" ]]; then
+            [[ "$vrr_capable" == 1 ]]
+            exit
+        fi
+        # NVIDIA: 1 G-SYNC, 2 G-SYNC Compatible. Monitors NVIDIA hasn't validated
+        # only do VRR with the AllowGSYNCCompatible=On MetaMode token, which
+        # hippos-xorg-setup doesn't set, so they get no switch.
+        command -v nvidia-settings >/dev/null || exit 1
+        vrr_mode=$(nvidia-settings -t -q "[dpy:${PSCREEN}]/DisplayVRRMode" 2>/dev/null)
+        [[ "$vrr_mode" == 1 || "$vrr_mode" == 2 ]]
         ;;
     setRotation|setDPI|setReflection|forceMode|supportSystemRotation|supportSystemReflection)
         exit 0
