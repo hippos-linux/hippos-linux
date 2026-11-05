@@ -685,6 +685,17 @@ capture_shell "pipewire-status.txt" \
         systemctl --user status pipewire.service wireplumber.service \
         --no-pager -l 2>&1 || true'
 
+capture_shell "pipewire-sinks.txt" \
+    'pactl_hippos() { XDG_RUNTIME_DIR=/run/user/1000 runuser -u hippos -- env LC_ALL=C pactl "$@" 2>&1; };
+     echo "default sink: $(pactl_hippos get-default-sink)";
+     echo; pactl_hippos list sinks short;
+     echo; pactl_hippos list sink-inputs;
+     echo; pactl_hippos list cards;
+     for eld in /proc/asound/card*/eld#*; do
+         [ -e "${eld}" ] || continue
+         echo; echo "== ${eld}"; cat "${eld}"
+     done'
+
 # ===========================================================================
 # Hardware
 # ===========================================================================

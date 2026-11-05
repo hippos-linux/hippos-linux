@@ -48,8 +48,10 @@ fi
 # it just was never forwarded on.
 dbus-update-activation-environment --systemd DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS HOME XDG_SESSION_ID 2>/dev/null || true
 
-/usr/lib/hippos/hippos-audio-setup
+# Display first: hippos-audio-setup only waits for an HDMI sink when the
+# codec's ELD reports a monitor, and that needs the output to be lit.
 /usr/lib/hippos/hippos-display-setup
+/usr/lib/hippos/hippos-audio-setup
 
 if hippos-touchscreen-detect 2>/dev/null; then
     pkill -x touchegg 2>/dev/null || true
