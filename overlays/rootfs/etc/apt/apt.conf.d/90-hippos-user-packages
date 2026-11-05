@@ -1,0 +1,7 @@
+// Record the user's own apt installs (reinstalled after OS updates) and keep
+// ES Ports launchers in step with the games among them. Both no-op in the
+// build chroot, before /usr/share/hippos/image-packages.list exists.
+DPkg::Post-Invoke {
+    "/usr/lib/hippos/hippos-apt-packages record || true";
+    "/usr/lib/hippos/hippos-ports sync || true";
+};

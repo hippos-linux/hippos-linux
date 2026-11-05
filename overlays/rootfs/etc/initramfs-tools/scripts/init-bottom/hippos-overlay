@@ -68,6 +68,41 @@ mkdir -p "${UPPER}" "${WORK}"
 chown 0:0 "${UPPER}"
 chmod 0755 "${UPPER}"
 
+# Apt installs land in the upper layer, and so do copied-up dpkg/apt state and
+# /etc/ld.so.cache. After an OS update those copies would hide the new image's
+# own (including its apt holds), so on the first boot of a different deployment
+# drop them, together with the installed files, and leave
+# hippos-apt-restore.service a flag to reinstall the user's packages.
+# /usr/local, /etc and /opt are kept.
+# Without a marker (a system from before this check) the previous deployment
+# is unknown, but a dpkg status copied up before this image was built is stale.
+# The old status and apt marks are kept for hippos-apt-packages, which has no
+# recorded package list on such a system.
+DEPLOYMENT_MARKER="${BTRFS_MNT}/@overlay/deployment"
+UPPER_STATUS="${UPPER}/var/lib/dpkg/status"
+STALE=""
+if [ -f "${DEPLOYMENT_MARKER}" ]; then
+    [ "$(cat "${DEPLOYMENT_MARKER}")" != "${ROOT_SUBVOL}" ] && STALE="deployment changed to ${ROOT_SUBVOL}"
+elif [ -f "${UPPER_STATUS}" ] && [ "${UPPER_STATUS}" -ot "${BTRFS_MNT}/${ROOT_SUBVOL}/var/lib/dpkg/status" ]; then
+    STALE="dpkg status predates ${ROOT_SUBVOL}"
+fi
+if [ -n "${STALE}" ]; then
+    kmsg "${STALE} — clearing package state from the overlay"
+    mkdir -p "${UPPER}/var/lib/hippos"
+    [ -f "${UPPER_STATUS}" ] && cp "${UPPER_STATUS}" "${UPPER}/var/lib/hippos/pre-update-dpkg-status"
+    [ -f "${UPPER}/var/lib/apt/extended_states" ] && \
+        cp "${UPPER}/var/lib/apt/extended_states" "${UPPER}/var/lib/hippos/pre-update-apt-extended-states"
+    for _entry in "${UPPER}/usr/"* "${UPPER}/usr/".[!.]*; do
+        [ -e "${_entry}" ] || [ -L "${_entry}" ] || continue
+        [ "${_entry}" = "${UPPER}/usr/local" ] && continue
+        rm -rf "${_entry}"
+    done
+    rm -rf "${UPPER}/var/lib/dpkg" "${UPPER}/var/lib/apt" "${UPPER}/var/cache/apt" \
+           "${UPPER}/etc/ld.so.cache" "${UPPER}/etc/alternatives"
+    : > "${UPPER}/var/lib/hippos/apt-restore-pending"
+fi
+echo "${ROOT_SUBVOL}" > "${DEPLOYMENT_MARKER}"
+
 OVERLAY_OPTS="lowerdir=${BTRFS_MNT}/${ROOT_SUBVOL},upperdir=${UPPER},workdir=${WORK}"
 if ! mount -t overlay -o "${OVERLAY_OPTS}" overlay "${rootmnt}"; then
     kmsg "overlay mount failed"

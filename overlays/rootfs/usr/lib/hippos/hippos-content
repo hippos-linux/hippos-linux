@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -20,6 +21,8 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 from typing import Optional
+
+from hippos_ports import CONTENT_MARKER, PORTS_DIR, write_launcher
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
@@ -36,17 +39,9 @@ INSTALL_ROOTS: dict[str, Path] = {
     'cheats':    USERDATA / 'cheats',
     'themes':    USERDATA / 'themes',
     'cores':     USERDATA / 'system' / 'emulators' / 'retroarch' / 'current' / 'cores',
-    'ports':     USERDATA / 'roms' / 'ports',
+    'ports':     PORTS_DIR,
 }
 
-_PORT_LAUNCHER_TEMPLATE = """\
-#!/bin/bash
-# HippOS port: {name}
-export HOME=/userdata
-export XDG_CONFIG_HOME=/userdata/system/.config
-export XDG_DATA_HOME=/userdata/system/.local/share
-exec {command}
-"""
 
 _USAGE = """\
 Usage: hippos-content <command> [args]
@@ -178,20 +173,14 @@ def _apt(action: str, packages: list[str]) -> int:
     return subprocess.run(cmd).returncode
 
 
-def _create_port_launcher(pkg: dict) -> Path:
+def _create_port_launcher(pkg: dict, apt_packages: list[str]) -> Path:
     name    = pkg.get('name', pkg['id'])
     command = pkg.get('launcher_command', '')
     args    = pkg.get('launcher_args', [])
     if args:
         command = command + ' ' + ' '.join(str(a) for a in args)
-    ports_dir = INSTALL_ROOTS['ports']
-    ports_dir.mkdir(parents=True, exist_ok=True)
-    script = ports_dir / f"{pkg['id']}.sh"
-    script.write_text(
-        _PORT_LAUNCHER_TEMPLATE.format(name=name, command=command),
-        encoding='utf-8',
-    )
-    script.chmod(0o755)
+    script = PORTS_DIR / f"{pkg['id']}.sh"
+    write_launcher(script, name, command, marker=shlex.join([CONTENT_MARKER, *apt_packages]))
     return script
 
 
@@ -264,12 +253,15 @@ def cmd_install(args: list[str]) -> int:
         if not apt_packages:
             print(f'No apt_packages defined for {pkg_id}', file=sys.stderr)
             return 1
+        # Written before apt runs so the hippos-ports apt hook sees these
+        # packages are already covered and doesn't add a second launcher.
+        script = _create_port_launcher(pkg, apt_packages)
         print(f"Installing {pkg.get('name', pkg_id)} via apt...")
         ret = _apt('install', apt_packages)
         if ret != 0:
+            script.unlink(missing_ok=True)
             print(f'apt install failed (exit {ret})', file=sys.stderr)
             return ret
-        script = _create_port_launcher(pkg)
         print(f'Created launcher: {script}')
         installed         = _load_installed()
         installed[pkg_id] = pkg.get('version', 'latest')

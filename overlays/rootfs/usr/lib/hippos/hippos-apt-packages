@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+"""hippos-apt-packages — keep the user's apt installs across OS updates.
+
+  hippos-apt-packages record   apt hook: write /userdata/system/apt-packages.list
+  hippos-apt-packages boot     hippos-apt-restore.service: reinstall the list after
+                               an OS update cleared package state, then record
+"""
+from __future__ import annotations
+
+import subprocess
+import sys
+
+from hippos_apt import (
+    PRE_UPDATE_EXTENDED_STATES,
+    PRE_UPDATE_STATUS,
+    RESTORE_PENDING,
+    USER_PACKAGES,
+    image_packages,
+    installed_user_packages,
+    pre_update_user_packages,
+    recorded_user_packages,
+)
+
+# The user may start apt while this runs at boot; wait for the lock.
+_APT = ['apt-get', '-o', 'DPkg::Lock::Timeout=300']
+_APT_INSTALL = [
+    *_APT, 'install', '-y',
+    # Config files the user's packages left in /etc survive the reset; keep them.
+    '-o', 'Dpkg::Options::=--force-confold',
+]
+
+
+def record() -> int:
+    image = image_packages()
+    if image is None or not USER_PACKAGES.parent.is_dir():
+        return 0
+    packages = set(installed_user_packages(image))
+    # Until the restore has run, most of the list isn't installed yet.
+    if RESTORE_PENDING.exists():
+        packages.update(recorded_user_packages())
+    tmp = USER_PACKAGES.with_suffix('.tmp')
+    tmp.write_text(''.join(f'{p}\n' for p in sorted(packages)), encoding='utf-8')
+    tmp.replace(USER_PACKAGES)
+    return 0
+
+
+def restore() -> int:
+    """0 once every package that can still be installed is; 1 to retry next boot."""
+    packages = recorded_user_packages()
+    if not packages and not USER_PACKAGES.exists():
+        image = image_packages()
+        if image is not None:
+            packages = pre_update_user_packages(image)
+    if packages:
+        print(f'Reinstalling {len(packages)} apt package(s): {" ".join(packages)}', flush=True)
+        if subprocess.run([*_APT, 'update']).returncode != 0:
+            print('apt-get update failed; will retry on next boot', file=sys.stderr)
+            return 1
+        if subprocess.run(_APT_INSTALL + packages).returncode != 0:
+            # One unavailable package fails the whole transaction.
+            missing = [p for p in packages if subprocess.run(_APT_INSTALL + [p]).returncode != 0]
+            if missing:
+                print(f'No longer installable, dropped: {" ".join(missing)}', file=sys.stderr)
+    RESTORE_PENDING.unlink(missing_ok=True)
+    PRE_UPDATE_STATUS.unlink(missing_ok=True)
+    PRE_UPDATE_EXTENDED_STATES.unlink(missing_ok=True)
+    return 0
+
+
+def main() -> int:
+    match sys.argv[1:]:
+        case ['record']:
+            return record()
+        case ['boot']:
+            status = restore() if RESTORE_PENDING.exists() else 0
+            record()
+            return status
+        case _:
+            print(__doc__.strip(), file=sys.stderr)
+            return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""hippos-ports — ES Ports launchers for desktop applications.
+
+  hippos-ports add FILE   launcher for a .desktop file, AppImage or executable
+  hippos-ports sync       apt hook: a launcher for each game (Categories=Game)
+                          the user installed with apt, removed with the package
+"""
+from __future__ import annotations
+
+import shlex
+import sys
+import urllib.request
+from pathlib import Path
+
+from hippos_apt import image_packages, installed_user_packages, package_files
+from hippos_ports import CONTENT_MARKER, PORTS_DIR, launcher_path, read_desktop_file, read_marker, write_launcher
+
+# Marks launchers sync owns: '# hippos-ports-apt <package> <desktop file>'.
+# Launchers without it (user-made, hippos-content) are never touched.
+_APT_MARKER = 'hippos-ports-apt'
+_APPLICATIONS = Path('/usr/share/applications')
+_ES_RELOAD = 'http://127.0.0.1:1234/reloadgames'
+
+
+def add(file: Path) -> int:
+    if not file.is_file():
+        print(f'File not found: {file}', file=sys.stderr)
+        return 1
+    if file.suffix == '.desktop':
+        app = read_desktop_file(file)
+        if app is None:
+            print(f'No launchable application in {file.name}', file=sys.stderr)
+            return 1
+        name, command = app.name, app.command
+    else:
+        file.chmod(file.stat().st_mode | 0o111)
+        name = file.name.removesuffix('.AppImage').removesuffix('.appimage')
+        command = shlex.quote(str(file))
+    path = launcher_path(name)
+    write_launcher(path, name, command)
+    print(f'Added {name}: {path}')
+    return 0
+
+
+def _content_packages() -> set[str]:
+    """Apt packages hippos-content already made a launcher for."""
+    packages = set()
+    for launcher in PORTS_DIR.glob('*.sh'):
+        packages.update(read_marker(launcher, CONTENT_MARKER) or [])
+    return packages
+
+
+def _installed_games(image: frozenset[str]) -> dict[Path, tuple[str, str, str]]:
+    """desktop file -> (package, name, command) for the user's apt games."""
+    games = {}
+    covered = _content_packages()
+    for package in installed_user_packages(image):
+        if package in covered:
+            continue
+        for path in package_files(package):
+            if path.parent != _APPLICATIONS or path.suffix != '.desktop':
+                continue
+            app = read_desktop_file(path)
+            if app is not None and 'Game' in app.categories:
+                games[path] = (package, app.name, app.command)
+    return games
+
+
+def sync() -> int:
+    image = image_packages()
+    if image is None or not PORTS_DIR.parent.is_dir():
+        return 0
+    games = _installed_games(image)
+
+    changed = False
+    managed = set()
+    for launcher in PORTS_DIR.glob('*.sh'):
+        fields = read_marker(launcher, _APT_MARKER)
+        if fields is None:
+            continue
+        desktop = Path(fields[-1]) if fields else None
+        if desktop in games:
+            managed.add(desktop)
+        else:
+            launcher.unlink()
+            print(f'Removed {launcher.name}')
+            changed = True
+
+    for desktop, (package, name, command) in games.items():
+        if desktop in managed:
+            continue
+        path = launcher_path(name)
+        if path.exists():  # the user's own launcher for it, or a name clash
+            continue
+        write_launcher(path, name, command, marker=shlex.join([_APT_MARKER, package, str(desktop)]))
+        print(f'Added {name} ({package}): {path.name}')
+        changed = True
+
+    if changed:
+        try:
+            urllib.request.urlopen(_ES_RELOAD, timeout=2).close()
+        except OSError:
+            pass  # ES isn't running; it reads the ports folder when it starts
+    return 0
+
+
+def main() -> int:
+    match sys.argv[1:]:
+        case ['add', file]:
+            return add(Path(file))
+        case ['sync']:
+            return sync()
+        case _:
+            print(__doc__.strip(), file=sys.stderr)
+            return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())
