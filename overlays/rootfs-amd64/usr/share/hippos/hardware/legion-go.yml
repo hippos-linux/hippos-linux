@@ -5,4 +5,4 @@ dmi:
 defaults:
   display.rotate: "270"
   system.suspendmode: "suspend"
-  global.tdp: "20"
+  global.tdp: "65"

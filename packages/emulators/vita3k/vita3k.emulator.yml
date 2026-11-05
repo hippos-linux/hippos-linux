@@ -2,6 +2,7 @@ requireArtifact: vita3k
 shared_features:
   - powermode
   - tdp
+  - platformprofile
   - videomode
 custom_features:
   vita3k_gfxbackend:

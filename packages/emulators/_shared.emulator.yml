@@ -231,10 +231,26 @@ custom_features:
       'On': '1'
       'Off': '0'
   tdp:
-    prompt: GLOBAL TDP
-    description: AMD TDP cap in watts (requires ryzenadj).
+    prompt: TDP
+    description: Percentage of the CPU's maximum power (watts) for AMD Ryzen mobile CPUs. Setting it too high can damage the device.
+    group: POWER OPTIONS
+    requires: system.cpu.tdp
     preset: sliderauto
-    preset_parameters: 5 35 1 W
+    preset_parameters: 10 120 5 %
+  platformprofile:
+    prompt: PLATFORM PROFILE
+    description: Firmware fan curve and power limits preset.
+    group: POWER OPTIONS
+    requires: system.platformprofile.choices
+    choices:
+      Low Power: low-power
+      Quiet: quiet
+      Cool: cool
+      Balanced: balanced
+      Balanced Performance: balanced-performance
+      Performance: performance
+      Max Power: max-power
+      Custom: custom
   gamescope:
     prompt: GAMESCOPE
     description: Wrap games in Valve's Gamescope micro-compositor. Default Off

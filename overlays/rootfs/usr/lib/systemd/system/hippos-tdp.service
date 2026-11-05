@@ -1,11 +1,11 @@
 [Unit]
 Description=HippOS AMD TDP configuration
-After=
+After=hippos-migrate.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/lib/hippos/hippos-tdp
+ExecStart=/usr/lib/hippos/hippos-tdp boot
 StandardOutput=journal
 StandardError=journal
 

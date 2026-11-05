@@ -2,6 +2,7 @@ requireArtifact: ppsspp
 shared_features:
   - powermode
   - tdp
+  - platformprofile
   - videomode
   - hud
   - hud_corner

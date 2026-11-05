@@ -2,6 +2,7 @@ requireArtifact: eka2l1
 shared_features:
   - powermode
   - tdp
+  - platformprofile
   - videomode
   - bezel
   - bezel_stretch

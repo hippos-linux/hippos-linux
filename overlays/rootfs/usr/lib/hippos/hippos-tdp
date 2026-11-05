@@ -1,20 +1,37 @@
 #!/usr/bin/env bash
-# hippos-tdp — apply AMD TDP limit via ryzenadj with per-device clamping.
-# Reads global.tdp (watts) from hippos.conf. No-op if ryzenadj not installed.
+# hippos-tdp — AMD TDP limits via ryzenadj, and ACPI platform profile.
+#
+# TDP settings (global.tdp, <system>.tdp, …) are a percentage of the CPU's
+# maximum, detected at boot and published as system.cpu.tdp (watts). The
+# platform profiles the firmware offers are published as
+# system.platformprofile.choices. ES hides each option while its key is
+# empty, and offers only the listed profiles.
+#
+#   hippos-tdp boot        detect + publish, apply global.platformprofile and global.tdp
+#   hippos-tdp detect-max  print the detected maximum TDP in watts (empty if unsupported)
+#   hippos-tdp profile [NAME]
+#                          print the current platform profile, or switch to NAME
+#                          (exit 0 only if it changed)
+#   hippos-tdp set PCT [SETTLE]
+#                          apply PCT% of the maximum (in-game override)
+#   hippos-tdp restore [SETTLE]
+#                          back to global.tdp (100% if unset)
+#
+# SETTLE waits that many seconds first, for use right after a profile switch.
+#
+# All subcommands serialise on a lock: the launcher runs restore detached, and
+# a quick relaunch's set must not land before it.
 
 log() { printf '[hippos-tdp] %s\n' "$*"; }
 
-if ! command -v ryzenadj >/dev/null 2>&1; then
-    log "ryzenadj not found — skipping"
-    exit 0
-fi
-
-TDP="$(hippos-settings get global.tdp 2>/dev/null || true)"
-if [[ -z "${TDP}" ]]; then
-    log "global.tdp not set — using hardware default"
-    exit 0
-fi
-TDP="${TDP%.*}"
+LOCK=/run/hippos/tdp.lock
+PLATFORM_PROFILE_DIR=/sys/class/platform-profile
+# Firmware applies a profile's own power limits about a second after a switch,
+# overwriting anything set in the meantime.
+PROFILE_SETTLE_SECONDS=2
+# Highest-power profile names, best first: the firmware reports its true
+# maximum limits only in one of these.
+HIGHEST_POWER_PROFILES=(custom max-power performance)
 
 # ── Device table: model_key → "label;min_w;max_w" ────────────────────────────
 declare -A DEVICES=(
@@ -30,42 +47,166 @@ declare -A DEVICES=(
     ["AIR_Plus"]="Ayaneo Air Plus;5;28"
 )
 
-MODEL="$(hippos-model 2>/dev/null || true)"
-KNOWN=0
-TDP_MIN=1
-TDP_MAX=999
-APPLY_TEMP=0
+setting() {
+    local value
+    value="$(hippos-settings get "$1" 2>/dev/null || true)"
+    [[ "${value}" == auto ]] && value=
+    printf '%s' "${value}"
+}
 
-if [[ -n "${MODEL}" && -v DEVICES["${MODEL}"] ]]; then
-    IFS=';' read -r LABEL TDP_MIN TDP_MAX <<< "${DEVICES[${MODEL}]}"
-    KNOWN=1
-    APPLY_TEMP=1
-    log "Device: ${LABEL} (${MODEL}) — range ${TDP_MIN}–${TDP_MAX}W"
-else
-    log "Device not in table (${MODEL:-unknown}) — applying without clamping"
-fi
+# ── Platform profile ─────────────────────────────────────────────────────────
 
-# Clamp: allow up to 20% OC above device max
-OC_CEIL=$(( TDP_MAX * 120 / 100 ))
-if (( TDP < TDP_MIN )); then
-    log "TDP ${TDP}W below minimum ${TDP_MIN}W — clamping"
-    TDP=${TDP_MIN}
-elif (( KNOWN && TDP > OC_CEIL )); then
-    log "TDP ${TDP}W above OC ceiling ${OC_CEIL}W — clamping"
-    TDP=${OC_CEIL}
-fi
+profile_handlers() {
+    compgen -G "${PLATFORM_PROFILE_DIR}/platform-profile-*" || true
+}
 
-TDP_MW=$(( TDP * 1000 ))
-SLOW_MW=$(( TDP_MW * 80 / 100 ))
+profile_choices() {
+    local handler
+    for handler in $(profile_handlers); do
+        cat "${handler}/choices"
+    done | tr ' ' '\n' | sed '/^$/d' | sort -u | tr '\n' ' ' | sed 's/ $//'
+}
 
-log "Applying ${TDP}W (fast=${TDP_MW}mW slow=${SLOW_MW}mW${APPLY_TEMP:+ temp=90C})"
+current_profile() {
+    local handler
+    for handler in $(profile_handlers); do
+        cat "${handler}/profile"
+        return
+    done
+}
 
-CMD=(ryzenadj
-    --stapm-limit="${TDP_MW}"
-    --fast-limit="${TDP_MW}"
-    --slow-limit="${SLOW_MW}"
-)
-(( APPLY_TEMP )) && CMD+=(--tctl-temp=90)
+# Returns 0 if any handler changed to the profile.
+set_profile() {
+    local profile="$1" handler changed=1
+    for handler in $(profile_handlers); do
+        grep -qw -- "${profile}" "${handler}/choices" || continue
+        [[ "$(cat "${handler}/profile")" == "${profile}" ]] && continue
+        # The class interface, unlike /sys/firmware/acpi/platform_profile, accepts custom
+        if echo "${profile}" > "${handler}/profile" 2>/dev/null \
+                && [[ "$(cat "${handler}/profile")" == "${profile}" ]]; then
+            changed=0
+        fi
+    done
+    (( changed == 0 )) && log "Platform profile: ${profile}"
+    return "${changed}"
+}
 
-"${CMD[@]}" 2>&1 | while IFS= read -r line; do log "${line}"; done \
-    || log "Warning: ryzenadj failed — check kernel module and root privileges"
+# ── TDP ──────────────────────────────────────────────────────────────────────
+
+ryzenadj_supported() {
+    command -v ryzenadj >/dev/null 2>&1 \
+        && grep -q AuthenticAMD /proc/cpuinfo \
+        && ! ryzenadj -i 2>&1 | grep -qi 'unsupported model'
+}
+
+# ryzenadj -i prints "| PPT LIMIT FAST | 30.000 | fast-limit |" rows, in watts.
+read_fast_limit() {
+    ryzenadj -i 2>/dev/null | awk -F'|' '
+        { gsub(/^ +| +$/, "", $2) }
+        $2 == "PPT LIMIT FAST" { printf "%.0f\n", $3; exit }
+    '
+}
+
+detect_max() {
+    ryzenadj_supported || return 0
+
+    local previous="" profile
+    for profile in "${HIGHEST_POWER_PROFILES[@]}"; do
+        if [[ " $(profile_choices) " == *" ${profile} "* ]]; then
+            previous="$(current_profile)"
+            set_profile "${profile}" >&2 && sleep "${PROFILE_SETTLE_SECONDS}"
+            break
+        fi
+    done
+
+    read_fast_limit
+
+    [[ -n "${previous}" ]] && set_profile "${previous}" >&2
+    return 0
+}
+
+apply_percent() {
+    local percent="${1%.*}"
+    [[ "${percent}" =~ ^[0-9]+$ ]] || { log "Invalid TDP percentage '${1}'"; return 1; }
+
+    local max
+    max="$(setting system.cpu.tdp)"
+    if [[ -z "${max}" ]]; then
+        log "TDP unsupported on this CPU — skipping"
+        return 0
+    fi
+
+    local tdp=$(( (max * percent + 50) / 100 ))
+    local model label tdp_min=1 tdp_max="${max}" known=0
+    model="$(hippos-model 2>/dev/null || true)"
+    if [[ -n "${model}" && -v DEVICES["${model}"] ]]; then
+        IFS=';' read -r label tdp_min tdp_max <<< "${DEVICES[${model}]}"
+        known=1
+        log "Device: ${label} (${model}) — range ${tdp_min}–${tdp_max}W"
+    fi
+
+    # Allow up to 20% OC above the device (or detected) max
+    local oc_ceil=$(( tdp_max * 120 / 100 ))
+    if (( tdp < tdp_min )); then
+        log "TDP ${tdp}W below minimum ${tdp_min}W — clamping"
+        tdp=${tdp_min}
+    elif (( tdp > oc_ceil )); then
+        log "TDP ${tdp}W above OC ceiling ${oc_ceil}W — clamping"
+        tdp=${oc_ceil}
+    fi
+
+    local tdp_mw=$(( tdp * 1000 ))
+    local slow_mw=$(( tdp_mw * 80 / 100 ))
+    local cmd=(ryzenadj --stapm-limit="${tdp_mw}" --fast-limit="${tdp_mw}" --slow-limit="${slow_mw}")
+    (( known )) && cmd+=(--tctl-temp=90)
+
+    log "Applying ${percent}% of ${max}W = ${tdp}W (slow=${slow_mw}mW$( (( known )) && echo ' temp=90C'))"
+    "${cmd[@]}" 2>&1 | while IFS= read -r line; do log "${line}"; done
+    (( PIPESTATUS[0] == 0 )) || { log "Warning: ryzenadj failed — check kernel module and root privileges"; return 1; }
+}
+
+# ── Commands ─────────────────────────────────────────────────────────────────
+
+mkdir -p "$(dirname "${LOCK}")"
+exec 9>"${LOCK}"
+flock 9
+
+case "${1:-}" in
+    boot)
+        hippos-settings set system.platformprofile.choices "$(profile_choices)"
+        hippos-settings set system.cpu.tdp "$(detect_max)"
+        log "Published: max TDP '$(setting system.cpu.tdp)'W, profiles '$(setting system.platformprofile.choices)'"
+
+        if profile="$(setting global.platformprofile)" && [[ -n "${profile}" ]]; then
+            set_profile "${profile}" && sleep "${PROFILE_SETTLE_SECONDS}"
+        fi
+        if percent="$(setting global.tdp)" && [[ -n "${percent}" ]]; then
+            apply_percent "${percent}"
+        fi
+        ;;
+    detect-max)
+        detect_max
+        ;;
+    profile)
+        if [[ -z "${2:-}" ]]; then
+            current_profile
+        else
+            set_profile "$2"
+        fi
+        ;;
+    set)
+        [[ -n "${2:-}" && "${3:-0}" =~ ^[0-9]+$ ]] || { echo "usage: hippos-tdp set PERCENT [SETTLE_SECONDS]" >&2; exit 2; }
+        sleep "${3:-0}"
+        apply_percent "$2"
+        ;;
+    restore)
+        [[ "${2:-0}" =~ ^[0-9]+$ ]] || { echo "usage: hippos-tdp restore [SETTLE_SECONDS]" >&2; exit 2; }
+        sleep "${2:-0}"
+        percent="$(setting global.tdp)"
+        apply_percent "${percent:-100}"
+        ;;
+    *)
+        echo "usage: hippos-tdp boot|detect-max|profile [NAME]|set PERCENT [SETTLE]|restore [SETTLE]" >&2
+        exit 2
+        ;;
+esac

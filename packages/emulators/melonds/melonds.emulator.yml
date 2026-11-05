@@ -2,6 +2,7 @@ requireArtifact: melonds
 shared_features:
   - powermode
   - tdp
+  - platformprofile
   - videomode
   - bezel
   - bezel_stretch

@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
 # hippos-power-mode — set CPU governor + Energy Performance Preference
 # Usage: hippos-power-mode [ac|battery|highperformance|balanced|powersaver|default]
+#   ac / battery   apply global.powermode / global.batterymode
+#   default        whichever of ac / battery matches the current power state
 
 POLICY0="/sys/devices/system/cpu/cpufreq/policy0"
 EPP_PATH="/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference"
 EPP_AVAIL_PATH="/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_available_preferences"
 
 [[ -f "${POLICY0}/scaling_governor" && -f "${POLICY0}/scaling_available_governors" ]] || exit 0
+
+on_battery() {
+    local supply
+    for supply in /sys/class/power_supply/*; do
+        [[ "$(cat "${supply}/type" 2>/dev/null)" == Battery ]] || continue
+        # Controller / peripheral batteries report scope=Device
+        [[ "$(cat "${supply}/scope" 2>/dev/null)" == Device ]] && continue
+        [[ "$(cat "${supply}/status" 2>/dev/null)" == Discharging ]] && return 0
+    done
+    return 1
+}
 
 has_epp() { [[ -f "${EPP_PATH}" ]]; }
 
@@ -59,24 +72,27 @@ apply_mode() {
     esac
 }
 
-case "$1" in
+global_mode() {
+    local mode
+    mode="$(hippos-settings get "$1" 2>/dev/null || true)"
+    [[ -z "${mode}" || "${mode}" == auto ]] && mode=balanced
+    echo "${mode}"
+}
+
+power_state="$1"
+if [[ "${power_state}" == default ]]; then
+    on_battery && power_state=battery || power_state=ac
+fi
+
+case "${power_state}" in
     ac)
-        mode="$(hippos-settings get global.powermode 2>/dev/null || true)"
-        [[ -z "${mode}" ]] && mode=balanced
-        apply_mode "${mode}"
+        apply_mode "$(global_mode global.powermode)"
         ;;
     battery)
-        mode="$(hippos-settings get global.batterymode 2>/dev/null || true)"
-        [[ -z "${mode}" ]] && mode=balanced
-        apply_mode "${mode}"
+        apply_mode "$(global_mode global.batterymode)"
         ;;
     highperformance|balanced|powersaver)
         apply_mode "$1"
-        ;;
-    default)
-        mode="$(hippos-settings get global.powermode 2>/dev/null || true)"
-        [[ -z "${mode}" ]] && mode=balanced
-        apply_mode "${mode}"
         ;;
     *)
         echo "Usage: $0 [ac|battery|highperformance|balanced|powersaver|default]" >&2

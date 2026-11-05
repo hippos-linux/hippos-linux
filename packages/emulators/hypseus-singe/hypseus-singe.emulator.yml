@@ -4,6 +4,7 @@ features:
 shared_features:
   - powermode
   - tdp
+  - platformprofile
   - videomode
   - use_guns
 custom_features:

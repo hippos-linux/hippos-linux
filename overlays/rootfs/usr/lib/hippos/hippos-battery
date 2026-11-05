@@ -38,9 +38,10 @@ osd_warn() {
         --title="HippOS Battery" --text="${msg}" &>/dev/null &
 }
 
-# No battery → nothing to do
+# No battery: apply the AC power mode once, nothing to monitor
 if [[ -z "$(battery_level)" ]]; then
-    log "No battery detected — exiting"
+    log "No battery detected — applying AC power mode and exiting"
+    hippos-power-mode ac
     exit 0
 fi
 

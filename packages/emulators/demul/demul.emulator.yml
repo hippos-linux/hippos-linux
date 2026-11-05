@@ -2,6 +2,7 @@ requireArtifact: demul
 shared_features:
   - powermode
   - tdp
+  - platformprofile
   - videomode
 custom_features:
   demulRatio:

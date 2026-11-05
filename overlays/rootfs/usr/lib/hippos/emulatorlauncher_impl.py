@@ -48,6 +48,7 @@ from emulatorlauncher_shared import (
     _load_yaml_defaults,
     _log,
 )
+from emulatorlauncher_power import game_power_settings
 
 
 LINDBERGH_BUNDLE_DIR = Path('/opt/emulators/lindbergh-loader')
@@ -463,111 +464,6 @@ def _build_hud_config(conf: dict[str, str], ctx: LaunchContext) -> Optional[Path
     return _HUD_CONFIG_PATH
 
 
-# ── Power mode hooks ──────────────────────────────────────────────────────────
-
-def _battery_discharging() -> bool:
-    for bat in Path('/sys/class/power_supply').glob('*BAT*'):
-        status_file = bat / 'status'
-        try:
-            if status_file.exists() and status_file.read_text(encoding='utf-8').strip() == 'Discharging':
-                return True
-        except OSError:
-            continue
-    for bat in Path('/sys/class/power_supply').glob('*bat*'):
-        status_file = bat / 'status'
-        try:
-            if status_file.exists() and status_file.read_text(encoding='utf-8').strip() == 'Discharging':
-                return True
-        except OSError:
-            continue
-    return False
-
-
-def _available_governors() -> set[str]:
-    available = set()
-    candidate = Path('/sys/devices/system/cpu/cpufreq/policy0/scaling_available_governors')
-    try:
-        if candidate.exists():
-            available.update(candidate.read_text(encoding='utf-8').split())
-    except OSError:
-        pass
-    return available
-
-
-def _current_governor() -> str:
-    candidate = Path('/sys/devices/system/cpu/cpufreq/policy0/scaling_governor')
-    try:
-        if candidate.exists():
-            return candidate.read_text(encoding='utf-8').strip()
-    except OSError:
-        pass
-    return ''
-
-
-def _set_governor(governor: str) -> bool:
-    gov = governor.strip()
-    if not gov:
-        return False
-    available = _available_governors()
-    if available and gov not in available:
-        _log.info("Power mode governor '%s' not available (have: %s)", gov, ', '.join(sorted(available)))
-        return False
-
-    changed = False
-    for gov_file in Path('/sys/devices/system/cpu').glob('cpu[0-9]*/cpufreq/scaling_governor'):
-        try:
-            gov_file.write_text(gov, encoding='utf-8')
-            changed = True
-        except OSError:
-            continue
-    if changed:
-        _log.info("Applied CPU governor: %s", gov)
-    return changed
-
-
-def _power_mode_to_governor(mode: str) -> str:
-    normalized = mode.strip().lower()
-    if not normalized or normalized == 'default':
-        return ''
-    if normalized in ('ac', 'performance', 'highperformance', 'high_performance'):
-        return 'performance'
-    if normalized in ('balanced', 'balance'):
-        return 'schedutil'
-    if normalized in ('battery', 'powersaver', 'power_saver', 'saver'):
-        return 'powersave'
-    return normalized
-
-
-def _apply_game_power_mode(conf: dict[str, str], system: str, rom: Path) -> str:
-    previous = _current_governor()
-    if not system:
-        return previous
-
-    game_name = rom.stem
-    keys = []
-    if game_name:
-        keys.append(f'{system}["{game_name}"].powermode')
-    keys.append(f'{system}.powermode')
-    keys.append('global.batterymode' if _battery_discharging() else 'global.powermode')
-
-    selected = ''
-    for key in keys:
-        value = _conf_value(conf, key, '')
-        if value:
-            selected = value
-            break
-
-    governor = _power_mode_to_governor(selected)
-    if governor:
-        _set_governor(governor)
-    return previous
-
-
-def _restore_game_power_mode(previous: str) -> None:
-    if previous:
-        _set_governor(previous)
-
-
 # ── Generators ─────────────────────────────────────────────────────────────────
 
 
@@ -927,11 +823,10 @@ def main() -> int:
     _prepare_ctx_bezel(ctx, conf)
     _build_hud_config(conf, ctx)
 
-    power_governor = _apply_game_power_mode(conf, ctx.system, ctx.rom)
     try:
-        return _run_with_squashfs(ctx, generator)
+        with game_power_settings(conf, ctx.system, ctx.rom):
+            return _run_with_squashfs(ctx, generator)
     finally:
-        _restore_game_power_mode(power_governor)
         _restore_video_mode(original_mode, conf)
         subprocess.run(
             ['systemctl', 'start', '--no-block', 'hippos-save-sync.service'],

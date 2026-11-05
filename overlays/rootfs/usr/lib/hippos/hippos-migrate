@@ -63,6 +63,26 @@ if version_lt "$APPLIED" "0.6.5"; then
     fi
 fi
 
+if [[ -n "$APPLIED" ]] && version_lt "$APPLIED" "0.6.6"; then
+    log "0.6.6: TDP settings are now a percentage of the detected CPU maximum"
+    # Skipped on fresh installs: their hippos.conf only holds the new
+    # percentage hardware defaults. Existing ones may hold watts, either set
+    # by the user or synced from the old hardware defaults.
+    TDP_MAX="$(/usr/lib/hippos/hippos-tdp detect-max)"
+    hippos-settings dump | grep -E '(^|\.)tdp=[0-9]+(\.[0-9]+)?$' | while IFS='=' read -r key watts; do
+        if [[ -z "${TDP_MAX}" ]]; then
+            hippos-settings del "${key}"
+            continue
+        fi
+        percent=$(awk -v w="${watts}" -v max="${TDP_MAX}" 'BEGIN {
+            p = int(w * 100 / max / 5 + 0.5) * 5
+            print (p < 10 ? 10 : (p > 120 ? 120 : p))
+        }')
+        log "  ${key}: ${watts}W of ${TDP_MAX}W -> ${percent}%"
+        hippos-settings set "${key}" "${percent}"
+    done
+fi
+
 # Storage manager state files are intentionally plain text and safe to create
 # before any external media has been mounted.
 HIPPOS_CONFIG=/userdata/system/configs/hippos
