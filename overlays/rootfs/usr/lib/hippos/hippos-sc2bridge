@@ -1,0 +1,301 @@
+#!/usr/bin/env python3
+"""Steam Controller 2 (Bluetooth 28de:1303) userspace bridge.
+
+The kernel binds this controller only to hid-generic, which exposes the raw
+HID reports plus keyboard/mouse fallback interfaces. This decodes the raw
+reports into a virtual gamepad (with rumble) and a virtual trackpad mouse,
+and grabs the fallback interfaces so nothing else sees them.
+
+Started per controller by udev (70-hippos-sc2bridge.rules) as
+hippos-sc2bridge@hidrawN.service. Report decoding derived from Vesra's
+Workshop sc2bridge v1.0.0.
+"""
+
+from __future__ import annotations
+
+import errno
+import os
+import signal
+import struct
+import sys
+import threading
+from pathlib import Path
+
+import evdev
+from evdev import AbsInfo, UInput, ecodes as e
+
+VENDOR_ID = 0x28de
+PRODUCT_ID = 0x1303
+
+INPUT_REPORT_ID = 0x45
+INPUT_REPORT_MIN_LEN = 46
+RUMBLE_REPORT_HEADER = bytes([0x80, 0x00])
+
+STICK_DEADZONE = 1800
+
+HAPTIC_SPEED = 18000
+HAPTIC_MAX_GAIN = 128
+
+MOUSE_DIVISOR = 120
+MOUSE_MAX_STEP = 60
+MOUSE_NOISE = 220
+MOUSE_SMOOTHING = 0.65
+
+BUTTONS = {
+    0x00000001: e.BTN_SOUTH,
+    0x00000002: e.BTN_EAST,
+    0x00000004: e.BTN_WEST,
+    0x00000008: e.BTN_NORTH,
+    0x00080000: e.BTN_TL,
+    0x00000200: e.BTN_TR,
+    0x00008000: e.BTN_THUMBL,
+    0x00000020: e.BTN_THUMBR,
+    0x00000040: e.BTN_SELECT,
+    0x00004000: e.BTN_START,
+    0x00010000: e.BTN_MODE,
+    0x00002000: e.BTN_DPAD_UP,
+    0x00000400: e.BTN_DPAD_DOWN,
+    0x00001000: e.BTN_DPAD_LEFT,
+    0x00000800: e.BTN_DPAD_RIGHT,
+    0x00000010: e.BTN_TRIGGER_HAPPY1,  # QAM
+    0x00020000: e.BTN_TRIGGER_HAPPY2,  # L4
+    0x00040000: e.BTN_TRIGGER_HAPPY3,  # L5
+    0x00000080: e.BTN_TRIGGER_HAPPY4,  # R4
+    0x00000100: e.BTN_TRIGGER_HAPPY5,  # R5
+}
+
+LEFT_PAD_TOUCH = 0x02000000
+LEFT_PAD_CLICK = 0x04000000
+RIGHT_PAD_TOUCH = 0x00200000
+
+STICK_ABS = AbsInfo(0, -32768, 32767, STICK_DEADZONE, 128, 0)
+TRIGGER_ABS = AbsInfo(0, 0, 32767, 0, 0, 0)
+
+
+def log(msg: str) -> None:
+    print(f'[hippos-sc2bridge] {msg}', flush=True)
+
+
+def s16(buf: bytes, off: int) -> int:
+    return struct.unpack_from('<h', buf, off)[0]
+
+
+def u16(buf: bytes, off: int) -> int:
+    return struct.unpack_from('<H', buf, off)[0]
+
+
+def u32(buf: bytes, off: int) -> int:
+    return struct.unpack_from('<I', buf, off)[0]
+
+
+def deadzone(v: int) -> int:
+    return 0 if abs(v) < STICK_DEADZONE else v
+
+
+def grab_fallback_interfaces(hidraw: str) -> list[evdev.InputDevice]:
+    """hid-generic registers the input interfaces before the hidraw node, so
+    by the time udev starts us for hidrawN its sibling event nodes exist."""
+    hid_dir = Path('/sys/class/hidraw') / Path(hidraw).name / 'device'
+    grabbed = []
+    for event_dir in sorted(hid_dir.glob('input/input*/event*')):
+        dev = evdev.InputDevice(f'/dev/input/{event_dir.name}')
+        dev.grab()
+        grabbed.append(dev)
+        log(f'grabbed fallback interface {dev.path} {dev.name}')
+    return grabbed
+
+
+def make_gamepad() -> UInput:
+    cap = {
+        e.EV_KEY: list(BUTTONS.values()),
+        e.EV_ABS: [
+            (e.ABS_X, STICK_ABS),
+            (e.ABS_Y, STICK_ABS),
+            (e.ABS_RX, STICK_ABS),
+            (e.ABS_RY, STICK_ABS),
+            (e.ABS_Z, TRIGGER_ABS),
+            (e.ABS_RZ, TRIGGER_ABS),
+        ],
+        e.EV_FF: [e.FF_RUMBLE],
+    }
+    return UInput(cap, name='Steam Controller 2 Bridge',
+                  vendor=VENDOR_ID, product=PRODUCT_ID, version=1, max_effects=16)
+
+
+def make_mouse() -> UInput:
+    cap = {
+        e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT],
+        e.EV_REL: [e.REL_X, e.REL_Y],
+    }
+    return UInput(cap, name='Steam Controller 2 Mouse',
+                  vendor=VENDOR_ID, product=PRODUCT_ID, version=1)
+
+
+def scale_haptic_gain(magnitude: int) -> int:
+    magnitude = max(0, min(65535, magnitude))
+    if magnitude == 0:
+        return 0
+    return min(HAPTIC_MAX_GAIN, 1 + (magnitude * 127) // 65535)
+
+
+def send_rumble(fd: int, strong: int, weak: int) -> None:
+    left_gain = scale_haptic_gain(strong)
+    right_gain = scale_haptic_gain(weak)
+    packet = RUMBLE_REPORT_HEADER + struct.pack(
+        '<HHBHB',
+        0,
+        HAPTIC_SPEED if left_gain else 0, left_gain,
+        HAPTIC_SPEED if right_gain else 0, right_gain,
+    )
+    os.write(fd, packet)
+
+
+def forward_rumble(gamepad: UInput, fd: int) -> None:
+    """Service FF uploads/plays on the virtual gamepad and translate active
+    rumble effects into SC2 haptic reports."""
+    effects: dict[int, object] = {}
+    active: set[int] = set()
+
+    def update() -> None:
+        strong = max((effects[i].u.ff_rumble_effect.strong_magnitude for i in active), default=0)
+        weak = max((effects[i].u.ff_rumble_effect.weak_magnitude for i in active), default=0)
+        send_rumble(fd, strong, weak)
+
+    for event in gamepad.read_loop():
+        if event.type == e.EV_UINPUT and event.code == e.UI_FF_UPLOAD:
+            upload = gamepad.begin_upload(event.value)
+            if upload.effect.type == e.FF_RUMBLE:
+                effects[upload.effect.id] = upload.effect
+                upload.retval = 0
+            else:
+                upload.retval = -1
+            gamepad.end_upload(upload)
+        elif event.type == e.EV_UINPUT and event.code == e.UI_FF_ERASE:
+            erase = gamepad.begin_erase(event.value)
+            active.discard(erase.effect_id)
+            effects.pop(erase.effect_id, None)
+            erase.retval = 0
+            gamepad.end_erase(erase)
+            update()
+        elif event.type == e.EV_FF and event.code in effects:
+            if event.value:
+                active.add(event.code)
+            else:
+                active.discard(event.code)
+            update()
+
+
+class TrackpadMouse:
+    """Right pad → relative pointer motion; left pad physical click →
+    left/right button depending on which half is pressed."""
+
+    def __init__(self, mouse: UInput) -> None:
+        self.mouse = mouse
+        self.prev: tuple[int, int] | None = None
+        self.smooth_dx = 0.0
+        self.smooth_dy = 0.0
+        self.left_down = False
+        self.right_down = False
+
+    def update(self, report: bytes, buttons: int) -> None:
+        self._move(report, buttons)
+        self._click(report, buttons)
+        self.mouse.syn()
+
+    def _move(self, report: bytes, buttons: int) -> None:
+        if not buttons & RIGHT_PAD_TOUCH:
+            self.prev = None
+            self.smooth_dx = self.smooth_dy = 0.0
+            return
+
+        pos = (s16(report, 24), s16(report, 26))
+        if self.prev is not None:
+            raw_dx = pos[0] - self.prev[0]
+            raw_dy = pos[1] - self.prev[1]
+            if abs(raw_dx) < MOUSE_NOISE:
+                raw_dx = 0
+            if abs(raw_dy) < MOUSE_NOISE:
+                raw_dy = 0
+            self.smooth_dx = MOUSE_SMOOTHING * self.smooth_dx + (1.0 - MOUSE_SMOOTHING) * raw_dx
+            self.smooth_dy = MOUSE_SMOOTHING * self.smooth_dy + (1.0 - MOUSE_SMOOTHING) * raw_dy
+            dx = max(-MOUSE_MAX_STEP, min(MOUSE_MAX_STEP, int(self.smooth_dx / MOUSE_DIVISOR)))
+            dy = max(-MOUSE_MAX_STEP, min(MOUSE_MAX_STEP, int(self.smooth_dy / MOUSE_DIVISOR)))
+            if dx:
+                self.mouse.write(e.EV_REL, e.REL_X, dx)
+            if dy:
+                self.mouse.write(e.EV_REL, e.REL_Y, -dy)
+        self.prev = pos
+
+    def _click(self, report: bytes, buttons: int) -> None:
+        pressed = buttons & LEFT_PAD_TOUCH and buttons & LEFT_PAD_CLICK
+        want_left = bool(pressed) and s16(report, 18) < 0
+        want_right = bool(pressed) and not want_left
+        if want_left != self.left_down:
+            self.mouse.write(e.EV_KEY, e.BTN_LEFT, int(want_left))
+            self.left_down = want_left
+        if want_right != self.right_down:
+            self.mouse.write(e.EV_KEY, e.BTN_RIGHT, int(want_right))
+            self.right_down = want_right
+
+    def release(self) -> None:
+        self.mouse.write(e.EV_KEY, e.BTN_LEFT, 0)
+        self.mouse.write(e.EV_KEY, e.BTN_RIGHT, 0)
+        self.mouse.syn()
+
+
+def write_gamepad_state(gamepad: UInput, report: bytes, buttons: int) -> None:
+    for mask, code in BUTTONS.items():
+        gamepad.write(e.EV_KEY, code, 1 if buttons & mask else 0)
+    gamepad.write(e.EV_ABS, e.ABS_Z, u16(report, 6))
+    gamepad.write(e.EV_ABS, e.ABS_RZ, u16(report, 8))
+    gamepad.write(e.EV_ABS, e.ABS_X, deadzone(s16(report, 10)))
+    gamepad.write(e.EV_ABS, e.ABS_Y, deadzone(s16(report, 12)))
+    gamepad.write(e.EV_ABS, e.ABS_RX, deadzone(s16(report, 14)))
+    gamepad.write(e.EV_ABS, e.ABS_RY, deadzone(s16(report, 16)))
+    gamepad.syn()
+
+
+def run(hidraw: str) -> None:
+    fd = os.open(hidraw, os.O_RDWR)
+    grabbed = grab_fallback_interfaces(hidraw)
+    gamepad = make_gamepad()
+    mouse = TrackpadMouse(make_mouse())
+    threading.Thread(target=forward_rumble, args=(gamepad, fd), daemon=True).start()
+    log(f'bridging {hidraw}')
+
+    try:
+        while True:
+            try:
+                report = os.read(fd, 64)
+            except OSError as exc:
+                if exc.errno == errno.ENODEV:
+                    log(f'{hidraw} disconnected')
+                    return
+                raise
+            if len(report) < INPUT_REPORT_MIN_LEN or report[0] != INPUT_REPORT_ID:
+                continue
+            buttons = u32(report, 2)
+            write_gamepad_state(gamepad, report, buttons)
+            mouse.update(report, buttons)
+    finally:
+        mouse.release()
+        mouse.mouse.close()
+        gamepad.close()
+        for dev in grabbed:
+            dev.close()
+        try:
+            send_rumble(fd, 0, 0)
+        except OSError:
+            pass  # controller already gone
+        os.close(fd)
+
+
+def main() -> None:
+    if len(sys.argv) != 2:
+        sys.exit('usage: hippos-sc2bridge /dev/hidrawN')
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    run(sys.argv[1])
+
+
+if __name__ == '__main__':
+    main()

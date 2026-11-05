@@ -1,0 +1,7 @@
+# HippOS: Steam Controller 2 over Bluetooth (28de:1303)
+# hid-generic exposes only raw HID plus keyboard/mouse fallback interfaces.
+# hippos-sc2bridge decodes the raw reports into a virtual gamepad + mouse and
+# grabs the fallback interfaces, so hippos-hotkeys must leave them alone.
+
+KERNELS=="0005:28DE:1303.*", SUBSYSTEM=="hidraw", TAG+="systemd", ENV{SYSTEMD_WANTS}+="hippos-sc2bridge@%k.service"
+KERNELS=="0005:28DE:1303.*", SUBSYSTEM=="input", KERNEL=="event*", ENV{HIPPOS_HOTKEYS_IGNORE}="1"

@@ -313,6 +313,17 @@ def send_mouse_reset(uinput: evdev.UInput) -> None:
 # Device state
 # ---------------------------------------------------------------------------
 
+def is_udev_ignored(udev_ctx: pyudev.Context, path: str) -> bool:
+    """Input nodes owned exclusively by another HippOS service (e.g. Steam
+    Controller 2 fallback interfaces consumed by hippos-sc2bridge) are tagged
+    HIPPOS_HOTKEYS_IGNORE=1 by udev rules; the service exposes its own
+    virtual device for hotkeys to use instead."""
+    try:
+        udev_device = pyudev.Devices.from_device_file(udev_ctx, path)
+    except pyudev.DeviceNotFoundError:
+        return False
+    return udev_device.properties.get('HIPPOS_HOTKEYS_IGNORE') == '1'
+
 def is_pure_keyboard(caps: dict[int, list[int]]) -> bool:
     """True for devices safe to grab exclusively: our own uinput (see
     make_uinput) only declares EV_KEY (KEY_* range) and EV_REL (X/Y only) —
@@ -461,6 +472,9 @@ class HotkeyDaemon:
         except OSError:
             return
         if ecodes.EV_KEY not in caps or device.name == DEVICE_NAME:
+            return
+        if is_udev_ignored(self.udev_ctx, path):
+            log(f'ignoring {path} {device.name} (HIPPOS_HOTKEYS_IGNORE)')
             return
 
         action_map = load_device_action_map(device)
@@ -748,6 +762,7 @@ def cmd_list() -> None:
         else:
             print(f'  {action:<22} -> [{target}]')
 
+    udev_ctx = pyudev.Context()
     for dev_path in sorted(Path('/dev/input').glob('event*')):
         try:
             dev = evdev.InputDevice(str(dev_path))
@@ -755,6 +770,8 @@ def cmd_list() -> None:
         except OSError:
             continue
         if dev.name == DEVICE_NAME or ecodes.EV_KEY not in caps:
+            continue
+        if is_udev_ignored(udev_ctx, str(dev_path)):
             continue
         action_map = load_device_action_map(dev)
         keys = set(caps.get(ecodes.EV_KEY, []))

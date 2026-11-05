@@ -1,0 +1,10 @@
+[Unit]
+Description=HippOS Steam Controller 2 bridge (%i)
+BindsTo=dev-%i.device
+After=dev-%i.device
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/hippos/hippos-sc2bridge /dev/%i
+Restart=on-failure
+RestartSec=2
