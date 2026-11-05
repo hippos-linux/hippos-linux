@@ -203,14 +203,6 @@ systems = {
                                             { "md5": "8ecd73eb4edf7ed7e81aef1be80031d5", "file": "bios/SGB2.sfc" } ] },
     # ---------- Microsoft ---------- #
     # https://docs.libretro.com/library/fmsx/#bios
-    "msx": { "name": "MSX", "biosFiles": [  { "md5": "364a1a579fe5cb8dba54519bcfcdac0d", "file": "bios/MSX.ROM"      } ] },
-
-    "msx2": { "name": "MSX2", "biosFiles": [ { "md5": "ec3a01c91f24fbddcbcab0ad301bc9ef", "file": "bios/MSX2.ROM"     },
-                                            { "md5": "2183c2aff17cf4297bdb496de78c2e8a", "file": "bios/MSX2EXT.ROM"  } ] },
-
-    "msx2+": { "name": "MSX2+", "biosFiles": [ { "md5": "847cc025ffae665487940ff2639540e5", "file": "bios/MSX2P.ROM"    },
-                                               { "md5": "7c8243c71d8f143b2531f01afa6a05dc", "file": "bios/MSX2PEXT.ROM" } ] },
-
     "xbox": { "name": "Xbox", "biosFiles": [{ "md5": "d49c52a4102f6df7bcf8d0617ac475ed", "file": "bios/mcpx_1.0.bin" },
                                             { "md5": "39cee882148a87f93cb440b99dde3ceb", "file": "bios/Complex_4627.bin" }] },
 
@@ -860,18 +852,25 @@ systems = {
                                                       { "md5": "5626206284b22c2734f3e9efefcd2675", "file": "bios/scummvm/extra/MT32_CONTROL.ROM" } ] },
 
     # ---------- MSX1/MSX2 ---------- #
+    # Both run openMSX's Boosted_MSX2_EN machine (emulatorlauncher_computers).
     #https://github.com/openMSX/openMSX/blob/master/share/machines/Boosted_MSX2_EN.txt
-    "msx1":   { "name": "MSX1/MS2", "biosFiles":  [ { "md5": "01dd1d72ed9bb6afe8a9b441c198a1cd", "file": "bios/openmsx/nms8250_disk.rom" },
+    "msx1":   { "name": "MSX1", "biosFiles":    [ { "md5": "01dd1d72ed9bb6afe8a9b441c198a1cd", "file": "bios/openmsx/nms8250_disk.rom" },
                                                     { "md5": "ec3a01c91f24fbddcbcab0ad301bc9ef", "file": "bios/openmsx/nms8250_basic-bios2.rom" },
                                                     { "md5": "2183c2aff17cf4297bdb496de78c2e8a", "file": "bios/openmsx/nms8250_msx2sub.rom" },
                                                     { "md5": "6f69cc8b5ed761b03afd78000dfb0e19", "file": "bios/openmsx/fmpac.rom" },
                                                     { "md5": "2ce20986da024e9a0e271961c6bc9f01", "file": "bios/openmsx/phc-70fd2_basickun.rom" },
                                                     { "md5": "42af93619160ef2116416f74a6cb12f2", "file": "bios/openmsx/yrw801.rom" } ] },
 
-    # ---------- MSX LaserDisc ---------- #
-    #https://github.com/openMSX/openMSX/blob/master/share/machines/Pioneer_PX-7.xml
-    "msx1":   { "name": "MSX LaserDisc", "biosFiles":  [ { "md5": "281809cafe63437fc4bffb3033fbd0db", "file": "bios/openmsx/px-7_pbasic.rom" },
-                                                         { "md5": "9218f6dd89f7ba01e3090d44721b4260", "file": "bios/openmsx/px-7_basic-bios1.rom" } ] },
+    "msx2":   { "name": "MSX2", "biosFiles":    [ { "md5": "01dd1d72ed9bb6afe8a9b441c198a1cd", "file": "bios/openmsx/nms8250_disk.rom" },
+                                                    { "md5": "ec3a01c91f24fbddcbcab0ad301bc9ef", "file": "bios/openmsx/nms8250_basic-bios2.rom" },
+                                                    { "md5": "2183c2aff17cf4297bdb496de78c2e8a", "file": "bios/openmsx/nms8250_msx2sub.rom" },
+                                                    { "md5": "6f69cc8b5ed761b03afd78000dfb0e19", "file": "bios/openmsx/fmpac.rom" },
+                                                    { "md5": "2ce20986da024e9a0e271961c6bc9f01", "file": "bios/openmsx/phc-70fd2_basickun.rom" },
+                                                    { "md5": "42af93619160ef2116416f74a6cb12f2", "file": "bios/openmsx/yrw801.rom" } ] },
+
+    # LaserDisc (.ogv) games run on the Pioneer PX-7 instead and need
+    # bios/openmsx/px-7_pbasic.rom and px-7_basic-bios1.rom; not listed per
+    # system, so cartridge and disk games don't report them missing.
 
     # ---------- MSX2+  ---------- #
     #https://github.com/openMSX/openMSX/blob/master/share/machines/Boosted_MSX2+_JP.txt
