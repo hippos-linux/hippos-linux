@@ -14,8 +14,9 @@
 #                          (exit 0 only if it changed)
 #   hippos-tdp set PCT [SETTLE]
 #                          apply PCT% of the maximum (in-game override)
+#   hippos-tdp save        remember the current limits, before a game changes them
 #   hippos-tdp restore [SETTLE]
-#                          back to global.tdp (100% if unset)
+#                          back to global.tdp, or else the saved limits
 #
 # SETTLE waits that many seconds first, for use right after a profile switch.
 #
@@ -28,6 +29,9 @@
 log() { printf '[hippos-tdp] %s\n' "$*"; }
 
 LOCK=/run/hippos/tdp.lock
+# Firmware limits from before a game changed them, for restore when no
+# global.tdp is set: "stapm_mw fast_mw slow_mw".
+SAVED_LIMITS=/run/hippos/tdp.saved
 PLATFORM_PROFILE_DIR=/sys/class/platform-profile
 # Firmware applies a profile's own power limits about a second after a switch,
 # overwriting anything set in the meantime.
@@ -103,11 +107,17 @@ ryzenadj_supported() {
 }
 
 # ryzenadj -i prints "| PPT LIMIT FAST | 30.000 | fast-limit |" rows, in watts.
-read_fast_limit() {
-    ryzenadj -i 2>/dev/null | awk -F'|' '
-        { gsub(/^ +| +$/, "", $2) }
-        $2 == "PPT LIMIT FAST" { printf "%.0f\n", $3; exit }
+# Prints the named row in milliwatts; nothing if it's missing or not a number.
+read_limit_mw() {
+    ryzenadj -i 2>/dev/null | awk -F'|' -v name="$1" '
+        { gsub(/^ +| +$/, "", $2); gsub(/ /, "", $3) }
+        $2 == name && $3 ~ /^[0-9]+(\.[0-9]+)?$/ { printf "%.0f\n", $3 * 1000; exit }
     '
+}
+
+run_ryzenadj() {
+    ryzenadj "$@" 2>&1 | while IFS= read -r line; do log "${line}"; done
+    (( PIPESTATUS[0] == 0 )) || { log "Warning: ryzenadj failed — check kernel module and root privileges"; return 1; }
 }
 
 detect_max() {
@@ -122,7 +132,9 @@ detect_max() {
         fi
     done
 
-    read_fast_limit
+    local fast_mw
+    fast_mw="$(read_limit_mw "PPT LIMIT FAST")"
+    [[ -n "${fast_mw}" ]] && echo $(( (fast_mw + 500) / 1000 ))
 
     [[ -n "${previous}" ]] && set_profile "${previous}" >&2
     return 0
@@ -160,12 +172,36 @@ apply_percent() {
 
     local tdp_mw=$(( tdp * 1000 ))
     local slow_mw=$(( tdp_mw * 80 / 100 ))
-    local cmd=(ryzenadj --stapm-limit="${tdp_mw}" --fast-limit="${tdp_mw}" --slow-limit="${slow_mw}")
-    (( known )) && cmd+=(--tctl-temp=90)
+    local args=(--stapm-limit="${tdp_mw}" --fast-limit="${tdp_mw}" --slow-limit="${slow_mw}")
+    (( known )) && args+=(--tctl-temp=90)
 
     log "Applying ${percent}% of ${max}W = ${tdp}W (slow=${slow_mw}mW$( (( known )) && echo ' temp=90C'))"
-    "${cmd[@]}" 2>&1 | while IFS= read -r line; do log "${line}"; done
-    (( PIPESTATUS[0] == 0 )) || { log "Warning: ryzenadj failed — check kernel module and root privileges"; return 1; }
+    run_ryzenadj "${args[@]}"
+}
+
+save_limits() {
+    [[ -n "$(setting system.cpu.tdp)" ]] || return 0
+    local stapm fast slow
+    stapm="$(read_limit_mw "STAPM LIMIT")"
+    fast="$(read_limit_mw "PPT LIMIT FAST")"
+    slow="$(read_limit_mw "PPT LIMIT SLOW")"
+    if [[ -n "${stapm}" && -n "${fast}" && -n "${slow}" ]]; then
+        echo "${stapm} ${fast} ${slow}" > "${SAVED_LIMITS}"
+    else
+        log "Could not read the current limits; restore will leave them as the game set them"
+    fi
+}
+
+restore_limits() {
+    local percent stapm fast slow
+    percent="$(setting global.tdp)"
+    if [[ -n "${percent}" ]]; then
+        apply_percent "${percent}"
+    elif [[ -f "${SAVED_LIMITS}" ]] && read -r stapm fast slow < "${SAVED_LIMITS}"; then
+        log "Restoring limits: stapm=${stapm}mW fast=${fast}mW slow=${slow}mW"
+        run_ryzenadj --stapm-limit="${stapm}" --fast-limit="${fast}" --slow-limit="${slow}"
+    fi
+    rm -f "${SAVED_LIMITS}"
 }
 
 # ── Commands ─────────────────────────────────────────────────────────────────
@@ -202,14 +238,16 @@ case "${1:-}" in
         sleep "${3:-0}"
         apply_percent "$2"
         ;;
+    save)
+        save_limits
+        ;;
     restore)
         [[ "${2:-0}" =~ ^[0-9]+$ ]] || { echo "usage: hippos-tdp restore [SETTLE_SECONDS]" >&2; exit 2; }
         sleep "${2:-0}"
-        percent="$(setting global.tdp)"
-        apply_percent "${percent:-100}"
+        restore_limits
         ;;
     *)
-        echo "usage: hippos-tdp boot|detect-max|profile [NAME]|set PERCENT [SETTLE]|restore [SETTLE]" >&2
+        echo "usage: hippos-tdp boot|detect-max|profile [NAME]|save|set PERCENT [SETTLE]|restore [SETTLE]" >&2
         exit 2
         ;;
 esac

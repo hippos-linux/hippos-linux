@@ -1,6 +1,7 @@
 [Unit]
 Description=HippOS AMD TDP configuration
-After=hippos-migrate.service
+# hardware-init writes the device defaults (global.tdp) this reads.
+After=hippos-migrate.service hippos-hardware-init.service
 
 [Service]
 Type=oneshot

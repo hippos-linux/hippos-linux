@@ -60,9 +60,15 @@ def game_power_settings(conf: dict[str, str], system: str, rom: Path) -> Iterato
     power_mode = _game_setting(conf, system, rom, 'powermode')
     _run_tool(_POWER_MODE_TOOL, power_mode or 'default')
 
+    profile = _game_setting(conf, system, rom, 'platformprofile')
+    tdp = _game_setting(conf, system, rom, 'tdp')
+    if profile or tdp:
+        # Without a global TDP, restore puts back the limits from before the game.
+        _run_tool(_TDP_TOOL, 'save')
+
     profile_changed = False
     previous_profile = ''
-    if profile := _game_setting(conf, system, rom, 'platformprofile'):
+    if profile:
         previous_profile = subprocess.run(
             [_TDP_TOOL, 'profile'], capture_output=True, text=True, check=False,
         ).stdout.strip()
@@ -73,7 +79,7 @@ def game_power_settings(conf: dict[str, str], system: str, rom: Path) -> Iterato
     # Applied off the launch path so the profile settle delay doesn't hold up
     # the emulator start.
     tdp_thread: threading.Thread | None = None
-    if tdp := _game_setting(conf, system, rom, 'tdp'):
+    if tdp:
         settle = str(_PROFILE_SETTLE_SECONDS if profile_changed else 0)
         tdp_thread = threading.Thread(target=_run_tool, args=(_TDP_TOOL, 'set', tdp, settle), daemon=True)
         tdp_thread.start()

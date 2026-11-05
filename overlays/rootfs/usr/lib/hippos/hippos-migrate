@@ -69,7 +69,7 @@ if [[ -n "$APPLIED" ]] && version_lt "$APPLIED" "0.6.6"; then
     # percentage hardware defaults. Existing ones may hold watts, either set
     # by the user or synced from the old hardware defaults.
     TDP_MAX="$(/usr/lib/hippos/hippos-tdp detect-max)"
-    hippos-settings dump | grep -E '(^|\.)tdp=[0-9]+(\.[0-9]+)?$' | while IFS='=' read -r key watts; do
+    hippos-settings dump | grep -E '(^|\.)tdp=[0-9]+(\.[0-9]+)?$' | grep -v '^system\.' | while IFS='=' read -r key watts; do
         if [[ -z "${TDP_MAX}" ]]; then
             hippos-settings del "${key}"
             continue
