@@ -12,6 +12,8 @@ import time
 import urllib.request
 import xml.etree.ElementTree as ET
 
+from hippos_ports import set_claimed
+
 _DEFAULT_CATALOG_URL = "https://hippos-linux.org/store/content-catalog.json"
 
 def _read_sysconf(key):
@@ -443,8 +445,12 @@ def _install_apt(pkg):
     print(f"Installing {pkg['name']} via apt...", flush=True)
     env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive"}
     subprocess.call(["apt-get", "update", "-qq"], env=env)
+    # Claimed before apt runs, so its hippos-ports hook doesn't add a
+    # second Ports entry next to ours.
+    set_claimed(apt_pkgs, True)
     ret = subprocess.call(["apt-get", "install", "-y", "--no-install-recommends"] + apt_pkgs, env=env)
     if ret != 0:
+        set_claimed(apt_pkgs, False)
         print(f"ERROR: apt install failed (exit {ret})", flush=True)
         sys.exit(1)
     if scummvm_id:
@@ -532,6 +538,7 @@ def cmd_remove(name):
 
     if pkg.get("type") == "apt":
         subprocess.call(["apt-get", "remove", "-y"] + pkg.get("apt_packages", []))
+        set_claimed(pkg.get("apt_packages", []), False)
         if pkg.get("scummvm_id"):
             _scummvm_remove(pkg)
         else:

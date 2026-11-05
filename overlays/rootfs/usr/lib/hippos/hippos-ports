@@ -13,10 +13,10 @@ import urllib.request
 from pathlib import Path
 
 from hippos_apt import image_packages, installed_user_packages, package_files
-from hippos_ports import CONTENT_MARKER, PORTS_DIR, launcher_path, read_desktop_file, read_marker, write_launcher
+from hippos_ports import PORTS_DIR, claimed_packages, launcher_path, read_desktop_file, read_marker, write_launcher
 
 # Marks launchers sync owns: '# hippos-ports-apt <package> <desktop file>'.
-# Launchers without it (user-made, hippos-content) are never touched.
+# Launchers without it (user-made, catalog) are never touched.
 _APT_MARKER = 'hippos-ports-apt'
 _APPLICATIONS = Path('/usr/share/applications')
 _ES_RELOAD = 'http://127.0.0.1:1234/reloadgames'
@@ -42,18 +42,10 @@ def add(file: Path) -> int:
     return 0
 
 
-def _content_packages() -> set[str]:
-    """Apt packages hippos-content already made a launcher for."""
-    packages = set()
-    for launcher in PORTS_DIR.glob('*.sh'):
-        packages.update(read_marker(launcher, CONTENT_MARKER) or [])
-    return packages
-
-
 def _installed_games(image: frozenset[str]) -> dict[Path, tuple[str, str, str]]:
     """desktop file -> (package, name, command) for the user's apt games."""
     games = {}
-    covered = _content_packages()
+    covered = claimed_packages()
     for package in installed_user_packages(image):
         if package in covered:
             continue

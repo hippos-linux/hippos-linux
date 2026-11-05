@@ -11,7 +11,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import shlex
 import shutil
 import subprocess
 import sys
@@ -22,7 +21,7 @@ import urllib.error
 from pathlib import Path
 from typing import Optional
 
-from hippos_ports import CONTENT_MARKER, PORTS_DIR, write_launcher
+from hippos_ports import PORTS_DIR, set_claimed, write_launcher
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
@@ -173,14 +172,14 @@ def _apt(action: str, packages: list[str]) -> int:
     return subprocess.run(cmd).returncode
 
 
-def _create_port_launcher(pkg: dict, apt_packages: list[str]) -> Path:
+def _create_port_launcher(pkg: dict) -> Path:
     name    = pkg.get('name', pkg['id'])
     command = pkg.get('launcher_command', '')
     args    = pkg.get('launcher_args', [])
     if args:
         command = command + ' ' + ' '.join(str(a) for a in args)
     script = PORTS_DIR / f"{pkg['id']}.sh"
-    write_launcher(script, name, command, marker=shlex.join([CONTENT_MARKER, *apt_packages]))
+    write_launcher(script, name, command)
     return script
 
 
@@ -253,15 +252,15 @@ def cmd_install(args: list[str]) -> int:
         if not apt_packages:
             print(f'No apt_packages defined for {pkg_id}', file=sys.stderr)
             return 1
-        # Written before apt runs so the hippos-ports apt hook sees these
-        # packages are already covered and doesn't add a second launcher.
-        script = _create_port_launcher(pkg, apt_packages)
+        # Claimed before apt runs, so its hook doesn't add a second launcher.
+        set_claimed(apt_packages, True)
         print(f"Installing {pkg.get('name', pkg_id)} via apt...")
         ret = _apt('install', apt_packages)
         if ret != 0:
-            script.unlink(missing_ok=True)
+            set_claimed(apt_packages, False)
             print(f'apt install failed (exit {ret})', file=sys.stderr)
             return ret
+        script = _create_port_launcher(pkg)
         print(f'Created launcher: {script}')
         installed         = _load_installed()
         installed[pkg_id] = pkg.get('version', 'latest')
@@ -332,6 +331,7 @@ def cmd_remove(args: list[str]) -> int:
             apt_packages = pkg.get('apt_packages', [])
             if apt_packages:
                 _apt('remove', apt_packages)
+                set_claimed(apt_packages, False)
             launcher = INSTALL_ROOTS['ports'] / f'{pkg_id}.sh'
             if launcher.exists():
                 launcher.unlink()
