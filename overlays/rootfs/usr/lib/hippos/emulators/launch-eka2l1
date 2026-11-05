@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
 . /usr/lib/hippos/emulator-env
+# Same data folder as emulatorlauncher's eka2l1 launch (firmware, drives, saves).
+export XDG_DATA_HOME=/userdata/system/configs
 export QT_QPA_PLATFORM=xcb
 exec /opt/emulators/eka2l1/bin/eka2l1_qt "$@"

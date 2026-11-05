@@ -33,6 +33,14 @@ if [[ ! -x "${STAGING}/bin/supermodel" ]]; then
     die "supermodel-es binary was not produced"
 fi
 
+# Supermodel needs Config/Games.xml to recognise ROM sets, and Assets/ for
+# crosshairs; the launcher runs it from a folder that links to these.
+rm -rf "${STAGING}/share"
+mkdir -p "${STAGING}/share"
+cp -r "${SRC}/Config" "${STAGING}/share/Config"
+[[ -d "${SRC}/Assets" ]] && cp -r "${SRC}/Assets" "${STAGING}/share/Assets"
+[[ -f "${STAGING}/share/Config/Games.xml" ]] || die "Games.xml missing from ${SRC}/Config"
+
 VERSION="$(git -C "${SRC}" rev-parse --short HEAD)"
 write_artifact_version "${STAGING}" "${VERSION}"
 log "Done. Artifact at ${STAGING}"

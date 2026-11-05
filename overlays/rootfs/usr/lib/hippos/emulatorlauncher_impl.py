@@ -445,7 +445,6 @@ from emulatorlauncher_core import (
     launch_duckstation as _launch_duckstation,
     launch_flycast as _launch_flycast,
     launch_mame as _launch_mame,
-    launch_mupen64plus_qt as _launch_mupen64plus_qt,
 )
 
 
@@ -509,6 +508,8 @@ from emulatorlauncher_extras import (
     launch_ikemen,
     launch_bigpemu,
     launch_applewin,
+    launch_eka2l1,
+    launch_snes9x,
     launch_demul,
     launch_sugarbox,
 )
@@ -547,6 +548,8 @@ GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'dosboxx':        launch_dosbox_x,
     'amiberry':    _launch_amiberry,
     'applewin':    launch_applewin,
+    'eka2l1':      launch_eka2l1,
+    'snes9x':      launch_snes9x,
     'bigpemu':     launch_bigpemu,
     'abuse':       _launch_standalone,
     'bstone':      _launch_standalone,
@@ -605,6 +608,8 @@ GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'steam':       _launch_steam,
     'sugarbox':    launch_sugarbox,
     'supermodel':  _launch_supermodel,
+    'supermodel-es':     _launch_supermodel,
+    'supermodel-legacy': _launch_supermodel,
     'taradino':    _launch_standalone,
     'theforceengine': _launch_theforceengine,
     'thextech':    launch_thextech,
@@ -628,7 +633,6 @@ GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'mame':        _launch_mame,
     'mednafen':    _launch_standalone,
     'mupen64plus': launch_mupen64plus,
-    'mupen64plus-qt': _launch_mupen64plus_qt,
     'cemu':        _launch_cemu,
     'azahar':      _launch_azahar,
     'rpcs3':       _launch_rpcs3,

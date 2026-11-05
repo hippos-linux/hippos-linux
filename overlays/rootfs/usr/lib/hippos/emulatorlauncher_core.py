@@ -357,23 +357,6 @@ def _write_mupen_config(ctx: LaunchContext) -> None:
     _log.info("Wrote Mupen config: %s", MUPEN_CUSTOM)
 
 
-def _launch_mupen64plus_qt(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('mupen64plus-qt')
-    if bin_path is None:
-        _log.error("mupen64plus-qt not found")
-        return 1
-
-    (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
-    _write_mupen_config(ctx)
-
-    conf = _load_hippos_conf()
-    cmd = [str(bin_path), str(ctx.rom)]
-    _log.info("Launching mupen64plus-qt: %s", ' '.join(cmd))
-    env = _build_game_env(conf, ctx)
-    result = _run_game_command(ctx, 'mupen64', cmd, env)
-    return result.returncode
-
-
 def _write_duckstation_config(ctx: LaunchContext) -> None:
     conf = _load_effective_hippos_conf()
     DUCKSTATION_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -759,7 +742,6 @@ def _launch_flycast(ctx: LaunchContext) -> int:
     return result.returncode
 
 
-launch_mupen64plus_qt = _launch_mupen64plus_qt
 launch_duckstation = _launch_duckstation
 launch_flycast = _launch_flycast
 

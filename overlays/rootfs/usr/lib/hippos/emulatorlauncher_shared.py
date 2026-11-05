@@ -33,6 +33,8 @@ STANDALONE_BINARIES: dict[str, tuple[str, ...]] = {
     'amiberry': ('amiberry',),
     # The artifact builds the SDL frontend (sa2), not QApple.
     'applewin': ('sa2', 'qapple', 'applen', 'applewin', 'AppleWin'),
+    'supermodel-es': ('supermodel',),
+    'supermodel-legacy': ('supermodel',),
     'cemu': ('Cemu', 'cemu'),
     'easyrpg': ('easyrpg-player', 'easyrpg'),
     'hypseus-singe': ('hypseus',),
@@ -75,7 +77,6 @@ STANDALONE_BINARIES: dict[str, tuple[str, ...]] = {
     'hatari': ('hatari',),
     'mame': ('mame',),
     'mednafen': ('mednafen',),
-    'mupen64plus-qt': ('mupen64plus-qt',),
     'nestopia': ('nestopia',),
     'openmsx': ('openmsx',),
     'raze': ('raze',),
@@ -96,7 +97,6 @@ ARTIFACT_PACKAGE_ALIASES: dict[str, tuple[str, ...]] = {
     'dolphin': ('dolphin-emu',),
     'dosbox_staging': ('dosbox-staging',),
     'dosboxx': ('dosbox-x',),
-    'mupen64plus-qt': ('mupen64plus',),
     'pyxel': ('python-pyxel',),
     'solarus': ('solarus-engine',),
 }

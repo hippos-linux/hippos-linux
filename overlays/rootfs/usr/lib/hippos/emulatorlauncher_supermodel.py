@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from emulatorlauncher_shared import (
@@ -12,16 +13,39 @@ from emulatorlauncher_shared import (
     _run_game_command,
 )
 
-from HipposPaths import CONFIGS, SAVES
+from HipposPaths import CONFIGS
 
 
-def write_supermodel_config(ctx: LaunchContext) -> None:
-    conf = _load_effective_hippos_conf()
-    SUPERMODEL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+def _prepare_run_dir(variant: str, share: Path) -> Path:
+    """Supermodel uses ./Config, ./NVRAM, ./Saves and ./Assets when a Config
+    folder exists in its working directory (every version checks there first),
+    so each variant gets its own run folder. Games.xml follows the artifact."""
+    run_dir = CONFIGS / variant
+    config_dir = run_dir / 'Config'
+    config_dir.mkdir(parents=True, exist_ok=True)
+    for name in ('Games.xml', 'Music.xml'):
+        src = share / 'Config' / name
+        if src.is_file():
+            shutil.copyfile(src, config_dir / name)
+    assets = run_dir / 'Assets'
+    if (share / 'Assets').is_dir() and not assets.exists():
+        assets.symlink_to(share / 'Assets')
+    return run_dir
 
+
+def write_supermodel_config(ctx: LaunchContext, run_dir: Path, share: Path) -> None:
     target = _new_ini_parser()
-    if SUPERMODEL_TEMPLATE.exists():
-        target.read(SUPERMODEL_TEMPLATE, encoding='utf-8')
+    template = share / 'Config' / 'Supermodel.ini'
+    if template.exists():
+        # Supermodel writes sections as "[ Global ]"; configparser keeps the spaces.
+        raw = _new_ini_parser()
+        raw.read(template, encoding='utf-8')
+        for section in raw.sections():
+            name = section.strip()
+            if not target.has_section(name):
+                target.add_section(name)
+            for key, value in raw.items(section):
+                target.set(name, key, value)
     else:
         if not target.has_section('Global'):
             target.add_section('Global')
@@ -74,17 +98,23 @@ def write_supermodel_config(ctx: LaunchContext) -> None:
                 elif key == 'InputAnalogJoyEvent2':
                     target.set(section, key, 'MOUSE2_MIDDLE_BUTTON')
 
-    with SUPERMODEL_INI.open('w', encoding='utf-8') as fh:
+    with (run_dir / 'Config' / 'Supermodel.ini').open('w', encoding='utf-8') as fh:
         target.write(fh)
 
 
+# Builds of the same emulator: upstream, a fork, and the 0.3a line.
+SUPERMODEL_VARIANTS = ('supermodel', 'supermodel-es', 'supermodel-legacy')
+
+
 def launch_supermodel(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('supermodel')
+    variant = ctx.emulator if ctx.emulator in SUPERMODEL_VARIANTS else 'supermodel'
+    bin_path = _find_emulator_bin(variant)
     if bin_path is None:
         return 1
 
-    (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
-    write_supermodel_config(ctx)
+    share = bin_path.parent.parent / 'share'
+    run_dir = _prepare_run_dir(variant, share)
+    write_supermodel_config(ctx, run_dir, share)
 
     conf = _load_effective_hippos_conf()
     cmd: list[str] = [str(bin_path), '-fullscreen', '-channels=2']
@@ -100,10 +130,6 @@ def launch_supermodel(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     env['SDL_VIDEODRIVER'] = 'x11'
     env['SDL_JOYSTICK_HIDAPI'] = '0'
-    result = _run_game_command(ctx, 'supermodel', cmd, env)
+    result = _run_game_command(ctx, variant, cmd, env, cwd=run_dir)
     return result.returncode
 
-
-SUPERMODEL_CONFIG_DIR = CONFIGS / 'supermodel'
-SUPERMODEL_INI        = SUPERMODEL_CONFIG_DIR / 'Supermodel.ini'
-SUPERMODEL_TEMPLATE   = Path('/usr/share/supermodel/Supermodel.ini.template')

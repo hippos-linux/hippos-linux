@@ -10,10 +10,12 @@ from emulatorlauncher_shared import (
     _build_game_env,
     _conf_bool,
     _conf_value,
+    _ensure_section,
     _find_emulator_bin,
     _load_es_input_configs,
     _load_hippos_conf,
     _log,
+    _new_ini_parser,
     _pick_es_profile,
     _run_game_command,
     generate_sdl_game_controller_config,
@@ -506,6 +508,60 @@ def launch_bigpemu(ctx: LaunchContext) -> int:
     env['XDG_DATA_HOME']   = str(saves_dir)
     env['SDL_JOYSTICK_HIDAPI'] = '0'
     return _run_game_command(ctx, 'bigpemu', cmd, env).returncode
+
+
+# ── Snes9x standalone (Qt frontend) ───────────────────────────────────────────
+
+def launch_snes9x(ctx: LaunchContext) -> int:
+    bin_path = _find_emulator_bin('snes9x')
+    if bin_path is None:
+        _log.error("snes9x: binary not found")
+        return 1
+
+    # snes9x-qt has no fullscreen flag; it reads FullscreenOnOpen from
+    # $XDG_CONFIG_HOME/snes9x/snes9x-qt.conf, a QSettings ini where the
+    # "General" group is written as [%General].
+    cfg_file = CONFIGS / 'snes9x' / 'snes9x-qt.conf'
+    cfg_file.parent.mkdir(parents=True, exist_ok=True)
+    parser = _new_ini_parser()
+    if cfg_file.exists():
+        parser.read(cfg_file)
+    _ensure_section(parser, '%General')
+    parser.set('%General', 'FullscreenOnOpen', 'true')
+    with cfg_file.open('w') as f:
+        parser.write(f, space_around_delimiters=False)
+
+    conf = _load_effective_hippos_conf()
+    env = _build_game_env(conf, ctx)
+    env['QT_QPA_PLATFORM'] = 'xcb'
+    return _run_game_command(ctx, 'snes9x', [str(bin_path), str(ctx.rom)], env).returncode
+
+
+# ── EKA2L1 (Nokia N-Gage) ─────────────────────────────────────────────────────
+
+def launch_eka2l1(ctx: LaunchContext) -> int:
+    """Game-card dumps (folder or zip with a System folder at its root) are
+    mounted as drive E and the N-Gage game on it is run; .sis/.sisx packages
+    are installed and EKA2L1 opens on its app list. The N-Gage firmware has
+    to be installed once through EKA2L1 itself (desktop menu)."""
+    bin_path = _find_emulator_bin('eka2l1')
+    if bin_path is None:
+        _log.error("eka2l1: binary not found")
+        return 1
+
+    cmd = [str(bin_path), '--fullscreen']
+    if ctx.rom.suffix.lower() in ('.sis', '.sisx'):
+        cmd += ['--install', str(ctx.rom)]
+    else:
+        cmd += ['--mount', str(ctx.rom), '--runng']
+
+    conf = _load_effective_hippos_conf()
+    env = _build_game_env(conf, ctx)
+    # Data (firmware, drives, saves) lands in $XDG_DATA_HOME/EKA2L1; the
+    # desktop launcher uses the same folder.
+    env['XDG_DATA_HOME'] = str(CONFIGS)
+    env['QT_QPA_PLATFORM'] = 'xcb'
+    return _run_game_command(ctx, 'eka2l1', cmd, env).returncode
 
 
 # ── AppleWin (Apple II) ────────────────────────────────────────────────────────

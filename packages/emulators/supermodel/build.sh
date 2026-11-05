@@ -51,5 +51,13 @@ fi
 
 # Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
+# Supermodel needs Config/Games.xml to recognise ROM sets, and Assets/ for
+# crosshairs; the launcher runs it from a folder that links to these.
+rm -rf "${STAGING}/share"
+mkdir -p "${STAGING}/share"
+cp -r "${SRC}/Config" "${STAGING}/share/Config"
+[[ -d "${SRC}/Assets" ]] && cp -r "${SRC}/Assets" "${STAGING}/share/Assets"
+[[ -f "${STAGING}/share/Config/Games.xml" ]] || die "Games.xml missing from ${SRC}/Config"
+
 write_artifact_version "${STAGING}" "$(git -C "${SRC}" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d)"
 log "Done. Artifact at ${STAGING}"
