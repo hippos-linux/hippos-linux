@@ -101,7 +101,7 @@ cat > "${STAGING}/bin/xenia" <<'LAUNCHER'
 #!/usr/bin/env bash
 set -euo pipefail
 
-XENIA_HOME="${XENIA_HOME:-/userdata/system/emulators/xenia/current}"
+XENIA_HOME="${XENIA_HOME:-/userdata/emulators/xenia/current}"
 XENIA_PREFIX="${XENIA_PREFIX:-/userdata/wine-bottles/xenia/current}"
 XENIA_EXE="${XENIA_EXE:-${XENIA_HOME}/xenia.exe}"
 

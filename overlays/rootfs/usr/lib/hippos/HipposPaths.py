@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 HIPPOS_SHARE_DIR: Final = Path('/usr/share/hippos')
 DATAINIT_DIR: Final = HIPPOS_SHARE_DIR / 'datainit'
 USERDATA: Final = Path('/userdata')
+# Bind mount of /userdata/emulators: bundled and updated emulator packages.
+EMULATORS_ROOT: Final = Path('/opt/emulators')
 
 HOME_INIT: Final = DATAINIT_DIR / 'system'
 CONF_INIT: Final = HOME_INIT / 'configs'

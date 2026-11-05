@@ -177,11 +177,7 @@ def launch_vice(ctx: LaunchContext) -> int:
         return 1
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
     conf = _load_hippos_conf()
-    # System ROMs from the artifact the binary came from (it may be an updated
-    # copy, not the compiled-in /opt/emulators/vice).
-    system_files = bin_path.parent.parent / 'share' / 'vice'
-    cmd = [str(bin_path), '-directory', str(system_files),
-           *_configure_vice_joysticks(ctx, binary)]
+    cmd = [str(bin_path), *_configure_vice_joysticks(ctx, binary)]
     border_option = _VICE_BORDER_OPTION.get(binary)
     if border_option and _conf_bool(conf, f'{ctx.system}.noborder'):
         cmd += [border_option, _VICE_BORDER_NONE]

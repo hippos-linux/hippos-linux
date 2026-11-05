@@ -26,7 +26,7 @@ except ImportError:
 from hippos_evmapy import evmapy_context
 
 from HipposPaths import (
-    CONFIGS, EMULATORLAUNCHER_DEFAULTS, HIPPOS_CONF, HIPPOS_SHARE_DIR, USERDATA, USER_ES_DIR,
+    CONFIGS, EMULATORLAUNCHER_DEFAULTS, EMULATORS_ROOT, HIPPOS_CONF, HIPPOS_SHARE_DIR, USER_ES_DIR,
 )
 
 STANDALONE_BINARIES: dict[str, tuple[str, ...]] = {
@@ -586,21 +586,11 @@ def _display_resolution_from_conf(conf: dict[str, str]) -> Optional[tuple[int, i
 
 
 def _find_emulator_bin(*names: str) -> Optional[Path]:
-    """Find an installed standalone emulator binary.
-
-    Search order matches the runtime resolution policy:
-    1. /userdata/emulators/<package>/current/  (user-updated)
-    2. /opt/emulators/<package>/                      (OS-bundled artifact)
-    """
+    """Find an installed standalone emulator binary."""
     for name in names:
         packages = (name,) + ARTIFACT_PACKAGE_ALIASES.get(name, ())
         binaries = STANDALONE_BINARIES.get(name, (name,))
-        search_dirs = [
-            *(USERDATA / 'emulators' / package / 'current' for package in packages),
-            *(Path('/opt/emulators') / package for package in packages),
-            *(USERDATA / 'emulators' / package for package in packages),
-        ]
-        for d in search_dirs:
+        for d in (EMULATORS_ROOT / package for package in packages):
             for binary in binaries:
                 for candidate in (d / binary, d / 'bin' / binary):
                     if candidate.exists() and os.access(str(candidate), os.X_OK):
@@ -618,15 +608,11 @@ def _find_emulator_bin(*names: str) -> Optional[Path]:
 
 def _find_emulator_bin_in_package(package: str, *binary_names: str) -> Optional[Path]:
     """Find a binary inside a specific emulator package directory."""
-    search_dirs = [
-        USERDATA / 'emulators' / package / 'current',
-        Path('/opt/emulators') / package,
-    ]
-    for d in search_dirs:
-        for binary in binary_names:
-            for candidate in (d / binary, d / 'bin' / binary):
-                if candidate.exists() and os.access(str(candidate), os.X_OK):
-                    return candidate
+    package_dir = EMULATORS_ROOT / package
+    for binary in binary_names:
+        for candidate in (package_dir / binary, package_dir / 'bin' / binary):
+            if candidate.exists() and os.access(str(candidate), os.X_OK):
+                return candidate
     for binary in binary_names:
         found = which(binary)
         if found:

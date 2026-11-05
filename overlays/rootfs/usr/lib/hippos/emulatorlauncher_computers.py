@@ -619,9 +619,7 @@ def launch_openmsx(ctx: LaunchContext) -> int:
     ]
 
     env = _build_game_env(conf, ctx)
-    # User data (settings.xml, script.tcl) under cfg_dir/share; system data
-    # from the artifact the binary was resolved from, which may be an updated
-    # copy rather than the build's compiled-in /opt/emulators path.
+    # User data (settings.xml, script.tcl) under cfg_dir/share.
     env['OPENMSX_HOME'] = str(cfg_dir)
     env['OPENMSX_SYSTEM_DATA'] = str(system_share)
     return _run_game_command(ctx, 'openmsx', cmd, env).returncode

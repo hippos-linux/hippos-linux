@@ -23,7 +23,7 @@ from emulatorlauncher_shared import (
     _run_game_command,
 )
 
-from HipposPaths import BIOS, CHEATS, CONFIGS, SAVES, SCREENSHOTS, USERDATA, USER_DECORATIONS, USER_SHADERS
+from HipposPaths import BIOS, CHEATS, CONFIGS, EMULATORS_ROOT, SAVES, SCREENSHOTS, USERDATA, USER_DECORATIONS, USER_SHADERS
 
 
 def launch_libretro(ctx: LaunchContext) -> int:
@@ -102,11 +102,8 @@ def launch_standalone(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin(ctx.emulator)
     if bin_path is None:
         _log.error(
-            "Emulator '%s' not installed. Expected binary at "
-            "/opt/emulators/%s/%s, /userdata/emulators/%s/current/%s, "
-            "or system PATH",
-            ctx.emulator, ctx.emulator, ctx.emulator,
-            ctx.emulator, ctx.emulator,
+            "Emulator '%s' not installed. Expected binary in %s/%s or system PATH",
+            ctx.emulator, EMULATORS_ROOT, ctx.emulator,
         )
         return 1
 
@@ -137,9 +134,7 @@ LIBRETRO_RATIO_INDEXES: tuple[str, ...] = (
 
 
 CORE_SEARCH_PATHS = [
-    USERDATA / 'emulators' / 'retroarch' / 'current' / 'cores',
-    Path('/opt/emulators/retroarch/cores'),
-    USERDATA / 'emulators' / 'retroarch' / 'cores',
+    EMULATORS_ROOT / 'retroarch' / 'cores',
     Path('/usr/lib/x86_64-linux-gnu/libretro'),
     Path('/usr/lib/aarch64-linux-gnu/libretro'),
     Path('/usr/lib/libretro'),
@@ -166,13 +161,13 @@ def _ratio_index(conf: dict[str, str]) -> int:
 
 
 def _core_search_paths() -> list[Path]:
-    paths = list(CORE_SEARCH_PATHS[:2])
+    paths = list(CORE_SEARCH_PATHS[:1])
     paths.extend(
         path
-        for path in sorted(Path('/opt/emulators').glob('*/cores'))
+        for path in sorted(EMULATORS_ROOT.glob('*/cores'))
         if path not in paths
     )
-    paths.extend(CORE_SEARCH_PATHS[2:])
+    paths.extend(CORE_SEARCH_PATHS[1:])
     return paths
 
 

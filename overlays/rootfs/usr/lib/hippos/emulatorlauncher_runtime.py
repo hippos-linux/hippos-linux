@@ -129,12 +129,9 @@ def launch_amiberry(ctx: LaunchContext) -> int:
 
     for path in (AMIBERRY_CONFIG_DIR, AMIBERRY_RETROARCH_DIR, AMIBERRY_INPUTS_DIR):
         path.mkdir(parents=True, exist_ok=True)
-    # Data and plugins come from the artifact the binary was resolved from,
-    # which may be an updated copy rather than the compiled-in prefix.
-    artifact = bin_path.parent.parent
     # whdboot_path must be writable (WHDLoad keeps per-game saves in it), so
     # it's a user copy of the bundled boot-data.zip and game database.
-    _sync_tree(artifact / 'share' / 'amiberry' / 'whdboot', AMIBERRY_WHDBOOT_DIR)
+    _sync_tree(bin_path.parent.parent / 'share' / 'amiberry' / 'whdboot', AMIBERRY_WHDBOOT_DIR)
     AMIBERRY_SAVES_DIR.mkdir(parents=True, exist_ok=True)
     AMIBERRY_BIOS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -213,8 +210,6 @@ def launch_amiberry(ctx: LaunchContext) -> int:
     _log.info("Launching Amiberry: %s", ' '.join(map(str, commandArray)))
     env = _build_game_env(conf, ctx)
     env.update({
-        'AMIBERRY_DATA_DIR': str(artifact / 'share' / 'amiberry'),
-        'AMIBERRY_PLUGINS_DIR': str(artifact / 'lib' / 'amiberry'),
         'AMIBERRY_HOME_DIR': str(AMIBERRY_CONFIG_DIR),
         'AMIBERRY_CONFIG_DIR': str(AMIBERRY_CONFIG_DIR),
         'XDG_DATA_HOME': str(CONFIGS),
