@@ -53,12 +53,14 @@ def restore() -> int:
             packages = pre_update_user_packages(image)
     if packages:
         print(f'Reinstalling {len(packages)} apt package(s): {" ".join(packages)}', flush=True)
-        if subprocess.run([*_APT, 'update']).returncode != 0:
-            print('apt-get update failed; will retry on next boot', file=sys.stderr)
-            return 1
+        # A failing update can be one broken third-party repo, so install anyway.
+        updated = subprocess.run([*_APT, 'update']).returncode == 0
         if subprocess.run(_APT_INSTALL + packages).returncode != 0:
             # One unavailable package fails the whole transaction.
             missing = [p for p in packages if subprocess.run(_APT_INSTALL + [p]).returncode != 0]
+            if not updated and len(missing) == len(packages):
+                print('apt-get update failed and nothing installed; will retry on next boot', file=sys.stderr)
+                return 1
             if missing:
                 print(f'No longer installable, dropped: {" ".join(missing)}', file=sys.stderr)
     RESTORE_PENDING.unlink(missing_ok=True)

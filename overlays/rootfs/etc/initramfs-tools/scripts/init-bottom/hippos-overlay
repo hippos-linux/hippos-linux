@@ -73,7 +73,7 @@ chmod 0755 "${UPPER}"
 # own (including its apt holds), so on the first boot of a different deployment
 # drop them, together with the installed files, and leave
 # hippos-apt-restore.service a flag to reinstall the user's packages.
-# /usr/local, /etc and /opt are kept.
+# /usr/local, /etc, /opt and user-added /usr/share/keyrings are kept.
 # Without a marker (a system from before this check) the previous deployment
 # is unknown, but a dpkg status copied up before this image was built is stale.
 # The old status and apt marks are kept for hippos-apt-packages, which has no
@@ -92,11 +92,27 @@ if [ -n "${STALE}" ]; then
     [ -f "${UPPER_STATUS}" ] && cp "${UPPER_STATUS}" "${UPPER}/var/lib/hippos/pre-update-dpkg-status"
     [ -f "${UPPER}/var/lib/apt/extended_states" ] && \
         cp "${UPPER}/var/lib/apt/extended_states" "${UPPER}/var/lib/hippos/pre-update-apt-extended-states"
+    # Repo keys the user added by hand (/etc/apt sources point at them) are
+    # kept; ones the new image ships are dropped so stale copies can't hide them.
+    _KEYRINGS_KEEP="${UPPER}/var/lib/hippos/keyrings.keep"
+    if [ -d "${UPPER}/usr/share/keyrings" ]; then
+        rm -rf "${_KEYRINGS_KEEP}"
+        mv "${UPPER}/usr/share/keyrings" "${_KEYRINGS_KEEP}"
+    fi
     for _entry in "${UPPER}/usr/"* "${UPPER}/usr/".[!.]*; do
         [ -e "${_entry}" ] || [ -L "${_entry}" ] || continue
         [ "${_entry}" = "${UPPER}/usr/local" ] && continue
         rm -rf "${_entry}"
     done
+    if [ -d "${_KEYRINGS_KEEP}" ]; then
+        mkdir -p "${UPPER}/usr/share/keyrings"
+        for _key in "${_KEYRINGS_KEEP}"/*; do
+            [ -f "${_key}" ] || continue
+            [ -e "${BTRFS_MNT}/${ROOT_SUBVOL}/usr/share/keyrings/${_key##*/}" ] && continue
+            mv "${_key}" "${UPPER}/usr/share/keyrings/"
+        done
+        rm -rf "${_KEYRINGS_KEEP}"
+    fi
     rm -rf "${UPPER}/var/lib/dpkg" "${UPPER}/var/lib/apt" "${UPPER}/var/cache/apt" \
            "${UPPER}/etc/ld.so.cache" "${UPPER}/etc/alternatives"
     : > "${UPPER}/var/lib/hippos/apt-restore-pending"

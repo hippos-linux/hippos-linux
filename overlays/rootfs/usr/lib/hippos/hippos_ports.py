@@ -69,16 +69,19 @@ def launcher_path(name: str) -> Path:
 def write_launcher(path: Path, name: str, command: str, marker: str = '') -> None:
     """Write a launcher. marker, when set, is a comment line identifying who
     manages the file (see read_marker)."""
+    created_dir = not path.parent.exists()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         _LAUNCHER_TEMPLATE.format(name=name, command=command, marker=f'# {marker}\n' if marker else ''),
         encoding='utf-8',
     )
     path.chmod(0o755)
-    # Root callers (the apt hook) must leave the file owned like the ports dir.
-    owner = path.parent.stat()
-    if os.getuid() == 0 and (owner.st_uid, owner.st_gid) != (0, 0):
-        os.chown(path, owner.st_uid, owner.st_gid)
+    # Root callers (the apt hook) must leave what they create owned like
+    # /userdata/roms, so the user can still manage their ports.
+    if os.getuid() == 0:
+        owner = path.parent.parent.stat()
+        for created in ([path.parent] if created_dir else []) + [path]:
+            os.chown(created, owner.st_uid, owner.st_gid)
 
 
 def read_marker(path: Path, prefix: str) -> list[str] | None:
