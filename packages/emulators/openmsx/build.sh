@@ -18,13 +18,23 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}"
 
-mkdir -p "${STAGING}/bin"
+# openMSX's configure has no --prefix; install locations are make variables
+# (build/main.mk). The launcher points OPENMSX_SYSTEM_DATA at share/, so the
+# path compiled into the binary doesn't matter.
+INSTALL_VARS=(
+    INSTALL_BINARY_DIR="${STAGING}/bin"
+    INSTALL_SHARE_DIR="${STAGING}/share"
+    INSTALL_DOC_DIR="${STAGING}/doc"
+    SYMLINK_FOR_BINARY=false
+)
 (
     cd "${SRC}"
-    ./configure --prefix="${STAGING}"
+    ./configure
 )
-make -C "${SRC}" -j"$(nproc)" OPENMSX_TARGET_CPU=x86_64
-make -C "${SRC}" install
+make -C "${SRC}" -j"$(nproc)" OPENMSX_TARGET_CPU=x86_64 "${INSTALL_VARS[@]}"
+make -C "${SRC}" install "${INSTALL_VARS[@]}"
+[[ -x "${STAGING}/bin/openmsx" ]] || { log "openmsx binary missing from ${STAGING}/bin after install"; exit 1; }
+rm -rf "${STAGING}/doc"
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"

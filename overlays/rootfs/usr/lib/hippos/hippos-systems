@@ -852,18 +852,14 @@ systems = {
                                                       { "md5": "5626206284b22c2734f3e9efefcd2675", "file": "bios/scummvm/extra/MT32_CONTROL.ROM" } ] },
 
     # ---------- MSX1/MSX2 ---------- #
-    # Both run openMSX's Boosted_MSX2_EN machine (emulatorlauncher_computers).
-    #https://github.com/openMSX/openMSX/blob/master/share/machines/Boosted_MSX2_EN.txt
-    "msx1":   { "name": "MSX1", "biosFiles":    [ { "md5": "01dd1d72ed9bb6afe8a9b441c198a1cd", "file": "bios/openmsx/nms8250_disk.rom" },
-                                                    { "md5": "ec3a01c91f24fbddcbcab0ad301bc9ef", "file": "bios/openmsx/nms8250_basic-bios2.rom" },
-                                                    { "md5": "2183c2aff17cf4297bdb496de78c2e8a", "file": "bios/openmsx/nms8250_msx2sub.rom" },
+    # Both run openMSX's Boosted_MSX2_EN machine (emulatorlauncher_computers),
+    # whose ROM list is share/machines/Boosted_MSX2_EN.txt. openMSX matches
+    # ROMs by SHA1, so the NMS 8245 ROM is only checked for presence.
+    "msx1":   { "name": "MSX1", "biosFiles":    [ { "md5": "",                                 "file": "bios/openmsx/NMS8245SystemROM1.08.bin" },
                                                     { "md5": "6f69cc8b5ed761b03afd78000dfb0e19", "file": "bios/openmsx/fmpac.rom" },
                                                     { "md5": "2ce20986da024e9a0e271961c6bc9f01", "file": "bios/openmsx/phc-70fd2_basickun.rom" },
                                                     { "md5": "42af93619160ef2116416f74a6cb12f2", "file": "bios/openmsx/yrw801.rom" } ] },
-
-    "msx2":   { "name": "MSX2", "biosFiles":    [ { "md5": "01dd1d72ed9bb6afe8a9b441c198a1cd", "file": "bios/openmsx/nms8250_disk.rom" },
-                                                    { "md5": "ec3a01c91f24fbddcbcab0ad301bc9ef", "file": "bios/openmsx/nms8250_basic-bios2.rom" },
-                                                    { "md5": "2183c2aff17cf4297bdb496de78c2e8a", "file": "bios/openmsx/nms8250_msx2sub.rom" },
+    "msx2":   { "name": "MSX2", "biosFiles":    [ { "md5": "",                                 "file": "bios/openmsx/NMS8245SystemROM1.08.bin" },
                                                     { "md5": "6f69cc8b5ed761b03afd78000dfb0e19", "file": "bios/openmsx/fmpac.rom" },
                                                     { "md5": "2ce20986da024e9a0e271961c6bc9f01", "file": "bios/openmsx/phc-70fd2_basickun.rom" },
                                                     { "md5": "42af93619160ef2116416f74a6cb12f2", "file": "bios/openmsx/yrw801.rom" } ] },

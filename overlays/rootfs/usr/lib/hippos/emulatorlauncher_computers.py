@@ -443,14 +443,18 @@ def launch_fsuae(ctx: LaunchContext) -> int:
 
 # ── OpenMSX ────────────────────────────────────────────────────────────────────
 
+# Machines shipped in openMSX's share/machines. An MSX2 runs MSX1 software, and
+# the Boosted_* machines need the system ROMs hippos-systems lists per system.
 _OPENMSX_MACHINES = {
-    'msx1':       'Boosted_MSX1_EN',
+    'msx1':       'Boosted_MSX2_EN',
     'msx2':       'Boosted_MSX2_EN',
-    'msx2+':      'Boosted_MSXturboR',
-    'msxturbor':  'Boosted_MSXturboR',
+    'msx2+':      'Boosted_MSX2+_JP',
+    'msxturbor':  'Boosted_MSXturboR_with_IDE',
     'colecovision': 'ColecoVision_SGM',
     'spectravideo': 'Spectravideo_SVI-328',
 }
+# LaserDisc games need the Pioneer PX-7, whatever the system.
+_OPENMSX_LASERDISC_MACHINE = 'Pioneer_PX-7'
 
 _OPENMSX_MEDIA_EXTS = {
     '.rom': '-cart', '.ri': '-cart', '.mx1': '-cart', '.mx2': '-cart',
@@ -461,20 +465,30 @@ _OPENMSX_MEDIA_EXTS = {
 }
 
 
-def _openmsx_write_settings(cfg_dir: Path, controllers: list[ControllerInfo]) -> Path:
+def _openmsx_write_settings(cfg_dir: Path, system_share: Path, controllers: list[ControllerInfo]) -> Path:
     share_dir = cfg_dir / 'share'
     share_dir.mkdir(parents=True, exist_ok=True)
 
     # settings.xml
     settings_file = share_dir / 'settings.xml'
+    # openMSX's own layout (src/config/SettingsConfig.cc): values under a nested
+    # <settings>, key bindings beside it, and a DOCTYPE it refuses to load without.
     root = ET.Element('settings')
+    values_el = ET.SubElement(root, 'settings')
 
     def _setting(name: str, value: str) -> None:
-        el = ET.SubElement(root, 'setting', id=name)
+        el = ET.SubElement(values_el, 'setting', id=name)
         el.text = value
 
     _setting('fullspeedwhenloading', 'true')
     _setting('save_settings_on_exit', 'false')
+    # Read before the machine is created, so its system ROMs resolve from /userdata/bios.
+    _setting('__filepool', ' '.join((
+        f'{{-path {BIOS}/Machines -types system_rom}}',
+        f'{{-path {BIOS}/openmsx -types system_rom}}',
+        f'{{-path {system_share}/systemroms -types system_rom}}',
+        f'{{-path {share_dir}/software -types {{rom disk tape}}}}',
+    )))
 
     bindings_el = ET.SubElement(root, 'bindings')
     for key, cmd in (
@@ -486,17 +500,17 @@ def _openmsx_write_settings(cfg_dir: Path, controllers: list[ControllerInfo]) ->
         bind_el.text = cmd
 
     ET.indent(root, space='  ')
-    ET.ElementTree(root).write(str(settings_file), encoding='unicode', xml_declaration=True)
+    settings_file.write_text(
+        '<?xml version="1.0"?>\n'
+        "<!DOCTYPE settings SYSTEM 'settings.dtd'>\n"
+        + ET.tostring(root, encoding='unicode') + '\n',
+        encoding='utf-8',
+    )
 
     # script.tcl — full joystick port and button bindings
     script_file = share_dir / 'script.tcl'
     profiles = _load_es_input_configs()
-    lines = [
-        f'filepool add -path {BIOS}/Machines -types system_rom -position 1',
-        f'filepool add -path {BIOS}/openmsx -types system_rom -position 2',
-        '',
-        '# -= Controller config =-',
-    ]
+    lines = ['# -= Controller config =-']
     joy_ports = ['joyporta', 'joyportb']
     for i, ctrl in enumerate(controllers[:2]):
         joy_num = i + 1
@@ -544,13 +558,9 @@ def launch_openmsx(ctx: LaunchContext) -> int:
         _log.error("openmsx: binary not found")
         return 1
 
-    # Copy system share if missing
-    sys_share = Path('/usr/share/openmsx')
-    cfg_share  = cfg_dir / 'share'
-    if sys_share.exists() and not cfg_share.exists():
-        shutil.copytree(str(sys_share), str(cfg_share))
-
-    share_dir = _openmsx_write_settings(cfg_dir, ctx.controllers)
+    # openMSX looks for machines and extensions next to its binary's install.
+    system_share = bin_path.parent.parent / 'share'
+    share_dir = _openmsx_write_settings(cfg_dir, system_share, ctx.controllers)
 
     machine = _OPENMSX_MACHINES.get(ctx.system, 'Boosted_MSX2_EN')
 
@@ -565,14 +575,19 @@ def launch_openmsx(ctx: LaunchContext) -> int:
             rom = candidates[0]
 
     media_flag = _OPENMSX_MEDIA_EXTS.get(rom.suffix.lower(), '-cart')
+    if media_flag == '-laserdisc':
+        machine = _OPENMSX_LASERDISC_MACHINE
 
     cmd = [
         str(bin_path),
         '-machine', machine,
-        '-share',   str(share_dir),
         media_flag, str(rom),
         '-script',  str(share_dir / 'script.tcl'),
     ]
 
     env = _build_game_env(conf, ctx)
+    # User data (settings.xml, script.tcl) under cfg_dir/share; system data
+    # (machines, extensions) from the installed artifact.
+    env['OPENMSX_HOME'] = str(cfg_dir)
+    env['OPENMSX_SYSTEM_DATA'] = str(system_share)
     return _run_game_command(ctx, 'openmsx', cmd, env).returncode
