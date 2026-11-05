@@ -33,6 +33,7 @@ STANDALONE_BINARIES: dict[str, tuple[str, ...]] = {
     'amiberry': ('amiberry',),
     # The artifact builds the SDL frontend (sa2), not QApple.
     'applewin': ('sa2', 'qapple', 'applen', 'applewin', 'AppleWin'),
+    'dosbox-staging': ('dosbox',),
     'supermodel-es': ('supermodel',),
     'supermodel-legacy': ('supermodel',),
     'cemu': ('Cemu', 'cemu'),

@@ -176,8 +176,27 @@ def resolve_emulator_core(
     sys_def  = defaults.get(system) or {}
 
     # Resolution order: CLI > game > folder > system > global > defaults
-    emulator = forced_emulator or game_em or folder_em or user_em or global_em or sys_def.get('emulator') or 'libretro'
-    core     = forced_core     or game_co or folder_co or user_co or global_co or sys_def.get('core')     or ''
+    chosen_em = forced_emulator or game_em or folder_em or user_em or global_em
+    emulator = chosen_em or sys_def.get('emulator') or 'libretro'
+    core     = forced_core or game_co or folder_co or user_co or global_co or sys_def.get('core') or ''
+    if chosen_em is None and rom is not None:
+        emulator, core = _compatible_default(sys_def, emulator, core, rom)
+    return emulator, core
+
+
+def _compatible_default(sys_def: dict, emulator: str, core: str, rom: Path) -> tuple[str, str]:
+    """When the default emulator can't take this file type (its emulator yml
+    exclude_extensions, e.g. DOSBox Staging and .zip), the first of the
+    system's candidates (in ES's order) that can. A choice the user made is
+    never overridden."""
+    ext = rom.suffix.lower()
+    candidates = sys_def.get('candidates') or []
+    if not any(c['emulator'] == emulator and ext in c.get('exclude_extensions', ()) for c in candidates):
+        return emulator, core
+    for candidate in candidates:
+        if ext not in candidate.get('exclude_extensions', ()):
+            _log.info("%s can't run %s files; using %s/%s", emulator, ext, candidate['emulator'], candidate['core'])
+            return candidate['emulator'], candidate['core']
     return emulator, core
 
 

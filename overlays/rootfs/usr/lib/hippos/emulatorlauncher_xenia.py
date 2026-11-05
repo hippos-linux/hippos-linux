@@ -23,17 +23,22 @@ from emulatorlauncher_shared import (
 from HipposPaths import CACHE, HOME, SAVES, USERDATA
 
 
-def _xenia_runtime_paths(core: str) -> tuple[Path, Path, Path]:
-    runtime_dir = XENIA_CANARY_RUNTIME_DIR if core == 'xenia-canary' else XENIA_RUNTIME_DIR
-    prefix_dir = XENIA_CANARY_PREFIX_DIR if core == 'xenia-canary' else XENIA_PREFIX_DIR
-    bundle_dir = XENIA_CANARY_BUNDLE_DIR if core == 'xenia-canary' else XENIA_BUNDLE_DIR
+def _is_canary(ctx: LaunchContext) -> bool:
+    """Decided by the emulator: ES's core name is xenia_canary, not xenia-canary."""
+    return ctx.emulator == 'xenia-canary'
+
+
+def _xenia_runtime_paths(canary: bool) -> tuple[Path, Path, Path]:
+    runtime_dir = XENIA_CANARY_RUNTIME_DIR if canary else XENIA_RUNTIME_DIR
+    prefix_dir = XENIA_CANARY_PREFIX_DIR if canary else XENIA_PREFIX_DIR
+    bundle_dir = XENIA_CANARY_BUNDLE_DIR if canary else XENIA_BUNDLE_DIR
     config_dir = runtime_dir
     runtime_dir.mkdir(parents=True, exist_ok=True)
     prefix_dir.mkdir(parents=True, exist_ok=True)
     config_dir.mkdir(parents=True, exist_ok=True)
     XENIA_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     XENIA_SAVES_DIR.mkdir(parents=True, exist_ok=True)
-    exe_name = 'xenia_canary.exe' if core == 'xenia-canary' else 'xenia.exe'
+    exe_name = 'xenia_canary.exe' if canary else 'xenia.exe'
     exe_link = config_dir / exe_name
     exe_target = bundle_dir / exe_name
     if exe_link.exists() or exe_link.is_symlink():
@@ -91,9 +96,9 @@ def _xenia_base_config(display_resolution: Optional[tuple[int, int]]) -> dict[st
 
 def _write_xenia_config(ctx: LaunchContext) -> tuple[Path, Path, Path]:
     conf = _load_effective_hippos_conf()
-    core = ctx.core or ctx.emulator
-    runtime_dir, prefix_dir, config_dir = _xenia_runtime_paths(core)
-    toml_file = config_dir / ('xenia-canary.config.toml' if core == 'xenia-canary' else 'xenia.config.toml')
+    canary = _is_canary(ctx)
+    runtime_dir, prefix_dir, config_dir = _xenia_runtime_paths(canary)
+    toml_file = config_dir / ('xenia-canary.config.toml' if canary else 'xenia.config.toml')
 
     config = _read_toml(toml_file) or _xenia_base_config(None)
     if not config:
@@ -105,7 +110,7 @@ def _write_xenia_config(ctx: LaunchContext) -> tuple[Path, Path, Path]:
 
     display = config.setdefault('Display', {})
     display['fullscreen'] = True
-    if core == 'xenia-canary':
+    if canary:
         display['internal_display_resolution'] = _conf_int(conf, 'xenia_resolution', 8)
 
     gpu = config.setdefault('GPU', {})
@@ -152,7 +157,7 @@ def _write_xenia_config(ctx: LaunchContext) -> tuple[Path, Path, Path]:
 
     _write_toml(toml_file, config)
 
-    if core == 'xenia-canary' and _conf_bool(conf, 'xenia_patches', False):
+    if canary and _conf_bool(conf, 'xenia_patches', False):
         patches_dir = runtime_dir / 'patches'
         if patches_dir.exists():
             rom_name = re.sub(r'\[.*?\]', '', ctx.rom.stem)
@@ -185,7 +190,8 @@ def launch_xenia(ctx: LaunchContext) -> int:
             pass
 
     runtime_dir, prefix_dir, config_dir = _write_xenia_config(ctx)
-    toml_file = config_dir / ('xenia-canary.config.toml' if ctx.core == 'xenia-canary' else 'xenia.config.toml')
+    canary = _is_canary(ctx)
+    toml_file = config_dir / ('xenia-canary.config.toml' if canary else 'xenia.config.toml')
 
     conf = _load_effective_hippos_conf()
     cmd = [str(bin_path)]
@@ -203,7 +209,7 @@ def launch_xenia(ctx: LaunchContext) -> int:
     env['SDL_JOYSTICK_HIDAPI'] = '0'
     env['LD_LIBRARY_PATH'] = f'/usr/lib:{env.get("LD_LIBRARY_PATH", "")}'
     env['LIBGL_DRIVERS_PATH'] = '/usr/lib/dri'
-    env['XENIA_EXE'] = str(config_dir / ('xenia_canary.exe' if ctx.core == 'xenia-canary' else 'xenia.exe'))
+    env['XENIA_EXE'] = str(config_dir / ('xenia_canary.exe' if canary else 'xenia.exe'))
 
     if Path('/var/tmp/hippos-nvidia.prime').exists():
         env.pop('__NV_PRIME_RENDER_OFFLOAD', None)

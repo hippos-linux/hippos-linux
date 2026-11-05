@@ -345,3 +345,61 @@ systems:
     as_core: mame
   - name: xrick
     as_core: xrick
+  - name: amiga500
+    as_core: puae
+  - name: amiga1200
+    as_core: puae
+  - name: amigacd32
+    as_core: puae
+  - name: amigacdtv
+    as_core: puae
+  - name: amstradcpc
+    as_core: cap32
+  - name: atomiswave
+    as_core: flycast
+  - name: bk
+    as_core: bk
+  - name: c64
+    as_core:
+      - vice_x64sc
+      - vice_x64
+  - name: colecovision
+    as_core: bluemsx
+  - name: gameandwatch
+    as_core: gw
+  - name: jaguar
+    as_core: virtualjaguar
+  - name: jaguarcd
+    as_core: virtualjaguar
+  - name: lcdgames
+    as_core: gw
+  - name: macintosh
+    as_core: minivmac
+  - name: megaduck
+    as_core: sameduck
+  - name: msx1
+    as_core: bluemsx
+  - name: msx2
+    as_core: bluemsx
+  - name: "msx2+"
+    as_core: bluemsx
+  - name: msxturbor
+    as_core: bluemsx
+  - name: naomi
+    as_core: flycast
+  - name: naomi2
+    as_core: flycast
+  - name: scummvm
+    as_core: scummvm
+  - name: spectravideo
+    as_core: bluemsx
+  - name: systemsp
+    as_core: flycast
+  - name: tic80
+    as_core: tic80
+  - name: uzebox
+    as_core: uzem
+  - name: vectrex
+    as_core: vecx
+  - name: zxspectrum
+    as_core: fuse
