@@ -178,7 +178,7 @@ def launch_vpinball(ctx: LaunchContext) -> int:
         return 1
 
     write_vpinball_config(ctx)
-    conf = _load_hippos_conf()
+    conf = _load_effective_hippos_conf()
     cmd = [str(bin_path), '-PrefPath', str(VPINBALL_CONFIG_DIR), '-Ini', str(VPINBALL_INI), '-Play', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)

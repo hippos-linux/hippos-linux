@@ -31,7 +31,8 @@ from HipposPaths import (
 
 STANDALONE_BINARIES: dict[str, tuple[str, ...]] = {
     'amiberry': ('amiberry',),
-    'applewin': ('qapple', 'applen', 'applewin', 'AppleWin'),
+    # The artifact builds the SDL frontend (sa2), not QApple.
+    'applewin': ('sa2', 'qapple', 'applen', 'applewin', 'AppleWin'),
     'cemu': ('Cemu', 'cemu'),
     'easyrpg': ('easyrpg-player', 'easyrpg'),
     'hypseus-singe': ('hypseus',),

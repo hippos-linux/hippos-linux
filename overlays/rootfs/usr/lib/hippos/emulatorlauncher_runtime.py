@@ -21,12 +21,17 @@ from emulatorlauncher_shared import (
     _log,
     _new_ini_parser,
     _pick_es_profile,
+    _ra_analog_dpad_mode,
+    _ra_binding_value,
+    _ra_btn_map_for_ctx,
+    _ra_type_suffix,
     _run_game_command,
     _sync_tree,
     _write_unix_settings_file,
     generate_sdl_game_controller_config,
 )
 
+from emulatorlauncher_generic import _RA_AXIS_MAP, _RA_DPAD_MAP
 from HipposPaths import BIOS, CONFIGS, LOGS, SAVES, SCREENSHOTS, USERDATA
 
 

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import configparser
 import logging
 import os
 import re
@@ -40,8 +39,6 @@ from emulatorlauncher_shared import (
     LaunchContext,
     _HUD_CONFIG_PATH,
     _conf_bool,
-    _conf_value,
-    _ensure_section,
     _get_yaml_system_options,
     _load_es_input_configs,
     _load_hippos_conf,
@@ -170,52 +167,6 @@ def _resolve_mergerfs_path(path: Path) -> Path:
     except Exception as exc:
         _log.debug("mergerfs path resolution failed: %s", exc)
     return path
-
-
-def _lindbergh_apply_mapping(
-    parser: configparser.ConfigParser,
-    section: str,
-    mapping: dict[str, str],
-    profile: ESControllerProfile,
-    ctrl: ControllerInfo,
-    player_index: int,
-) -> None:
-    _ensure_section(parser, section)
-    for logical_name, button_name in mapping.items():
-        source_name = logical_name
-        if source_name not in profile.inputs:
-            if logical_name == 'joystick1right' and 'joystick1left' in profile.inputs:
-                source_name = 'joystick1left'
-            elif logical_name == 'joystick1down' and 'joystick1up' in profile.inputs:
-                source_name = 'joystick1up'
-            elif logical_name == 'joystick2right' and 'joystick2left' in profile.inputs:
-                source_name = 'joystick2left'
-            elif logical_name == 'joystick2down' and 'joystick2up' in profile.inputs:
-                source_name = 'joystick2up'
-        binding = profile.inputs.get(source_name)
-        if binding is None:
-            continue
-
-        value = _lindbergh_binding_to_value(binding, profile, logical_name)
-        if value is None:
-            continue
-
-        target = button_name
-        player_for_target = player_index
-        if target.endswith('_ON_PLAYER_2'):
-            target = target[:-12]
-            player_for_target = 2
-        if target == 'COIN' and player_index > 1:
-            continue
-
-        if target.startswith('ANALOGUE_'):
-            if player_index == 1:
-                parser.set(section, target, value)
-            continue
-        if target in {'TEST_BUTTON', 'PLAYER_1_BUTTON_SERVICE'}:
-            parser.set(section, target, value)
-            continue
-        parser.set(section, f'PLAYER_{player_for_target}_{target}', value)
 
 
 def resolve_emulator_core(
@@ -587,6 +538,12 @@ GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'dosbox':         launch_dosbox_staging,
     'dosbox-x':       launch_dosbox_x,
     'dosbox_staging': launch_dosbox_staging,
+    # ES names emulators after their package (packages/emulators/<name>), so
+    # the per-system emulator option sends these names.
+    'dosbox-staging': launch_dosbox_staging,
+    'python-pygame2': _launch_pygame,
+    'python-pyxel':   _launch_pyxel,
+    'solarus-engine': _launch_solarus,
     'dosboxx':        launch_dosbox_x,
     'amiberry':    _launch_amiberry,
     'applewin':    launch_applewin,

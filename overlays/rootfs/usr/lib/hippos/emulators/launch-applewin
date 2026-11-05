@@ -1,4 +1,3 @@
 #!/usr/bin/env bash
 . /usr/lib/hippos/emulator-env
-export QT_QPA_PLATFORM=xcb
-exec /opt/emulators/applewin/bin/qapple "$@"
+exec /opt/emulators/applewin/bin/sa2 "$@"

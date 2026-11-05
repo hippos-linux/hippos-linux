@@ -20,8 +20,8 @@ clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
 # A stale CMakeCache.txt reuses cached *_DIR values from whatever prefix
 # resolved them last run instead of re-searching CMAKE_PREFIX_PATH/deps —
-# always start clean.
-rm -rf "${BUILD}"
+# always start clean, and drop whatever earlier builds staged.
+rm -rf "${BUILD}" "${STAGING}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_BUILD_TYPE=Release \
@@ -33,7 +33,6 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DBUILD_SA2=ON
 cmake --build "${BUILD}" -j"$(nproc)"
 cmake --install "${BUILD}"
-find "${BUILD}" -maxdepth 4 -type f -perm /111 -not -path '*/CMakeFiles/*' -exec cp {} "${STAGING}/bin/" \; 2>/dev/null || true
 
 mkdir -p "${STAGING}/lib"
 cp /usr/lib/x86_64-linux-gnu/libminizip.so.1* "${STAGING}/lib/" 2>/dev/null || true

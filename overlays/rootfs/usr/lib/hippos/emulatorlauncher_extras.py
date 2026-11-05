@@ -508,7 +508,7 @@ def launch_bigpemu(ctx: LaunchContext) -> int:
     return _run_game_command(ctx, 'bigpemu', cmd, env).returncode
 
 
-# ── AppleWin / QApple (Apple II) ──────────────────────────────────────────────
+# ── AppleWin (Apple II) ────────────────────────────────────────────────────────
 
 def launch_applewin(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -517,7 +517,7 @@ def launch_applewin(ctx: LaunchContext) -> int:
     saves_dir.mkdir(parents=True, exist_ok=True)
     cfg_dir.mkdir(parents=True, exist_ok=True)
 
-    bin_path = _find_emulator_bin('qapple', 'applewin')
+    bin_path = _find_emulator_bin('applewin')
     if bin_path is None:
         _log.error("applewin: binary not found")
         return 1
@@ -531,7 +531,6 @@ def launch_applewin(ctx: LaunchContext) -> int:
 
     env = _build_game_env(conf, ctx)
     env['XDG_CONFIG_HOME'] = str(cfg_dir)
-    env['QT_QPA_PLATFORM'] = 'xcb'
     return _run_game_command(ctx, 'applewin', cmd, env).returncode
 
 

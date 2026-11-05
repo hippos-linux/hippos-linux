@@ -374,16 +374,6 @@ def _launch_mupen64plus_qt(ctx: LaunchContext) -> int:
     return result.returncode
 
 
-def _lightgun_color(index: int) -> str:
-    palette = (
-        '-1073741571',  # Red
-        '-1057153792',  # Blue
-        '-1073479933',  # Green
-        '-1056964609',  # White
-    )
-    return palette[(index - 1) % len(palette)]
-
-
 def _write_duckstation_config(ctx: LaunchContext) -> None:
     conf = _load_effective_hippos_conf()
     DUCKSTATION_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -767,32 +757,6 @@ def _launch_flycast(ctx: LaunchContext) -> int:
     env['SDL_JOYSTICK_HIDAPI'] = '0'
     result = _run_game_command(ctx, 'flycast', cmd, env)
     return result.returncode
-
-
-def _sync_tree(source: Path, destination: Path) -> None:
-    if not source.exists():
-        return
-    try:
-        destination.resolve().relative_to(source.resolve())
-        __import__('logging').getLogger('hippos.emulatorlauncher').error(
-            "_sync_tree: destination %s is inside source %s — refusing to sync",
-            destination, source,
-        )
-        return
-    except ValueError:
-        pass
-    destination.mkdir(parents=True, exist_ok=True)
-    cmp = filecmp.dircmp(source, destination)
-    for name in cmp.left_only + cmp.diff_files:
-        src_path = source / name
-        dst_path = destination / name
-        if src_path.is_dir():
-            _sync_tree(src_path, dst_path)
-        else:
-            dst_path.parent.mkdir(parents=True, exist_ok=True)
-            copyfile(src_path, dst_path)
-    for name in cmp.common_dirs:
-        _sync_tree(source / name, destination / name)
 
 
 launch_mupen64plus_qt = _launch_mupen64plus_qt
