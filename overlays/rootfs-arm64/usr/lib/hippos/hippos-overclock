@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# hippos-overclock — Raspberry Pi CPU/GPU overclock presets (ES: System Settings > Overclock)
+#
+#   hippos-overclock list       "<id> <label>" per preset; just "none" on unsupported boards
+#   hippos-overclock set <id>   write the preset; takes effect on the next boot
+#
+# The firmware reads clocks only at boot, from config.txt on the boot partition.
+# Presets go in their own file, included last so they win over config.txt.
+# If a preset won't boot, empty hippos-overclock.txt from another computer.
+
+BOOT_DIR=/boot/efi
+CONFIG_TXT="${BOOT_DIR}/config.txt"
+OVERCLOCK_TXT=hippos-overclock.txt
+INCLUDE_LINE="include ${OVERCLOCK_TXT}"
+
+board() {
+    # Also matches the Pi 400/500 keyboards.
+    case "$( { tr -d '\0' < /proc/device-tree/model; } 2>/dev/null)" in
+        "Raspberry Pi 5"*|"Raspberry Pi Compute Module 5"*) echo rpi5 ;;
+        "Raspberry Pi 4"*|"Raspberry Pi Compute Module 4"*) echo rpi4 ;;
+    esac
+}
+
+# id|label|config.txt lines (';'-separated). Higher presets need a heatsink and fan.
+presets() {
+    case "$(board)" in
+        rpi4)
+            # Stock is 1500 MHz on early (B0) boards, 1800 MHz on C0 boards and the Pi 400.
+            echo "high|HIGH (1700MHz)|over_voltage=2;arm_freq=1700;gpu_freq=500"
+            echo "turbo|TURBO (1800MHz)|over_voltage=3;arm_freq=1800;gpu_freq=600"
+            echo "extreme|EXTREME (HEATSINK & FAN 1950MHz)|over_voltage=5;arm_freq=1950;gpu_freq=700"
+            echo "insane|INSANE (HEATSINK & FAN 2100MHz)|over_voltage=6;arm_freq=2100;gpu_freq=750"
+            ;;
+        rpi5)
+            # over_voltage_delta is in microvolts, on top of the firmware's own voltage scaling.
+            echo "high|HIGH (2600MHz)|over_voltage_delta=25000;arm_freq=2600;gpu_freq=950"
+            echo "turbo|TURBO (HEATSINK & FAN 2800MHz)|over_voltage_delta=50000;arm_freq=2800;gpu_freq=970"
+            echo "extreme|EXTREME (HEATSINK & FAN 3000MHz)|over_voltage_delta=50000;arm_freq=3000;gpu_freq=1000"
+            ;;
+    esac
+}
+
+cmd_list() {
+    echo "none NONE"
+    local id label _
+    while IFS='|' read -r id label _; do
+        echo "${id} ${label}"
+    done < <(presets)
+}
+
+cmd_set() {
+    local wanted="$1" id label lines settings=""
+    if [[ "${wanted}" != none ]]; then
+        while IFS='|' read -r id label lines; do
+            [[ "${id}" == "${wanted}" ]] && settings="${lines//;/$'\n'}"
+        done < <(presets)
+        [[ -n "${settings}" ]] || { echo "hippos-overclock: unknown preset '${wanted}'" >&2; return 1; }
+    fi
+
+    [[ -f "${CONFIG_TXT}" ]] || { echo "hippos-overclock: ${CONFIG_TXT} not found" >&2; return 1; }
+    grep -qxF "${INCLUDE_LINE}" "${CONFIG_TXT}" || printf '\n%s\n' "${INCLUDE_LINE}" >> "${CONFIG_TXT}"
+
+    local tmp="${BOOT_DIR}/${OVERCLOCK_TXT}.new"
+    printf '# Managed by hippos-overclock (preset: %s)\n%s\n' "${wanted}" "${settings}" > "${tmp}"
+    sync "${tmp}"
+    mv -f "${tmp}" "${BOOT_DIR}/${OVERCLOCK_TXT}"
+    sync -f "${BOOT_DIR}"
+}
+
+case "$1" in
+    list) cmd_list ;;
+    set)
+        [[ -n "$2" ]] || { echo "Usage: hippos-overclock set <id>" >&2; exit 1; }
+        [[ "${EUID}" -ne 0 ]] && exec sudo "$0" "$@"
+        cmd_set "$2"
+        ;;
+    *)
+        echo "Usage: hippos-overclock list | set <id>" >&2
+        exit 1
+        ;;
+esac
