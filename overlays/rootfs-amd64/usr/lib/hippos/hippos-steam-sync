@@ -3,12 +3,12 @@
 
 from __future__ import annotations
 
-import json
-import os
 import re
 import sys
 from pathlib import Path
 from typing import Any
+
+from hippos_launcher_sync import sync_launchers
 
 
 USERDATA = Path("/userdata")
@@ -116,88 +116,12 @@ def installed_apps() -> dict[str, str]:
     return apps
 
 
-def safe_filename(name: str) -> str:
-    cleaned = re.sub(r'[\\/:*?"<>|]+', " ", name)
-    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
-    return cleaned or "Steam Game"
-
-
-def read_state() -> dict[str, str]:
-    try:
-        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    return {str(k): str(v) for k, v in data.items()}
-
-
-def write_state(state: dict[str, str]) -> None:
-    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    tmp = STATE_FILE.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    tmp.replace(STATE_FILE)
-
-
-def launcher_path(appid: str, name: str) -> Path:
-    base = safe_filename(name)
-    candidate = ROMS_DIR / f"{base}.steam"
-    if candidate.name == "Steam.steam":
-        candidate = ROMS_DIR / f"{base} ({appid}).steam"
-    if not candidate.exists() or candidate.read_text(encoding="utf-8", errors="replace").strip() == appid:
-        return candidate
-    return ROMS_DIR / f"{base} ({appid}).steam"
-
-
 def sync() -> int:
     apps = installed_apps()
-    ROMS_DIR.mkdir(parents=True, exist_ok=True)
-
-    old_state = read_state()
-    new_state: dict[str, str] = {}
-    created = 0
-    updated = 0
-    removed = 0
-
-    for appid, name in sorted(apps.items(), key=lambda item: safe_filename(item[1]).lower()):
-        previous = Path(old_state.get(appid, ""))
-        if previous.name and previous.parent == ROMS_DIR:
-            path = previous
-        else:
-            path = launcher_path(appid, name)
-
-        if path.name == "Steam.steam":
-            path = launcher_path(appid, name)
-        before = path.read_text(encoding="utf-8", errors="replace").strip() if path.exists() else None
-        if before != appid:
-            path.write_text(appid + "\n", encoding="utf-8")
-            if before is None:
-                created += 1
-            else:
-                updated += 1
-        new_state[appid] = str(path)
-
-    for appid, old_path_text in old_state.items():
-        if appid in new_state:
-            continue
-        old_path = Path(old_path_text)
-        if old_path.parent == ROMS_DIR and old_path.exists():
-            try:
-                if old_path.read_text(encoding="utf-8", errors="replace").strip() == appid:
-                    old_path.unlink()
-                    removed += 1
-            except OSError:
-                pass
-
-    write_state(new_state)
-    try:
-        os.chown(ROMS_DIR, 1000, 100)
-        os.chown(STATE_FILE, 1000, 100)
-        for path_text in new_state.values():
-            os.chown(path_text, 1000, 100)
-    except OSError:
-        pass
-
+    # A game literally named "Steam" would collide with the client's own entry.
+    created, updated, removed = sync_launchers(
+        ROMS_DIR, STATE_FILE, '.steam', apps, 'Steam Game', reserved_stems=('Steam',),
+    )
     log(f"found={len(apps)} created={created} updated={updated} removed={removed}")
     return 0
 

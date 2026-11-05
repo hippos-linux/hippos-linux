@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""Generate EmulationStation .lutris launchers from installed Lutris games.
+
+Lutris keeps its library in $XDG_DATA_HOME/lutris/pga.db. The desktop session
+leaves XDG_DATA_HOME unset, so that's /userdata/.local/share/lutris/pga.db.
+Each launcher holds the game's Lutris id, run as lutris:rungameid/<id>.
+"""
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+from hippos_launcher_sync import sync_launchers
+
+USERDATA   = Path('/userdata')
+PGA_DB     = USERDATA / '.local' / 'share' / 'lutris' / 'pga.db'
+ROMS_DIR   = USERDATA / 'roms' / 'lutris'
+STATE_FILE = USERDATA / 'system' / 'lutris-launchers.json'
+
+
+def log(message: str) -> None:
+    print(f'[hippos-lutris-sync] {message}', flush=True)
+
+
+def installed_games() -> dict[str, str]:
+    """{game id -> name}; read-only so Lutris keeps writing undisturbed."""
+    if not PGA_DB.exists():
+        return {}
+    with sqlite3.connect(f'file:{PGA_DB}?mode=ro', uri=True, timeout=10) as db:
+        rows = db.execute('SELECT id, name FROM games WHERE installed = 1').fetchall()
+    return {str(game_id): name or f'Lutris game {game_id}' for game_id, name in rows}
+
+
+def sync() -> int:
+    games = installed_games()
+    created, updated, removed = sync_launchers(ROMS_DIR, STATE_FILE, '.lutris', games, 'Lutris Game')
+    log(f'found={len(games)} created={created} updated={updated} removed={removed}')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(sync())

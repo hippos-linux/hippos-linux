@@ -153,6 +153,30 @@ def launch_heroic(ctx: LaunchContext) -> int:
     return result.returncode
 
 
+def launch_lutris(ctx: LaunchContext) -> int:
+    """A .lutris file (hippos-lutris-sync) holds the game's Lutris id. Lutris
+    quits once a game started with lutris:rungameid exits."""
+    try:
+        game_id = ctx.rom.read_text(encoding='utf-8').strip()
+    except OSError as exc:
+        _log.error("Could not read Lutris launcher from %s: %s", ctx.rom, exc)
+        return 1
+    if not game_id.isdigit():
+        _log.error("Not a Lutris game id in %s: %r", ctx.rom, game_id)
+        return 1
+    conf = _load_hippos_conf()
+    env = _build_game_env(conf, ctx)
+    # Same dirs as the desktop session, where the games were installed:
+    # pga.db and game configs live under these.
+    env['XDG_CONFIG_HOME'] = '/userdata/system/.config'
+    env['XDG_DATA_HOME'] = '/userdata/.local/share'
+    # What Lutris's own desktop shortcuts set: skip runtime and runner checks.
+    env['LUTRIS_SKIP_INIT'] = '1'
+    cmd = ['lutris', f'lutris:rungameid/{game_id}']
+    _log.info("Launching Lutris game %s", game_id)
+    return _run_game_command(ctx, 'lutris', cmd, env).returncode
+
+
 def launch_pygame(ctx: LaunchContext) -> int:
     pygame_dir = Path('/opt/emulators/python-pygame2')
     conf = _load_hippos_conf()

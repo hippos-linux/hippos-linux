@@ -1120,6 +1120,10 @@ heroic:
   emulator: heroic
   core: heroic
 
+lutris:
+  emulator: lutris
+  core: lutris
+
 steam:
   emulator: steam
   core: steam

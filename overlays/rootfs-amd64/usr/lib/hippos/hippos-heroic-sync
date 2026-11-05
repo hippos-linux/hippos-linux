@@ -4,10 +4,9 @@
 from __future__ import annotations
 
 import json
-import os
-import re
-import sys
 from pathlib import Path
+
+from hippos_launcher_sync import sync_launchers
 
 
 USERDATA   = Path('/userdata')
@@ -22,12 +21,6 @@ HEROIC_ROOTS = [
 
 def log(message: str) -> None:
     print(f'[hippos-heroic-sync] {message}', flush=True)
-
-
-def safe_filename(name: str) -> str:
-    cleaned = re.sub(r'[\\/:*?"<>|]+', ' ', name)
-    cleaned = re.sub(r'\s+', ' ', cleaned).strip(' .')
-    return cleaned or 'Heroic Game'
 
 
 def _load_json(path: Path) -> object:
@@ -85,72 +78,9 @@ def installed_apps() -> dict[str, str]:
     return apps
 
 
-def read_state() -> dict[str, str]:
-    try:
-        data = json.loads(STATE_FILE.read_text(encoding='utf-8'))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    return {str(k): str(v) for k, v in data.items()}
-
-
-def write_state(state: dict[str, str]) -> None:
-    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    tmp = STATE_FILE.with_suffix('.json.tmp')
-    tmp.write_text(json.dumps(state, indent=2, sort_keys=True) + '\n', encoding='utf-8')
-    tmp.replace(STATE_FILE)
-
-
 def sync() -> int:
     apps = installed_apps()
-    ROMS_DIR.mkdir(parents=True, exist_ok=True)
-
-    old_state = read_state()
-    new_state: dict[str, str] = {}
-    created = updated = removed = 0
-
-    for key, name in sorted(apps.items(), key=lambda x: safe_filename(x[1]).lower()):
-        previous = Path(old_state.get(key, ''))
-        if previous.name and previous.parent == ROMS_DIR:
-            path = previous
-        else:
-            path = ROMS_DIR / f'{safe_filename(name)}.heroic'
-
-        existing = path.read_text(encoding='utf-8', errors='replace').strip() if path.exists() else None
-        if existing != key:
-            path.write_text(key + '\n', encoding='utf-8')
-            if existing is None:
-                created += 1
-            else:
-                updated += 1
-        new_state[key] = str(path)
-
-    for key, old_path_str in old_state.items():
-        if key in new_state:
-            continue
-        old_path = Path(old_path_str)
-        if old_path.parent == ROMS_DIR and old_path.exists():
-            try:
-                if old_path.read_text(encoding='utf-8', errors='replace').strip() == key:
-                    old_path.unlink()
-                    removed += 1
-            except OSError:
-                pass
-
-    write_state(new_state)
-
-    try:
-        os.chown(ROMS_DIR, 1000, 100)
-        os.chown(STATE_FILE, 1000, 100)
-        for path_str in new_state.values():
-            try:
-                os.chown(path_str, 1000, 100)
-            except OSError:
-                pass
-    except OSError:
-        pass
-
+    created, updated, removed = sync_launchers(ROMS_DIR, STATE_FILE, '.heroic', apps, 'Heroic Game')
     log(f'found={len(apps)} created={created} updated={updated} removed={removed}')
     return 0
 

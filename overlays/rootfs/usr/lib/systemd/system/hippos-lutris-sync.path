@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch for Lutris game installs/removals
+After=local-fs.target userdata.mount
+
+[Path]
+PathModified=/userdata/.local/share/lutris/pga.db
+Unit=hippos-lutris-sync.service
+
+[Install]
+WantedBy=multi-user.target
