@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Syncs libretro cores from the buildbot nightly.
+# Syncs libretro cores from the buildbot nightly into the retroarch package.
 # Uses ETags to skip cores that haven't changed since last download.
 # Use --force to re-download all cores regardless.
 set -euo pipefail
@@ -22,8 +22,9 @@ esac
 
 ARTIFACT_ROOT="${ARTIFACT_ROOT:-"${ARTIFACTS_DIR}/${ARCH}"}"
 STAGING_DIR="${ARTIFACT_ROOT}/emulators/${EMULATOR_NAME}"
-CORES_DIR="${ARTIFACT_ROOT}/libretro-cores"
-ETAG_DIR="${CORES_DIR}/.etags"
+CORES_DIR="${STAGING_DIR}/cores"
+# Outside the staging dir so the ETags are not packed with the cores.
+ETAG_DIR="${ARTIFACT_ROOT}/retroarch-core-etags"
 
 BUILDBOT_BASE="https://buildbot.libretro.com/nightly/linux/${LIBRETRO_ARCH}/latest"
 
