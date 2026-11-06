@@ -5,6 +5,8 @@ Wants=userdata.mount
 
 [Service]
 Type=oneshot
+# Apps install per-user under /userdata; flatpak run as root can't see them.
+User=hippos
 ExecStart=/usr/lib/hippos/hippos-flatpak-sync
 Nice=10
 

@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
-"""Generate EmulationStation .flatpak launchers from installed Flatpak apps."""
+"""Generate EmulationStation .flatpak launchers and details from installed Flatpak apps."""
 
 from __future__ import annotations
 
-import json
-import os
-import re
 import subprocess
-import sys
 from pathlib import Path
+
+import hippos_quiver
+from hippos_flatpak_metadata import read_app_details
+from hippos_launcher_sync import GameMetadata, reload_es, sync_gamelist, sync_launchers
 
 
 USERDATA   = Path('/userdata')
 ROMS_DIR   = USERDATA / 'roms' / 'flatpak'
 STATE_FILE = USERDATA / 'system' / 'flatpak-launchers.json'
+# Quiver's trademark terms limit its icon to running Quiver itself.
+NO_ICON_APPS = frozenset({hippos_quiver.APP_ID})
 
 
 def log(message: str) -> None:
@@ -39,79 +41,20 @@ def installed_apps() -> dict[str, str]:
         return {}
 
 
-def safe_filename(name: str) -> str:
-    cleaned = re.sub(r'[\\/:*?"<>|]+', ' ', name)
-    cleaned = re.sub(r'\s+', ' ', cleaned).strip(' .')
-    return cleaned or 'Flatpak App'
-
-
-def read_state() -> dict[str, str]:
-    try:
-        data = json.loads(STATE_FILE.read_text(encoding='utf-8'))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    return {str(k): str(v) for k, v in data.items()}
-
-
-def write_state(state: dict[str, str]) -> None:
-    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    tmp = STATE_FILE.with_suffix('.json.tmp')
-    tmp.write_text(json.dumps(state, indent=2, sort_keys=True) + '\n', encoding='utf-8')
-    tmp.replace(STATE_FILE)
+def metadata_for(app_id: str, name: str) -> GameMetadata:
+    details = read_app_details(app_id)
+    icon = None if app_id in NO_ICON_APPS else details.icon
+    return GameMetadata(name, details.description, details.developer, icon)
 
 
 def sync() -> int:
     apps = installed_apps()
-    ROMS_DIR.mkdir(parents=True, exist_ok=True)
-
-    old_state = read_state()
-    new_state: dict[str, str] = {}
-    created = updated = removed = 0
-
-    for app_id, name in sorted(apps.items(), key=lambda x: safe_filename(x[1]).lower()):
-        previous = Path(old_state.get(app_id, ''))
-        if previous.name and previous.parent == ROMS_DIR:
-            path = previous
-        else:
-            path = ROMS_DIR / f'{safe_filename(name)}.flatpak'
-
-        existing = path.read_text(encoding='utf-8', errors='replace').strip() if path.exists() else None
-        if existing != app_id:
-            path.write_text(app_id + '\n', encoding='utf-8')
-            if existing is None:
-                created += 1
-            else:
-                updated += 1
-        new_state[app_id] = str(path)
-
-    for app_id, old_path_str in old_state.items():
-        if app_id in new_state:
-            continue
-        old_path = Path(old_path_str)
-        if old_path.parent == ROMS_DIR and old_path.exists():
-            try:
-                if old_path.read_text(encoding='utf-8', errors='replace').strip() == app_id:
-                    old_path.unlink()
-                    removed += 1
-            except OSError:
-                pass
-
-    write_state(new_state)
-
-    try:
-        os.chown(ROMS_DIR, 1000, 100)
-        os.chown(STATE_FILE, 1000, 100)
-        for path_str in new_state.values():
-            try:
-                os.chown(path_str, 1000, 100)
-            except OSError:
-                pass
-    except OSError:
-        pass
-
-    log(f'found={len(apps)} created={created} updated={updated} removed={removed}')
+    created, updated, removed = sync_launchers(ROMS_DIR, STATE_FILE, '.flatpak', apps, 'Flatpak App')
+    games = {app_id: metadata_for(app_id, name) for app_id, name in apps.items()}
+    details_changed = sync_gamelist(ROMS_DIR, STATE_FILE, '.flatpak', games)
+    log(f'found={len(apps)} created={created} updated={updated} removed={removed} details_changed={details_changed}')
+    if created or updated or removed or details_changed:
+        reload_es()
     return 0
 
 
