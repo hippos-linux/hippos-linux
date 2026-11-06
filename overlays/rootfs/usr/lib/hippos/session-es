@@ -117,4 +117,6 @@ fi
 _ES_CMD="/usr/bin/emulationstation"
 [[ -n "$_MONITOR_IDX" ]] && _ES_CMD="$_ES_CMD --monitor $_MONITOR_IDX"
 
-exec openbox --sm-disable --startup "$_ES_CMD"
+# openbox outlives its startup command, so end it with ES: otherwise a crashed ES
+# leaves a black screen, because hippos-es only starts a new session once this exits.
+exec openbox --sm-disable --startup "sh -c '$_ES_CMD; openbox --exit'"
