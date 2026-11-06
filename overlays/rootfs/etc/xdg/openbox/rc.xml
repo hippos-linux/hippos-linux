@@ -4,5 +4,14 @@
     <number>1</number>
   </desktops>
   <applications>
+    <!-- Only the ES session reads this file; the desktop uses lxqt-rc.xml. So
+         everything launched from ES has no title bar and fills the screen, and the
+         same app stays windowed on the desktop. Dialogs keep their own size. -->
+    <application class="*">
+      <decor>no</decor>
+    </application>
+    <application class="*" type="normal">
+      <fullscreen>yes</fullscreen>
+    </application>
   </applications>
 </openbox_config>
