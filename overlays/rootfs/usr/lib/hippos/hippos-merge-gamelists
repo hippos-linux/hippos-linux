@@ -10,6 +10,7 @@ path conflicts so user-scraped metadata is never overwritten by external media.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -174,6 +175,9 @@ def _write_gamelist(entries: dict[str, ET.Element], dest: Path) -> None:
     tree = ET.ElementTree(root)
     ET.indent(tree, space='  ')
     tree.write(str(dest), encoding='utf-8', xml_declaration=True)
+    # This runs as root at boot; a root-owned gamelist stops ES saving it.
+    parent = dest.parent.stat()
+    os.chown(dest, parent.st_uid, parent.st_gid)
 
 
 def merge_system(system: str, rw_branch: Path, ro_branches: list[Path]) -> int:

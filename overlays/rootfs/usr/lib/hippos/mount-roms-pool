@@ -58,6 +58,9 @@ if [[ -d "${POOL}" && -n "$(ls -A "${POOL}" 2>/dev/null)" && -z "$(ls -A "${RW}"
     chown -R 1000:1000 "${RW}"
 fi
 
+# Earlier merges left root-owned gamelists that ES can't save to.
+find "${RW}" -mindepth 2 -maxdepth 2 -name gamelist.xml ! -user 1000 -exec chown 1000:1000 {} +
+
 mkdir -p "${POOL}"
 chown 1000:1000 "${POOL}"
 
