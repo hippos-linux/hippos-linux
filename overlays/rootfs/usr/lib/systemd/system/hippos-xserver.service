@@ -30,15 +30,17 @@ StandardInput=tty
 StandardOutput=journal
 StandardError=journal
 TTYPath=/dev/tty7
-TTYReset=yes
+# Must be "no": systemd reapplies this for ExecStartPost=, after Xorg has taken
+# the VT, putting it back to KD_TEXT and K_UNICODE. The kernel console then acts
+# on input underneath X, so an Alt+F4 from hippos-hotkeys also switches to tty4.
+TTYReset=no
 # Must be "no": this Xorg is a persistent server, not a one-shot login shell.
 # TTYVHangup=yes sends the TTY a vhangup() on every start, which delivers
 # SIGHUP to any process already holding /dev/tty7 open — including Xorg
 # itself once it has taken the VT, killing it (code=killed, signal=HUP)
 # before /tmp/.X11-unix/X0 is ever created. Confirmed on real hardware:
 # flipping this to "no" is the only change needed for Xorg to survive and
-# X0 to appear. TTYReset=yes (line-discipline reset, no hangup) is enough
-# for our purposes here.
+# X0 to appear.
 TTYVHangup=no
 TTYVTDisallocate=no
 PAMName=login
