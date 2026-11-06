@@ -73,8 +73,10 @@ printf '%s\n' "${ISSUE}" > "${LOGS}/issue.txt"
 
 echo -n "  Settings...            "
 {
-    echo "=== hippos.conf (token redacted) ==="
-    sed 's/\(updates\.token\s*=\s*\).*/\1<redacted>/' \
+    echo "=== hippos.conf (secrets redacted) ==="
+    # Bundles get posted to Discord. Per-game keys are left out of the match
+    # (no quotes allowed) so a ROM name can't redact its own settings.
+    sed -E 's/^([^="]*\.(key|token|password|passwd|pass|psk|secret)\s*=\s*).*/\1<redacted>/' \
         /userdata/system/hippos.conf 2>/dev/null || echo "(not found)"
 } > "${LOGS}/settings.txt" 2>&1
 echo "done"

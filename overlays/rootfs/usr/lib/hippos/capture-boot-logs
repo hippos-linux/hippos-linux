@@ -210,6 +210,20 @@ if [[ -f /tmp/Xorg.0.log ]]; then
     cp -f /tmp/Xorg.0.log "${OUT_DIR}/Xorg.0.log" || true
 fi
 
+# ES sends a launch's stdout and stderr to these files, not the journal, and
+# each launch overwrites them, so they hold the most recent launch only.
+for launch_log in es_launch_stdout.log es_launch_stderr.log retroarch.log; do
+    if [[ -f "/userdata/system/logs/${launch_log}" ]]; then
+        cp -f "/userdata/system/logs/${launch_log}" "${OUT_DIR}/${launch_log}" || true
+    fi
+done
+
+capture_shell "emulator-packages.txt" \
+    'ls -la /userdata/emulators; echo; echo "retroarch cores: $(find /userdata/emulators/retroarch/cores -name "*.so" 2>/dev/null | wc -l)"'
+
+capture_shell "roms-ownership.txt" \
+    'ls -la /userdata/.roms-rw; echo; find /userdata/.roms-rw -mindepth 2 -maxdepth 2 -name gamelist.xml -exec ls -la {} +'
+
 # ===========================================================================
 # Previous boot
 #
