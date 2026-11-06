@@ -82,6 +82,7 @@ License: creative commons CC-BY-NC-SA
     </text>
 
     <carousel name="systemcarousel">
+      <scrollSound>./assets/sounds/scroll.wav</scrollSound>
       <type>horizontal</type>
       <pos>0 0.41</pos>
       <size>1 0.3925</size>
@@ -103,6 +104,15 @@ License: creative commons CC-BY-NC-SA
   </view>
 
   <view name="video, basic, detailed, grid">
+    <sound name="back">
+      <path>./assets/sounds/back.wav</path>
+    </sound>
+    <sound name="launch">
+      <path>./assets/sounds/launch.wav</path>
+    </sound>
+    <sound name="menuOpen">
+      <path>./assets/sounds/menu.wav</path>
+    </sound>
     <helpsystem name="help">
       <textColor>FFFFFF90</textColor>
       <iconColor>FFFFFF90</iconColor>
@@ -150,6 +160,7 @@ License: creative commons CC-BY-NC-SA
 
   <view name="video, basic, detailed">
     <textlist name="gamelist">
+      <scrollSound>./assets/sounds/scroll.wav</scrollSound>
       <selectorColor>7B3FFF</selectorColor>
       <selectorColorEnd>1A6FFF</selectorColorEnd>
       <selectedColor>ffffff</selectedColor>
@@ -275,6 +286,7 @@ License: creative commons CC-BY-NC-SA
       <glowSize>3</glowSize>
     </text>
     <imagegrid name="gamegrid">
+      <scrollSound>./assets/sounds/scroll.wav</scrollSound>
       <pos>0.047 0.200</pos>
       <size>0.51 0.67</size>
       <margin>0.005 0.010</margin>
