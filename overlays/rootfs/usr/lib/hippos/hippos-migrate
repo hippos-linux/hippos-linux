@@ -83,6 +83,16 @@ if [[ -n "$APPLIED" ]] && version_lt "$APPLIED" "0.6.6"; then
     done
 fi
 
+if version_lt "$APPLIED" "0.6.7"; then
+    log "0.6.7: es-theme-hippos replaces es-theme-hippos-minimal as the default theme"
+    # The userdata overlay only seeds fresh images. Anyone on another theme chose
+    # it, so only the old default moves.
+    ES_SETTINGS=/userdata/system/configs/emulationstation/es_settings.cfg
+    if [[ -f "${ES_SETTINGS}" ]]; then
+        sed -i 's/name="ThemeSet" value="es-theme-hippos-minimal"/name="ThemeSet" value="es-theme-hippos"/' "${ES_SETTINGS}"
+    fi
+fi
+
 # Storage manager state files are intentionally plain text and safe to create
 # before any external media has been mounted.
 HIPPOS_CONFIG=/userdata/system/configs/hippos
