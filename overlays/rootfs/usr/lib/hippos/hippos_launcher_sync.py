@@ -19,6 +19,9 @@ from pathlib import Path
 # hippos:users, so the user can manage the generated files.
 _OWNER_UID, _OWNER_GID = 1000, 100
 _ES_RELOAD = 'http://127.0.0.1:1234/reloadgames'
+# Launcher file content meaning "open the app itself" rather than one of its
+# games. Not a valid game key, so it can't collide with one.
+CLIENT_ENTRY = '@launcher'
 
 
 @dataclass(frozen=True)

@@ -1,4 +1,4 @@
-"""Read an installed Flatpak's own description and icon, with no network access."""
+"""Read an installed app's own AppStream description and icon, with no network access."""
 from __future__ import annotations
 
 import re
@@ -70,12 +70,16 @@ def read_app_details(app_id: str) -> AppDetails:
         share = root / app_id / 'current' / 'active' / 'export' / 'share'
         if not share.is_dir():
             continue
-        description = developer = None
-        try:
-            component = ET.parse(share / 'metainfo' / f'{app_id}.metainfo.xml').getroot()
-        except (OSError, ET.ParseError):
-            pass  # metainfo is optional; the icon can still be used
-        else:
-            description, developer = _description(component), _developer(component)
-        return AppDetails(description, developer, _icon(share, app_id))
+        return read_share_details(share, app_id)
     return AppDetails()
+
+
+def read_share_details(share: Path, app_id: str) -> AppDetails:
+    description = developer = None
+    try:
+        component = ET.parse(share / 'metainfo' / f'{app_id}.metainfo.xml').getroot()
+    except (OSError, ET.ParseError):
+        pass  # metainfo is optional; the icon can still be used
+    else:
+        description, developer = _description(component), _developer(component)
+    return AppDetails(description, developer, _icon(share, app_id))

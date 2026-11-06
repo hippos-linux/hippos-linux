@@ -1,0 +1,7 @@
+{
+  "name": "lutris",
+  "keys": {
+    "exit": "pkill -TERM -f '[l]utris-wrapper' || pkill -TERM -f 'lutris:[r]ungameid' || DISPLAY=:0 xdotool key alt+F4",
+    "screenshot": "KEY_SYSRQ"
+  }
+}

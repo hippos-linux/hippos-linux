@@ -12,7 +12,7 @@ from PIL import Image
 
 import hippos_quiver
 from hippos_flatpak_metadata import read_app_details
-from hippos_launcher_sync import GameMetadata, known_keys, reload_es, sync_gamelist, sync_launchers
+from hippos_launcher_sync import CLIENT_ENTRY, GameMetadata, known_keys, reload_es, sync_gamelist, sync_launchers
 
 ROMS_DIR     = hippos_quiver.USERDATA / 'roms' / 'quiver'
 STATE_FILE   = hippos_quiver.USERDATA / 'system' / 'quiver-launchers.json'
@@ -79,12 +79,12 @@ def sync() -> int:
     # Read before sync_launchers records this run's launchers as known.
     already_created = known_keys(STATE_FILE)
     apps = installed_apps()
-    entries = {hippos_quiver.LAUNCHER_ENTRY: 'Quiver Launcher', **{f: a['name'] for f, a in apps.items()}}
+    entries = {CLIENT_ENTRY: 'Quiver Launcher', **{f: a['name'] for f, a in apps.items()}}
     created, updated, removed = sync_launchers(ROMS_DIR, STATE_FILE, '.quiver', entries, 'Quiver App')
 
     own = read_app_details(hippos_quiver.APP_ID)
     # Quiver's trademark terms limit its icon to running Quiver itself, so no image here.
-    games = {hippos_quiver.LAUNCHER_ENTRY: GameMetadata('Quiver Launcher', own.description, own.developer)}
+    games = {CLIENT_ENTRY: GameMetadata('Quiver Launcher', own.description, own.developer)}
     network_up = True
     with tempfile.TemporaryDirectory() as scratch:
         for folder, app in apps.items():

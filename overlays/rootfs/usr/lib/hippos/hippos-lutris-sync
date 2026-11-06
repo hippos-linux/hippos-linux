@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate EmulationStation .lutris launchers from installed Lutris games.
+"""Generate EmulationStation .lutris launchers and details: Lutris and its installed games.
 
 Lutris keeps its library in $XDG_DATA_HOME/lutris/pga.db. The desktop session
 leaves XDG_DATA_HOME unset, so that's /userdata/.local/share/lutris/pga.db.
@@ -10,31 +10,56 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from hippos_launcher_sync import sync_launchers
+from hippos_flatpak_metadata import read_share_details
+from hippos_launcher_sync import CLIENT_ENTRY, GameMetadata, reload_es, sync_gamelist, sync_launchers
 
 USERDATA   = Path('/userdata')
-PGA_DB     = USERDATA / '.local' / 'share' / 'lutris' / 'pga.db'
+DATA_DIR   = USERDATA / '.local' / 'share' / 'lutris'
+CACHE_DIR  = USERDATA / '.cache' / 'lutris'
+PGA_DB     = DATA_DIR / 'pga.db'
 ROMS_DIR   = USERDATA / 'roms' / 'lutris'
 STATE_FILE = USERDATA / 'system' / 'lutris-launchers.json'
+# Lutris falls back to its data folder when these aren't in its cache folder.
+ART_DIRS = tuple(root / kind for kind in ('coverart', 'banners') for root in (CACHE_DIR, DATA_DIR))
+LUTRIS_APP_ID = 'net.lutris.Lutris'
 
 
 def log(message: str) -> None:
     print(f'[hippos-lutris-sync] {message}', flush=True)
 
 
-def installed_games() -> dict[str, str]:
-    """{game id -> name}; read-only so Lutris keeps writing undisturbed."""
+def installed_games() -> dict[str, tuple[str, str]]:
+    """{game id -> (name, slug)}; read-only so Lutris keeps writing undisturbed."""
     if not PGA_DB.exists():
         return {}
     with sqlite3.connect(f'file:{PGA_DB}?mode=ro', uri=True, timeout=10) as db:
-        rows = db.execute('SELECT id, name FROM games WHERE installed = 1').fetchall()
-    return {str(game_id): name or f'Lutris game {game_id}' for game_id, name in rows}
+        rows = db.execute('SELECT id, name, slug FROM games WHERE installed = 1').fetchall()
+    return {str(game_id): (name or f'Lutris game {game_id}', slug or '') for game_id, name, slug in rows}
+
+
+def artwork(slug: str) -> Path | None:
+    for directory in ART_DIRS:
+        for suffix in ('.jpg', '.png'):
+            path = directory / f'{slug}{suffix}'
+            if slug and path.is_file():
+                return path
+    return None
 
 
 def sync() -> int:
     games = installed_games()
-    created, updated, removed = sync_launchers(ROMS_DIR, STATE_FILE, '.lutris', games, 'Lutris Game')
-    log(f'found={len(games)} created={created} updated={updated} removed={removed}')
+    # Lutris is always listed, so games can be installed from ES on an empty library.
+    names = {CLIENT_ENTRY: 'Lutris', **{game_id: name for game_id, (name, _) in games.items()}}
+    created, updated, removed = sync_launchers(ROMS_DIR, STATE_FILE, '.lutris', names, 'Lutris Game')
+
+    own = read_share_details(Path('/usr/share'), LUTRIS_APP_ID)
+    details = {CLIENT_ENTRY: GameMetadata('Lutris', own.description, own.developer, own.icon)}
+    details.update({game_id: GameMetadata(name, image=artwork(slug)) for game_id, (name, slug) in games.items()})
+    details_changed = sync_gamelist(ROMS_DIR, STATE_FILE, '.lutris', details)
+
+    log(f'found={len(games)} created={created} updated={updated} removed={removed} details_changed={details_changed}')
+    if created or updated or removed or details_changed:
+        reload_es()
     return 0
 
 

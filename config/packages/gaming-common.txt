@@ -45,9 +45,6 @@ mesa-va-drivers
 mesa-vdpau-drivers
 vainfo
 
-# Game launchers
-lutris
-
 # RetroArch + core info (cores come from the retroarch build artifact)
 retroarch
 libretro-core-info
