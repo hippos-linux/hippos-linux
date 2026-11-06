@@ -44,6 +44,7 @@ avahi-utils
 # Software centre (Discover — Flatpak + apt, works on all desktops)
 plasma-discover
 plasma-discover-backend-flatpak
+flatpak-xdg-utils
 packagekit
 
 # Screenshot

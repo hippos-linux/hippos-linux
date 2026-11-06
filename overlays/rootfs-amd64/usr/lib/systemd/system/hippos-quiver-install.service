@@ -1,0 +1,15 @@
+[Unit]
+Description=HippOS Quiver Launcher installer
+After=network.target local-fs.target userdata.mount
+Wants=userdata.mount
+ConditionPathExists=!/userdata/.local/share/flatpak/app/io.github.tgeorgiadis.QuiverLauncher
+
+[Service]
+Type=simple
+TimeoutStopSec=10
+ExecStart=/usr/lib/hippos/hippos-quiver-install
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

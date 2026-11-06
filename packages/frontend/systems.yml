@@ -172,6 +172,7 @@ _emulator_defaults:
   spectravideo:  { emulator: openmsx,            core: openmsx            }
   heroic:        { emulator: heroic,             core: heroic             }
   lutris:        { emulator: lutris,             core: lutris             }
+  quiver:        { emulator: quiver,             core: quiver             }
   steam:         { emulator: steam,              core: steam              }
   sufami:        { emulator: retroarch,          core: snes9x             }
   supergrafx:    { emulator: retroarch,          core: mednafen_supergrafx }
@@ -2592,6 +2593,14 @@ lutris:
   manufacturer: Lutris
   name: Lutris
   release: 2009
+quiver:
+  extensions:
+  - quiver
+  force: true
+  hardware: os
+  manufacturer: Quiver Launcher
+  name: Quiver Launcher
+  release: 2026
 steam:
   extensions:
   - steam

@@ -23,6 +23,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import BIOS, CONFIGS, SAVES, USERDATA
+import hippos_quiver
 
 
 _VICE_MACHINE_NAMES: dict[str, str] = {
@@ -280,6 +281,27 @@ def launch_lutris(ctx: LaunchContext) -> int:
     cmd = ['lutris', f'lutris:rungameid/{game_id}']
     _log.info("Launching Lutris game %s", game_id)
     return _run_game_command(ctx, 'lutris', cmd, env).returncode
+
+
+def launch_quiver(ctx: LaunchContext) -> int:
+    """A .quiver file (hippos-quiver-sync) holds an app's Quiver folder name,
+    or the marker for Quiver's own entry. Quiver picks the executable and runs
+    Windows apps through its configured Wine command."""
+    try:
+        target = ctx.rom.read_text(encoding='utf-8').strip()
+    except OSError as exc:
+        _log.error("Could not read Quiver launcher from %s: %s", ctx.rom, exc)
+        return 1
+    if not target:
+        _log.error("Empty Quiver launcher in %s", ctx.rom)
+        return 1
+    conf = _load_hippos_conf()
+    env = _build_game_env(conf, ctx)
+    cmd = ['/usr/bin/flatpak', 'run', hippos_quiver.APP_ID]
+    if target != hippos_quiver.LAUNCHER_ENTRY:
+        cmd += ['--run', target]
+    _log.info("Launching Quiver: %s", target)
+    return _run_game_command(ctx, 'quiver', cmd, env).returncode
 
 
 def launch_pygame(ctx: LaunchContext) -> int:

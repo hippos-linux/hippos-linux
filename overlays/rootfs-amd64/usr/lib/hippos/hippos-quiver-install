@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Install Quiver Launcher's official Flatpak as the hippos user. It lands in
+# /userdata, so it survives OS updates, and the service stops running once it's
+# there. Quiver isn't on Flathub, and this bundle doesn't update itself: moving
+# to a newer version means changing this URL and checksum.
+set -euo pipefail
+
+BUNDLE_URL="https://github.com/tgeorgiadis/quiver-launcher/releases/download/v3.5.1/QuiverLauncher.flatpak"
+BUNDLE_SHA256="d6629e54f7967433f5717253381961fddb5056bd7560c0c9c7370dd0dcb65c61"
+APP_ID="io.github.tgeorgiadis.QuiverLauncher"
+CACHE_DIR="/userdata/system/cache/quiver"
+BUNDLE="${CACHE_DIR}/QuiverLauncher.flatpak"
+SETTINGS="/userdata/.var/app/${APP_ID}/data/QuiverLauncher/settings.json"
+
+log() { echo "[hippos-quiver-install] $*"; }
+
+log "Waiting for internet connectivity..."
+until curl -s --connect-timeout 5 --max-time 10 -o /dev/null https://github.com; do
+    sleep 30
+done
+
+runuser -l hippos -c "mkdir -p '${CACHE_DIR}'"
+trap 'rm -f "${BUNDLE}"' EXIT
+
+log "Downloading ${BUNDLE_URL}"
+runuser -l hippos -c "curl -fsSL --retry 3 -o '${BUNDLE}' '${BUNDLE_URL}'"
+echo "${BUNDLE_SHA256}  ${BUNDLE}" | sha256sum --check --quiet
+
+log "Installing ${APP_ID}"
+runuser -l hippos -c "flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo"
+runuser -l hippos -c "flatpak install --user --noninteractive --assumeyes --bundle '${BUNDLE}'"
+
+# Windows apps use HippOS's Wine, unless the user has already chosen a command.
+runuser -l hippos -c "python3 - '${SETTINGS}'" <<'PYEOF'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+path.parent.mkdir(parents=True, exist_ok=True)
+try:
+    settings = json.loads(path.read_text(encoding='utf-8-sig'))
+except (OSError, ValueError):
+    settings = {}
+if not settings.get('LinuxWindowsLaunchCommand'):
+    settings['LinuxWindowsLaunchCommand'] = 'hippos-wine windows play {exe}'
+path.write_text(json.dumps(settings, indent=2), encoding='utf-8')
+PYEOF
+
+/usr/lib/hippos/hippos-quiver-sync
+log "Done"

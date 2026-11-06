@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Generate EmulationStation .quiver launchers and details: Quiver and its installed apps."""
+from __future__ import annotations
+
+import json
+import tempfile
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+from PIL import Image
+
+import hippos_quiver
+from hippos_flatpak_metadata import read_app_details
+from hippos_launcher_sync import GameMetadata, known_keys, reload_es, sync_gamelist, sync_launchers
+
+ROMS_DIR     = hippos_quiver.USERDATA / 'roms' / 'quiver'
+STATE_FILE   = hippos_quiver.USERDATA / 'system' / 'quiver-launchers.json'
+ICON_CACHE   = hippos_quiver.DATA_DIR / 'Cache' / 'Icons'
+GITHUB_TIMEOUT_SECONDS = 4
+
+
+def log(message: str) -> None:
+    print(f'[hippos-quiver-sync] {message}', flush=True)
+
+
+def _load_json(path: Path) -> dict:
+    try:
+        # Quiver writes a UTF-8 byte order mark on some platforms.
+        data = json.loads(path.read_text(encoding='utf-8-sig'))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def installed_apps() -> dict[str, dict]:
+    """{app folder name -> library entry}. A library entry only counts once its
+    folder exists: Quiver lists apps it hasn't downloaded yet."""
+    settings = _load_json(hippos_quiver.DATA_DIR / 'settings.json')
+    apps_dir = Path(settings.get('AppsPath') or hippos_quiver.DATA_DIR / 'Apps')
+    apps: dict[str, dict] = {}
+    for app in _load_json(hippos_quiver.DATA_DIR / 'apps.json').get('apps', []):
+        folder, name = app.get('folderName'), app.get('name')
+        if folder and name and Path(app.get('installPath') or apps_dir / folder).is_dir():
+            apps[folder] = app
+    return apps
+
+
+def cached_icon(folder: str, scratch: Path) -> Path | None:
+    """Quiver's cached icon, with Windows .ico files converted because they often
+    hold only small sizes that ES would pick the wrong frame from."""
+    for icon in sorted(ICON_CACHE.glob(f'{folder}_*')):
+        if icon.suffix.lower() != '.ico':
+            return icon
+        try:
+            converted = scratch / f'{folder}.png'
+            Image.open(icon).save(converted)
+            return converted
+        except OSError as exc:
+            log(f'could not read {icon.name}: {exc}')
+    return None
+
+
+def github_description(repository: str) -> str | None:
+    request = urllib.request.Request(
+        f'https://api.github.com/repos/{repository}',
+        headers={'User-Agent': 'HippOS', 'Accept': 'application/vnd.github+json'},
+    )
+    with urllib.request.urlopen(request, timeout=GITHUB_TIMEOUT_SECONDS) as response:
+        return json.load(response).get('description')
+
+
+def sync() -> int:
+    if not hippos_quiver.FLATPAK_INSTALL.is_dir():
+        created, updated, removed = sync_launchers(ROMS_DIR, STATE_FILE, '.quiver', {}, 'Quiver App')
+        log(f'not installed; removed={removed}')
+        return 0
+
+    # Read before sync_launchers records this run's launchers as known.
+    already_created = known_keys(STATE_FILE)
+    apps = installed_apps()
+    entries = {hippos_quiver.LAUNCHER_ENTRY: 'Quiver Launcher', **{f: a['name'] for f, a in apps.items()}}
+    created, updated, removed = sync_launchers(ROMS_DIR, STATE_FILE, '.quiver', entries, 'Quiver App')
+
+    own = read_app_details(hippos_quiver.APP_ID)
+    # Quiver's trademark terms limit its icon to running Quiver itself, so no image here.
+    games = {hippos_quiver.LAUNCHER_ENTRY: GameMetadata('Quiver Launcher', own.description, own.developer)}
+    network_up = True
+    with tempfile.TemporaryDirectory() as scratch:
+        for folder, app in apps.items():
+            repository = app.get('repository')
+            description = None
+            is_github = repository and app.get('repositorySource', 'github') == 'github'
+            # Asked once, when the shortcut is created, and never again.
+            if network_up and is_github and folder not in already_created:
+                try:
+                    description = github_description(repository)
+                except (OSError, urllib.error.URLError, ValueError) as exc:
+                    log(f'no GitHub description for {repository}: {exc}')
+                    network_up = False
+            developer = repository.split('/')[0] if repository else None
+            games[folder] = GameMetadata(app['name'], description, developer, cached_icon(folder, Path(scratch)))
+        details_changed = sync_gamelist(ROMS_DIR, STATE_FILE, '.quiver', games)
+
+    log(f'found={len(entries)} created={created} updated={updated} removed={removed} details_changed={details_changed}')
+    if created or updated or removed or details_changed:
+        reload_es()
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(sync())

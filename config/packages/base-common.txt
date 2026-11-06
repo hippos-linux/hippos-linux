@@ -69,6 +69,7 @@ ntfs-3g
 pv
 mergerfs
 fuse3
+libfuse2t64
 rsync
 udisks2
 udisks2-btrfs
