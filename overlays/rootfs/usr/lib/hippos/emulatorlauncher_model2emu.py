@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 from emulatorlauncher_shared import (
+    WINE_NO_INSTALLER_PROMPTS,
     LaunchContext,
     _build_game_env,
     _conf_bool,
@@ -16,7 +17,7 @@ from emulatorlauncher_shared import (
     _sync_tree,
 )
 
-from HipposPaths import USERDATA
+from HipposPaths import CONFIGS, USERDATA
 
 
 def _model2_border_thickness(width: int) -> str:
@@ -167,6 +168,7 @@ def launch_model2emu(ctx: LaunchContext) -> int:
     cmd: list[str] = [str(bin_path), ctx.rom.stem]
     env = _build_game_env(conf, ctx)
     env['SDL_JOYSTICK_HIDAPI'] = '0'
+    env['WINEDLLOVERRIDES'] = WINE_NO_INSTALLER_PROMPTS
     if _conf_value(conf, 'model2_Software', '0') == '1':
         env.update({
             '__GLX_VENDOR_LIBRARY_NAME': 'mesa',
@@ -178,7 +180,8 @@ def launch_model2emu(ctx: LaunchContext) -> int:
     return result.returncode
 
 
-MODEL2_RUNTIME_ROOT = USERDATA / 'emulators' / 'model2emu' / 'current'
+# Outside the package: updates replace the package directory, and it's synced from.
+MODEL2_RUNTIME_ROOT = CONFIGS / 'model2emu'
 MODEL2_RUNTIME_EMU  = MODEL2_RUNTIME_ROOT / 'emulator'
 MODEL2_SOURCE_EMU   = Path('/opt/emulators/model2emu/emulator')
 MODEL2_ROMS         = USERDATA / 'roms' / 'model2'

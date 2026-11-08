@@ -6,6 +6,7 @@ import configparser
 from pathlib import Path
 
 from emulatorlauncher_shared import (
+    WINE_NO_INSTALLER_PROMPTS,
     LaunchContext,
     _build_game_env,
     _conf_bool,
@@ -173,22 +174,17 @@ def launch_ymir(ctx: LaunchContext) -> int:
         _log.error("ymir: binary not found")
         return 1
 
-    # Write minimal TOML config for saves + screenshots
-    cfg_file = cfg_dir / 'ymir.toml'
+    # Ymir fills in everything else when it saves the profile's config.
+    cfg_file = cfg_dir / 'Ymir.toml'
     if not cfg_file.exists():
         cfg_file.write_text(
-            f'[paths]\n'
-            f'saves = "{saves_dir}"\n'
-            f'screenshots = "{SCREENSHOTS}"\n'
-            f'bios = "{BIOS}"\n'
+            f"[General.PathOverrides]\n"
+            f"BackupMemory = '{saves_dir}'\n"
+            f"IPLROMImages = '{BIOS}'\n"
+            f"Screenshots = '{SCREENSHOTS}'\n"
         )
 
-    cmd = [
-        str(bin_path),
-        '--config', str(cfg_file),
-        '--fullscreen',
-        str(ctx.rom),
-    ]
+    cmd = [str(bin_path), '--profile', str(cfg_dir), '--fullscreen', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
     return _run_game_command(ctx, 'ymir', cmd, env).returncode
@@ -620,6 +616,7 @@ def launch_demul(ctx: LaunchContext) -> int:
 
     env = _build_game_env(conf, ctx)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
+    env['WINEDLLOVERRIDES'] = WINE_NO_INSTALLER_PROMPTS
     return _run_game_command(ctx, 'demul', cmd, env).returncode
 
 

@@ -549,7 +549,7 @@ AMIBERRY_BIOS_DIR = BIOS / 'amiga'
 AMIBERRY_LOG_FILE = LOGS / 'amiberry.log'
 
 
-LINDBERGH_RUNTIME_DIR = Path('/run/hippos/emulators/lindbergh-loader')
+LINDBERGH_RUNTIME_DIR = CONFIGS / 'lindbergh-loader'
 
 
 LINDBERGH_TEMPLATE_DIR = Path('/usr/share/hippos/lindbergh')

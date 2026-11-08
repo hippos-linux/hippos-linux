@@ -174,6 +174,10 @@ def launch_shadps4(ctx: LaunchContext) -> int:
         return 1
 
     write_shadps4_config(ctx)
+    # shadPS4 opens a save migration dialog whenever its user folder is missing,
+    # even with nothing to migrate.
+    for user_dir in ('savedata', 'trophy', 'inputs'):
+        (SHADPS4_RUNTIME_DIR / 'shadPS4' / 'home' / '1000' / user_dir).mkdir(parents=True, exist_ok=True)
     runtime_exe = _find_executable(SHADPS4_RUNTIME_DIR) or bin_path
     if not runtime_exe.exists():
         return 1
@@ -206,6 +210,6 @@ SHADPS4_CONFIG_DIR = CONFIGS / 'shadps4'
 SHADPS4_USER_CONFIG_DIR = SHADPS4_CONFIG_DIR / 'user'
 SHADPS4_TOML = SHADPS4_USER_CONFIG_DIR / 'config.toml'
 SHADPS4_SAVES = SAVES / 'shadps4'
-SHADPS4_RUNTIME_DIR = Path('/run/hippos/emulators/shadps4')
+SHADPS4_RUNTIME_DIR = CONFIGS / 'shadps4-runtime'
 SHADPS4_BUNDLE_DIR = Path('/opt/emulators/shadps4')
 SHADPS4_ROM_DIR = USERDATA / 'roms' / 'ps4'

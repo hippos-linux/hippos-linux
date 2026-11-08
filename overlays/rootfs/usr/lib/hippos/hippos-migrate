@@ -93,6 +93,26 @@ if version_lt "$APPLIED" "0.6.7"; then
     fi
 fi
 
+if version_lt "$APPLIED" "0.6.8"; then
+    log "0.6.8: default language is now en_GB; repair hippos.conf owner and touchegg.conf root"
+    # Choosing a language in ES writes this key, so an unset key means no choice
+    # was made. ES reads only this file, not hippos-defaults.conf.
+    if ! grep -q '^system.language=' /userdata/system/hippos.conf 2>/dev/null; then
+        hippos-settings set system.language en_GB
+    fi
+    # Older hippos-settings runs as root could leave this root-owned, which stops
+    # ES saving its settings.
+    chown hippos:users /userdata/system/hippos.conf
+    # Touché can't open a config without the accented root, and shows no window.
+    # Model 2 used to sync its package into a folder inside itself, nesting deeper
+    # on every launch. Its runtime lives under configs now.
+    rm -rf /userdata/emulators/model2emu/current
+    TOUCHEGG_CONF=/userdata/.config/touchegg/touchegg.conf
+    if [[ -f "${TOUCHEGG_CONF}" ]]; then
+        sed -i 's#<touchegg>#<touchégg>#; s#</touchegg>#</touchégg>#' "${TOUCHEGG_CONF}"
+    fi
+fi
+
 # Storage manager state files are intentionally plain text and safe to create
 # before any external media has been mounted.
 HIPPOS_CONFIG=/userdata/system/configs/hippos
@@ -108,6 +128,8 @@ touch "${HIPPOS_CONFIG}/ignored-storage-devices.txt"
 if [[ ! -s "${HIPPOS_CONFIG}/current-storage.conf" ]]; then
     printf 'INTERNAL\n' > "${HIPPOS_CONFIG}/current-storage.conf"
 fi
+# hippos-storage-manager edits these as the user from ES.
+chown -R hippos:users "${HIPPOS_CONFIG}"
 
 # ── record applied version ────────────────────────────────────────────────────
 mkdir -p /userdata/system

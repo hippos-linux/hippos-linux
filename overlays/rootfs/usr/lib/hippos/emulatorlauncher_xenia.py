@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 from emulatorlauncher_shared import (
+    WINE_NO_INSTALLER_PROMPTS,
     LaunchContext,
     _build_game_env,
     _conf_bool,
@@ -205,6 +206,7 @@ def launch_xenia(ctx: LaunchContext) -> int:
     env['WINEPREFIX'] = str(prefix_dir)
     env['WINEARCH'] = 'win64'
     env['WINEDEBUG'] = '-all'
+    env['WINEDLLOVERRIDES'] = WINE_NO_INSTALLER_PROMPTS
     env['VKD3D_SHADER_CACHE_PATH'] = str(XENIA_CACHE_DIR)
     env['SDL_JOYSTICK_HIDAPI'] = '0'
     env['LD_LIBRARY_PATH'] = f'/usr/lib:{env.get("LD_LIBRARY_PATH", "")}'

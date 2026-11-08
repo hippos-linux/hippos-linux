@@ -26,7 +26,7 @@ from hippos_controller_monitor import start_controller_monitor
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
-from HipposPaths import HOME, SAVES  # noqa: E402
+from HipposPaths import HOME, SAVES_RW  # noqa: E402
 
 # ── Shared launcher core (constants, LaunchContext, conf/env helpers) ──────────
 # Imported — not defined here — so per-emulator modules never import this file
@@ -808,7 +808,9 @@ def _run_with_squashfs(ctx: LaunchContext, generator: Callable[[LaunchContext], 
 
     with mount_squashfs(ctx.rom) as squash_root:
         if ctx.emulator in WRITES_TO_ROM:
-            saves_root = SAVES / ctx.system / ctx.rom.stem
+            # overlayfs can't use a FUSE upper dir, so the overlay writes to the
+            # saves pool's internal branch; the files still show in /userdata/saves.
+            saves_root = SAVES_RW / ctx.system / ctx.rom.stem
             with mount_overlayfs(squash_root, saves_root) as overlay:
                 ctx.rom = overlay
                 return generator(ctx)

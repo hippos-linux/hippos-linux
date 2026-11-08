@@ -62,7 +62,8 @@ def _write_ppsspp_config(conf: dict[str, str]) -> None:
     PPSSPP_INI.parent.mkdir(parents=True, exist_ok=True)
     parser = _new_ini_parser()
     if PPSSPP_INI.exists():
-        parser.read(PPSSPP_INI, encoding='utf-8')
+        # PPSSPP saves its ini with a byte order mark.
+        parser.read(PPSSPP_INI, encoding='utf-8-sig')
 
     for section in ('Graphics', 'SystemParam', 'General', 'Upgrade'):
         _ensure_section(parser, section)

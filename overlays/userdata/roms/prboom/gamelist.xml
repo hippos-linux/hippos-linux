@@ -15,4 +15,14 @@
         <genre>First-Person Shooter</genre>
         <players>1</players>
     </game>
+    <game>
+        <path>./prboom.wad</path>
+        <name>PrBoom</name>
+        <desc>PrBoom is the open source engine that runs DOOM on HippOS. Starting it plays the included DOOM shareware episode.</desc>
+        <image>./images/Doom-image.png</image>
+        <thumbnail>./images/Doom-thumb.png</thumbnail>
+        <marquee>./images/Doom-logo.png</marquee>
+        <developer>PrBoom Team</developer>
+        <genre>First-Person Shooter</genre>
+    </game>
 </gameList>

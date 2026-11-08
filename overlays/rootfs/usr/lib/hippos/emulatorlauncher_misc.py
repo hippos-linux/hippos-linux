@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-import signal
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -66,6 +66,10 @@ _VICE_BORDER_OPTION: dict[str, str] = {
 }
 _VICE_BORDER_NONE = '3'
 
+LUTRISVIEW = '/usr/lib/hippos/lutrisview'
+# LutrisView takes its colours, fonts and background from the default ES theme.
+LUTRISVIEW_THEME = '/usr/share/emulationstation/themes/es-theme-hippos'
+
 # VICE's -joydevN numbering: 0 none, 1 numpad, 2-3 keysets, then host devices.
 _VICE_JOYDEV_FIRST_HOST = 4
 
@@ -121,10 +125,11 @@ def _vice_joysticks() -> list[_ViceJoystick]:
     joysticks = []
     for node in sorted(Path('/dev/input').glob('event*')):
         try:
-            with InputDevice(str(node)) as device:
-                caps = device.capabilities()
+            device = InputDevice(str(node))
         except OSError:
             continue
+        caps = device.capabilities()
+        device.close()
         keys = set(caps.get(ecodes.EV_KEY, ()))
         axes = {code for code, _info in caps.get(ecodes.EV_ABS, ())}
         if keys & _VICE_GAMEPAD_BUTTONS and axes & _VICE_GAMEPAD_AXES:
@@ -263,7 +268,9 @@ def launch_heroic(ctx: LaunchContext) -> int:
 
 def launch_lutris(ctx: LaunchContext) -> int:
     """A .lutris file (hippos-lutris-sync) holds a game's Lutris id, or the marker
-    for Lutris itself. Lutris quits once a game started with lutris:rungameid exits."""
+    for the Lutris entry, which opens LutrisView: a controller frontend for the
+    library and store that hands games and installs to Lutris. Lutris quits once
+    a game started with lutris:rungameid exits."""
     try:
         target = ctx.rom.read_text(encoding='utf-8').strip()
     except OSError as exc:
@@ -275,18 +282,20 @@ def launch_lutris(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
     # Same dirs as the desktop session, where the games were installed:
-    # pga.db and game configs live under these.
+    # pga.db, game configs and cover art live under these.
     env['XDG_CONFIG_HOME'] = '/userdata/system/.config'
     env['XDG_DATA_HOME'] = '/userdata/.local/share'
+    env['XDG_CACHE_HOME'] = '/userdata/.cache'
     # Debian installs Lutris and tools it runs, like gamemoderun, to /usr/games,
     # which isn't on the service manager's PATH. session-desktop adds the same.
     env['PATH'] = f"{env.get('PATH', '')}:/usr/local/games:/usr/games"
-    cmd = ['lutris'] if target == CLIENT_ENTRY else ['lutris', f'lutris:rungameid/{target}']
+    if target == CLIENT_ENTRY:
+        env['LUTRISVIEW_THEME'] = LUTRISVIEW_THEME
+        cmd = [LUTRISVIEW]
+    else:
+        cmd = ['lutris', f'lutris:rungameid/{target}']
     _log.info("Launching Lutris: %s", target)
-    returncode = _run_game_command(ctx, 'lutris', cmd, env).returncode
-    # The exit hotkey ends a launch that hasn't reached its game by terminating
-    # Lutris, which ES would otherwise report as an error.
-    return 0 if returncode == -signal.SIGTERM else returncode
+    return _run_game_command(ctx, 'lutris', cmd, env).returncode
 
 
 def launch_quiver(ctx: LaunchContext) -> int:
@@ -353,8 +362,21 @@ def launch_pyxel(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     cmd = [str(bin_path), 'play' if ctx.rom.suffix == '.pyxapp' else 'run', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
+    # bin/pyxel is a plain script; the package sits at the top of the artifact.
+    env['PYTHONPATH'] = str(bin_path.parent.parent)
     result = _run_game_command(ctx, 'pyxel', cmd, env)
     return result.returncode
+
+
+def _clk_media(rom: Path) -> Path:
+    """Clock Signal can't read inside a zip, and picks its machine from the file."""
+    if not zipfile.is_zipfile(rom):
+        return rom
+    extract_dir = Path('/tmp/clk') / rom.stem
+    extract_dir.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(rom) as archive:
+        archive.extractall(extract_dir)
+        return extract_dir / sorted(archive.namelist())[0]
 
 
 def launch_clk(ctx: LaunchContext) -> int:
@@ -364,7 +386,7 @@ def launch_clk(ctx: LaunchContext) -> int:
     if ctx.rom.is_dir():
         return 1
     conf = _load_hippos_conf()
-    cmd: list[str] = [str(bin_path), str(ctx.rom), '--rompath=/userdata/bios/']
+    cmd: list[str] = [str(bin_path), str(_clk_media(ctx.rom)), '--rompath=/userdata/bios/']
     if ctx.system in CLK_SVIDEO_SYSTEMS:
         cmd.append('--output=SVideo')
     if ctx.system in CLK_RGB_SYSTEMS:

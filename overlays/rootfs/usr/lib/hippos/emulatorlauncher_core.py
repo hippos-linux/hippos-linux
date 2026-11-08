@@ -438,7 +438,7 @@ def _write_duckstation_config(ctx: LaunchContext) -> None:
     settings.set('Main', 'SetupWizardIncomplete', 'false')
     settings.set('Main', 'EmulationSpeed', _conf_value(conf, 'duckstation_clocking', '1'))
     settings.set('Main', 'SyncToHostRefreshRate', _conf_value(conf, 'duckstation_hrr', 'false'))
-    settings.set('Main', 'Language', 'English')
+    settings.set('Main', 'Language', 'en')
     settings.set('Main', 'RewindEnable', 'true' if _conf_bool(conf, 'global.rewind', False) else 'false')
 
     settings.set('ControllerPorts', 'ControllerSettingsMigrated', 'true')

@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import signal
 import subprocess
 import time
 import tomllib
@@ -14,7 +15,7 @@ from contextlib import contextmanager
 from functools import cache
 from dataclasses import dataclass, field
 from pathlib import Path
-from shutil import copyfile, which
+from shutil import copy2, which
 from typing import Optional
 
 try:
@@ -593,7 +594,7 @@ def _find_emulator_bin(*names: str) -> Optional[Path]:
         for d in (EMULATORS_ROOT / package for package in packages):
             for binary in binaries:
                 for candidate in (d / binary, d / 'bin' / binary):
-                    if candidate.exists() and os.access(str(candidate), os.X_OK):
+                    if candidate.is_file() and os.access(str(candidate), os.X_OK):
                         return candidate
         for binary in binaries:
             found = which(binary)
@@ -611,7 +612,7 @@ def _find_emulator_bin_in_package(package: str, *binary_names: str) -> Optional[
     package_dir = EMULATORS_ROOT / package
     for binary in binary_names:
         for candidate in (package_dir / binary, package_dir / 'bin' / binary):
-            if candidate.exists() and os.access(str(candidate), os.X_OK):
+            if candidate.is_file() and os.access(str(candidate), os.X_OK):
                 return candidate
     for binary in binary_names:
         found = which(binary)
@@ -630,6 +631,10 @@ HOTKEYS_BIN = Path('/usr/lib/hippos/hippos-hotkeys')
 @contextmanager
 def hotkey_context(name: str):
     source = HOTKEY_CONTEXT_DIR / f'{name}.json'
+    if not source.exists():
+        # The daemon would otherwise stay on ES's context, whose Esc doesn't close
+        # most emulators.
+        source = HOTKEY_CONTEXT_DIR / 'game-default.json'
     try:
         if source.exists():
             data = json.loads(source.read_text())
@@ -841,13 +846,23 @@ def _run_game_command(
             with hotkey_context(hotkey_name):
                 profiles = _load_es_input_configs()
                 with evmapy_context(ctx.system, ctx.emulator, ctx.rom, ctx.controllers, profiles):
-                    return subprocess.run(cmd, env=env, text=True, cwd=str(cwd) if cwd is not None else None)
+                    result = subprocess.run(cmd, env=env, text=True, cwd=str(cwd) if cwd is not None else None)
+                    # The exit hotkey can end a game by terminating it, which ES
+                    # would otherwise report as an error.
+                    if result.returncode == -signal.SIGTERM:
+                        result.returncode = 0
+                    return result
     finally:
         # Runs on normal exit, non-zero exit, and process crash alike
         # (subprocess.run itself doesn't raise for any of those) — the one
         # gap is cmd never actually starting (e.g. FileNotFoundError), which
         # also never touched the display, so nothing to restore either way.
         _restore_crt_resolution()
+
+
+# Emulators packaged as Windows apps don't use .NET or a web view, and Wine's offer
+# to install those at first run is a dialog a controller can't dismiss.
+WINE_NO_INSTALLER_PROMPTS = 'mscoree=d;mshtml=d'
 
 
 def _build_game_env(conf: dict[str, str], ctx: Optional[LaunchContext] = None) -> dict[str, str]:
@@ -960,7 +975,7 @@ def _sync_tree(source: Path, destination: Path) -> None:
             _sync_tree(src_path, dst_path)
         else:
             dst_path.parent.mkdir(parents=True, exist_ok=True)
-            copyfile(src_path, dst_path)
+            copy2(src_path, dst_path)
     for name in cmp.common_dirs:
         _sync_tree(source / name, destination / name)
 

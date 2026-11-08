@@ -130,6 +130,6 @@ def launch_supermodel(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     env['SDL_VIDEODRIVER'] = 'x11'
     env['SDL_JOYSTICK_HIDAPI'] = '0'
-    result = _run_game_command(ctx, variant, cmd, env, cwd=run_dir)
+    result = _run_game_command(ctx, 'supermodel', cmd, env, cwd=run_dir)
     return result.returncode
 
