@@ -541,10 +541,15 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
     cfg.set('input_autodetect_enable',  '"false"')
     # udev driver reads /dev/input/event* directly — more reliable than sdl2
     # on Debian where SDL2 HIDAPI conflicts with xpad claiming the USB device.
-    # Button indices are identical (both enumerate evdev BTN_* codes in order).
+    # Button indices match ES's only because session-es turns off SDL's HIDAPI
+    # drivers, so both enumerate evdev BTN_* codes in order.
     cfg.set('input_joypad_driver',      '"udev"')
     cfg.set('input_enable_hotkey',      '"shift"')
     cfg.set('input_exit_emulator',      '"escape"')
+    # RetroArch otherwise only shows "Press again to quit" on the exit hotkey.
+    cfg.set('quit_press_twice',         '"false"')
+    # HippOS sets the CPU power mode itself, and polkit denies gamemode's helper.
+    cfg.set('gamemode_enable',          '"false"')
     cfg.set('input_menu_toggle',        '"f1"')
     cfg.set('input_pause_toggle',       '"p"')
     cfg.set('input_save_state',         '"f3"')

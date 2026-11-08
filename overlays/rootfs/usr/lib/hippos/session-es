@@ -19,7 +19,12 @@ export HOME=/userdata
 export XDG_RUNTIME_DIR=/run/user/1000
 export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus"
 export DISPLAY=:0
-export SDL_JOYSTICK_HIDAPI_STEAM=1
+# ES must see controllers the way emulators do: RetroArch reads evdev
+# (input_joypad_driver=udev) and the launcher writes ES's button indices into
+# its config. SDL's HIDAPI drivers (DualSense, DualShock 4, Steam) number
+# buttons in SDL's own order instead, which put Start on L2 and swapped the
+# face buttons for a DualSense. The kernel drives all of these pads.
+export SDL_JOYSTICK_HIDAPI=0
 unset XAUTHORITY
 
 # ES's own gettext lookup honors system.language directly (LANGUAGE env var,
@@ -89,15 +94,6 @@ _SLEEP_TIMER="$(hippos-settings get system.sleep_timer 2>/dev/null || true)"
 if [[ -n "$_SLEEP_TIMER" && "$_SLEEP_TIMER" != "0" ]]; then
     ( while true; do sleep 30; _idle=$(xprintidle 2>/dev/null || echo 0); [ "$_idle" -ge "$((_SLEEP_TIMER * 60000))" ] && /usr/bin/hippos-shutdown suspend; done ) &
 fi
-
-# Switch to VT7 once ES is running. Plymouth retains its last frame on VT1
-# while we're here, hiding GPU log text that would otherwise flash on screen.
-# Poll for the ES process, then give it a moment to render its first frame.
-# Matched by full command line: the kernel truncates its process name to
-# "emulationstatio", so pgrep -x emulationstation never matches.
-( until pgrep -f '^/usr/bin/emulationstation' > /dev/null 2>&1; do sleep 0.1; done
-  sleep 0.5
-  chvt 7 2>/dev/null || true ) &
 
 # Translate display.output (xrandr name) → SDL display index so ES opens on the right screen.
 # SDL enumerates active displays in xrandr output order.

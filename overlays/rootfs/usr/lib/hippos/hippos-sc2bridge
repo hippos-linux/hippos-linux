@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Steam Controller 2 (Bluetooth 28de:1303) userspace bridge.
 
-The kernel binds this controller only to hid-generic, which exposes the raw
-HID reports plus keyboard/mouse fallback interfaces. This decodes the raw
+Only for kernels whose hid-steam lacks Steam Controller 2 support: those bind
+it to hid-generic, which exposes the raw HID reports plus keyboard/mouse
+fallback interfaces. This decodes the raw
 reports into a virtual gamepad (with rumble) and a virtual trackpad mouse,
 and grabs the fallback interfaces so nothing else sees them.
 
