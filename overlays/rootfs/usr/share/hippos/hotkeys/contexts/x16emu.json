@@ -1,7 +1,7 @@
 {
   "name": "x16emu",
   "keys": {
-    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "exit": "/usr/lib/hippos/hippos-close-game",
     "menu": "KEY_F1",
     "reset": "KEY_F5",
     "screenshot": "KEY_F9"

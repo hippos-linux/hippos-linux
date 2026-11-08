@@ -313,16 +313,17 @@ def send_mouse_reset(uinput: evdev.UInput) -> None:
 # Device state
 # ---------------------------------------------------------------------------
 
-def is_udev_ignored(udev_ctx: pyudev.Context, path: str) -> bool:
-    """Input nodes owned exclusively by another HippOS service (e.g. Steam
-    Controller 2 fallback interfaces consumed by hippos-sc2bridge) are tagged
-    HIPPOS_HOTKEYS_IGNORE=1 by udev rules; the service exposes its own
-    virtual device for hotkeys to use instead."""
+def has_udev_flag(udev_ctx: pyudev.Context, path: str, flag: str) -> bool:
+    """udev rules flag input nodes that another service owns.
+    HIPPOS_HOTKEYS_IGNORE: the service consumes the node and exposes its own
+    virtual device for hotkeys instead (hippos-sc2bridge).
+    HIPPOS_HOTKEYS_NOGRAB: the service needs its own exclusive grab, so
+    hotkeys only listens (HHD and the built-in keyboard)."""
     try:
         udev_device = pyudev.Devices.from_device_file(udev_ctx, path)
     except pyudev.DeviceNotFoundError:
         return False
-    return udev_device.properties.get('HIPPOS_HOTKEYS_IGNORE') == '1'
+    return udev_device.properties.get(flag) == '1'
 
 def is_pure_keyboard(caps: dict[int, list[int]]) -> bool:
     """True for devices safe to grab exclusively: our own uinput (see
@@ -473,7 +474,7 @@ class HotkeyDaemon:
             return
         if ecodes.EV_KEY not in caps or device.name == DEVICE_NAME:
             return
-        if is_udev_ignored(self.udev_ctx, path):
+        if has_udev_flag(self.udev_ctx, path, 'HIPPOS_HOTKEYS_IGNORE'):
             log(f'ignoring {path} {device.name} (HIPPOS_HOTKEYS_IGNORE)')
             return
 
@@ -505,7 +506,9 @@ class HotkeyDaemon:
             action_map = dict(self.default_map)
 
         grabbed = False
-        if is_pure_keyboard(caps):
+        if has_udev_flag(self.udev_ctx, path, 'HIPPOS_HOTKEYS_NOGRAB'):
+            log(f'not grabbing {path} {device.name} (HIPPOS_HOTKEYS_NOGRAB)')
+        elif is_pure_keyboard(caps):
             try:
                 device.grab()
                 grabbed = True
@@ -771,7 +774,7 @@ def cmd_list() -> None:
             continue
         if dev.name == DEVICE_NAME or ecodes.EV_KEY not in caps:
             continue
-        if is_udev_ignored(udev_ctx, str(dev_path)):
+        if has_udev_flag(udev_ctx, str(dev_path), 'HIPPOS_HOTKEYS_IGNORE'):
             continue
         action_map = load_device_action_map(dev)
         keys = set(caps.get(ecodes.EV_KEY, []))

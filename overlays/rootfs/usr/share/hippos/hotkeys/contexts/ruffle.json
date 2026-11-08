@@ -1,8 +1,11 @@
 {
   "name": "ruffle",
   "keys": {
-    "exit": ["KEY_LEFTALT", "KEY_F4"],
-    "menu": ["KEY_LEFTCTRL", "KEY_M"],
+    "exit": "/usr/lib/hippos/hippos-close-game",
+    "menu": [
+      "KEY_LEFTCTRL",
+      "KEY_M"
+    ],
     "screenshot": "KEY_SYSRQ"
   }
 }

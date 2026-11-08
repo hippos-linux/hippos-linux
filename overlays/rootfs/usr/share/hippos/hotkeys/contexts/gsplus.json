@@ -1,7 +1,7 @@
 {
   "name": "gsplus",
   "keys": {
-    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "exit": "/usr/lib/hippos/hippos-close-game",
     "menu": "KEY_F4",
     "screenshot": "KEY_SYSRQ",
     "reset": "KEY_F12"

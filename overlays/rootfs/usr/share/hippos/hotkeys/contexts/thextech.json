@@ -1,7 +1,7 @@
 {
   "name": "thextech",
   "keys": {
-    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "exit": "/usr/lib/hippos/hippos-close-game",
     "screenshot": "KEY_F12",
     "pause": "KEY_P"
   }

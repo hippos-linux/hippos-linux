@@ -1,7 +1,7 @@
 {
   "name": "demul",
   "keys": {
-    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "exit": "/usr/lib/hippos/hippos-close-game",
     "menu": "KEY_TAB",
     "coin": "KEY_5",
     "reset": "KEY_F3",

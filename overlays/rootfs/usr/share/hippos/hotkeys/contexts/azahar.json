@@ -1,7 +1,7 @@
 {
   "name": "azahar",
   "keys": {
-    "exit": ["KEY_LEFTALT", "KEY_F4"],
+    "exit": "/usr/lib/hippos/hippos-close-game",
     "menu": "KEY_F2",
     "save_state": "KEY_F5",
     "restore_state": "KEY_F8",
