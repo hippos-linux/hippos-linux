@@ -13,5 +13,11 @@
     <application class="*" type="normal">
       <fullscreen>yes</fullscreen>
     </application>
+    <!-- GTK hides a fullscreen window's header bar, where Lutris's installer
+         keeps its Install and Cancel buttons. -->
+    <application class="Lutris">
+      <fullscreen>no</fullscreen>
+      <maximized>yes</maximized>
+    </application>
   </applications>
 </openbox_config>

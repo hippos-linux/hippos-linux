@@ -1,0 +1,1307 @@
+#!/usr/bin/python3
+# LutrisView — controller-friendly Lutris frontend. Apache2/MIT.
+import os
+import sys
+import ctypes
+import json
+import math
+import logging
+import threading
+import subprocess
+import xml.etree.ElementTree as ET
+import pygame
+from enum import Enum
+from typing import Optional, List, Dict
+
+# Lutris's own folders; it follows the XDG base directories.
+LUTRIS_DATA  = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "lutris")
+LUTRIS_CACHE = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "lutris")
+PGA_DB       = os.path.join(LUTRIS_DATA, "pga.db")
+
+# ── Look ──────────────────────────────────────────────────────────────────────
+# LUTRISVIEW_THEME names an EmulationStation theme folder whose <variables>
+# follow the HippOS theme's names; its colours, fonts and Lutris world art
+# replace the Lutris look, so the view matches the frontend it opens from.
+THEME_DIR = os.environ.get("LUTRISVIEW_THEME", "")
+
+
+def theme_variables(theme_dir: str) -> Dict[str, str]:
+    if not theme_dir:
+        return {}
+    try:
+        variables = ET.parse(os.path.join(theme_dir, "theme.xml")).getroot().find("variables")
+    except (OSError, ET.ParseError) as e:
+        logging.warning("theme %s unreadable, using the Lutris look: %s", theme_dir, e)
+        return {}
+    return {v.tag: (v.text or "").strip() for v in variables} if variables is not None else {}
+
+
+_THEME = theme_variables(THEME_DIR)
+
+
+def theme_color(name: str, default: tuple) -> tuple:
+    value = _THEME.get(name, "")
+    return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4)) if len(value) >= 6 else default
+
+
+def theme_font(name: str) -> str:
+    # pygame shrinks its default font when given None, so name its file.
+    value = _THEME.get(name)
+    return os.path.normpath(os.path.join(THEME_DIR, value)) if value else pygame.font.get_default_font()
+
+
+def mix(a: tuple, b: tuple, t: float) -> tuple:
+    return tuple(round(x + (y - x) * t) for x, y in zip(a, b))
+
+
+def text_on(color: tuple) -> tuple:
+    """Dark text on light fills, light text on dark ones."""
+    r, g, b = color
+    return BG if 0.299 * r + 0.587 * g + 0.114 * b > 140 else TEXT
+
+
+BG           = theme_color("ink",         ( 28,  28,  28))
+TEXT         = theme_color("textPrimary", (240, 240, 240))
+TEXT_DIM     = theme_color("textMuted",   (130, 130, 130))
+ACCENT       = theme_color("brandPurple", (255, 140,   0))   # Lutris orange
+STORE_ACCENT = theme_color("brandBlue",   ( 74, 158, 255))
+BG_CARD      = mix(BG, TEXT, 0.09)
+BG_STRIP     = mix(BG, TEXT, 0.05)
+
+FONT_DISPLAY = theme_font("fontDisplay")
+FONT_STRONG  = theme_font("fontStrong")
+FONT_REGULAR = theme_font("fontRegular")
+BACKGROUND   = os.path.join(THEME_DIR, "worlds", "lutris.jpg") if THEME_DIR else ""
+
+# Opacity of the bars and panels laid over the background art.
+PANEL_ALPHA = 215
+# Multiplier that keeps the background art behind the rows and text.
+BACKGROUND_DARKEN = (110, 110, 110)
+
+
+# SDL joystick index of Y on evdev pads (BTN_Y is the fourth face button code).
+# Guide stays free: it is the system hotkey.
+BTN_Y = 3
+
+# Right stick axes on evdev pads (ABS_RX, ABS_RY follow ABS_X, ABS_Y, ABS_Z).
+AXIS_RX, AXIS_RY = 3, 4
+STICK_DEADZONE   = 0.2
+POINTER_MAX_STEP = 18    # pixels per frame at full tilt
+
+
+class XPointer:
+    """Drives the X pointer with XTest, so the pad can work Lutris's
+    installer, which only takes a mouse."""
+
+    def __init__(self):
+        self._x11  = ctypes.CDLL("libX11.so.6")
+        self._xtst = ctypes.CDLL("libXtst.so.6")
+        self._x11.XOpenDisplay.restype = ctypes.c_void_p
+        self._x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+        self._x11.XFlush.argtypes = [ctypes.c_void_p]
+        self._x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+        self._xtst.XTestFakeRelativeMotionEvent.argtypes = [
+            ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_ulong]
+        self._xtst.XTestFakeButtonEvent.argtypes = [
+            ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
+        self._dpy = self._x11.XOpenDisplay(None)
+        if not self._dpy:
+            raise OSError("cannot open X display")
+
+    def move(self, dx: int, dy: int):
+        self._xtst.XTestFakeRelativeMotionEvent(self._dpy, dx, dy, 0)
+        self._x11.XFlush(self._dpy)
+
+    def button(self, number: int, pressed: bool):
+        self._xtst.XTestFakeButtonEvent(self._dpy, number, int(pressed), 0)
+        self._x11.XFlush(self._dpy)
+
+    def click(self, number: int):
+        self.button(number, True)
+        self.button(number, False)
+
+    def close(self):
+        self._x11.XCloseDisplay(self._dpy)
+
+
+# X pointer buttons
+MOUSE_LEFT, WHEEL_UP, WHEEL_DOWN = 1, 4, 5
+
+
+# Lutris's art folders, box art first: a wide banner only fills a tile
+# letterboxed. Lutris names its own art by game slug and a store's art by the
+# store's slug or app ID.
+ART_DIRS = [os.path.join(root, d) for root, dirs in (
+    (LUTRIS_DATA,  ["coverart"]),
+    (LUTRIS_CACHE, ["coverart", "steam/covers", "egs/game_box_tall",
+                    "battlenet/coverart", "ubisoft/covers"]),
+    (LUTRIS_DATA,  ["banners"]),
+    (LUTRIS_CACHE, ["banners", "steam/header", "steam/banners", "gog/banners/large",
+                    "gog/banners/medium", "egs/game_box", "amazon/banners",
+                    "flathub/banners", "itchio/cover", "humblebundle/icons"]),
+) for d in dirs]
+ART_EXTS = (".jpg", ".png")
+
+# Art within this fraction of a tile's aspect ratio is cropped to fill it.
+CROP_TOLERANCE = 0.2
+# Downscale factor that blurs letterbox and backdrop fills.
+BLUR_FACTOR = 24
+# Multiplier that darkens blurred fills so the art and text on them stand out.
+BLUR_DARKEN = (90, 90, 90)
+
+
+def scale_to_fill(image: pygame.Surface, w: int, h: int) -> pygame.Surface:
+    iw, ih = image.get_size()
+    scale = max(w / iw, h / ih)
+    sw, sh = max(w, round(iw * scale)), max(h, round(ih * scale))
+    scaled = pygame.transform.smoothscale(image, (sw, sh))
+    return scaled.subsurface(((sw - w) // 2, (sh - h) // 2, w, h)).copy()
+
+
+def blurred_fill(image: pygame.Surface, w: int, h: int) -> pygame.Surface:
+    small = pygame.transform.smoothscale(
+        scale_to_fill(image, w, h), (max(1, w // BLUR_FACTOR), max(1, h // BLUR_FACTOR)))
+    surf = pygame.transform.smoothscale(small, (w, h))
+    surf.fill(BLUR_DARKEN, special_flags=pygame.BLEND_MULT)
+    return surf
+
+
+def fit_art(image: pygame.Surface, w: int, h: int) -> pygame.Surface:
+    iw, ih = image.get_size()
+    if abs(iw / ih - w / h) <= CROP_TOLERANCE * (w / h):
+        return scale_to_fill(image, w, h)
+    tile = blurred_fill(image, w, h)
+    scale = min(w / iw, h / ih)
+    fw, fh = round(iw * scale), round(ih * scale)
+    tile.blit(pygame.transform.smoothscale(image, (fw, fh)), ((w - fw) // 2, (h - fh) // 2))
+    return tile
+
+
+class SortMode(Enum):
+    LASTPLAYED = "Recently Played"
+    PLAYTIME   = "Most Played"
+    NAME       = "By Name"
+
+
+class ViewMode(Enum):
+    LIBRARY = "Library"
+    STORE   = "Store"
+
+
+STORE_NAMES: Dict[str, str] = {
+    # Lutris service keys
+    "steam":            "Steam",
+    "steamwindows":     "Steam (Windows)",
+    "gog":              "GOG",
+    "egs":              "Epic Games",
+    "ea_app":           "EA App",
+    "amazon":           "Amazon Games",
+    "ubisoft":          "Ubisoft Connect",
+    "itchio":           "itch.io",
+    "humblebundle":     "Humble Bundle",
+    "flathub":          "Flathub",
+    "battlenet":        "Battle.net",
+    # Runner key fallbacks (for installed games without a service)
+    "steam_legacy":     "Steam",
+    "epic-games-store": "Epic Games",
+    "humble-bundle":    "Humble Bundle",
+    "uplay":            "Ubisoft Connect",
+    "origin":           "EA App",
+    # Catch-all
+    "other":            "Other",
+}
+
+# Runners whose names don't title-case cleanly.
+RUNNER_NAMES: Dict[str, str] = {
+    "dosbox":    "DOSBox",
+    "mame":      "MAME",
+    "scummvm":   "ScummVM",
+    "pcsx2":     "PCSX2",
+    "rpcs3":     "RPCS3",
+    "ppsspp":    "PPSSPP",
+    "xemu":      "xemu",
+    "vice":      "VICE",
+    "fsuae":     "FS-UAE",
+    "libretro":  "Libretro",
+    "easyrpg":   "EasyRPG",
+}
+
+
+def runner_label(runner: str) -> str:
+    return RUNNER_NAMES.get(runner, runner.title())
+
+
+def store_label(key: str) -> str:
+    return STORE_NAMES.get(key, key.title() if key else "Other")
+
+
+# Name fragments (lowercase) → service key, for launcher entries without a service field
+_NAME_HINTS: List[tuple] = [
+    ("epic games",   "egs"),
+    ("battle.net",   "battlenet"),
+    ("battlenet",    "battlenet"),
+    ("amazon games", "amazon"),
+    ("ea app",       "ea_app"),
+    ("ea desktop",   "ea_app"),
+    ("origin",       "ea_app"),
+    ("ubisoft",      "ubisoft"),
+    ("uplay",        "ubisoft"),
+    ("gog galaxy",   "gog"),
+    ("itch.io",      "itchio"),
+]
+
+
+# ── Data ─────────────────────────────────────────────────────────────────────
+
+class LutrisGame:
+    def __init__(self, data: dict):
+        self.id         = data["id"]
+        self.slug       = data["slug"]
+        self.install_slug = data.get("install_slug") or ""
+        self.name       = data["name"]
+        self.playtime   = data.get("playtime") or 0.0
+        # Lutris's playtime text reads "1 day, 16:12:00" past a day.
+        self.playtime_secs: Optional[float] = data.get("playtimeSeconds")
+        self.lastplayed = data.get("lastplayed") or ""
+        self.runner     = data.get("runner") or ""
+        self.platform   = data.get("platform") or ""
+        self.year       = str(data.get("year") or "")
+        self.service    = data.get("service") or ""
+        self.appid      = str(data.get("appid") or "")
+        self.installed  = bool(data.get("installed", True))
+        # CLI provides coverPath directly; avoid re-scanning for installed games
+        cover = data.get("coverPath") or None
+        self._cover: Optional[str] = cover if (cover and os.path.exists(cover)) else None
+
+    @property
+    def cover_key(self) -> str:
+        """Unique key for the covers cache — namespaced to avoid games/service_games ID collision."""
+        if self.installed:
+            return f"g{self.id}"
+        return f"s{self.service}:{self.appid or self.id}"
+
+    def find_cover(self):
+        names = [n for n in dict.fromkeys((self.slug, self.install_slug, self.appid)) if n]
+        for folder in ART_DIRS:
+            for name in names:
+                for ext in ART_EXTS:
+                    p = os.path.join(folder, name + ext)
+                    if os.path.exists(p):
+                        self._cover = p
+                        return
+
+        if self.service in ("steam", "steamwindows") and self.appid:
+            base = os.path.expanduser(
+                f"~/.steam/steam/appcache/librarycache/{self.appid}/"
+            )
+            for name in ("library_600x900.jpg", "header.jpg"):
+                p = os.path.join(base, name)
+                if os.path.exists(p):
+                    self._cover = p
+                    return
+
+    def cover_path(self) -> Optional[str]:
+        if self._cover is None:
+            self.find_cover()
+        return self._cover
+
+    def playtime_seconds(self) -> float:
+        if self.playtime_secs is not None:
+            return float(self.playtime_secs)
+        if not self.playtime:
+            return 0.0
+
+        if isinstance(self.playtime, (int, float)):
+            # Older Lutris JSON can expose playtime as hours.
+            return float(self.playtime) * 3600.0
+
+        value = str(self.playtime).strip()
+        if not value:
+            return 0.0
+
+        # Newer Lutris can expose playtime as H:MM:SS.microseconds.
+        try:
+            parts = value.split(":")
+            if len(parts) == 3:
+                hours = int(parts[0])
+                minutes = int(parts[1])
+                seconds = float(parts[2])
+                return hours * 3600.0 + minutes * 60.0 + seconds
+            if len(parts) == 2:
+                minutes = int(parts[0])
+                seconds = float(parts[1])
+                return minutes * 60.0 + seconds
+            return float(value) * 3600.0
+        except Exception:
+            return 0.0
+
+    def playtime_str(self) -> str:
+        seconds = int(self.playtime_seconds())
+        if seconds <= 0:
+            return "Never played"
+        h = seconds // 3600
+        m = (seconds % 3600) // 60
+        if h:
+            return f"{h}h {m}m"
+        return f"{m}m" if m else "<1m"
+
+    def lastplayed_str(self) -> str:
+        return str(self.lastplayed)[:10] if self.lastplayed else "—"
+
+    def launch_uri(self) -> str:
+        return f"lutris:rungameid/{self.id}"
+
+    def install_uri(self) -> str:
+        return f"lutris:{self.install_slug}" if self.install_slug else ""
+
+
+def _infer_service(name: str, runner: str) -> str:
+    """Guess store service from game name and runner when the DB has no service set."""
+    if runner == "steam":
+        return "steam"
+    low = name.lower()
+    for fragment, service in _NAME_HINTS:
+        if fragment in low:
+            return service
+    return ""
+
+
+def _enrich_service(games: List[LutrisGame]) -> None:
+    """Backfill service field for installed games (not exposed by CLI).
+    Strategy: DB service field → slug match in service_games → name heuristic."""
+    import sqlite3 as _sqlite3
+    db = PGA_DB
+    if not os.path.exists(db):
+        return
+    try:
+        conn = _sqlite3.connect(db)
+        # 1. service from games table, keyed by game ID
+        by_id = {row[0]: (row[1] or "", row[2] or "")   # id → (service, slug)
+                 for row in conn.execute(
+                     "SELECT id, service, slug FROM games WHERE installed = 1")}
+        # 2. service_games slug → service (covers community-script-installed games)
+        slug_to_service: Dict[str, str] = {}
+        for row in conn.execute(
+                "SELECT slug, lutris_slug, service FROM service_games "
+                "WHERE service IS NOT NULL AND service != ''"):
+            for col in (row[0], row[1]):
+                if col:
+                    slug_to_service.setdefault(col, row[2])
+        conn.close()
+
+        for g in games:
+            if g.service:
+                continue
+            service, slug = by_id.get(g.id, ("", g.slug or ""))
+            if service:
+                g.service = service
+                continue
+            # Try slug cross-reference
+            if slug and slug in slug_to_service:
+                g.service = slug_to_service[slug]
+                continue
+            # Name/runner heuristic
+            inferred = _infer_service(g.name, g.runner)
+            if inferred:
+                g.service = inferred
+    except Exception as e:
+        logging.error("_enrich_service failed: %s", e)
+
+
+def fetch_games() -> List[LutrisGame]:
+    """Fetch installed games via Lutris CLI, enriched with service info from DB."""
+    try:
+        r = subprocess.run(
+            ["lutris", "--list-games", "--installed", "-j"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+        )
+        if r.returncode == 0:
+            games = [LutrisGame(g) for g in json.loads(r.stdout)]
+            for g in games:
+                g.installed = True
+            _enrich_service(games)
+            return games
+        logging.error("lutris --list-games failed: %s", r.stderr.strip())
+    except Exception as e:
+        logging.error("fetch_games failed: %s", e)
+    return []
+
+
+_EXCLUDED_SERVICES = {"xdg"}
+
+
+def fetch_store_games() -> Dict[str, List[LutrisGame]]:
+    """Query service_games for all store-available games, excluding already-installed ones."""
+    import sqlite3 as _sqlite3
+    db = PGA_DB
+    if not os.path.exists(db):
+        return {}
+    try:
+        conn = _sqlite3.connect(db)
+        conn.row_factory = _sqlite3.Row
+        rows = conn.execute("""
+            SELECT sg.id, sg.service, sg.appid, sg.name, sg.slug, sg.lutris_slug
+            FROM service_games sg
+            LEFT JOIN games g
+                ON g.service = sg.service AND g.service_id = sg.appid AND g.installed = 1
+            WHERE g.id IS NULL
+              AND sg.name IS NOT NULL AND sg.name != ''
+            ORDER BY sg.name
+        """).fetchall()
+        conn.close()
+        grouped: Dict[str, List[LutrisGame]] = {}
+        for row in rows:
+            service = row["service"] or ""
+            if service in _EXCLUDED_SERVICES:
+                continue
+
+            # Controller-only install mode needs a concrete Lutris installer slug.
+            # Rows without lutris_slug are only "known store library" entries and would
+            # force the user into Lutris' mouse/keyboard installer picker.
+            installer_slug = row["lutris_slug"] or ""
+            if not installer_slug:
+                continue
+
+            data = {
+                "id":        row["id"],
+                "name":      row["name"],
+                "slug":      row["slug"] or installer_slug,
+                "runner":    "",
+                "service":   service,
+                "install_slug": installer_slug,
+                "appid":     row["appid"] or "",
+                "installed": False,
+                "playtime":  0,
+                "lastplayed": "",
+            }
+            g = LutrisGame(data)
+            grouped.setdefault(service, []).append(g)
+        return grouped
+    except Exception as e:
+        logging.error("fetch_store_games failed: %s", e)
+        return {}
+
+
+# ── View ──────────────────────────────────────────────────────────────────────
+
+class LutrisView:
+
+    def __init__(self):
+        self.games_all: List[LutrisGame] = []
+        self.games:     List[LutrisGame] = []   # games in active section
+        self.covers:    Dict[tuple, Optional[pygame.Surface]] = {}
+        self.sort_mode  = SortMode.LASTPLAYED
+        self.selected   = 0    # game index within active section
+        self.loading    = True
+        self.error      = ""
+        # Lutris process handling a store install, and the game's name
+        self.installer: Optional[subprocess.Popen] = None
+        self.installing_name = ""
+        self.pointer: Optional[XPointer] = None
+        self._pointer_rest = [0.0, 0.0]   # sub-pixel motion carried between frames
+
+        # Library section state (installed games grouped by store)
+        self.lib_sections:     Dict[str, List[LutrisGame]] = {}
+        self.lib_section_keys: List[str]                   = []
+        self.lib_section_idx   = 0
+
+        # Store view state (available / uninstalled games)
+        self.view_mode:      ViewMode                    = ViewMode.LIBRARY
+        self.available:      Dict[str, List[LutrisGame]] = {}
+        self.store_sources:  List[str]                   = []
+        self.store_idx       = 0
+        self.store_sel       = 0
+
+        # Input repeat state
+        self._held_dir    = 0
+        self._repeat_at   = 0
+        self._held_y      = 0    # library up/down section
+        self._repeat_y    = 0
+        self._store_held  = 0    # store left/right
+        self._store_rep   = 0
+        self._store_held_y = 0   # store up/down section
+        self._store_rep_y  = 0
+
+    # ── Startup ──────────────────────────────────────────────────────────────
+
+    def run(self):
+        # SDL minimises a fullscreen window that loses focus; the Lutris
+        # installer opens on top, and we must still be there when it closes.
+        os.environ.setdefault("SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS", "0")
+        # The pad drives the pointer while the installer has focus.
+        os.environ.setdefault("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1")
+        pygame.init()
+        self._open_display()
+        self.clock = pygame.time.Clock()
+
+        self._init_layout()
+        self._init_fonts()
+        self.background = self._load_background()
+        self._init_joysticks()
+
+        self._start_load()
+        self._loop()
+
+    def _start_load(self):
+        self.loading = True
+        self.error = ""
+        focus = self.games[self._safe_selected()].id if self.games else None
+        threading.Thread(target=self._bg_load, args=(focus,), daemon=True).start()
+
+    def _open_display(self):
+        self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        pygame.display.set_caption("LutrisView")
+        self.W, self.H = self.screen.get_size()
+
+    def _init_layout(self):
+        """Compute layout constants relative to screen size."""
+        self.TAB_H  = max(44, int(self.H * 0.065))
+        self.HINT_H = max(36, int(self.H * 0.05))
+
+        # ── Hero panel + section rows ─────────────────────────────────────────
+        self.HERO_H          = int(self.H * 0.26)
+        self.HERO_Y          = self.TAB_H + 10
+        self.SECTION_Y       = self.TAB_H + self.HERO_H
+        self.SECTION_AREA_H  = self.H - self.HINT_H - self.SECTION_Y
+        self.SECTION_LABEL_H = max(28, int(self.H * 0.04))
+        self.COMPACT_ROW_H   = self.SECTION_LABEL_H + 10
+        self.ROW_PAD         = 16
+        self.THUMB_GAP       = max(10, int(self.W * 0.012))
+
+        # Hero cover dimensions (fit within HERO_H)
+        hero_h = self.HERO_H - 20
+        hero_w = int(hero_h * (264 / 352))
+        self.HERO     = (hero_w, hero_h)
+        self.HERO_X   = max(32, int(self.W * 0.04))
+        self.DETAIL_X = self.HERO_X + hero_w + max(32, int(self.W * 0.04))
+
+    def _thumb_size(self, n_sections: int) -> tuple:
+        """The open row takes the height the closed rows leave, keeping room
+        for three closed rows, capped so a lone row doesn't dwarf the hero."""
+        closed = min(n_sections - 1, 3) * self.COMPACT_ROW_H
+        budget = self.SECTION_AREA_H - closed - self.SECTION_LABEL_H - self.ROW_PAD
+        h = max(80, min(int(self.H * 0.34), budget))
+        return int(h * (264 / 352)), h
+
+    def _init_fonts(self):
+        self.f_title  = pygame.font.Font(FONT_DISPLAY, max(24, int(self.H * 0.038)))
+        self.f_body   = pygame.font.Font(FONT_STRONG,  max(18, int(self.H * 0.026)))
+        self.f_small  = pygame.font.Font(FONT_REGULAR, max(13, int(self.H * 0.019)))
+        self.f_label  = pygame.font.Font(FONT_STRONG,  max(11, int(self.H * 0.016)))
+
+    def _load_background(self) -> Optional[pygame.Surface]:
+        if not BACKGROUND or not os.path.exists(BACKGROUND):
+            return None
+        try:
+            image = pygame.image.load(BACKGROUND).convert()
+        except pygame.error as e:
+            logging.warning("unreadable background %s: %s", BACKGROUND, e)
+            return None
+        surf = scale_to_fill(image, self.W, self.H)
+        surf.fill(BACKGROUND_DARKEN, special_flags=pygame.BLEND_MULT)
+        return surf
+
+    def _draw_panel(self, rect: tuple):
+        panel = pygame.Surface(rect[2:])
+        panel.fill(BG_CARD)
+        panel.set_alpha(PANEL_ALPHA)
+        self.screen.blit(panel, rect[:2])
+
+    def _init_joysticks(self):
+        self.joysticks: Dict[int, pygame.joystick.JoystickType] = {}
+        for i in range(pygame.joystick.get_count()):
+            j = pygame.joystick.Joystick(i)
+            self.joysticks[j.get_instance_id()] = j
+        pygame.mouse.set_visible(not self.joysticks)
+
+    # ── Background load ───────────────────────────────────────────────────────
+
+    def _bg_load(self, focus: Optional[int]):
+        # Background thread: fetch game list only — NO pygame calls (not thread-safe)
+        installed = fetch_games()
+        if not installed:
+            self.error = "No games found — add games in Lutris first"
+        self.games_all = installed
+        self._apply_sort(focus)
+
+        # Query DB directly for uninstalled store games (CLI doesn't expose installed field)
+        self.available = fetch_store_games()
+        self.store_sources = sorted(self.available.keys())
+
+        # Pre-resolve cover paths in background (file I/O only, no pygame)
+        for g in self.games:
+            g.cover_path()
+        self.loading = False
+
+    @property
+    def _cur_section_games(self) -> List[LutrisGame]:
+        if not self.lib_section_keys:
+            return []
+        return self.lib_sections.get(self.lib_section_keys[self.lib_section_idx], [])
+
+    def _apply_sort(self, focus: Optional[int] = None):
+        """Group installed games by store, then order games and stores alike
+        by the sort mode: a store ranks by its first game, so the most recent
+        or most played game in the library opens selected. Selects the game
+        with ID `focus`, or the first game of the first store."""
+        sections: Dict[str, List[LutrisGame]] = {}
+        for g in self.games_all:
+            sections.setdefault(g.service or "other", []).append(g)
+
+        rev = self.sort_mode in (SortMode.LASTPLAYED, SortMode.PLAYTIME)
+        key_fn = {
+            SortMode.NAME:       lambda g: g.name.lower(),
+            SortMode.LASTPLAYED: lambda g: str(g.lastplayed or ""),
+            SortMode.PLAYTIME:   lambda g: g.playtime_seconds(),
+        }[self.sort_mode]
+        for lst in sections.values():
+            lst.sort(key=key_fn, reverse=rev)
+
+        self.lib_sections = sections
+        self.lib_section_keys = sorted(sections, key=lambda k: store_label(k).lower())
+        if self.sort_mode != SortMode.NAME:
+            self.lib_section_keys.sort(key=lambda k: key_fn(sections[k][0]), reverse=True)
+
+        self.lib_section_idx, self.selected = 0, 0
+        for s, key in enumerate(self.lib_section_keys):
+            for i, g in enumerate(sections[key]):
+                if g.id == focus:
+                    self.lib_section_idx, self.selected = s, i
+        self.games = self._cur_section_games
+
+    def _art(self, g: LutrisGame, size: tuple, backdrop: bool = False) -> Optional[pygame.Surface]:
+        """The game's art fitted to a tile of `size`, or as a blurred
+        backdrop filling it; a backdrop is None for a game without art."""
+        key = (g.cover_key, size, backdrop)
+        if key not in self.covers:
+            self.covers[key] = self._render_art(g, size, backdrop)
+        return self.covers[key]
+
+    def _render_art(self, g: LutrisGame, size: tuple, backdrop: bool) -> Optional[pygame.Surface]:
+        image = None
+        path = g.cover_path()
+        if path:
+            try:
+                image = pygame.image.load(path).convert()
+            except pygame.error as e:
+                logging.warning("unreadable art %s: %s", path, e)
+        if image is None:
+            return None if backdrop else self._placeholder(g, *size)
+        return blurred_fill(image, *size) if backdrop else fit_art(image, *size)
+
+    def _placeholder(self, g: LutrisGame, w: int, h: int) -> pygame.Surface:
+        surf = pygame.Surface((w, h))
+        surf.fill(BG_CARD)
+        # Subtle gradient-ish border
+        pygame.draw.rect(surf, BG_STRIP, (0, 0, w, h), 1)
+        name = (g.name or "").strip()
+        letter = name[0].upper() if name else "?"
+        font = pygame.font.Font(FONT_DISPLAY, max(32, h // 4))
+        txt  = font.render(letter, True, TEXT_DIM)
+        tw, th = txt.get_size()
+        surf.blit(txt, ((w - tw) // 2, (h - th) // 2))
+        return surf
+
+    def _safe_selected(self) -> int:
+        if not self.games:
+            return 0
+        return max(0, min(self.selected, len(self.games) - 1))
+
+    def _safe_store_selected(self) -> int:
+        games = self._cur_store_games
+        if not games:
+            return 0
+        return max(0, min(self.store_sel, len(games) - 1))
+
+    # ── Main loop ─────────────────────────────────────────────────────────────
+
+    def _loop(self):
+        while True:
+            now = pygame.time.get_ticks()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self._quit()
+                self._handle(event, now)
+
+            if self.installer and self.installer.poll() is not None:
+                self._finish_install()
+            if self.installer:
+                self._drive_pointer()
+
+            # Held-direction repeat scroll
+            if self._held_dir and now >= self._repeat_at:
+                self._move(self._held_dir)
+                self._repeat_at = now + 110
+            if self._held_y and now >= self._repeat_y:
+                self._lib_section_move(self._held_y)
+                self._repeat_y = now + 180
+            if self._store_held and now >= self._store_rep:
+                self._store_move(self._store_held)
+                self._store_rep = now + 110
+            if self._store_held_y and now >= self._store_rep_y:
+                self._store_section_move(self._store_held_y)
+                self._store_rep_y = now + 180
+
+            self._draw()
+            pygame.display.flip()
+            self.clock.tick(60)
+
+    def _quit(self):
+        pygame.quit()
+        sys.exit(0)
+
+    # ── Input ─────────────────────────────────────────────────────────────────
+
+    def _handle(self, event, now: int):
+        if self.installer:
+            self._handle_installing(event)
+            return
+
+        store = self.view_mode == ViewMode.STORE
+
+        if event.type == pygame.KEYDOWN:
+            k = event.key
+            if k == pygame.K_ESCAPE:
+                if store:
+                    self.view_mode = ViewMode.LIBRARY
+                else:
+                    self._quit()
+            elif k == pygame.K_s:
+                self._toggle_view()
+            elif store:
+                if k == pygame.K_RIGHT:
+                    self._store_move(1);         self._store_held = 1;   self._store_rep = now + 380
+                elif k == pygame.K_LEFT:
+                    self._store_move(-1);        self._store_held = -1;  self._store_rep = now + 380
+                elif k == pygame.K_DOWN:
+                    self._store_section_move(1); self._store_held_y = 1; self._store_rep_y = now + 380
+                elif k == pygame.K_UP:
+                    self._store_section_move(-1);self._store_held_y =-1; self._store_rep_y = now + 380
+                elif k in (pygame.K_RETURN, pygame.K_SPACE):
+                    self._install()
+            else:  # library
+                if k == pygame.K_RIGHT:
+                    self._move(1);              self._held_dir = 1;  self._repeat_at = now + 380
+                elif k == pygame.K_LEFT:
+                    self._move(-1);             self._held_dir = -1; self._repeat_at = now + 380
+                elif k == pygame.K_DOWN:
+                    self._lib_section_move(1);  self._held_y = 1;    self._repeat_y = now + 380
+                elif k == pygame.K_UP:
+                    self._lib_section_move(-1); self._held_y = -1;   self._repeat_y = now + 380
+                elif k in (pygame.K_RETURN, pygame.K_SPACE):
+                    self._launch()
+                elif k == pygame.K_TAB:
+                    self._cycle_sort(1)
+                elif k == pygame.K_BACKQUOTE:
+                    self._cycle_sort(-1)
+
+        elif event.type == pygame.KEYUP:
+            if event.key in (pygame.K_RIGHT, pygame.K_LEFT):
+                self._held_dir = 0
+                self._store_held = 0
+            elif event.key in (pygame.K_UP, pygame.K_DOWN):
+                self._held_y = 0
+                self._store_held_y = 0
+
+        elif event.type == pygame.JOYBUTTONDOWN:
+            b = event.button
+            if store:
+                if b == 0:              self._install()
+                elif b in (1, BTN_Y):   self.view_mode = ViewMode.LIBRARY
+            else:
+                if b == 0:              self._launch()
+                elif b == 1:            self._quit()
+                elif b in (4, 6):       self._cycle_sort(-1)
+                elif b in (5, 7):       self._cycle_sort(1)
+                elif b == BTN_Y:        self._toggle_view()
+
+        elif event.type == pygame.JOYHATMOTION:
+            x, y = event.value
+            if store:
+                if x == 1:
+                    self._store_move(1);          self._store_held = 1;    self._store_rep = now + 380
+                elif x == -1:
+                    self._store_move(-1);         self._store_held = -1;   self._store_rep = now + 380
+                else:
+                    self._store_held = 0
+                if y == -1:
+                    self._store_section_move(1);  self._store_held_y = 1;  self._store_rep_y = now + 380
+                elif y == 1:
+                    self._store_section_move(-1); self._store_held_y = -1; self._store_rep_y = now + 380
+                else:
+                    self._store_held_y = 0
+            else:
+                if x == 1:
+                    self._move(1);              self._held_dir = 1;  self._repeat_at = now + 380
+                elif x == -1:
+                    self._move(-1);             self._held_dir = -1; self._repeat_at = now + 380
+                else:
+                    self._held_dir = 0
+                if y == 1:
+                    self._lib_section_move(-1); self._held_y = -1;   self._repeat_y = now + 380
+                elif y == -1:
+                    self._lib_section_move(1);  self._held_y = 1;    self._repeat_y = now + 380
+                else:
+                    self._held_y = 0
+
+        elif event.type == pygame.JOYAXISMOTION:
+            if event.axis == 0:
+                if store:
+                    if event.value > 0.5:
+                        self._store_move(1);  self._store_held = 1;  self._store_rep = now + 380
+                    elif event.value < -0.5:
+                        self._store_move(-1); self._store_held = -1; self._store_rep = now + 380
+                    else:
+                        self._store_held = 0
+                else:
+                    if event.value > 0.5:
+                        self._move(1);  self._held_dir = 1;  self._repeat_at = now + 380
+                    elif event.value < -0.5:
+                        self._move(-1); self._held_dir = -1; self._repeat_at = now + 380
+                    else:
+                        self._held_dir = 0
+            elif event.axis == 1:
+                if store:
+                    if event.value > 0.5:
+                        self._store_section_move(1);  self._store_held_y = 1;  self._store_rep_y = now + 380
+                    elif event.value < -0.5:
+                        self._store_section_move(-1); self._store_held_y = -1; self._store_rep_y = now + 380
+                    else:
+                        self._store_held_y = 0
+                else:
+                    if event.value > 0.5:
+                        self._lib_section_move(1);  self._held_y = 1;  self._repeat_y = now + 380
+                    elif event.value < -0.5:
+                        self._lib_section_move(-1); self._held_y = -1; self._repeat_y = now + 380
+                    else:
+                        self._held_y = 0
+
+        elif event.type == pygame.JOYDEVICEADDED:
+            j = pygame.joystick.Joystick(event.device_index)
+            self.joysticks[j.get_instance_id()] = j
+            pygame.mouse.set_visible(False)
+
+        elif event.type == pygame.JOYDEVICEREMOVED:
+            j = self.joysticks.pop(event.instance_id, None)
+            if j:
+                j.quit()
+            if not self.joysticks:
+                pygame.mouse.set_visible(True)
+
+    def _move(self, delta: int):
+        if self.games:
+            self.selected = max(0, min(self.selected + delta, len(self.games) - 1))
+
+    def _cycle_sort(self, delta: int):
+        modes = list(SortMode)
+        self.sort_mode = modes[(modes.index(self.sort_mode) + delta) % len(modes)]
+        self._apply_sort()
+
+    def _lib_section_move(self, delta: int):
+        n = len(self.lib_section_keys)
+        if n:
+            self.lib_section_idx = max(0, min(self.lib_section_idx + delta, n - 1))
+            self.games   = self._cur_section_games
+            self.selected = min(self.selected, max(0, len(self.games) - 1))
+
+    def _store_section_move(self, delta: int):
+        n = len(self.store_sources)
+        if n:
+            self.store_idx = max(0, min(self.store_idx + delta, n - 1))
+            self.store_sel = 0
+
+    def _launch(self):
+        if not self.loading and self.games:
+            self._run_lutris(self.games[self._safe_selected()].launch_uri())
+
+    def _run_lutris(self, uri: str):
+        """Run a game through Lutris, then come back with a fresh library.
+        The window closes so the game owns the screen; Lutris exits by
+        itself when a game it was asked to run stops."""
+        pygame.display.quit()
+        try:
+            subprocess.run(["lutris", uri])
+        except OSError as e:
+            logging.error("could not start lutris: %s", e)
+        pygame.display.init()
+        self._open_display()
+        pygame.mouse.set_visible(not self.joysticks)
+        # Presses made in the game must not act on LutrisView.
+        pygame.event.clear()
+        self._reload()
+
+    def _reload(self):
+        self._held_dir = self._held_y = self._store_held = self._store_held_y = 0
+        # Playtime, installs and covers may all have changed.
+        self.covers.clear()
+        self._start_load()
+
+    def _finish_install(self):
+        """Lutris keeps running, hidden, after its installer window closes,
+        so the user tells us when they are done."""
+        if self.installer.poll() is None:
+            self.installer.terminate()
+            try:
+                self.installer.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.installer.kill()
+                self.installer.wait()
+        self.installer = None
+        if self.pointer:
+            self.pointer.button(MOUSE_LEFT, False)
+            self.pointer.close()
+            self.pointer = None
+        self._reload()
+
+    def _drive_pointer(self):
+        """Right stick moves the pointer, with a squared response so small
+        tilts give fine control."""
+        if not self.pointer or pygame.key.get_focused():
+            return
+        for j in self.joysticks.values():
+            if j.get_numaxes() <= AXIS_RY:
+                continue
+            for i, axis in enumerate((AXIS_RX, AXIS_RY)):
+                v = j.get_axis(axis)
+                if abs(v) > STICK_DEADZONE:
+                    t = (abs(v) - STICK_DEADZONE) / (1 - STICK_DEADZONE)
+                    self._pointer_rest[i] += math.copysign(t * t * POINTER_MAX_STEP, v)
+        dx, dy = int(self._pointer_rest[0]), int(self._pointer_rest[1])
+        if dx or dy:
+            self._pointer_rest[0] -= dx
+            self._pointer_rest[1] -= dy
+            self.pointer.move(dx, dy)
+
+    def _handle_installing(self, event):
+        if pygame.key.get_focused():
+            # The installer has closed and we are back on top.
+            if (event.type == pygame.JOYBUTTONDOWN and event.button == 1) or \
+               (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+                self._finish_install()
+            return
+        if not self.pointer:
+            return
+        if event.type in (pygame.JOYBUTTONDOWN, pygame.JOYBUTTONUP) and event.button == 0:
+            self.pointer.button(MOUSE_LEFT, event.type == pygame.JOYBUTTONDOWN)
+        elif event.type == pygame.JOYHATMOTION and event.value[1]:
+            self.pointer.click(WHEEL_UP if event.value[1] > 0 else WHEEL_DOWN)
+
+    def _toggle_view(self):
+        self.view_mode = ViewMode.STORE if self.view_mode == ViewMode.LIBRARY else ViewMode.LIBRARY
+
+    @property
+    def _cur_store_games(self) -> List[LutrisGame]:
+        if not self.store_sources:
+            return []
+        return self.available.get(self.store_sources[self.store_idx], [])
+
+    def _store_move(self, delta: int):
+        games = self._cur_store_games
+        if games:
+            self.store_sel = max(0, min(self.store_sel + delta, len(games) - 1))
+
+    def _store_cycle(self, delta: int):
+        if self.store_sources:
+            self.store_idx = (self.store_idx + delta) % len(self.store_sources)
+            self.store_sel = 0
+
+    def _install(self):
+        games = self._cur_store_games
+        if self.loading or not games:
+            return
+        game = games[self._safe_store_selected()]
+        uri = game.install_uri()
+        if not uri:
+            return
+        try:
+            # LutrisView stays open underneath: the installer window opens on top.
+            self.installer = subprocess.Popen(["lutris", uri])
+            self.installing_name = game.name
+        except OSError as e:
+            logging.error("could not start lutris: %s", e)
+            return
+        try:
+            self.pointer = XPointer()
+        except OSError as e:
+            logging.error("no pad pointer, the installer needs a mouse: %s", e)
+
+    # ── Drawing ───────────────────────────────────────────────────────────────
+
+    def _draw(self):
+        if self.background:
+            self.screen.blit(self.background, (0, 0))
+        else:
+            self.screen.fill(BG)
+        if self.installer:
+            self._draw_installing()
+        elif self.loading:
+            self._draw_loading()
+        elif self.view_mode == ViewMode.STORE:
+            self._draw_store()
+        else:
+            self._draw_library()
+
+    def _draw_centred(self, lines: List[tuple], extra_w: int = 0, extra_h: int = 0) -> int:
+        """Centred lines of text on a panel, so they stay readable over the
+        background art; returns the y below the text, where further content
+        `extra_w` wide and `extra_h` high fits on the panel."""
+        surfs = [font.render(text, True, color) for font, text, color in lines]
+        gap, pad = 12, 32
+        text_h = sum(s.get_height() + gap for s in surfs) - gap
+        w = max([s.get_width() for s in surfs] + [extra_w]) + 2 * pad
+        h = text_h + extra_h + 2 * pad
+        y = (self.H - h) // 2 + pad
+        self._draw_panel(((self.W - w) // 2, y - pad, w, h))
+        for surf in surfs:
+            self.screen.blit(surf, ((self.W - surf.get_width()) // 2, y))
+            y += surf.get_height() + gap
+        return y - gap
+
+    def _draw_loading(self):
+        dots = "." * (1 + (pygame.time.get_ticks() // 500) % 3)
+        bar_w, bar_h, bar_gap = int(self.W * 0.3), 3, 20
+        y = self._draw_centred([
+            (self.f_title, f"Loading library{dots}", TEXT),
+            (self.f_small, "This may take a moment", TEXT_DIM),
+        ], extra_w=bar_w, extra_h=bar_gap + bar_h)
+        phase = (pygame.time.get_ticks() % 1200) / 1200
+        fill = int(bar_w * (0.5 + 0.5 * math.sin(phase * 2 * math.pi)))
+        bx, by = (self.W - bar_w) // 2, y + bar_gap
+        pygame.draw.rect(self.screen, BG,     (bx, by, bar_w, bar_h), border_radius=2)
+        pygame.draw.rect(self.screen, ACCENT, (bx, by, fill,  bar_h), border_radius=2)
+
+    def _draw_installing(self):
+        self._draw_centred([
+            (self.f_title, f"Installing {self.installing_name} in Lutris", TEXT),
+            (self.f_body, "In the installer: right stick moves the pointer, A clicks, D-pad scrolls", TEXT_DIM),
+            (self.f_body, "Press B here once the installer has closed", TEXT_DIM),
+        ])
+
+    def _draw_message(self, msg: str):
+        self._draw_centred([(self.f_title, msg, TEXT_DIM)])
+
+    # Tab bar (generic)
+    def _draw_tab_bar(self, labels: List[str], active_idx: int,
+                      right_label: str = "LutrisView", accent_color: tuple = ACCENT):
+        self._draw_panel((0, 0, self.W, self.TAB_H))
+        pygame.draw.line(self.screen, accent_color, (0, self.TAB_H - 2), (self.W, self.TAB_H - 2), 2)
+
+        n = len(labels)
+        tab_w     = int(self.W * 0.28) if n <= 3 else max(1, self.W // (n + 1))
+        tab_start = int(self.W * 0.02)
+
+        for i, label in enumerate(labels):
+            active = i == active_idx
+            color  = accent_color if active else TEXT_DIM
+            surf   = self.f_body.render(label, True, color)
+            lw, lh = surf.get_size()
+            x = tab_start + i * tab_w + (tab_w - lw) // 2
+            y = (self.TAB_H - lh) // 2
+            self.screen.blit(surf, (x, y))
+            if active:
+                pygame.draw.rect(self.screen, accent_color,
+                                 (tab_start + i * tab_w + 8, self.TAB_H - 4, tab_w - 16, 3))
+
+        brand = self.f_label.render(right_label, True, TEXT_DIM)
+        bw, bh = brand.get_size()
+        self.screen.blit(brand, (self.W - bw - 14, (self.TAB_H - bh) // 2))
+
+    def _draw_library(self):
+        modes = list(SortMode)
+        self._draw_tab_bar([m.value for m in modes], modes.index(self.sort_mode))
+        if not self.games:
+            # A new user may only have store games, so point at the store.
+            self._draw_message(self.error or "No installed games")
+            self._draw_hint_bar([("B", "Exit"), ("Y", "Store")], ACCENT)
+            return
+        idx = self._safe_selected()
+        game = self.games[idx]
+        dy = self._draw_hero(game, ACCENT)
+        facts = [("PLAYTIME", game.playtime_str()), ("LAST PLAYED", game.lastplayed_str()),
+                 ("PLATFORM", game.platform), ("YEAR", game.year)]
+        # The store pill already names the runner when there is no store.
+        if game.service:
+            facts.append(("RUNNER", runner_label(game.runner)))
+        self._draw_facts(dy, [f for f in facts if f[1]], ACCENT)
+        self._draw_counter(idx, len(self.games), self.lib_section_idx, len(self.lib_section_keys))
+        self._draw_sections(self.lib_section_keys, self.lib_sections,
+                            self.lib_section_idx, idx, ACCENT)
+        self._draw_hint_bar([("A", "Launch"), ("B", "Exit"), ("Up/Down", "Section"),
+                             ("LB/RB", "Sort"), ("Y", "Store")], ACCENT)
+
+    def _draw_facts(self, y: int, facts: List[tuple], accent: tuple):
+        """Label-over-value columns on one line, the hero has no room for a
+        second; a long value is shortened and facts past the edge are left out."""
+        right = self.W - 24
+        x = self.DETAIL_X
+        for label_text, value_text in facts:
+            lbl = self.f_label.render(label_text, True, accent)
+            val = self.f_body.render(
+                self._ellipsize(value_text, self.f_body, (right - self.DETAIL_X) // 3), True, TEXT)
+            w = max(lbl.get_width(), val.get_width())
+            if x + w > right:
+                return
+            self.screen.blit(lbl, (x, y))
+            self.screen.blit(val, (x, y + lbl.get_height() + 3))
+            x += w + 48
+
+    def _draw_store(self):
+        self._draw_tab_bar(["Store"], 0, accent_color=STORE_ACCENT)
+        if not self.store_sources:
+            self._draw_message("No store games found — sync a store in Lutris first")
+            self._draw_hint_bar([("B/Y", "Library")], STORE_ACCENT)
+            return
+        games = self._cur_store_games
+        idx = self._safe_store_selected()
+        if games:
+            dy = self._draw_hero(games[idx], STORE_ACCENT)
+            install = self.f_body.render("Press A to Install", True, STORE_ACCENT)
+            self.screen.blit(install, (self.DETAIL_X, dy))
+            self._draw_counter(idx, len(games), self.store_idx, len(self.store_sources))
+        self._draw_sections(self.store_sources, self.available, self.store_idx, idx, STORE_ACCENT)
+        self._draw_hint_bar([("A", "Install"), ("B/Y", "Library"), ("Up/Down", "Section")], STORE_ACCENT)
+
+    def _draw_hero(self, game: LutrisGame, accent: tuple) -> int:
+        """Draws the selected game's backdrop, cover, title and store, and
+        returns the height where its details go."""
+        backdrop = self._art(game, (self.W, self.HERO_H), backdrop=True)
+        if backdrop:
+            self.screen.blit(backdrop, (0, self.TAB_H))
+
+        hw, hh = self.HERO
+        hx = self.HERO_X
+        hy = self.HERO_Y + (self.HERO_H - 20 - hh) // 2
+        shadow = pygame.Surface((hw + 10, hh + 10), pygame.SRCALPHA)
+        shadow.fill((0, 0, 0, 60))
+        self.screen.blit(shadow, (hx + 5, hy + 5))
+        pygame.draw.rect(self.screen, accent, (hx - 3, hy - 3, hw + 6, hh + 6), 3,
+                         border_radius=3)
+        self.screen.blit(self._art(game, self.HERO), (hx, hy))
+
+        dx = self.DETAIL_X
+        dy = self.HERO_Y + 16
+        max_w = self.W - dx - 24
+        for line in self._wrap(game.name, self.f_title, max_w)[:2]:
+            s = self.f_title.render(line, True, TEXT)
+            self.screen.blit(s, (dx, dy))
+            dy += s.get_height() + 4
+        dy += 10
+
+        src = game.service or game.runner
+        if src:
+            rtext = self.f_label.render(store_label(src).upper(), True, text_on(accent))
+            rw, rh = rtext.get_size()
+            pygame.draw.rect(self.screen, accent, (dx, dy, rw + 14, rh + 6), border_radius=3)
+            self.screen.blit(rtext, (dx + 7, dy + 3))
+            dy += rh + 16
+
+        pygame.draw.line(self.screen, BG_CARD, (dx, dy), (dx + min(300, max_w), dy), 1)
+        return dy + 14
+
+    def _draw_counter(self, idx: int, n_games: int, section: int, n_sections: int):
+        sec_label = f"  ·  store {section + 1}/{n_sections}" if n_sections > 1 else ""
+        counter = self.f_label.render(f"{idx + 1} of {n_games}{sec_label}", True, TEXT_DIM)
+        self.screen.blit(counter, (self.DETAIL_X,
+                                   self.TAB_H + self.HERO_H - counter.get_height() - 8))
+
+    def _draw_sections(self, keys: List[str], groups: Dict[str, List[LutrisGame]],
+                       active: int, selected: int, accent: tuple):
+        """One row per store: the active one open, as many closed rows
+        around it as fit."""
+        if not keys:
+            return
+        size = self._thumb_size(len(keys))
+        active_row_h = self.SECTION_LABEL_H + size[1] + self.ROW_PAD
+        max_closed = max(0, (self.SECTION_AREA_H - active_row_h) // self.COMPACT_ROW_H)
+        before = min(active, max_closed // 2)
+        after  = min(len(keys) - 1 - active, max_closed - before)
+        before = min(active, max_closed - after)
+
+        y = self.SECTION_Y
+        for i in range(active - before, active + after + 1):
+            games = groups.get(keys[i], [])
+            if i == active:
+                self._draw_section_label(y, self.SECTION_LABEL_H, keys[i], len(games), accent, accent)
+                self._draw_shelf(y + self.SECTION_LABEL_H, games, selected, size, accent)
+                y += active_row_h
+            else:
+                self._draw_section_label(y, self.COMPACT_ROW_H, keys[i], len(games), TEXT_DIM, BG_CARD)
+                y += self.COMPACT_ROW_H
+
+    def _draw_section_label(self, y: int, h: int, key: str, count: int,
+                            color: tuple, line_color: tuple):
+        pygame.draw.line(self.screen, line_color, (0, y), (self.W, y), 1)
+        lbl = self.f_body.render(store_label(key), True, color)
+        cnt = self.f_label.render(str(count), True, TEXT_DIM)
+        self.screen.blit(lbl, (self.HERO_X, y + (h - lbl.get_height()) // 2))
+        self.screen.blit(cnt, (self.HERO_X + lbl.get_width() + 10, y + (h - cnt.get_height()) // 2))
+
+    def _draw_shelf(self, y: int, games: List[LutrisGame], selected: int,
+                    size: tuple, accent: tuple):
+        """Covers start at the left edge and scroll once the selection
+        passes the first third of the row."""
+        tw, th = size
+        step = tw + self.THUMB_GAP
+        per_row = max(1, (self.W - self.HERO_X) // step)
+        first = max(0, min(selected - per_row // 3, len(games) - per_row))
+        for idx in range(first, min(len(games), first + per_row + 1)):
+            x = self.HERO_X + (idx - first) * step
+            thumb = self._art(games[idx], size)
+            if idx == selected:
+                pygame.draw.rect(self.screen, accent,
+                                 (x - 3, y - 3, tw + 6, th + 6), 2, border_radius=2)
+                self.screen.blit(thumb, (x, y))
+            else:
+                dim = thumb.copy()
+                dim.set_alpha(max(50, 160 - abs(idx - selected) * 35))
+                self.screen.blit(dim, (x, y))
+
+    def _draw_hint_bar(self, hints: List[tuple], accent: tuple):
+        top = self.H - self.HINT_H
+        self._draw_panel((0, top, self.W, self.HINT_H))
+        x = self.HERO_X
+        for btn, label in hints:
+            b_surf = self.f_label.render(btn, True, text_on(accent))
+            l_surf = self.f_small.render(label, True, TEXT)
+            bw, bh = b_surf.get_size()
+            pill_w, pill_h = bw + 12, bh + 6
+            pygame.draw.rect(self.screen, accent, (x, top + (self.HINT_H - pill_h) // 2, pill_w, pill_h),
+                             border_radius=3)
+            self.screen.blit(b_surf, (x + 6, top + (self.HINT_H - bh) // 2))
+            self.screen.blit(l_surf, (x + pill_w + 8, top + (self.HINT_H - l_surf.get_height()) // 2))
+            x += pill_w + 8 + l_surf.get_width() + 28
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _ellipsize(text: str, font: pygame.font.Font, max_w: int) -> str:
+        if font.size(text)[0] <= max_w:
+            return text
+        while text and font.size(text + "…")[0] > max_w:
+            text = text[:-1]
+        return text.rstrip() + "…"
+
+    @staticmethod
+    def _wrap(text: str, font: pygame.font.Font, max_w: int) -> List[str]:
+        words = text.split()
+        lines = []
+        cur = ""
+        for word in words:
+            test = (cur + " " + word).strip()
+            if font.size(test)[0] <= max_w:
+                cur = test
+            else:
+                if cur:
+                    lines.append(cur)
+                cur = word
+        if cur:
+            lines.append(cur)
+        return lines
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.WARNING)
+    LutrisView().run()
