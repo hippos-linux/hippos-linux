@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# hippos-upload-logs — collect system logs and post them to Discord.
+# hippos-upload-logs — collect system logs and upload them.
 # Usage: hippos-upload-logs [issue description]
 # Requires updates.token in /userdata/system/hippos.conf (sent via Discord DM
-# when you received Early Access or Dev Access). Beta tokens post to your beta
-# thread; the shared dev token posts to the dev channel instead.
+# when you received Early Access or Dev Access).
 
 set -euo pipefail
 
@@ -74,7 +73,7 @@ printf '%s\n' "${ISSUE}" > "${LOGS}/issue.txt"
 echo -n "  Settings...            "
 {
     echo "=== hippos.conf (secrets redacted) ==="
-    # Bundles get posted to Discord. Per-game keys are left out of the match
+    # Bundles leave the machine. Per-game keys are left out of the match
     # (no quotes allowed) so a ROM name can't redact its own settings.
     sed -E 's/^([^="]*\.(key|token|password|passwd|pass|psk|secret)\s*=\s*).*/\1<redacted>/' \
         /userdata/system/hippos.conf 2>/dev/null || echo "(not found)"
@@ -129,7 +128,7 @@ case "${HTTP_STATUS}" in
     200)
         echo "done"
         echo ""
-        echo "Logs posted to Discord."
+        echo "Logs uploaded."
         ;;
     401)
         echo "failed"

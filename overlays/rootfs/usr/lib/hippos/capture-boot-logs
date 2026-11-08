@@ -153,18 +153,13 @@ for _ in $(seq 1 240); do
         break
     fi
 
-    # If graphical.target isn't going to complete because the boot genuinely
-    # failed, don't wait forever once there are no remaining start jobs.
-    # Exclude our own unit: this script IS hippos-capture-boot-logs.service's
-    # ExecStart, so its "start running" job is always present in the list
-    # while this loop runs — without the exclusion, this check can never
-    # fire and every capture silently burns the full 120s here regardless
-    # of whether anything is actually still pending (boot-hang investigation,
-    # 2026-08-23).
+    # graphical.target is ordered after this unit, through multi-user.target, so
+    # it can't finish while this loop runs. Boot has settled once no other job
+    # is running: anything still queued is waiting on this unit.
     if ! systemctl list-jobs --no-legend 2>/dev/null |
             grep -vE 'hippos-capture-boot-logs\.service[[:space:]]' |
-            grep -q ' start '; then
-        BOOT_STATE="no pending start jobs"
+            grep -q ' running'; then
+        BOOT_STATE="no running start jobs"
         break
     fi
 
@@ -206,15 +201,17 @@ journalctl -b \
 
 dmesg -T > "${OUT_DIR}/dmesg.log" 2>&1 || true
 
+# hippos-upload-logs reads this directory as the hippos user, so copies are made
+# world-readable: Xorg creates its log 0640, which made uploads need sudo.
 if [[ -f /tmp/Xorg.0.log ]]; then
-    cp -f /tmp/Xorg.0.log "${OUT_DIR}/Xorg.0.log" || true
+    install -m 0644 /tmp/Xorg.0.log "${OUT_DIR}/Xorg.0.log" || true
 fi
 
 # ES sends a launch's stdout and stderr to these files, not the journal, and
 # each launch overwrites them, so they hold the most recent launch only.
 for launch_log in es_launch_stdout.log es_launch_stderr.log retroarch.log; do
     if [[ -f "/userdata/system/logs/${launch_log}" ]]; then
-        cp -f "/userdata/system/logs/${launch_log}" "${OUT_DIR}/${launch_log}" || true
+        install -m 0644 "/userdata/system/logs/${launch_log}" "${OUT_DIR}/${launch_log}" || true
     fi
 done
 
@@ -554,7 +551,7 @@ capture_shell "plymouth-initramfs.txt" \
 # plymouthd.conf (see configure-rootfs.sh, DISC-001) — the only way to tell
 # whether a splash that "started" per systemd ever actually reached the screen.
 if [[ -f /var/log/plymouth-debug.log ]]; then
-    cp -f /var/log/plymouth-debug.log "${OUT_DIR}/plymouth-debug.log" || true
+    install -m 0644 /var/log/plymouth-debug.log "${OUT_DIR}/plymouth-debug.log" || true
 fi
 
 # ===========================================================================
@@ -765,7 +762,7 @@ capture_shell "controller-udev-rules.txt" \
 # the only way to tell "no NVIDIA GPU detected" from "detected but the tier
 # lookup/switch silently fell through to nvidia-open" from the outside.
 if [[ -f /var/log/hippos-gpu.log ]]; then
-    cp -f /var/log/hippos-gpu.log "${OUT_DIR}/hippos-gpu.log" || true
+    install -m 0644 /var/log/hippos-gpu.log "${OUT_DIR}/hippos-gpu.log" || true
 fi
 
 # What HippOS actually wrote under /etc/modprobe.d (nvidia_use_proprietary/
