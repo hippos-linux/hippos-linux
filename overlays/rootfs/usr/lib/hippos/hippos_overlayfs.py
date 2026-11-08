@@ -15,6 +15,9 @@ _log = logging.getLogger(__name__)
 
 _OVERLAY_ROOT = Path('/var/run/hippos/overlays')
 
+# emulatorlauncher runs as hippos; mounting overlayfs needs root.
+_SUDO = ['sudo', '-n']
+
 
 @contextmanager
 def mount_overlayfs(lower: Path, upper_root: Path):
@@ -33,7 +36,7 @@ def mount_overlayfs(lower: Path, upper_root: Path):
 
     subprocess.run(
         [
-            'mount', '-t', 'overlay', 'overlay',
+            *_SUDO, 'mount', '-t', 'overlay', 'overlay',
             '-o', f'lowerdir={lower},upperdir={upper},workdir={work}',
             str(mount_point),
         ],
@@ -44,7 +47,7 @@ def mount_overlayfs(lower: Path, upper_root: Path):
     try:
         yield mount_point
     finally:
-        subprocess.run(['umount', str(mount_point)], check=False)
+        subprocess.run([*_SUDO, 'umount', str(mount_point)], check=False)
         try:
             mount_point.rmdir()
         except OSError:

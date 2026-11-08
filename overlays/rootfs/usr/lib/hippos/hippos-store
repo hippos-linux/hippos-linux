@@ -444,11 +444,13 @@ def _install_apt(pkg):
     scummvm_id   = pkg.get("scummvm_id", "")
     print(f"Installing {pkg['name']} via apt...", flush=True)
     env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive"}
-    subprocess.call(["apt-get", "update", "-qq"], env=env)
+    # apt needs root; the rest of the store stays hippos so files it writes
+    # under /userdata keep the user's ownership.
+    subprocess.call(["sudo", "-n", "apt-get", "update", "-qq"], env=env)
     # Claimed before apt runs, so its hippos-ports hook doesn't add a
     # second Ports entry next to ours.
     set_claimed(apt_pkgs, True)
-    ret = subprocess.call(["apt-get", "install", "-y", "--no-install-recommends"] + apt_pkgs, env=env)
+    ret = subprocess.call(["sudo", "-n", "apt-get", "install", "-y", "--no-install-recommends"] + apt_pkgs, env=env)
     if ret != 0:
         set_claimed(apt_pkgs, False)
         print(f"ERROR: apt install failed (exit {ret})", flush=True)
@@ -537,7 +539,7 @@ def cmd_remove(name):
         sys.exit(1)
 
     if pkg.get("type") == "apt":
-        subprocess.call(["apt-get", "remove", "-y"] + pkg.get("apt_packages", []))
+        subprocess.call(["sudo", "-n", "apt-get", "remove", "-y"] + pkg.get("apt_packages", []))
         set_claimed(pkg.get("apt_packages", []), False)
         if pkg.get("scummvm_id"):
             _scummvm_remove(pkg)

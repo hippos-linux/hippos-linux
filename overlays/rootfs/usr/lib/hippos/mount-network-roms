@@ -79,10 +79,7 @@ done < "${CONFIG}"
 if [[ "${changed}" -eq 1 ]]; then
     es_was_active=0
     systemctl is-active --quiet hippos-es.service 2>/dev/null && es_was_active=1 || true
-    if findmnt /userdata/roms >/dev/null 2>&1; then
-        umount /userdata/roms 2>/dev/null || true
-    fi
-    /usr/lib/hippos/mount-roms-pool
+    /usr/lib/hippos/hippos-rom-scan
     # ES-DE may have exited cleanly when the pool disappeared; revive it
     if [[ "${es_was_active}" -eq 1 ]]; then
         if systemctl is-active --quiet hippos-es.service 2>/dev/null; then

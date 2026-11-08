@@ -30,6 +30,8 @@ QUARANTINE_ROOT = CACHE_ROOT / "quarantine"
 EXTERNAL_ROM_CONFIG = HIPPOS_CONFIG / "external-roms.conf"
 NETWORK_ROM_CONFIG = HIPPOS_CONFIG / "roms-sources.conf"
 IGNORED_DEVICES = HIPPOS_CONFIG / "ignored-storage-devices.txt"
+PROMPTED_THIS_BOOT = Path("/run/hippos/storage-merge-prompted")
+MOUNT_COMMANDS = {"mount", "unmount", "eject", "format", "mount_network", "add_network", "remove_network"}
 MEDIA_ROOT = Path("/media")
 ROMS_POOL = USERDATA / "roms"
 ES_API = "http://127.0.0.1:1234"
@@ -919,7 +921,9 @@ def mounted_media_roots() -> list[tuple[str, Path, str, str]]:
 
     try:
         proc = subprocess.run(
-            ["findmnt", "-J", "-R", str(MEDIA_ROOT)],
+            # /media itself is not a mountpoint, so list every mount and keep
+            # those directly below it.
+            ["findmnt", "-J", "--list", "-o", "TARGET,SOURCE,FSTYPE"],
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -1149,7 +1153,8 @@ def remove_external_rom_config_path(path: Path) -> None:
 
 
 def rebuild_rom_pool() -> None:
-    subprocess.run(["systemctl", "start", "--no-block", "hippos-rom-scan.service"], check=False)
+    # Blocking, so the games reload that follows sees the rebuilt pool.
+    subprocess.run(["/usr/lib/hippos/hippos-rom-scan"], check=False)
 
 
 def rebuild_bios_pool() -> None:
@@ -1217,6 +1222,38 @@ def cmd_merge(mount_path: str) -> int:
     return 0
 
 
+def merge_request(devname: str, mount_path: Path) -> Optional[str]:
+    """The REQUEST_MERGE event asking the user to pool a drive's ROMs, or None
+    when the drive has no ROMs, is already pooled, or must not be asked about."""
+    branch = rom_branch_for_mount(mount_path)
+    if branch is None or str(branch) in storage_roots_from_config():
+        return None
+    if not is_true(setting("storage.prompt_merge", "true")) or is_ignored_device(devname):
+        return None
+    model = sanitize_event_field(run_text(["lsblk", "-dnro", "MODEL", f"/dev/{parent_disk(devname)}"]).strip() or "Generic Drive")
+    size = sanitize_event_field(run_text(["lsblk", "-dnro", "SIZE", f"/dev/{devname}"]).strip())
+    return f"REQUEST_MERGE:{devname}:{model}:{size}:{mount_path}:{device_unique_id(devname)}"
+
+
+def cmd_pending_merges() -> int:
+    """Merge prompts for drives mounted before ES could show them (at boot).
+    Each drive is asked about once per boot, so declining "this time" holds
+    when ES restarts after desktop mode."""
+    PROMPTED_THIS_BOOT.parent.mkdir(parents=True, exist_ok=True)
+    prompted = set(PROMPTED_THIS_BOOT.read_text(encoding="utf-8").split()) if PROMPTED_THIS_BOOT.exists() else set()
+    for _name, path, source, _fstype in mounted_media_roots():
+        # btrfs subvolume mounts report their source as /dev/sdb1[/subvol].
+        device = source.split("[", 1)[0]
+        if not device.startswith("/dev/") or device in prompted:
+            continue
+        request = merge_request(Path(device).name, path)
+        if request:
+            print(request)
+            prompted.add(device)
+    PROMPTED_THIS_BOOT.write_text("\n".join(sorted(prompted)) + "\n", encoding="utf-8")
+    return 0
+
+
 def cmd_mount(device: str) -> int:
     devname = device.removeprefix("/dev/")
     if is_system_device(devname):
@@ -1239,10 +1276,9 @@ def cmd_mount(device: str) -> int:
     proc = subprocess.run(["/usr/lib/hippos/hippos-automount", devname], check=False)
     mount_path = mounted_path_for_device(devname)
     if proc.returncode == 0 and mount_path:
-        if rom_branch_for_mount(mount_path) and is_true(setting("storage.prompt_merge", "true")):
-            model = sanitize_event_field(run_text(["lsblk", "-dnro", "MODEL", f"/dev/{parent_disk(devname)}"]).strip() or "Generic Drive")
-            size = sanitize_event_field(run_text(["lsblk", "-dnro", "SIZE", f"/dev/{devname}"]).strip())
-            storage_event_es(f"REQUEST_MERGE:{devname}:{model}:{size}:{mount_path}:{device_unique_id(devname)}")
+        request = merge_request(devname, mount_path)
+        if request:
+            storage_event_es(request)
         else:
             rebuild_and_reload()
     else:
@@ -1385,6 +1421,7 @@ def main() -> int:
     sub.add_parser("list_drives")
     sub.add_parser("list_devices")
     sub.add_parser("list_network")
+    sub.add_parser("pending_merges")
     mount_p = sub.add_parser("mount")
     mount_p.add_argument("device")
     unmount_p = sub.add_parser("unmount")
@@ -1408,6 +1445,11 @@ def main() -> int:
 
     args = parser.parse_args()
 
+    # ES runs these as hippos; mount, umount and mkfs need root. The sudoers
+    # grant covers it, as for hippos-tdp.
+    if args.command in MOUNT_COMMANDS and os.geteuid() != 0:
+        os.execvp("sudo", ["sudo", "-n", str(Path(__file__).resolve()), *sys.argv[1:]])
+
     if args.command == "list_ejectable":
         print_lines(list_ejectable())
         return 0
@@ -1417,6 +1459,8 @@ def main() -> int:
         return cmd_list_devices()
     if args.command == "list_network":
         return cmd_list_network()
+    if args.command == "pending_merges":
+        return cmd_pending_merges()
     if args.command == "mount":
         return cmd_mount(args.device)
     if args.command == "unmount":

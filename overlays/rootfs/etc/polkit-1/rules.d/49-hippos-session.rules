@@ -63,13 +63,21 @@ polkit.addRule(function(action, subject) {
 // way this assumed. HippOS is single-user (no other account exists to
 // withhold this from), so drop the check rather than chase session
 // resolution for it.
+//
+// The -other-seat variants are what udisks2 actually asks for from the
+// desktop: its logind session is Class=background with no seat, so every
+// drive counts as being on another seat (0.6.7 report: mounting and Disks'
+// power-off failed while unmount worked).
 polkit.addRule(function(action) {
     var udisksActions = [
         "org.freedesktop.udisks2.filesystem-mount",
+        "org.freedesktop.udisks2.filesystem-mount-other-seat",
         "org.freedesktop.udisks2.filesystem-mount-system",
         "org.freedesktop.udisks2.filesystem-unmount-others",
         "org.freedesktop.udisks2.eject-media",
-        "org.freedesktop.udisks2.power-off-drive"
+        "org.freedesktop.udisks2.eject-media-other-seat",
+        "org.freedesktop.udisks2.power-off-drive",
+        "org.freedesktop.udisks2.power-off-drive-other-seat"
     ];
     if (udisksActions.indexOf(action.id) >= 0) {
         return polkit.Result.YES;

@@ -2,7 +2,7 @@
 Description=HippOS storage event processor
 After=local-fs.target userdata.mount
 Wants=userdata.mount
-Before=hippos-rom-scan.service hippos-roms-pool.service
+Before=hippos-roms-pool.service
 
 [Service]
 Type=oneshot

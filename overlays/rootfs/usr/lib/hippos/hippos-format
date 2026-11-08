@@ -2,6 +2,9 @@
 # hippos-format — list and format external disks from ES.
 # Usage: hippos-format listDisks | listFstypes | format <disk> <fstype> [label]
 
+# ES runs this as hippos; umount and mkfs on a block device need root.
+[[ "${1:-}" == "format" && "${EUID}" -ne 0 ]] && exec sudo -n "$0" "$@"
+
 # Disks that must never be offered for formatting
 _system_disks() {
     grep -E '^[^ ]+ (/|/userdata) ' /proc/mounts 2>/dev/null \

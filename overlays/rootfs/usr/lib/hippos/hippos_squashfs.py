@@ -11,6 +11,9 @@ _log = logging.getLogger(__name__)
 
 _SQUASHFS_ROOT = Path('/var/run/hippos/squashfs')
 
+# emulatorlauncher runs as hippos; loop mounts need root.
+_SUDO = ['sudo', '-n']
+
 
 @contextmanager
 def mount_squashfs(rom: Path):
@@ -24,7 +27,7 @@ def mount_squashfs(rom: Path):
     mount_point.mkdir(parents=True, exist_ok=True)
 
     subprocess.run(
-        ['mount', str(rom), str(mount_point)],
+        [*_SUDO, 'mount', str(rom), str(mount_point)],
         check=True,
     )
     _log.info("squashfs: mounted %s → %s", rom, mount_point)
@@ -38,7 +41,7 @@ def mount_squashfs(rom: Path):
             yield mount_point
     finally:
         subprocess.run(
-            ['umount', str(mount_point)],
+            [*_SUDO, 'umount', str(mount_point)],
             check=False,
         )
         try:

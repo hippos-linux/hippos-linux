@@ -22,6 +22,8 @@ HOME: Final = USERDATA / 'system'
 CONFIGS: Final = HOME / 'configs'
 EVMAPY: Final = CONFIGS / 'evmapy'
 SAVES: Final = USERDATA / 'saves'
+# Internal branch of the SAVES mergerfs pool (mount-saves-pool).
+SAVES_RW: Final = USERDATA / '.saves-rw'
 SCREENSHOTS: Final = USERDATA / 'screenshots'
 RECORDINGS: Final = USERDATA / 'recordings'
 BIOS: Final = USERDATA / 'bios'

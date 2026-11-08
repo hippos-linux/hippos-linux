@@ -2,6 +2,9 @@
 # hippos-planemode — toggle airplane mode (WiFi + Bluetooth).
 # Usage: hippos-planemode status | enable | disable
 
+# ES runs this as hippos; /dev/rfkill is root-only.
+[[ "${1:-status}" != "status" && "${EUID}" -ne 0 ]] && exec sudo -n "$0" "$@"
+
 wifi_off() { nmcli radio wifi 2>/dev/null | grep -qi "disabled"; }
 bt_blocked() { rfkill list bluetooth 2>/dev/null | grep -q "Soft blocked: yes"; }
 

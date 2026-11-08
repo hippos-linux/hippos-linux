@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
+# Rebuild the ROM pool to reflect current mounts. hippos-roms-pool.service owns
+# the mergerfs process: a pool mounted from any other unit is killed when that
+# unit's script exits.
 set -euo pipefail
 
-POOL=/userdata/roms
-
-log() { printf '[hippos-rom-scan] %s\n' "$*"; }
-
-# Rebuild the mergerfs pool to reflect current mount state
-if findmnt "${POOL}" >/dev/null 2>&1; then
-    umount "${POOL}" 2>/dev/null || true
+# At boot the pool's start job is still queued behind hippos-storage.service,
+# which replays drive mounts through here. That start sees the new mounts
+# anyway, and waiting on it from storage would deadlock.
+if [[ -n "$(systemctl list-jobs --no-legend hippos-roms-pool.service)" ]]; then
+    exit 0
 fi
 
-/usr/lib/hippos/mount-roms-pool
-log "pool rebuilt"
+systemctl restart hippos-roms-pool.service
+printf '[hippos-rom-scan] pool rebuilt\n'
