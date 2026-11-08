@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# hippos-wifi-sleep pre|post — keep Intel Wi-Fi alive across suspend.
+#
+# Some Intel cards (AX200 on an AYANEO 2021, 2026-11-08) can't leave D3hot
+# after S3: "Unable to change power state from D3hot to D0, device
+# inaccessible", and Wi-Fi stays dead until the card is removed from the PCI
+# bus and rescanned. The PCI core never moves a device that has no driver into
+# a low-power state, so iwlwifi is unbound before sleep and bound again after.
+# If the card still fails to probe, it gets the remove and rescan that brought
+# it back by hand.
+
+set -u
+
+DRIVER=/sys/bus/pci/drivers/iwlwifi
+UNBOUND=/run/hippos/iwlwifi-unbound
+
+log() { echo "hippos-wifi-sleep: $*"; }
+
+case "${1:-}" in
+    pre)
+        [[ -d "${DRIVER}" ]] || exit 0
+        mkdir -p /run/hippos
+        : > "${UNBOUND}"
+        for device in "${DRIVER}"/*:*:*.*; do
+            [[ -e "${device}" ]] || continue
+            address="$(basename "${device}")"
+            if echo "${address}" > "${DRIVER}/unbind"; then
+                echo "${address}" >> "${UNBOUND}"
+            else
+                log "could not unbind ${address}"
+            fi
+        done
+        ;;
+    post)
+        [[ -f "${UNBOUND}" ]] || exit 0
+        while read -r address; do
+            echo "${address}" > "${DRIVER}/bind" 2>/dev/null
+            [[ -e "${DRIVER}/${address}" ]] && continue
+            log "${address} did not come back, removing and rescanning it"
+            echo 1 > "/sys/bus/pci/devices/${address}/remove"
+            echo 1 > /sys/bus/pci/rescan
+        done < "${UNBOUND}"
+        rm -f "${UNBOUND}"
+        ;;
+esac
