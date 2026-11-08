@@ -1,5 +1,5 @@
 # CMake toolchain for cross-compiling Qt 6.x itself to aarch64 from amd64.
-# Used only by qt611.Dockerfile arm64-qt stage; not for emulator builds.
+# Used only by qt.Dockerfile arm64-qt stage; not for emulator builds.
 # Qt configure handles QT_HOST_PATH separately via -qt-host-path flag.
 
 set(CMAKE_SYSTEM_NAME      Linux)

@@ -127,7 +127,7 @@ def get_beta_token():
 
 
 def _make_request(url: str) -> urllib.request.Request:
-    headers = {"User-Agent": "hippos-upgrade/1.0"}
+    headers = {"User-Agent": "hippos-upgrade/1.0", "X-HippOS-Version": current_version()}
     token = get_beta_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -1169,12 +1169,29 @@ def installed_frontend_version(name):
         return None
 
 
+def manifest_emulators(manifest):
+    """The newest build of each emulator that this OS can run.
+
+    `emulators` holds builds every supported OS can run; it's all that clients
+    from before 0.6.8 read. `emulator_builds` adds builds that need a newer OS,
+    such as ones linked against a newer HippOS Qt, each with its `min_os`.
+    """
+    payloads = manifest.get("payloads", {})
+    chosen = dict(payloads.get("emulators", {}))
+    os_version = ver_tuple(current_version())
+    for name, builds in payloads.get("emulator_builds", {}).items():
+        runnable = [b for b in builds if ver_tuple(b["min_os"]) <= os_version]
+        if runnable:
+            chosen[name] = max(runnable, key=lambda b: ver_tuple(b["min_os"]))
+    return chosen
+
+
 def cmd_list_emulator_updates():
     """Print emulators with pending updates only, one per line: name\tinstalled → available."""
     manifest = fetch_manifest(get_channel())
     if not manifest:
         die("Could not fetch manifest")
-    emulators = manifest.get("payloads", {}).get("emulators", {})
+    emulators = manifest_emulators(manifest)
     if not emulators:
         log("No emulator payloads in manifest")
         return
@@ -1191,7 +1208,7 @@ def cmd_update_emulator(name, force=False):
     if not manifest:
         die("Could not fetch manifest")
 
-    emulators = manifest.get("payloads", {}).get("emulators", {})
+    emulators = manifest_emulators(manifest)
     if name not in emulators:
         die(f"Emulator '{name}' not found in manifest. Available: {sorted(emulators.keys())}")
 
@@ -1250,7 +1267,7 @@ def cmd_update_all_emulators():
     manifest = fetch_manifest(get_channel())
     if not manifest:
         die("Could not fetch manifest")
-    emulators = manifest.get("payloads", {}).get("emulators", {})
+    emulators = manifest_emulators(manifest)
     if not emulators:
         log("No emulator payloads in manifest")
         return
@@ -1419,7 +1436,7 @@ if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "apply"
 
     # Read-only commands that don't need root
-    READONLY_CMDS = {"check", "list-deployments", "list-emulator-updates",
+    READONLY_CMDS = {"check", "list-emulator-updates",
                      "list-frontend-updates", "list-kernel-update", "list-patches"}
     if cmd not in READONLY_CMDS:
         _require_root()

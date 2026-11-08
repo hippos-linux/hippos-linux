@@ -34,6 +34,9 @@ cmake -S "${SRC}" -B "${BUILD}" \
 cmake --build "${BUILD}" -j"$(nproc)"
 cmake --install "${BUILD}"
 
+# sa2 exits at startup without this folder, and the install rule leaves it out.
+cp -r "${SRC}/bin" "${STAGING}/share/applewin/"
+
 mkdir -p "${STAGING}/lib"
 cp /usr/lib/x86_64-linux-gnu/libminizip.so.1* "${STAGING}/lib/" 2>/dev/null || true
 

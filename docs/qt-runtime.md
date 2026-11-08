@@ -1,17 +1,20 @@
-# HippOS Qt 6.10 Isolated Runtime
+# HippOS Qt Runtime
 
 ## Why
 
-Debian Trixie ships Qt 6.8.x. Some emulators (e.g. duckstation) require Qt 6.10+
-due to API changes or prebuilt dependency bundles that link against newer Qt symbols.
+Debian Trixie ships Qt 6.8. Some emulators need a newer Qt, for example
+DuckStation, whose prebuilt dependencies are built against a specific Qt
+release. HippOS builds its own Qt and installs it to `/opt/hippos/qt/6`, beside
+the system Qt in `/usr`.
 
-Rather than replacing or conflicting with the system Qt, HippOS builds an isolated
-Qt 6.10 runtime installed to `/opt/hippos/qt/6.10`. System Qt at `/usr` is untouched.
-The two coexist cleanly.
+The path names only the major version. Qt keeps binary compatibility across
+minor releases of Qt 6, so a bump to a newer 6.x doesn't change the path
+emulators link against. Emulators find the libraries through their RPATH
+(`QT_RPATH`), not the linker cache.
 
-At runtime, `/etc/ld.so.conf.d/hippos-qt.conf` adds `/opt/hippos/qt/6.10/lib` to the
-dynamic linker cache so emulators linked against Qt 6.10 resolve their symbols correctly.
-The system Qt 6.8 libs remain available for everything else.
+The image also links `/opt/hippos/qt/6.11` to `6`, because emulator packages
+built before 0.6.8 link to that path and stay installed across OS updates until
+each one is updated.
 
 ## Build
 
@@ -19,56 +22,34 @@ The system Qt 6.8 libs remain available for everything else.
 ./build/build-qt.sh
 ```
 
-Builds Qt from source inside Docker, produces:
-
-```
-artifacts/qt/qt-6.10-hippos-x86_64.tar.xz
-```
-
-Build takes ~40 minutes. Run once; the tarball is cached. Pass `--force` to rebuild.
-
-To build a specific patch version:
-
-```bash
-QT_VERSION=6.10.1 ./build/build-qt.sh
-```
+Builds Qt from source inside Docker (`docker/qt/qt.Dockerfile`) and produces
+`artifacts/qt/qt-<version>-hippos-x86_64.tar.xz`. The tarball is cached; pass
+`--force` to rebuild. arm64 is cross-compiled with `ARCH=arm64` and needs the
+amd64 tarball first, for host tools.
 
 ## Update
 
-1. Delete the old tarball: `rm artifacts/qt/qt-6.10-hippos-x86_64.tar.xz`
-2. Delete the extracted work copy: `rm -rf work/qt/6.10`
-3. Run `./build/build-qt.sh --force`
-4. Rebuild any emulators that use Qt 6.10
-5. Re-run `./build/configure-rootfs.sh` to install the new runtime into the rootfs
+1. Set `QT_VERSION` in `build/common.sh`.
+2. Run `./build/build-qt.sh` (and `ARCH=arm64 ./build/build-qt.sh`).
+3. Rebuild every emulator whose `build.sh` sources `qt-env.sh`.
+4. Run `./build/configure-rootfs.sh` to install the new runtime into the rootfs.
 
-If upgrading to Qt 6.11+, update:
-- `docker/qt/qt610.Dockerfile` — `ARG QT_VERSION`
-- `build/build-qt.sh` — tarball filename and `QT_MINOR`
-- `build/qt610-env.sh` — `QT_ROOT` path
-- `overlays/rootfs/etc/ld.so.conf.d/hippos-qt.conf` — lib path
+## Using it in an emulator build
 
-## Opting in (emulator build scripts)
-
-Add this near the top of `packages/emulators/<name>/build.sh`, before cmake:
+After `common.sh`, source the env script:
 
 ```bash
-source "/work/build/qt610-env.sh"
+source "/work/build/qt-env.sh"
 ```
 
-This sets:
+It sets `QT_ROOT`, `QT_RPATH`, `PATH`, `CMAKE_PREFIX_PATH`, `LD_LIBRARY_PATH`
+and `Qt6_DIR`, so `find_package(Qt6 ...)` finds HippOS's Qt. Put `QT_RPATH`
+in the install RPATH:
 
 ```bash
-QT_ROOT=/opt/hippos/qt/6.10
-PATH=$QT_ROOT/bin:$PATH
-CMAKE_PREFIX_PATH=$QT_ROOT:...
-LD_LIBRARY_PATH=$QT_ROOT/lib:...
-Qt6_DIR=$QT_ROOT/lib/cmake/Qt6
+-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+-DCMAKE_INSTALL_RPATH="${QT_RPATH}:\$ORIGIN/../lib"
 ```
-
-cmake then finds Qt 6.10 automatically via `find_package(Qt6 ...)`.
-
-The emulator binary is linked against Qt 6.10 shared libs. At runtime on HippOS,
-ldconfig resolves them from `/opt/hippos/qt/6.10/lib`.
 
 ## Modules built
 

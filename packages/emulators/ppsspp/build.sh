@@ -34,7 +34,8 @@ cmake --build "${BUILD}" -j"$(nproc)"
 cp "${BUILD}/PPSSPPSDL" "${STAGING}/bin/"
 
 # Assets are required at runtime — copy from source tree
-cp -r "${SRC}/assets" "${STAGING}/"
+# PPSSPP looks for its fonts and UI next to the binary.
+cp -r "${SRC}/assets" "${STAGING}/bin/"
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"

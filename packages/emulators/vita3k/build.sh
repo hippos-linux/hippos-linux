@@ -2,6 +2,7 @@
 set -euo pipefail
 
 source "/work/build/common.sh"
+source "/work/build/qt-env.sh"
 
 NAME='vita3k'
 REPO='https://github.com/vita3k/vita3k'
@@ -43,6 +44,14 @@ if [[ -f "${LOAD_SELF}" ]]; then
     sed -i 's/reinterpret_cast<const Elf32_Phdr const \*>/reinterpret_cast<const Elf32_Phdr *>/g' "${LOAD_SELF}"
 fi
 
+# std::vector::append_range/assign_range are C++23 library features that
+# Trixie's libstdc++ 14 lacks (they arrived in GCC 15).
+VECTOR_UTILS="${SRC}/vita3k/util/include/util/vector_utils.h"
+sed -i -E \
+    -e 's/(\w+)\.append_range\((\w+)\);/\1.insert(\1.end(), \2.begin(), \2.end());/' \
+    -e 's/(\w+)\.assign_range\((\w+)\);/\1.assign(\2.begin(), \2.end());/' \
+    "${VECTOR_UTILS}"
+
 # A stale CMakeCache.txt reuses cached *_DIR values from whatever prefix
 # resolved them last run instead of re-searching CMAKE_PREFIX_PATH/deps —
 # always start clean.
@@ -59,15 +68,10 @@ else
     AVX_FLAG='OFF'
 fi
 
-QT_PREFIX="/opt/hippos/qt/6.11"
-CMAKE_PREFIX=""
-[[ -d "${QT_PREFIX}" ]] && CMAKE_PREFIX="-DCMAKE_PREFIX_PATH=${QT_PREFIX}"
-
 cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_SHARED_LIBS=OFF \
     -DCMAKE_INSTALL_PREFIX=/usr \
-    ${CMAKE_PREFIX:+"${CMAKE_PREFIX}"} \
     -DUSE_DISCORD_RICH_PRESENCE=OFF \
     -DUSE_VITA3K_UPDATE=OFF \
     -DXXH_X86DISPATCH_ALLOW_AVX="${AVX_FLAG}"

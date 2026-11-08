@@ -2,7 +2,7 @@
 set -euo pipefail
 
 source "/work/build/common.sh"
-source "/work/build/qt611-env.sh"
+source "/work/build/qt-env.sh"
 
 NAME='eka2l1'
 REPO='https://github.com/EKA2L1/EKA2L1.git'
@@ -39,10 +39,10 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_FLAGS="-Wno-incompatible-pointer-types -Wno-int-conversion" \
-    -DCMAKE_CXX_FLAGS="-include algorithm -I${QT_ROOT}/include/QtGui/6.11.1/QtGui" \
+    -DCMAKE_CXX_FLAGS="-include algorithm -I${QT_ROOT}/include/QtGui/${QT_VERSION}/QtGui" \
     -DCMAKE_PREFIX_PATH="${QT_ROOT}" \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
-    -DCMAKE_INSTALL_RPATH="/opt/hippos/qt/6.11/lib:\$ORIGIN/../lib" \
+    -DCMAKE_INSTALL_RPATH="${QT_RPATH}:\$ORIGIN/../lib" \
     -DBUILD_SHARED_LIBS=OFF \
     -DBUILD_STATIC_LIBS=ON \
     -DEKA2L1_ENABLE_SCRIPTING_ABILITY=OFF \

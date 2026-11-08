@@ -20,7 +20,7 @@ clone_source "${REPO}" "${TAG}" "${SRC}"
 
 git -C "${SRC}" submodule update --init --recursive
 
-source "/work/build/qt611-env.sh"
+source "/work/build/qt-env.sh"
 
 # GCC 14 false positive: addr is set by ParseGhidraCsvLine (out-param) before use,
 # but the compiler can't see through it. Initialize to suppress -Werror=maybe-uninitialized.
@@ -66,7 +66,7 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCITRON_USE_AUTO_UPDATER=OFF \
     -DCITRON_BUILD_TYPE=Release \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
-    -DCMAKE_INSTALL_RPATH="/opt/hippos/qt/6.11/lib" \
+    -DCMAKE_INSTALL_RPATH="${QT_RPATH}" \
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     "${_citron_arch_flags[@]}" \
     -Wno-dev

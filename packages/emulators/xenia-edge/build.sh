@@ -25,15 +25,18 @@ export CXX=clang++-21
 export LDFLAGS="-fuse-ld=lld-21"
 
 log "Running xb setup"
+python3 xb slang
 python3 xb setup
 
 log "Building xenia-edge (release)"
 python3 xb build --config=release
 
-XENIA_BIN="$(find "${SRC}/build" -maxdepth 4 -name 'xenia*' -type f -perm /111 | sort | tail -1)"
-[[ -n "${XENIA_BIN}" ]] || die "xenia binary not found after build"
+# The build also produces helpers such as xenia-shader-cc, so match the app by name.
+XENIA_BIN="$(find "${SRC}/build" -maxdepth 4 \( -name 'xenia-edge' -o -name 'xenia_edge' \) -type f -perm /111 | head -1)"
+[[ -n "${XENIA_BIN}" ]] || die "xenia-edge binary not found after build"
 log "Binary: ${XENIA_BIN}"
-BIN_NAME="$(basename "${XENIA_BIN}")"
+# The launcher wrapper below takes the plain name.
+BIN_NAME="xenia-edge.bin"
 cp "${XENIA_BIN}" "${STAGING}/bin/${BIN_NAME}"
 
 # Bundle clang-21 libc++ — rootfs links against system libc++ which may differ

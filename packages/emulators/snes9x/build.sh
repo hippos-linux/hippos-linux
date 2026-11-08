@@ -18,6 +18,14 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
+# 1.63 ignores a ROM on the command line, so it opens with no game. Upstream added
+# this after that release (088c6cf8), loading it once the event loop is running.
+if ! grep -q 'openFile' "${SRC}/qt/src/main.cpp"; then
+    sed -i -e '1i #include <QTimer>' \
+        -e 's|^\( *\)emu.qtapp->exec();|\1if (argc > 1) QTimer::singleShot(0, [\&] { emu.window->openFile(std::string(argv[1])); });\n&|' \
+        "${SRC}/qt/src/main.cpp"
+fi
+
 # Build standalone (Qt port)
 log "Building standalone"
 # A stale CMakeCache.txt reuses cached *_DIR values from whatever prefix

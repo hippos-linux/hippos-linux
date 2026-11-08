@@ -25,7 +25,7 @@ clone_source "${REPO}" "${REF}" "${SRC}"
 
 git -C "${SRC}" submodule update --init --recursive
 
-source "/work/build/qt611-env.sh"
+source "/work/build/qt-env.sh"
 
 mkdir -p "${SRC}/dep/prebuilt" "${STAGING}/bin"
 
@@ -44,7 +44,7 @@ if [[ ! -f "${SRC}/dep/prebuilt/.deps-${_ds_deps_suffix}.done" ]]; then
             chmod +x "${CROSS_DEPS_SCRIPT}"
 
             # Strip the Qt build/install sections from the script — we already
-            # have a custom arm64 Qt 6.11 mounted at ${QT_ROOT}. Skip from any
+            # have HippOS's arm64 Qt mounted at ${QT_ROOT}. Skip from any
             # "echo "Building/Installing Qt..." line through the next non-Qt
             # section echo so the script only builds the non-Qt deps
             # (cpuinfo, soundtouch, plutosvg, shaderc, SDL, etc.).
@@ -67,7 +67,7 @@ PYEOF
             # SYSROOTDIR=/: arm64 multiarch libs live at /usr/lib/aarch64-linux-gnu/
             # HOSTDIR unused now (Qt sections stripped), but arg is still required
             "${CROSS_DEPS_SCRIPT}" \
-                /opt/hippos/qt/6.11-host \
+                "${QT_HOST_ROOT}" \
                 arm64 \
                 / \
                 "${CROSS_DEPS_DIR}"
@@ -92,10 +92,14 @@ fi
 
 rm -rf "${BUILD}"
 
-# Remove FindSoundTouch.cmake so cmake uses the prebuilt's SoundTouchConfig.cmake
-# (which defines SoundTouch::SoundTouchDLL) instead of the module (which defines
-# SoundTouch::SoundTouch only)
-rm -f "${SRC}/CMakeModules/FindSoundTouch.cmake"
+# DuckStation's source is built unmodified, so build behaviour is changed only
+# through cmake options:
+# - PREFER_CONFIG picks the prebuilt SoundTouchConfig.cmake (which defines
+#   SoundTouch::SoundTouchDLL) over the bundled FindSoundTouch module (which
+#   defines SoundTouch::SoundTouch only).
+# - Upstream sets CMAKE_INSTALL_RPATH itself, relative to its build tree, but
+#   appends to the linker flags, so the runtime library paths go there.
+DUCKSTATION_RPATH="${QT_RPATH}:${EMULATOR_RUNTIME_ROOT}/${NAME}/lib"
 
 log "Configuring"
 cmake -S "${SRC}" -B "${BUILD}" \
@@ -104,7 +108,8 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_C_COMPILER=clang \
     -DCMAKE_CXX_COMPILER=clang++ \
     -DCMAKE_CXX_SCAN_FOR_MODULES=OFF \
-    -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld" \
+    -DCMAKE_FIND_PACKAGE_PREFER_CONFIG=ON \
+    -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld -Wl,-rpath,${DUCKSTATION_RPATH}" \
     -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld" \
     -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld" \
     -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
@@ -113,9 +118,7 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DSoundTouch_ROOT="${SRC}/dep/prebuilt/${_ds_deps_suffix}" \
     -DSoundTouch_DIR="${SRC}/dep/prebuilt/${_ds_deps_suffix}/lib/cmake/SoundTouch" \
     -DSHADERC_LIBRARY=/usr/lib/${GNU_ARCH}/libshaderc_combined.a \
-    -DBUILD_QT_FRONTEND=ON \
-    -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
-    -DCMAKE_INSTALL_RPATH="/opt/hippos/qt/6.11/lib:\$ORIGIN/../lib"
+    -DBUILD_QT_FRONTEND=ON
 
 log "Building"
 ninja -C "${BUILD}" -j"$(nproc)"
@@ -132,8 +135,13 @@ chmod +x "${STAGING}/bin/duckstation"
 # Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
 cp -r "${BUILD}/bin/resources" "${STAGING}/bin/"
+# English is built in, but DuckStation still looks for a translation file for it
+# and opens a dialog at every launch when there isn't one. An empty one is enough.
+mkdir -p "${STAGING}/bin/translations"
+printf '<TS version="2.1" language="en"></TS>\n' > "${BUILD}/duckstation-qt_en.ts"
+/usr/lib/qt6/bin/lrelease "${BUILD}/duckstation-qt_en.ts" -qm "${STAGING}/bin/translations/duckstation-qt_en.qm"
 
-# Bundle prebuilt runtime libs that the binary's $ORIGIN/../lib rpath expects.
+# Bundle prebuilt runtime libs that DUCKSTATION_RPATH points at.
 # libcpuinfo.so has no soname versioning in the duckstation prebuilt.
 # libsoundtouch.so.2 differs from Debian's libSoundTouch.so.1 (different case + version).
 PREBUILT_LIB="${SRC}/dep/prebuilt/${_ds_deps_suffix}/lib"
@@ -159,6 +167,9 @@ done
 (cd "${STAGING}/lib" && \
     versioned="$(ls libpng16.so.16.* 2>/dev/null | head -1)" && \
     [[ -n "${versioned}" ]] && ln -sf "${versioned}" libpng16.so.16 || true)
+
+# CC BY-NC-ND requires the licence notice to travel with the binaries.
+install -Dm644 "${SRC}/LICENSE" "${STAGING}/share/doc/duckstation/LICENSE"
 
 write_artifact_version "${STAGING}" "$(git -C "${SRC}" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d)"
 log "Done. Artifact at ${STAGING}"

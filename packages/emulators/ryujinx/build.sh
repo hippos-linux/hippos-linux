@@ -46,7 +46,7 @@ RYUJINX_BIN="$(find "${BUILD}/extract" -maxdepth 4 -type f -perm /111 \( -iname 
 cp -a "$(dirname "${RYUJINX_BIN}")/." "${STAGING}/bin/"
 
 # libavcodec.so.* is bundled alongside libavutil.so.* in bin/, but its embedded
-# RUNPATH points to /opt/hippos/qt/6.11/lib rather than $ORIGIN, so the dynamic
+# RUNPATH points to a build-machine Qt path rather than $ORIGIN, so the dynamic
 # linker cannot find the sibling libavutil at runtime. Fix the RUNPATH in-place.
 find "${STAGING}/bin" -name "libavcodec.so.*" -type f | while read -r f; do
     patchelf --set-rpath '$ORIGIN' "${f}" 2>/dev/null || true

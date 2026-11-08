@@ -387,7 +387,7 @@ done\n\
 for _a in "$@"; do\n\
     case "${_a}" in --toolchain|-DCMAKE_TOOLCHAIN_FILE*) exec "${_cmake}" "$@";; esac\n\
 done\n\
-# Inject Qt host path; qt611-env.sh overrides QT_HOST_PATH env var for Qt 6.11 builds.\n\
+# Inject Qt host path; qt-env.sh overrides QT_HOST_PATH env var for builds against HippOS's Qt.\n\
 _qt_host="${QT_HOST_PATH:-/usr}"\n\
 _qt_host_cmake="${QT_HOST_PATH_CMAKE_DIR:-/usr/lib/x86_64-linux-gnu/cmake}"\n\
 exec "${_cmake}" --toolchain /opt/hippos/aarch64-toolchain.cmake \\\n\

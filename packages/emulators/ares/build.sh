@@ -40,14 +40,10 @@ mkdir -p "${STAGING}/lib"
 cp /usr/lib/${GNU_ARCH}/libao.so.4* "${STAGING}/lib/" 2>/dev/null || true
 patchelf --set-rpath '$ORIGIN/../lib' "${STAGING}/bin/ares" 2>/dev/null || true
 
-# Copy any bundled data/shaders alongside the binary
-RUNDIR="$(dirname "${ARES_BIN}")"
-if [[ -d "${RUNDIR}/shaders" ]]; then
-    cp -r "${RUNDIR}/shaders" "${STAGING}/"
-fi
-if [[ -d "${RUNDIR}/System" ]]; then
-    cp -r "${RUNDIR}/System" "${STAGING}/"
-fi
+# ares looks for its data next to the binary and can't load a game without Database.
+ARES_DATA="${BUILD}/rundir/share/ares"
+[[ -d "${ARES_DATA}/Database" ]] || die "ares Database not found in ${ARES_DATA}"
+cp -r "${ARES_DATA}/." "${STAGING}/bin/"
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"

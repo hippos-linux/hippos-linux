@@ -49,7 +49,7 @@ fi
 
 git -C "${SRC}" submodule update --init --recursive
 
-source "/work/build/qt611-env.sh"
+source "/work/build/qt-env.sh"
 
 # KDDockWidgets-qt6 is not in Trixie repos; build from source
 if [[ ! -d "${KDDW_SRC}/.git" ]]; then
@@ -145,7 +145,7 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld" \
     -DCMAKE_PREFIX_PATH="${QT_ROOT};${PLUTOVG_PREFIX};${PLUTOSVG_PREFIX};${KDDW_PREFIX};${RYML_PREFIX}" \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
-    -DCMAKE_INSTALL_RPATH="/opt/hippos/qt/6.11/lib:\$ORIGIN/../lib" \
+    -DCMAKE_INSTALL_RPATH="${QT_RPATH}:\$ORIGIN/../lib" \
     -DSHADERC_LIBRARY=/usr/lib/${GNU_ARCH}/libshaderc_combined.a \
     -DSHADERC_INCLUDE_DIR=/usr/include \
     -DBUILD_SHARED_LIBS=OFF \

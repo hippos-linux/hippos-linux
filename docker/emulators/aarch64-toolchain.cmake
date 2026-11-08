@@ -27,8 +27,8 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)
 
 # Qt cross-compilation: QT_HOST_PATH is injected by the cmake wrapper at build
 # time from the QT_HOST_PATH env var (defaulting to /usr = system Qt6.8.x).
-# qt611-env.sh exports QT_HOST_PATH=/opt/hippos/qt/6.11-host for emulators that
-# target our custom Qt 6.11; that value overrides the /usr default.
+# qt-env.sh exports QT_HOST_PATH=/opt/hippos/qt/6-host for emulators that
+# target HippOS's own Qt; that value overrides the /usr default.
 # Do not set QT_HOST_PATH here; the wrapper handles it.
 
 # pkg-config: override the search path so the native binary finds arm64 .pc files.

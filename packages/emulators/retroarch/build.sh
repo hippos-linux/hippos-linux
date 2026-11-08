@@ -98,6 +98,15 @@ while IFS= read -r so_name; do
     fi
 done <<< "${AVAILABLE}"
 
+# glibc 2.41 refuses to load a library that asks for an executable stack, and a
+# couple of buildbot cores do. RetroArch reports only "Failed to open libretro core".
+for core in "${CORES_DIR}"/*.so; do
+    if readelf -lW "${core}" | grep -q 'GNU_STACK.*RWE'; then
+        patchelf --clear-execstack "${core}"
+        log "Cleared executable stack: $(basename "${core}")"
+    fi
+done
+
 log "Done — ${total} available, ${downloaded} downloaded, ${skipped} skipped, ${failed} failed"
 
 write_artifact_version "${STAGING_DIR}" "$(date +%Y%m%d)"

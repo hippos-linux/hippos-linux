@@ -5,7 +5,7 @@ source "/work/build/common.sh"
 
 NAME='shadps4-qtlauncher'
 REPO='https://github.com/shadps4-emu/shadps4-qtlauncher.git'
-TAG="$(github_latest_tag "${REPO}")"
+TAG="$(github_newest_release_tag "${REPO}")"
 
 WORK_ROOT="${WORK_ROOT:-/work/work/emulators}"
 ARTIFACT_ROOT="${ARTIFACT_ROOT:-/artifacts}"
@@ -17,7 +17,7 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
-source "/work/build/qt611-env.sh"
+source "/work/build/qt-env.sh"
 
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
@@ -33,7 +33,7 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_PREFIX_PATH="${QT_ROOT}" \
     -DCMAKE_INSTALL_PREFIX="${STAGING}" \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
-    -DCMAKE_INSTALL_RPATH="/opt/hippos/qt/6.11/lib" \
+    -DCMAKE_INSTALL_RPATH="${QT_RPATH}" \
     -DENABLE_UPDATER=OFF
 
 log "Building"
