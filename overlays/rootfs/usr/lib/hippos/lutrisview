@@ -8,10 +8,11 @@ import math
 import logging
 import threading
 import subprocess
-import xml.etree.ElementTree as ET
 import pygame
 from enum import Enum
 from typing import Optional, List, Dict
+
+from hippos_theme import Theme, mix
 
 # Lutris's own folders; it follows the XDG base directories.
 LUTRIS_DATA  = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "lutris")
@@ -19,39 +20,10 @@ LUTRIS_CACHE = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expandus
 PGA_DB       = os.path.join(LUTRIS_DATA, "pga.db")
 
 # ── Look ──────────────────────────────────────────────────────────────────────
-# LUTRISVIEW_THEME names an EmulationStation theme folder whose <variables>
-# follow the HippOS theme's names; its colours, fonts and Lutris world art
-# replace the Lutris look, so the view matches the frontend it opens from.
-THEME_DIR = os.environ.get("LUTRISVIEW_THEME", "")
-
-
-def theme_variables(theme_dir: str) -> Dict[str, str]:
-    if not theme_dir:
-        return {}
-    try:
-        variables = ET.parse(os.path.join(theme_dir, "theme.xml")).getroot().find("variables")
-    except (OSError, ET.ParseError) as e:
-        logging.warning("theme %s unreadable, using the Lutris look: %s", theme_dir, e)
-        return {}
-    return {v.tag: (v.text or "").strip() for v in variables} if variables is not None else {}
-
-
-_THEME = theme_variables(THEME_DIR)
-
-
-def theme_color(name: str, default: tuple) -> tuple:
-    value = _THEME.get(name, "")
-    return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4)) if len(value) >= 6 else default
-
-
-def theme_font(name: str) -> str:
-    # pygame shrinks its default font when given None, so name its file.
-    value = _THEME.get(name)
-    return os.path.normpath(os.path.join(THEME_DIR, value)) if value else pygame.font.get_default_font()
-
-
-def mix(a: tuple, b: tuple, t: float) -> tuple:
-    return tuple(round(x + (y - x) * t) for x, y in zip(a, b))
+# LUTRISVIEW_THEME names an EmulationStation theme folder; its colours, fonts
+# and Lutris world art replace the Lutris look, so the view matches the
+# frontend it opens from.
+_THEME = Theme(os.environ.get("LUTRISVIEW_THEME", ""))
 
 
 def text_on(color: tuple) -> tuple:
@@ -60,18 +32,18 @@ def text_on(color: tuple) -> tuple:
     return BG if 0.299 * r + 0.587 * g + 0.114 * b > 140 else TEXT
 
 
-BG           = theme_color("ink",         ( 28,  28,  28))
-TEXT         = theme_color("textPrimary", (240, 240, 240))
-TEXT_DIM     = theme_color("textMuted",   (130, 130, 130))
-ACCENT       = theme_color("brandPurple", (255, 140,   0))   # Lutris orange
-STORE_ACCENT = theme_color("brandBlue",   ( 74, 158, 255))
+BG           = _THEME.color("ink",         ( 28,  28,  28))
+TEXT         = _THEME.color("textPrimary", (240, 240, 240))
+TEXT_DIM     = _THEME.color("textMuted",   (130, 130, 130))
+ACCENT       = _THEME.color("brandPurple", (255, 140,   0))   # Lutris orange
+STORE_ACCENT = _THEME.color("brandBlue",   ( 74, 158, 255))
 BG_CARD      = mix(BG, TEXT, 0.09)
 BG_STRIP     = mix(BG, TEXT, 0.05)
 
-FONT_DISPLAY = theme_font("fontDisplay")
-FONT_STRONG  = theme_font("fontStrong")
-FONT_REGULAR = theme_font("fontRegular")
-BACKGROUND   = os.path.join(THEME_DIR, "worlds", "lutris.jpg") if THEME_DIR else ""
+FONT_DISPLAY = _THEME.font("fontDisplay")
+FONT_STRONG  = _THEME.font("fontStrong")
+FONT_REGULAR = _THEME.font("fontRegular")
+BACKGROUND   = _THEME.art("worlds", "lutris.jpg")
 
 # Opacity of the bars and panels laid over the background art.
 PANEL_ALPHA = 215
