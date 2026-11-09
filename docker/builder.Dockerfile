@@ -29,6 +29,7 @@ RUN apt-get update \
         binutils-aarch64-linux-gnu \
         qemu-user-static \
         binfmt-support \
+        arch-test \
         kmod \
         kpartx \
         libdw-dev \
