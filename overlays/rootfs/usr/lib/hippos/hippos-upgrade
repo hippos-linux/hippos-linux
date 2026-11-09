@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import fcntl
 import hashlib
 import json
 import os
@@ -23,6 +24,7 @@ BTRFS_MNT         = "/tmp/hippos-btrfs-update"
 BARE_ROOTFS       = "@rootfs"
 STAGING_ROOTFS    = "@rootfs.new"
 UPDATE_PENDING    = "/run/hippos-update-pending"
+LOCK_FILE         = "/run/lock/hippos-upgrade.lock"
 KERNEL_SNAPSHOT_PREFIX = "@rootfs-kernel-"
 LOG_FILE          = "/userdata/system/logs/upgrade.log"
 PATCHES_STATE_FILE = "/userdata/system/applied-patches.json"
@@ -1220,6 +1222,8 @@ if __name__ == "__main__":
     if cmd not in READONLY_CMDS:
         _require_root()
         _open_log()
+        _lock = open(LOCK_FILE, "w")
+        fcntl.flock(_lock, fcntl.LOCK_EX)
 
     if cmd == "check":
         cmd_check()
