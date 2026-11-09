@@ -631,6 +631,7 @@ def main() -> int:
     ctx.netplay_mode = getattr(args, 'netplaymode', '') or ''
     ctx.netplay_ip   = getattr(args, 'netplayip',   '') or ''
     ctx.netplay_port = getattr(args, 'netplayport',  '') or ''
+    ctx.monitor      = args.monitor if args.monitor is not None else -1
 
     _log.info("system=%s emulator=%s core=%s controllers=%d",
               ctx.system, ctx.emulator, ctx.core, len(ctx.controllers))

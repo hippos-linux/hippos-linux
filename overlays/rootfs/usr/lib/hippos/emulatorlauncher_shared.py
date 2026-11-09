@@ -150,6 +150,7 @@ class LaunchContext:
     netplay_mode:  str = ''
     netplay_ip:    str = ''
     netplay_port:  str = ''
+    monitor:       int = -1
 
 @dataclass(frozen=True)
 class ESBinding:
@@ -693,7 +694,51 @@ def wheel_proxy_context(ctx: LaunchContext, env: dict[str, str]):
                 except Exception:
                     pass
 
-def _gamescope_wrap(cmd: list[str], conf: dict[str, str]) -> list[str]:
+def _xrandr_env() -> dict[str, str]:
+    env = dict(os.environ)
+    env.setdefault('DISPLAY', ':0')
+    return env
+
+def _connector_for_monitor(index: int) -> Optional[str]:
+    try:
+        out = subprocess.run(['xrandr', '--listmonitors'], capture_output=True,
+                             text=True, check=False, env=_xrandr_env()).stdout
+    except FileNotFoundError:
+        return None
+    for line in out.splitlines():
+        fields = line.split()
+        if len(fields) >= 4 and fields[0] == f'{index}:':
+            return fields[-1]
+    return None
+
+def _xrandr_primary() -> Optional[str]:
+    try:
+        out = subprocess.run(['xrandr', '--query'], capture_output=True,
+                             text=True, check=False, env=_xrandr_env()).stdout
+    except FileNotFoundError:
+        return None
+    for line in out.splitlines():
+        if ' connected primary ' in line:
+            return line.split()[0]
+    return None
+
+def _set_primary(connector: str) -> None:
+    subprocess.run(['xrandr', '--output', connector, '--primary'],
+                   check=False, capture_output=True, env=_xrandr_env())
+
+@contextmanager
+def game_monitor_primary(ctx: Optional[LaunchContext]):
+    connector = _connector_for_monitor(ctx.monitor) if (ctx is not None and ctx.monitor >= 0) else None
+    previous = _xrandr_primary() if connector else None
+    if connector and previous and connector != previous:
+        _set_primary(connector)
+    try:
+        yield
+    finally:
+        if connector and previous and connector != previous:
+            _set_primary(previous)
+
+def _gamescope_wrap(cmd: list[str], conf: dict[str, str], ctx: Optional[LaunchContext] = None) -> list[str]:
     if not _conf_bool(conf, 'global.gamescope'):
         return cmd
     bin_path = which('gamescope')
@@ -702,6 +747,11 @@ def _gamescope_wrap(cmd: list[str], conf: dict[str, str]) -> list[str]:
         return cmd
 
     gs = [bin_path]
+
+    if ctx is not None and ctx.monitor >= 0:
+        connector = _connector_for_monitor(ctx.monitor)
+        if connector:
+            gs += ['--prefer-output', connector]
 
     output_res = _conf_value(conf, 'global.gamescope_output_resolution', '')
     if output_res:
@@ -757,18 +807,19 @@ def _run_game_command(
     cwd: Optional[Path] = None,
 ) -> subprocess.CompletedProcess[str]:
     conf = _load_hippos_conf()
-    cmd = _gamescope_wrap(cmd, conf)
+    cmd = _gamescope_wrap(cmd, conf, ctx)
     if _hud_config_path() is not None and ctx.emulator in _HUD_NEEDS_WRAPPER and _hud_supported(ctx.system):
         cmd = ['mangohud'] + cmd
     try:
-        with wheel_proxy_context(ctx, env):
-            with hotkey_context(hotkey_name):
-                profiles = _load_es_input_configs()
-                with evmapy_context(ctx.system, ctx.emulator, ctx.rom, ctx.controllers, profiles):
-                    result = subprocess.run(cmd, env=env, text=True, cwd=str(cwd) if cwd is not None else None)
-                    if result.returncode == -signal.SIGTERM:
-                        result.returncode = 0
-                    return result
+        with game_monitor_primary(ctx):
+            with wheel_proxy_context(ctx, env):
+                with hotkey_context(hotkey_name):
+                    profiles = _load_es_input_configs()
+                    with evmapy_context(ctx.system, ctx.emulator, ctx.rom, ctx.controllers, profiles):
+                        result = subprocess.run(cmd, env=env, text=True, cwd=str(cwd) if cwd is not None else None)
+                        if result.returncode == -signal.SIGTERM:
+                            result.returncode = 0
+                        return result
     finally:
         _restore_crt_resolution()
 
