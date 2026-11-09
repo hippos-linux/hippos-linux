@@ -9,6 +9,7 @@ only this README is tracked.
 |------|--------------|--------|-------------|
 | `screenscraper-login.txt` | `SCREENSCRAPER_DEV_LOGIN` | `devid=NAME&devpassword=PASS` | screenscraper.fr dev account |
 | `steamgriddb-apikey.txt` | `STEAMGRIDDB_APIKEY` | the API key | steamgriddb.com/profile/preferences/api |
+| `thegamesdb-api-key.txt` | `GAMESDB_APIKEY` | the API key | thegamesdb.net (public key for release builds) |
 | `cheevos-dev-login.txt` | `CHEEVOS_DEV_LOGIN` | `z=NAME&y=KEY` | retroachievements.org connect API key |
 
 `cheevos-dev-login.txt` enables the in-ES achievement browser (game lists,
