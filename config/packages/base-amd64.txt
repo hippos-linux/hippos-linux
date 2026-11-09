@@ -18,3 +18,6 @@ libsdl3-0:i386
 libsdl3-image0:i386
 libsdl3-ttf0:i386
 libglut3.12:i386
+
+# Intel thermal daemon (x86 only)
+thermald

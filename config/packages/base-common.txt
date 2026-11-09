@@ -94,7 +94,6 @@ fwupd
 # Performance
 irqbalance
 power-profiles-daemon
-thermald
 switcheroo-control
 zram-tools
 upower
