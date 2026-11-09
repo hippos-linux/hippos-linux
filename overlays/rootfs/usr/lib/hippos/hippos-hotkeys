@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""HippOS global hotkey daemon — full keyboard and controller hotkey support."""
 
 from __future__ import annotations
 
@@ -20,10 +19,6 @@ import errno
 import evdev
 import pyudev
 from evdev import ecodes
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
 
 DEVICE_NAME = "hippos hotkeys"
 
@@ -66,12 +61,6 @@ ECODES_NAMES: dict[int, str] = {
     if name.startswith('KEY_') or name.startswith('BTN_')
 }
 
-# SDL2 keycode -> evdev KEY_* translation, for es_input.cfg's type="keyboard"
-# inputConfig (the id attribute there is an SDL_Keycode, not an evdev code).
-# Printable ASCII passes straight through as its own char; everything else
-# (arrows, F-keys, modifiers, backspace/tab/enter/escape/delete) is either a
-# small literal control-code table or, for keys >= SDLK_SCANCODE_MASK, an
-# SDL_Scancode offset translated via SDL_SCANCODE_TO_EVDEV.
 SDLK_SCANCODE_MASK = 1 << 30
 
 _ASCII_TO_EVDEV_NAME: dict[str, str] = {
@@ -89,7 +78,6 @@ _SDLK_CONTROL_TO_EVDEV_NAME: dict[int, str] = {
     8: 'KEY_BACKSPACE', 9: 'KEY_TAB', 13: 'KEY_ENTER', 27: 'KEY_ESC', 127: 'KEY_DELETE',
 }
 
-# SDL_Scancode -> evdev KEY_* name, for id values >= SDLK_SCANCODE_MASK.
 _SDL_SCANCODE_TO_EVDEV_NAME: dict[int, str] = {
     58: 'KEY_F1', 59: 'KEY_F2', 60: 'KEY_F3', 61: 'KEY_F4', 62: 'KEY_F5', 63: 'KEY_F6',
     64: 'KEY_F7', 65: 'KEY_F8', 66: 'KEY_F9', 67: 'KEY_F10', 68: 'KEY_F11', 69: 'KEY_F12',
@@ -111,10 +99,6 @@ def sdl_keycode_to_evdev(sdl_id: int) -> int | None:
         name = None
     return ecodes.ecodes.get(name) if name else None
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def log(msg: str) -> None:
     print(f'[hippos-hotkeys] {msg}', flush=True)
 
@@ -133,12 +117,7 @@ def device_mapping_name(device: evdev.InputDevice) -> str:
     name = re.sub(r'[^a-zA-Z0-9_]', '', device.name.replace(' ', '_'))
     return f'{name}-{device.info.vendor:02x}-{device.info.product:02x}.mapping'
 
-# ---------------------------------------------------------------------------
-# Context helpers
-# ---------------------------------------------------------------------------
-
 def _resolve_keys(raw: dict[str, Any]) -> dict[str, Any]:
-    """Convert KEY_* string names to ecodes; leave command strings as-is."""
     result: dict[str, Any] = {}
     for action, target in raw.items():
         if isinstance(target, list):
@@ -157,7 +136,7 @@ def _resolve_keys(raw: dict[str, Any]) -> dict[str, Any]:
             else:
                 log(f'unknown key {target!r} in context')
         else:
-            result[action] = target  # command string
+            result[action] = target
     return result
 
 def load_context() -> dict[str, Any]:
@@ -172,14 +151,12 @@ def load_context() -> dict[str, Any]:
     }
 
 def load_common_context() -> dict[str, Any]:
-    """System-wide commands (screenshot, volume, brightness…) always active."""
     src = USER_COMMON_CONTEXT_FILE if USER_COMMON_CONTEXT_FILE.exists() else COMMON_CONTEXT_FILE
     data = load_json(src, {})
     raw = data.get('keys', data) if isinstance(data, dict) else {}
     return _resolve_keys(raw)
 
 def load_default_mapping() -> dict[int, str]:
-    """Load default_mapping.json as evdev-code → action-name."""
     src = USER_MAPPING_FILE if USER_MAPPING_FILE.exists() else DEFAULT_MAPPING_FILE
     data = load_json(src, {})
     result: dict[int, str] = {}
@@ -206,14 +183,6 @@ def load_device_action_map(device: evdev.InputDevice) -> dict[int, str]:
     return {}
 
 def load_es_button_maps() -> tuple[dict[str, dict[int, str]], dict[int, str]]:
-    """Returns (per-device joystick button maps, generic keyboard button map).
-
-    The keyboard map comes from es_input.cfg's single type="keyboard" config
-    (deviceName="Keyboard") and applies to any real keyboard device, since ES
-    doesn't key that config by hardware name the way it does joysticks — it's
-    also how keyboard-emulating arcade encoders (IPAC/JAMMA boards configured
-    in ES as keyboard input) get their button config picked up here.
-    """
     for path in ES_INPUT_FILES:
         if path.exists():
             break
@@ -266,10 +235,6 @@ def load_combo_actions() -> list[dict[str, Any]]:
     actions = data.get('actions_player1', []) if isinstance(data, dict) else []
     return [a for a in actions if isinstance(a, dict)]
 
-# ---------------------------------------------------------------------------
-# UInput / key sending
-# ---------------------------------------------------------------------------
-
 def make_uinput() -> evdev.UInput:
     key_codes = [
         c for c in range(ecodes.KEY_MAX)
@@ -292,7 +257,6 @@ def send_keys(uinput: evdev.UInput, keys: int | list[int], begin: bool) -> None:
         uinput.syn()
 
 def send_key_combo(uinput: evdev.UInput, keys: int | list[int]) -> None:
-    """Press-and-release a combo (used for gamepad hotkeys)."""
     targets = keys if isinstance(keys, list) else [keys]
     for code in targets:
         uinput.write(ecodes.EV_KEY, code, 1)
@@ -303,22 +267,12 @@ def send_key_combo(uinput: evdev.UInput, keys: int | list[int]) -> None:
         uinput.syn()
 
 def send_mouse_reset(uinput: evdev.UInput) -> None:
-    """Move cursor to corner to unblock the UI after exiting an emulator."""
     uinput.write(ecodes.EV_REL, ecodes.REL_X, -10000)
     uinput.write(ecodes.EV_REL, ecodes.REL_Y, -10000)
     uinput.syn()
     time.sleep(0.10)
 
-# ---------------------------------------------------------------------------
-# Device state
-# ---------------------------------------------------------------------------
-
 def has_udev_flag(udev_ctx: pyudev.Context, path: str, flag: str) -> bool:
-    """udev rules flag input nodes that another service owns.
-    HIPPOS_HOTKEYS_IGNORE: the service consumes the node and exposes its own
-    virtual device for hotkeys instead (hippos-sc2bridge).
-    HIPPOS_HOTKEYS_NOGRAB: the service needs its own exclusive grab, so
-    hotkeys only listens (HHD and the built-in keyboard)."""
     try:
         udev_device = pyudev.Devices.from_device_file(udev_ctx, path)
     except pyudev.DeviceNotFoundError:
@@ -326,13 +280,6 @@ def has_udev_flag(udev_ctx: pyudev.Context, path: str, flag: str) -> bool:
     return udev_device.properties.get(flag) == '1'
 
 def is_pure_keyboard(caps: dict[int, list[int]]) -> bool:
-    """True for devices safe to grab exclusively: our own uinput (see
-    make_uinput) only declares EV_KEY (KEY_* range) and EV_REL (X/Y only) —
-    real keyboards and keyboard-emulating arcade encoders (IPAC/JAMMA) match
-    that exactly. Mice, gamepads, and combo devices carry capabilities
-    (scroll wheel, extra buttons, analog axes) our uinput can't reproduce;
-    grabbing one would silently drop whatever it can't replicate.
-    """
     if ecodes.EV_ABS in caps or ecodes.EV_REL in caps:
         return False
     keys = set(caps.get(ecodes.EV_KEY, []))
@@ -341,16 +288,12 @@ def is_pure_keyboard(caps: dict[int, list[int]]) -> bool:
 @dataclass(slots=True)
 class DeviceState:
     device:     evdev.InputDevice
-    button_map: dict[int, str]  # evdev code → logical name (gamepads)
-    action_map: dict[int, str]  # evdev code → action name (all devices)
+    button_map: dict[int, str]
+    action_map: dict[int, str]
     grabbed:    bool = False
     pressed:    set[str] = field(default_factory=set)
-    consumed_keys: set[int] = field(default_factory=set)  # codes currently substituted, for repeat/up tracking
-    active_combos: set[frozenset[str]] = field(default_factory=set)  # triggers already dispatched, held down
-
-# ---------------------------------------------------------------------------
-# Daemon
-# ---------------------------------------------------------------------------
+    consumed_keys: set[int] = field(default_factory=set)
+    active_combos: set[frozenset[str]] = field(default_factory=set)
 
 class HotkeyDaemon:
     def __init__(self, permanent: bool = False) -> None:
@@ -360,7 +303,7 @@ class HotkeyDaemon:
         self.monitor = pyudev.Monitor.from_netlink(self.udev_ctx)
         self.monitor.filter_by(subsystem='input')
         self.poll = select.poll()
-        self.devices: dict[str, DeviceState] = {}    # path → state
+        self.devices: dict[str, DeviceState] = {}
         self.fd_to_path: dict[int, str] = {}
         self.context: dict[str, Any] = {}
         self.common_keys: dict[str, Any] = {}
@@ -370,8 +313,6 @@ class HotkeyDaemon:
         self.combo_actions: list[dict[str, Any]] = []
         self.require_reconfig = False
         self._reload_all()
-
-    # --- config reload -------------------------------------------------------
 
     def _reload_all(self) -> None:
         self.context = load_context()
@@ -388,17 +329,13 @@ class HotkeyDaemon:
     def _do_reconfig(self) -> None:
         old = self.context.get('name', '')
         self._reload_all()
-        # Re-add all devices so mappings refresh
         for path in list(self.devices):
             self._remove_device(path)
         for dev_path in sorted(Path('/dev/input').glob('event*')):
             self._add_device(str(dev_path))
         log(f'reconfig done: context {old!r} -> {self.context.get("name", "")!r}, {len(self.devices)} devices')
 
-    # --- action execution ----------------------------------------------------
-
     def _resolve_action(self, action: str) -> Any:
-        """Look up action in context, then common context (unless common is disabled)."""
         result = self.context.get('keys', {}).get(action)
         if result is not None:
             return result
@@ -407,31 +344,24 @@ class HotkeyDaemon:
         return None
 
     def execute_action(self, action: str, begin: bool) -> bool:
-        """Returns True if this action substituted something for the
-        triggering key — the caller uses that to decide whether to
-        passthrough the raw key on a grabbed device."""
         target = self._resolve_action(action)
         if target is None:
             return False
-        # Reset cursor on key-DOWN for key targets, on key-UP for command targets.
         if action == 'exit':
             if isinstance(target, str) and not begin:
                 send_mouse_reset(self.uinput)
             elif not isinstance(target, str) and begin:
                 send_mouse_reset(self.uinput)
         if isinstance(target, str):
-            # command — execute on key release only
             if not begin:
                 log(f'cmd {action}')
                 subprocess.Popen(target, shell=True, start_new_session=True)
         else:
-            # key(s) — send down on press, up on release
             log(f'key {action} {"dn" if begin else "up"}')
             send_keys(self.uinput, target, begin)
         return True
 
     def execute_combo_target(self, target: str | list[str]) -> None:
-        """Execute the target of a gamepad combo (synthetic key or action)."""
         if isinstance(target, list):
             if len(target) == 1:
                 target = target[0]
@@ -442,8 +372,6 @@ class HotkeyDaemon:
                     send_key_combo(self.uinput, codes)
                 return
 
-        # Single KEY_* name: look up in default_map to find its action,
-        # then resolve through the current context.
         code = ecodes.ecodes.get(target)
         if code is not None:
             action = self.default_map.get(code)
@@ -458,11 +386,9 @@ class HotkeyDaemon:
                     subprocess.Popen(ctx_target, shell=True, start_new_session=True)
                     return
                 log(f'combo -> action {action!r} not bound in context {self.context.get("name", "")!r} — no-op')
-                return  # named action with nothing bound in this context — do nothing
+                return
             log(f'combo -> raw key {target} (no default_mapping entry)')
             send_key_combo(self.uinput, code)
-
-    # --- device management ---------------------------------------------------
 
     def _add_device(self, path: str) -> None:
         if path in self.devices:
@@ -481,27 +407,16 @@ class HotkeyDaemon:
         action_map = load_device_action_map(device)
         keys = set(caps.get(ecodes.EV_KEY, []))
 
-        # Gamepad button map
         button_map = {c: n for c, n in FALLBACK_GAMEPAD_BUTTONS.items() if c in keys}
-        # ES input config stores SDL joystick button indices. SDL enumerates gamepad buttons
-        # in ascending evdev-code order, so sort the device's actual button codes to translate.
         gamepad_btn_codes = sorted(c for c in keys if c >= ecodes.BTN_GAMEPAD)
         es_map = self.es_button_maps.get(device.name, {})
         for sdl_idx, action_name in es_map.items():
             if sdl_idx < len(gamepad_btn_codes):
                 button_map[gamepad_btn_codes[sdl_idx]] = action_name
 
-        # Real keyboards (and keyboard-emulating arcade encoders/IPAC boards)
-        # never have BTN_GAMEPAD-range codes, so they never get an es_map
-        # entry above. Apply ES's generic type="keyboard" input config here
-        # instead, so button-hold combos (Select+Start exit, etc.) work from
-        # a keyboard the same as from a gamepad.
         if not button_map and ecodes.KEY_ESC in keys and ecodes.KEY_A in keys:
             button_map = {c: n for c, n in self.es_keyboard_map.items() if c in keys}
 
-        # Keyboard fallback: use default_mapping so media/single keys (Escape,
-        # F1, volume, …) still trigger their direct action. Kept independent
-        # of button_map above — combos and single-key actions both apply.
         if not action_map:
             action_map = dict(self.default_map)
 
@@ -535,17 +450,11 @@ class HotkeyDaemon:
         except Exception:
             pass
 
-    # --- event handling ------------------------------------------------------
-
     def _handle_controller_button(self, state: DeviceState, event: evdev.InputEvent) -> None:
         name = state.button_map.get(event.code)
         if not name:
             return
         names = [name]
-        # Devices with no dedicated mode/guide button (keyboards, and many
-        # cheap/older gamepads) can never satisfy a "hotkey"-gated combo.
-        # Let Select double as the hotkey modifier for them, matching the
-        # classic Batocera Select+Start exit convention.
         select_fallback = name == 'select' and 'hotkey' not in state.button_map.values()
         if select_fallback:
             names.append('hotkey')
@@ -559,11 +468,10 @@ class HotkeyDaemon:
                 target  = combo.get('target')
                 if not isinstance(trigger, list) or target is None:
                     continue
-                # Some devices resend value=1 repeatedly while a button stays
-                # held, without an intervening value=0 — track combos already
-                # dispatched for the current hold so those don't refire.
                 trigger_key = frozenset(trigger)
                 if trigger_key in state.active_combos:
+                    continue
+                if not trigger_key & set(names) or trigger_key <= set(names):
                     continue
                 if all(b in state.pressed for b in trigger):
                     state.active_combos.add(trigger_key)
@@ -571,16 +479,12 @@ class HotkeyDaemon:
                     self.execute_combo_target(target)
         elif event.value == 0:
             state.pressed.difference_update(names)
-            # Releasing any trigger button re-arms that combo for the next hold.
             state.active_combos = {
                 trigger_key for trigger_key in state.active_combos
                 if trigger_key.issubset(state.pressed)
             }
 
     def _passthrough(self, event: evdev.InputEvent) -> None:
-        """Forward a raw event from a grabbed device unchanged. Only called
-        for EV_KEY on pure-keyboard devices — exactly what our uinput's
-        declared capabilities (see make_uinput) can reproduce."""
         try:
             self.uinput.write(event.type, event.code, event.value)
             self.uinput.syn()
@@ -595,10 +499,6 @@ class HotkeyDaemon:
             for event in state.device.read():
                 if event.type != ecodes.EV_KEY:
                     continue
-                # Independent, not either/or: a keyboard-class device's key
-                # can be both a direct default_mapping action (e.g. Escape's
-                # instant "exit") and a named combo button (e.g. Select, for
-                # Select+Start) at the same time.
                 if event.code in state.button_map:
                     self._handle_controller_button(state, event)
 
@@ -609,12 +509,9 @@ class HotkeyDaemon:
                             state.consumed_keys.add(event.code)
                         else:
                             state.consumed_keys.discard(event.code)
-                        continue  # substituted — don't also deliver the raw key
+                        continue
 
                 if event.code in state.consumed_keys:
-                    # autorepeat (or a release whose action didn't resolve
-                    # this time) for a key we substituted on press — keep
-                    # suppressing it instead of leaking a raw repeat/release.
                     if event.value == 0:
                         state.consumed_keys.discard(event.code)
                     continue
@@ -623,8 +520,6 @@ class HotkeyDaemon:
                     self._passthrough(event)
         except OSError:
             self._remove_device(path)
-
-    # --- main loop -----------------------------------------------------------
 
     def run(self) -> None:
         Path('/run/hippos').mkdir(parents=True, exist_ok=True)
@@ -666,10 +561,6 @@ class HotkeyDaemon:
                     if fd != self.monitor.fileno():
                         log(f'event error fd={fd}: {exc}')
 
-# ---------------------------------------------------------------------------
-# CLI subcommands
-# ---------------------------------------------------------------------------
-
 def _read_pid() -> int:
     return int(PID_FILE.read_text().strip())
 
@@ -683,22 +574,12 @@ def _signal_daemon(sig: int = signal.SIGHUP) -> None:
     except ProcessLookupError:
         pass
     except PermissionError:
-        # hippos-hotkeys.service runs as root (needs /dev/input, /dev/uinput);
-        # --new-context/--default-context/--reload are invoked as the hippos
-        # user (emulatorlauncher, waydroid-launcher run under User=hippos) —
-        # a plain os.kill() against a root-owned PID is rejected by the
-        # kernel regardless of what wrote CONTEXT_FILE, so the daemon never
-        # actually reconfigures: the file is right, the running process just
-        # never hears about it. hippos already has NOPASSWD sudo for
-        # everything (see /etc/sudoers.d/hippos) — use it for the one
-        # privileged step this needs.
         subprocess.run(
             ['sudo', '-n', 'kill', f'-{signal.Signals(sig).name}', str(pid)],
             capture_output=True,
         )
 
 def cmd_send(action: str) -> None:
-    """Inject a named action into the currently active context."""
     ctx_data = load_json(CONTEXT_FILE if CONTEXT_FILE.exists() else DEFAULT_CONTEXT_FILE, {})
     all_keys = {
         **_resolve_keys(ctx_data.get('keys', {})),
@@ -714,14 +595,6 @@ def cmd_send(action: str) -> None:
     try:
         uinput = make_uinput()
     except PermissionError:
-        # /dev/uinput is root:root by default — only the daemon (runs as
-        # root) can normally open it. --send creates its own transient
-        # uinput device rather than going through the daemon, so callers
-        # invoked as the hippos user (hippos-swissknife, run from
-        # EmulationStation's own User=hippos process) hit the same
-        # root-vs-non-root gap _signal_daemon() had. Re-invoke this one
-        # send under sudo rather than trying to grant /dev/uinput access
-        # more broadly.
         subprocess.run(
             ['sudo', '-n', str(Path(__file__).resolve()), '--send', action],
             capture_output=True,
@@ -737,9 +610,6 @@ def cmd_new_context(name: str, json_str: str, disable_common: bool = False) -> N
     data: dict[str, Any] = {'name': name, 'keys': json.loads(json_str)}
     if disable_common:
         data['common_disabled'] = True
-    # Atomic write: a reader (the daemon reloading on SIGHUP, or anything else
-    # that reads CONTEXT_FILE) must never observe a truncated-but-not-yet-written
-    # file mid-update.
     tmp_path = CONTEXT_FILE.with_suffix('.tmp')
     tmp_path.write_text(json.dumps(data))
     os.replace(tmp_path, CONTEXT_FILE)
@@ -787,8 +657,6 @@ def cmd_list() -> None:
                 print(f'  {ECODES_NAMES.get(code, str(code)):<22} -> {act}')
             for code, btn in sorted(button_map.items()):
                 print(f'  {ECODES_NAMES.get(code, str(code)):<22} -> button:{btn}')
-
-# ---------------------------------------------------------------------------
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='hippos-hotkeys')
