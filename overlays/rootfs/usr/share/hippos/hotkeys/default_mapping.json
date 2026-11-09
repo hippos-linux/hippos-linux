@@ -22,7 +22,6 @@
   "KEY_BRIGHTNESS_CYCLE": "brightness-cycle",
   "KEY_POWER": "power",
   "KEY_SUBTITLE": "translation",
-  "KEY_FRONT": "bezels",
   "KEY_VIDEO_NEXT": "next_disk",
   "KEY_SCREEN": "swap_screen",
   "KEY_CAMERA_FOCUS": "swap_screen",
@@ -31,5 +30,6 @@
   "KEY_ATTENDANT_TOGGLE": "onscreen-keyboard",
   "KEY_ATTENDANT_ON": "recording-start",
   "KEY_ATTENDANT_OFF": "recording-stop",
-  "KEY_FILE": "files"
+  "KEY_FILE": "files",
+  "KEY_FULL_SCREEN": "fullscreen"
 }

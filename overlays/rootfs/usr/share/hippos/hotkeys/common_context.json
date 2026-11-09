@@ -7,5 +7,6 @@
   "brightness-down":  "brightnessctl set 10%-",
   "brightness-cycle": "brightnessctl set +10%",
   "power":            "systemctl poweroff",
-  "swap_screen":      "hippos-swap-screen"
+  "swap_screen":      "hippos-swap-screen",
+  "fullscreen":       ["KEY_LEFTALT", "KEY_ENTER"]
 }

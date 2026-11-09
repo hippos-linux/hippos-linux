@@ -87,8 +87,8 @@
     {
       "trigger": ["hotkey", "r3"],
       "type": "key",
-      "target": ["KEY_FRONT"],
-      "description": "Bezels"
+      "target": ["KEY_FULL_SCREEN"],
+      "description": "Toggle fullscreen (shows the app's menu bar)"
     },
     {
       "trigger": ["hotkey", "select"],
