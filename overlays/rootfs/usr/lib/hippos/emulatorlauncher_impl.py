@@ -577,6 +577,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument('-emulator',     type=str,  required=False)
     p.add_argument('-core',         type=str,  required=False)
     p.add_argument('-systemname',   type=str,  required=False)
+    p.add_argument('-monitor',      type=int,  required=False)
     p.add_argument('-gameinfoxml',  type=str,  required=False, nargs='?', default=None, const=None)
     p.add_argument('-netplaymode',  type=str,  required=False)
     p.add_argument('-netplayip',    type=str,  required=False)
