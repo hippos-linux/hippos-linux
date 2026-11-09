@@ -112,7 +112,6 @@ python3-dbus
 
 # X11 session
 greetd
-tuigreet
 openbox
 xserver-xorg-core
 xserver-xorg-input-libinput
