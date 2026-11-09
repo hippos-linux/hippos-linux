@@ -13,11 +13,6 @@ kmsg "starting (rootmnt=${rootmnt})"
 
 modprobe overlay 2>/dev/null || true
 
-# Bounded wait for device enumeration before the label lookup below — without
-# it, a not-yet-settled boot (slow USB enumeration, or a udev remove/re-add
-# right after hippos-grow-userdata's blockdev --rereadpt on a previous boot)
-# falls through to "booting without overlay" and pushes the mount onto the
-# racier systemd/fstab path instead.
 udevadm settle --timeout=5 2>/dev/null || true
 
 MAIN_DEV="$(blkid -L HippOS 2>/dev/null)"
@@ -34,7 +29,6 @@ if ! mount -t btrfs -o subvolid=5,noatime,commit=5,compress=zstd:1 "${MAIN_DEV}"
 fi
 kmsg "HippOS btrfs top-level mounted at ${BTRFS_MNT}"
 
-# Determine which rootfs subvol to use from the kernel cmdline.
 ROOT_SUBVOL="@rootfs"
 for _param in $(cat /proc/cmdline); do
     case "$_param" in
@@ -56,33 +50,75 @@ UPPER="${BTRFS_MNT}/@overlay/upper"
 WORK="${BTRFS_MNT}/@overlay/work"
 mkdir -p "${UPPER}" "${WORK}"
 
-# Overlayfs reports the mounted root's own metadata (uid/gid/mode) straight
-# from upperdir's directory entry, unconditionally, from the first mount
-# onward — mkdir -p above only sets this on first creation and never touches
-# it again. upperdir persists on disk across every boot, so anything that
-# ever chowns/chmods live "/" (a stray `sudo chown -R $USER: /` typo is the
-# classic way) bakes that into the merged root permanently, surviving every
-# future boot with no way to self-correct. Force it back to root:root/0755
-# unconditionally on every boot, before the overlay is mounted — cheap and a
-# no-op when it's already correct.
 chown 0:0 "${UPPER}"
 chmod 0755 "${UPPER}"
 
-# Apt installs land in the upper layer, and so do copied-up dpkg/apt state and
-# /etc/ld.so.cache. After an OS update those copies would hide the new image's
-# own (including its apt holds), so on the first boot of a different deployment
-# drop them, together with the installed files, and leave
-# hippos-apt-restore.service a flag to reinstall the user's packages.
-# /usr/local, /etc, /opt and user-added /usr/share/keyrings are kept.
-# Without a marker (a system from before this check) the previous deployment
-# is unknown, but a dpkg status copied up before this image was built is stale.
-# The old status and apt marks are kept for hippos-apt-packages, which has no
-# recorded package list on such a system.
+AWK_UNION='function union(a, b,    list, n, i, seen, out) {
+    n = split(a "," b, list, ",")
+    for (i = 1; i <= n; i++)
+        if (list[i] != "" && !(list[i] in seen)) {
+            seen[list[i]] = 1
+            out = out (out == "" ? "" : ",") list[i]
+        }
+    return out
+}'
+
+replace_upper_etc() {
+    cat "${UPPER}/etc/$1.new" > "${UPPER}/etc/$1"
+    rm -f "${UPPER}/etc/$1.new"
+}
+
+merge_ids() {
+    [ -s "${UPPER}/etc/$1" ] || return 0
+    awk -F: -v OFS=: -v is_group="$([ "$1" = group ] && echo 1)" "${AWK_UNION}"'
+        FNR == NR { upper[$1] = $0; order[++n] = $1; next }
+        {
+            in_image[$1] = 1; id_used[$3] = 1
+            if (is_group && ($1 in upper)) { split(upper[$1], u, ":"); $4 = union($4, u[4]) }
+            print
+        }
+        END {
+            for (i = 1; i <= n; i++) {
+                split(upper[order[i]], u, ":")
+                if (!(order[i] in in_image) && !(u[3] in id_used)) print upper[order[i]]
+            }
+        }' "${UPPER}/etc/$1" "${BTRFS_MNT}/${ROOT_SUBVOL}/etc/$1" > "${UPPER}/etc/$1.new"
+    replace_upper_etc "$1"
+}
+
+merge_secrets() {
+    [ -s "${UPPER}/etc/$1" ] || return 0
+    awk -F: -v OFS=: -v is_gshadow="$([ "$1" = gshadow ] && echo 1)" \
+        -v accounts="${UPPER}/etc/$2" -v upper_file="${UPPER}/etc/$1" "${AWK_UNION}"'
+        FILENAME == accounts { kept[$1] = 1; next }
+        FILENAME == upper_file { upper[$1] = $0; order[++n] = $1; next }
+        {
+            in_image[$1] = 1
+            if (!($1 in upper)) { print; next }
+            if (!is_gshadow) { print upper[$1]; next }
+            split(upper[$1], u, ":"); $2 = u[2]; $3 = u[3]; $4 = union($4, u[4])
+            print
+        }
+        END {
+            for (i = 1; i <= n; i++)
+                if (!(order[i] in in_image) && (order[i] in kept)) print upper[order[i]]
+        }' "${UPPER}/etc/$2" "${UPPER}/etc/$1" "${BTRFS_MNT}/${ROOT_SUBVOL}/etc/$1" > "${UPPER}/etc/$1.new"
+    replace_upper_etc "$1"
+}
+
+merge_accounts() {
+    merge_ids passwd
+    merge_secrets shadow passwd
+    merge_ids group
+    merge_secrets gshadow group
+}
+
 DEPLOYMENT_MARKER="${BTRFS_MNT}/@overlay/deployment"
+DEPLOYMENT="${ROOT_SUBVOL} $(sed -n 's/^BUILD_ID=//p' "${BTRFS_MNT}/${ROOT_SUBVOL}/etc/hippos-version" 2>/dev/null)"
 UPPER_STATUS="${UPPER}/var/lib/dpkg/status"
 STALE=""
 if [ -f "${DEPLOYMENT_MARKER}" ]; then
-    [ "$(cat "${DEPLOYMENT_MARKER}")" != "${ROOT_SUBVOL}" ] && STALE="deployment changed to ${ROOT_SUBVOL}"
+    [ "$(cat "${DEPLOYMENT_MARKER}")" != "${DEPLOYMENT}" ] && STALE="deployment changed to ${DEPLOYMENT}"
 elif [ -f "${UPPER_STATUS}" ] && [ "${UPPER_STATUS}" -ot "${BTRFS_MNT}/${ROOT_SUBVOL}/var/lib/dpkg/status" ]; then
     STALE="dpkg status predates ${ROOT_SUBVOL}"
 fi
@@ -92,8 +128,6 @@ if [ -n "${STALE}" ]; then
     [ -f "${UPPER_STATUS}" ] && cp "${UPPER_STATUS}" "${UPPER}/var/lib/hippos/pre-update-dpkg-status"
     [ -f "${UPPER}/var/lib/apt/extended_states" ] && \
         cp "${UPPER}/var/lib/apt/extended_states" "${UPPER}/var/lib/hippos/pre-update-apt-extended-states"
-    # Repo keys the user added by hand (/etc/apt sources point at them) are
-    # kept; ones the new image ships are dropped so stale copies can't hide them.
     _KEYRINGS_KEEP="${UPPER}/var/lib/hippos/keyrings.keep"
     if [ -d "${UPPER}/usr/share/keyrings" ]; then
         rm -rf "${_KEYRINGS_KEEP}"
@@ -116,8 +150,10 @@ if [ -n "${STALE}" ]; then
     rm -rf "${UPPER}/var/lib/dpkg" "${UPPER}/var/lib/apt" "${UPPER}/var/cache/apt" \
            "${UPPER}/etc/ld.so.cache" "${UPPER}/etc/alternatives"
     : > "${UPPER}/var/lib/hippos/apt-restore-pending"
+    merge_accounts
+    kmsg "account files merged with ${ROOT_SUBVOL}'s"
 fi
-echo "${ROOT_SUBVOL}" > "${DEPLOYMENT_MARKER}"
+echo "${DEPLOYMENT}" > "${DEPLOYMENT_MARKER}"
 
 OVERLAY_OPTS="lowerdir=${BTRFS_MNT}/${ROOT_SUBVOL},upperdir=${UPPER},workdir=${WORK}"
 if ! mount -t overlay -o "${OVERLAY_OPTS}" overlay "${rootmnt}"; then

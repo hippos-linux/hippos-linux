@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""HippOS system updater — apply updates and manage rollback deployments."""
 
 import hashlib
 import json
@@ -22,6 +21,8 @@ SYSCONF           = "/userdata/system/hippos.conf"
 CACHE_DIR         = "/userdata/system/cache/update"
 BTRFS_MNT         = "/tmp/hippos-btrfs-update"
 BARE_ROOTFS       = "@rootfs"
+STAGING_ROOTFS    = "@rootfs.new"
+UPDATE_PENDING    = "/run/hippos-update-pending"
 KERNEL_SNAPSHOT_PREFIX = "@rootfs-kernel-"
 LOG_FILE          = "/userdata/system/logs/upgrade.log"
 PATCHES_STATE_FILE = "/userdata/system/applied-patches.json"
@@ -58,20 +59,11 @@ def die(msg):
     log(f"ERROR: {msg}")
     sys.exit(1)
 
-
 def _log_uncaught_exception(exc_type, exc_value, exc_tb):
-    # Without this, an unhandled exception anywhere below prints to stderr
-    # and vanishes — upgrade.log (what hippos-upload-logs actually collects)
-    # shows the last log() line and then nothing, with no way to tell what
-    # happened. die()'s sys.exit() doesn't hit this hook (SystemExit is
-    # handled separately by the interpreter), so expected error exits are
-    # unaffected.
     log("CRASH: " + "".join(traceback.format_exception(exc_type, exc_value, exc_tb)).rstrip())
     sys.__excepthook__(exc_type, exc_value, exc_tb)
 
-
 sys.excepthook = _log_uncaught_exception
-
 
 def current_version():
     try:
@@ -79,14 +71,7 @@ def current_version():
     except FileNotFoundError:
         return "0.0.0"
 
-
 def parse_current_subvol(mounts_text: str) -> str:
-    """Extract the active @rootfs* subvolume name from /proc/mounts content.
-
-    HippOS uses overlayfs for /; lowerdir reveals the active btrfs subvol.
-    Falls back to the bare "@rootfs" subvolume — the pre-first-update state —
-    if no overlay root is mounted (e.g. running outside the normal boot path).
-    """
     for line in mounts_text.splitlines():
         parts = line.split()
         if len(parts) >= 4 and parts[1] == "/" and parts[2] == "overlay":
@@ -98,11 +83,8 @@ def parse_current_subvol(mounts_text: str) -> str:
                         return last
     return BARE_ROOTFS
 
-
 def current_subvol():
-    """Return the subvolume name we are currently booted into."""
     return parse_current_subvol(open("/proc/mounts").read())
-
 
 def get_channel():
     try:
@@ -114,7 +96,6 @@ def get_channel():
         pass
     return "stable"
 
-
 def get_beta_token():
     try:
         for line in open(SYSCONF):
@@ -125,7 +106,6 @@ def get_beta_token():
         pass
     return None
 
-
 def _make_request(url: str) -> urllib.request.Request:
     headers = {"User-Agent": "hippos-upgrade/1.0", "X-HippOS-Version": current_version()}
     token = get_beta_token()
@@ -133,11 +113,7 @@ def _make_request(url: str) -> urllib.request.Request:
         headers["Authorization"] = f"Bearer {token}"
     return urllib.request.Request(url, headers=headers)
 
-
 def fetch_manifest(channel):
-    # Dev channel is gated by token role (KV value 'dev', see betaAuth.ts
-    # validateDevToken) and lives at its own path — a stable/beta token
-    # cannot read it, so it must not fall back to the regular manifest URLs.
     if channel == "dev":
         urls = [f"https://hippos-linux.org/api/update/manifest-{_DEB_ARCH}-dev.json"]
     else:
@@ -155,45 +131,23 @@ def fetch_manifest(channel):
             log(f"Manifest fetch failed for {url}: HTTP {e.code}")
             continue
         except Exception as e:
-            # Logged rather than silently swallowed — the caller's generic
-            # "check network" die() otherwise gives no way to tell a real
-            # outage apart from e.g. a malformed response on this exact URL,
-            # which matters for the dev channel since it has no fallback URL
-            # to fall through to.
             log(f"Manifest fetch failed for {url}: {e}")
             continue
     return None
 
-
 def ver_tuple(v):
-    """Normalize a version string to a comparable (major, minor, patch, prerelease) tuple.
-
-    Always pads/truncates major.minor.patch to exactly 3 components so "1.2" and
-    "1.2.0" compare equal instead of the shorter string sorting as lower — Python's
-    tuple comparison treats a missing trailing element as smaller than any present
-    value, and cur/remote version strings aren't guaranteed to have the same number
-    of dot-separated parts.
-
-    Dev channel versions carry a "-dev.N" suffix (e.g. "0.5.3-dev.3") — the trailing
-    N is kept as a 4th element so successive dev builds on the same base version
-    still compare as increasing. Non-prerelease versions get 0 here, which doesn't
-    change their relative ordering against each other.
-    """
     base, _, pre = v.lstrip("v").partition("-")
     parts = (base.split(".") + ["0", "0", "0"])[:3]
     pre_match = re.search(r"(\d+)$", pre)
     pre_num = int(pre_match.group(1)) if pre_match else 0
     return tuple(int(x) for x in parts) + (pre_num,)
 
-
 def btrfs_device():
-    # HippOS root is overlayfs; find the btrfs device via any btrfs mount.
     for line in open("/proc/mounts"):
         parts = line.split()
         if len(parts) >= 3 and parts[2] == "btrfs":
             return parts[0]
     die("Cannot find btrfs root device")
-
 
 def mount_toplevel():
     os.makedirs(BTRFS_MNT, exist_ok=True)
@@ -202,45 +156,30 @@ def mount_toplevel():
         check=True
     )
 
-
 def umount_toplevel():
     subprocess.run(["umount", "-l", BTRFS_MNT], check=False)
 
-
 def _deployment_sort_key(name):
-    # Kernel-update snapshots carry a kernel version, not an OS version, and
-    # are only ever taken of the running deployment just before its kernel is
-    # replaced. Sorting them after every OS deployment makes the snapshot the
-    # newest rollback slot, which write_grub_cfg uses as the boot-counter
-    # fallback when the new kernel fails to boot.
     if name.startswith(KERNEL_SNAPSHOT_PREFIX):
+        return (2, name)
+    if name == BARE_ROOTFS:
         return (1, name)
     return (0, ver_tuple(name[len("@rootfs-"):]))
 
-
 def sort_deployment_names(names) -> list[str]:
-    """Sort @rootfs-* names by parsed version, not string order.
-
-    "@rootfs-0.5.10" must sort after "@rootfs-0.5.2"; plain string sorting
-    gets that backwards once a version component reaches two digits.
-    """
     return sorted(names, key=_deployment_sort_key)
 
-
 def parse_deployment_names(btrfs_list_output: str) -> list[str]:
-    """Parse `btrfs subvolume list -o` output into a version-sorted @rootfs-* list."""
     names = []
     for line in btrfs_list_output.splitlines():
         parts = line.split()
         if parts:
             name = parts[-1]
-            if name.startswith("@rootfs-"):
+            if name == BARE_ROOTFS or name.startswith("@rootfs-"):
                 names.append(name)
     return sort_deployment_names(names)
 
-
 def list_deployments():
-    """Return version-sorted list of @rootfs-* subvolume names."""
     r = subprocess.run(
         ["btrfs", "subvolume", "list", "-o", BTRFS_MNT],
         capture_output=True, text=True
@@ -249,17 +188,22 @@ def list_deployments():
         log(f"WARNING: btrfs subvolume list failed: {r.stderr.strip()}")
     return parse_deployment_names(r.stdout)
 
+def deployment_version(name):
+    if name != BARE_ROOTFS:
+        return name[len("@rootfs-"):]
+    try:
+        return open(os.path.join(BTRFS_MNT, BARE_ROOTFS, VERSION_FILE.lstrip("/"))).read().strip()
+    except FileNotFoundError:
+        return "latest"
 
-# Two kernel variants can be installed side by side in the same /boot (see
-# build/build-kernel.sh KERNEL_VARIANT and hippos-select-kernel) — "-lts" is
-# checked before the bare "-hippos" suffix since every lts filename also ends
-# in "-hippos".
+def require_no_pending_update():
+    if os.path.exists(UPDATE_PENDING):
+        die("An update is waiting for a reboot — restart first")
+
 _KERNEL_VARIANTS = ("standard", "lts")
 _KERNEL_VARIANT_SUFFIX = {"standard": "-hippos", "lts": "-hippos-lts"}
 
-
 def _kernel_sort_key(name):
-    """Sort key for vmlinuz-X.Y.Z[-hippos[-lts]] filenames."""
     ver = name[len("vmlinuz-"):] if name.startswith("vmlinuz-") else name
     for suffix in ("-hippos-lts", "-hippos"):
         if ver.endswith(suffix):
@@ -270,12 +214,7 @@ def _kernel_sort_key(name):
     except ValueError:
         return (0,)
 
-
 def find_kernel_files(subvol_path, variant):
-    """Find the newest installed kernel/initrd for `variant` ('standard' or
-    'lts') in subvol_path/boot. Returns None if that variant isn't installed
-    in this subvol (e.g. lts on a deployment predating the lts kernel, or on
-    a platform that doesn't build it)."""
     boot = os.path.join(subvol_path, "boot")
     suffix = _KERNEL_VARIANT_SUFFIX[variant]
     kernels = []
@@ -283,8 +222,6 @@ def find_kernel_files(subvol_path, variant):
         for f in os.listdir(boot):
             if not (f.startswith("vmlinuz-") and f.endswith(suffix)):
                 continue
-            # "-hippos" is a substring of "-hippos-lts" — exclude lts files
-            # when collecting the standard variant.
             if variant == "standard" and f.endswith("-hippos-lts"):
                 continue
             kernels.append(f)
@@ -297,11 +234,7 @@ def find_kernel_files(subvol_path, variant):
     initrd = f"initrd.img-{kver}" if os.path.exists(os.path.join(boot, f"initrd.img-{kver}")) else "initrd.img"
     return kernel, initrd
 
-
 def default_kernel_variant():
-    """Return the kernel variant selected via the system.kernel setting —
-    same key and same standard/lts semantics as hippos-select-kernel, which
-    is what a user (or CRT setup) actually writes to."""
     try:
         result = subprocess.run(
             ["hippos-settings", "get", "system.kernel"],
@@ -312,15 +245,12 @@ def default_kernel_variant():
         variant = ""
     return variant if variant in _KERNEL_VARIANTS else "standard"
 
-
+EFI_MOUNT = "/boot/efi"
 EFI_GRUB_CFG = "/boot/efi/grub/grub.cfg"
 EFI_GRUBENV = "/boot/efi/grub/grubenv"
-# The GRUB theme ships in each deployment and is copied onto the ESP, where
-# GRUB reads it (the ESP is GRUB's root).
 DEPLOYMENT_GRUB_THEME = "usr/share/hippos/grub/themes/hippos"
 GRUB_THEME = "/grub/themes/hippos"
 EFI_GRUB_THEME = "/boot/efi/grub/themes/hippos"
-# Failed boots of a new deployment before GRUB falls back to the previous one.
 BOOT_ATTEMPTS = 3
 GRUB_DEFAULT_CFG = "/etc/default/grub"
 GRUB_DEFAULT_CFG_DIR = "/etc/default/grub.d"
@@ -337,9 +267,7 @@ _MANAGED_KERNEL_ARGS = {
     "splash",
 }
 
-
 def read_grub_uuid_partuuid():
-    """Extract fs-uuid and PARTUUID from grub.cfg on the EFI partition."""
     uuid = partuuid = None
     try:
         for line in open(EFI_GRUB_CFG):
@@ -353,8 +281,6 @@ def read_grub_uuid_partuuid():
                         partuuid = t.split("PARTUUID=")[1].split()[0].rstrip("\\")
     except FileNotFoundError:
         pass
-    # Live image grub.cfg uses root=LABEL=HippOS — no PARTUUID/UUID baked in.
-    # Fall back to reading them directly from the running block device.
     if not partuuid or not uuid:
         try:
             dev = btrfs_device()
@@ -371,7 +297,6 @@ def read_grub_uuid_partuuid():
             pass
     return uuid, partuuid
 
-
 def _split_kernel_args(value):
     if not value:
         return []
@@ -379,7 +304,6 @@ def _split_kernel_args(value):
         return shlex.split(value)
     except ValueError:
         return value.split()
-
 
 def _filter_managed_kernel_args(args):
     filtered = []
@@ -390,7 +314,6 @@ def _filter_managed_kernel_args(args):
             continue
         filtered.append(arg)
     return filtered
-
 
 def _dedupe_kernel_args(*arg_lists):
     merged = []
@@ -403,9 +326,7 @@ def _dedupe_kernel_args(*arg_lists):
             seen.add(arg)
     return merged
 
-
 def read_grub_cmdline_args():
-    """Read persistent kernel args from /etc/default/grub and dropins."""
     config_files = [GRUB_DEFAULT_CFG]
     config_files.extend(sorted(glob.glob(os.path.join(GRUB_DEFAULT_CFG_DIR, "*.cfg"))))
 
@@ -438,9 +359,7 @@ printf '%s\\n%s\\n' "$GRUB_CMDLINE_LINUX" "$GRUB_CMDLINE_LINUX_DEFAULT"
     )
     return _dedupe_kernel_args(linux_args, default_args)
 
-
 def os_prober_entries():
-    """Run os-prober and return list of GRUB menuentry strings for other OSes."""
     try:
         result = subprocess.run(
             ["os-prober"], capture_output=True, text=True, timeout=30
@@ -485,7 +404,6 @@ def os_prober_entries():
             ]))
     return entries
 
-
 def _grub_menuentry(label, subvol, kernel, initrd, uuid, cmdline, entry_id=None):
     id_option = f' --id={entry_id}' if entry_id else ''
     return [
@@ -501,18 +419,12 @@ def _grub_menuentry(label, subvol, kernel, initrd, uuid, cmdline, entry_id=None)
         '',
     ]
 
-
 def arm_boot_counter():
-    """Makes GRUB fall back to the previous deployment after BOOT_ATTEMPTS
-    failed boots."""
     subprocess.run(["grub-editenv", EFI_GRUBENV, "create"], check=False)
     subprocess.run(["grub-editenv", EFI_GRUBENV, "set", f"boot_counter={BOOT_ATTEMPTS}"], check=True)
     log(f"Boot counter armed ({BOOT_ATTEMPTS} attempts before rollback)")
 
-
 def install_grub_theme(deployment_path):
-    """Puts the deployment's GRUB theme on the ESP, replacing the last one.
-    The ESP is vfat, so files are copied without their ownership or modes."""
     source = os.path.join(deployment_path, DEPLOYMENT_GRUB_THEME)
     if not os.path.isdir(source):
         return
@@ -521,16 +433,26 @@ def install_grub_theme(deployment_path):
     for name in os.listdir(source):
         shutil.copyfile(os.path.join(source, name), os.path.join(EFI_GRUB_THEME, name))
 
+def efi_partition_mounted():
+    return os.path.ismount(EFI_MOUNT)
+
+def require_efi_partition():
+    if not efi_partition_mounted():
+        die(f"HippOS's boot partition is not mounted at {EFI_MOUNT}, so the boot "
+            "menu can't be changed. If another system's boot loader starts HippOS, "
+            "point it at the deployment you want instead.")
+
+def update_boot_menu(default_subvol, deployments, uuid, partuuid):
+    if not efi_partition_mounted():
+        log(f"No HippOS boot partition at {EFI_MOUNT} — boot menu left to the "
+            f"system's own boot loader, which must start {BARE_ROOTFS}")
+        return
+    write_grub_cfg(default_subvol, deployments, uuid, partuuid)
+    log(f"GRUB updated — default: {default_subvol}")
+    arm_boot_counter()
 
 def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
-    """Regenerate grub.cfg on the EFI partition.
-
-    Menu shape mirrors a normal distro grub-mkconfig layout: a single
-    top-level default entry, everything else (the other kernel variant,
-    a verbose entry, a rescue entry, and every rollback deployment) tucked
-    into an "Advanced options" submenu, plus firmware setup and any
-    os-prober entries.
-    """
+    require_efi_partition()
     extra_args = read_grub_cmdline_args()
     rollback_subvols = [s for s in reversed(all_subvols) if s != default_subvol]
     other_entries = os_prober_entries()
@@ -553,8 +475,6 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
     def kernel_for(subvol_path, variant, required=False):
         found = find_kernel_files(subvol_path, variant)
         if found is None and required:
-            # Standard is always expected to exist; fall back to a
-            # placeholder rather than silently dropping the entry.
             found = "vmlinuz", "initrd.img"
         return found
 
@@ -562,11 +482,6 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
     default_kernel, default_initrd = kernel_for(default_subvol_path, default_variant, required=True)
     install_grub_theme(default_subvol_path)
 
-    # Fallback target for the boot-counter (below), in the priority order a
-    # user would want: the other kernel variant on this same deployment
-    # first, then the newest rollback deployment's default variant, and
-    # finally (single-deployment, single-kernel installs) the default entry
-    # itself, which always exists — so this is never None.
     fallback_id = "hippos_fallback"
     fallback = next(
         (
@@ -584,26 +499,15 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
         (default_subvol, default_variant),
     )
 
-    # Boot-counter logic: grubenv holds boot_counter (BOOT_ATTEMPTS after each
-    # update). Each failed boot decrements it; when it hits 0 the fallback
-    # entry is selected by id (see fallback_id above) instead of a positional
-    # index, so it keeps pointing at the right entry regardless of submenu
-    # nesting. A successful boot clears it via hippos-boot-success.service.
-    # GRUB's script has no arithmetic, so the decrement is one branch per value.
     lines = [
         "insmod all_video",
         "insmod gfxterm",
         "insmod png",
         "insmod jpeg",
-        # auto, not a hardcoded 1080p mode — this must stay safe for CRT
-        # rigs going through a VGA-DAC (see kb/guidance/crt-support-plan.md),
-        # which advertise a different GOP mode list than a normal monitor
-        # and boot long before that doc's kernel/DRM-level EDID logic runs.
         "set gfxmode=auto",
         "terminal_output gfxterm",
         f"if [ -f {GRUB_THEME}/theme.txt ] ; then",
         f"    set theme={GRUB_THEME}/theme.txt",
-        # A theme can only use fonts GRUB has loaded.
         *(f"    loadfont {GRUB_THEME}/{os.path.basename(font)}"
           for font in sorted(glob.glob(os.path.join(EFI_GRUB_THEME, "*.pf2")))),
         "fi",
@@ -657,9 +561,6 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
         if found is None:
             continue
         kernel, initrd = found
-        # Boots the normal graphical.target chain (unlike the rescue entry
-        # below) so hangs in hippos-* units between sysinit.target and
-        # basic.target still reproduce, just with full unit status visible.
         suffix = " (LTS, verbose)" if variant == "lts" else " (verbose)"
         advanced += _grub_menuentry(
             f"HippOS{suffix}", default_subvol, kernel, initrd, uuid,
@@ -679,7 +580,7 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
 
     for subvol in rollback_subvols:
         subvol_path = os.path.join(BTRFS_MNT, subvol)
-        ver = subvol.replace("@rootfs-", "")
+        ver = deployment_version(subvol)
         base_label = f"HippOS {ver} (rollback)"
         for variant in variant_order:
             found = kernel_for(subvol_path, variant)
@@ -713,7 +614,6 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
     with open(EFI_GRUB_CFG, "w") as f:
         f.write("\n".join(lines))
 
-
 def sha256_file(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -721,16 +621,7 @@ def sha256_file(path):
             h.update(chunk)
     return h.hexdigest()
 
-
 def fetch_archive(url, archive, sha256="", timeout=None):
-    """Download `url` into `archive`, reusing a cached copy if it's already valid.
-
-    Downloads to a .part sibling and only renames it into place after a full,
-    checksum-clean download. A payload dropped mid-download (interrupted
-    connection, disk full, checksum failure) must never be left sitting at
-    the final `archive` path — otherwise the next update attempt sees the
-    path already exists, skips the download, and fails the same way forever.
-    """
     if os.path.exists(archive):
         if not sha256 or sha256_file(archive) == sha256:
             return
@@ -763,13 +654,7 @@ def fetch_archive(url, archive, sha256="", timeout=None):
         if os.path.exists(part):
             os.remove(part)
 
-
-# ---------------------------------------------------------------------------
-# Subcommands
-# ---------------------------------------------------------------------------
-
 def cmd_check():
-    """Exit 0 + print info if update available; exit 1 if up to date."""
     cur = current_version()
     manifest = fetch_manifest(get_channel())
     if not manifest:
@@ -781,22 +666,17 @@ def cmd_check():
         sys.exit(0)
     sys.exit(1)
 
-
 def cmd_list_deployments():
-    """Print available rollback deployments, one per line."""
     cur = current_subvol()
     try:
         mount_toplevel()
         for sv in list_deployments():
             if sv != cur:
-                ver = sv.replace("@rootfs-", "")
-                print(f"{sv}\t{ver}")
+                print(f"{sv}\t{deployment_version(sv)}")
     finally:
         umount_toplevel()
 
-
 def cmd_rollback(subvol):
-    """Make `subvol` the default boot entry; takes effect on next boot."""
     try:
         mount_toplevel()
         available = list_deployments()
@@ -814,82 +694,23 @@ def cmd_rollback(subvol):
 
     log("Rollback configured. Reboot to apply.")
 
-
 @dataclass
 class ApplyPlan:
-    """Snapshot/create/prune decisions for cmd_apply.
+    prune: list
+    retire_running_as: str | None
+    final_deployments: list
 
-    Computed once from btrfs state as it exists before this apply run
-    touches anything, so the whole decision is a pure function of that
-    state and can be tested without btrfs, GRUB, or root.
-    """
-    backup_name: str
-    need_snapshot: bool
-    new_subvol: str
-    prune: list = field(default_factory=list)
-    retained_deployments: list = field(default_factory=list)
-    final_deployments: list = field(default_factory=list)
-
-
-def plan_apply(running: str, cur_version: str, remote_version: str,
-               existing_deployments: list, bare_rootfs_exists: bool = False) -> ApplyPlan:
-    """Decide what cmd_apply needs to snapshot, create, and prune.
-
-    `existing_deployments` is list_deployments()'s result from *before* this
-    run creates anything. `running` may not appear in it — a fresh install's
-    running subvolume is the bare "@rootfs", which list_deployments() never
-    returns since it only matches the "@rootfs-*" naming pattern.
-
-    Everything except the running subvolume and its backup slot is pruned
-    up front, before the download: the rootfs archive and the new subvolume
-    land on the same btrfs volume, and small disks run out of space if old
-    deployments are only removed after extraction succeeds.
-    """
-    backup_name = f"@rootfs-{cur_version}"
-    new_subvol = f"@rootfs-{remote_version}"
-
-    # A subvolume named backup_name can already exist for two reasons: a
-    # previous apply run snapshotted it and was then interrupted before
-    # pruning, or it *is* the running subvolume (steady state once a system
-    # has been updated at least once, since running == f"@rootfs-{cur}").
-    # Either way there's nothing to snapshot.
-    need_snapshot = backup_name not in set(existing_deployments) | {running}
-
-    keep = {backup_name, running}
-    # Includes new_subvol when a previous apply attempt left it half-extracted.
-    prune = sort_deployment_names(s for s in existing_deployments if s not in keep)
-    # The install-time "@rootfs" stays behind after the first update — its
-    # content lives on in the @rootfs-<version> snapshot taken from it, and
-    # nothing boots it once GRUB points at versioned deployments. Left alone
-    # it stops sharing extents as soon as that snapshot is pruned, and holds
-    # a full extra rootfs copy forever.
-    if bare_rootfs_exists and running != BARE_ROOTFS:
-        prune.insert(0, BARE_ROOTFS)
-
+def plan_apply(running: str, cur_version: str, existing_deployments: list) -> ApplyPlan:
+    retire = f"@rootfs-{cur_version}" if running == BARE_ROOTFS else None
     return ApplyPlan(
-        backup_name=backup_name,
-        need_snapshot=need_snapshot,
-        new_subvol=new_subvol,
-        prune=prune,
-        retained_deployments=sort_deployment_names(
-            s for s in existing_deployments if s in keep
-        ),
-        final_deployments=sort_deployment_names({backup_name, new_subvol}),
+        prune=sort_deployment_names(s for s in existing_deployments if s != running),
+        retire_running_as=retire,
+        final_deployments=sort_deployment_names({retire or running, BARE_ROOTFS}),
     )
 
-
-# Kept free on top of the update itself so /userdata (configs, logs, saves)
-# stays writable while the old and new deployments coexist until reboot.
 UPDATE_SPACE_RESERVE = 512 * 1024 * 1024
 
-
 def update_space_shortfall(free_bytes, payload, archive_cached):
-    """Bytes missing for downloading and extracting `payload`, or 0 if it fits.
-
-    The archive and its extracted tree share the btrfs volume until apply
-    deletes the archive at the end. Manifests published before the payload
-    sizes were added carry neither field; those skip the check (return 0).
-    """
     installed = payload.get("installed_size")
     if installed is None:
         return 0
@@ -898,17 +719,15 @@ def update_space_shortfall(free_bytes, payload, archive_cached):
         needed += payload.get("size", 0)
     return max(0, needed - free_bytes)
 
-
 def remove_stale_archives(keep_archive):
-    """Delete cached rootfs archives (complete or partial) for other versions."""
     for name in os.listdir(CACHE_DIR):
         path = os.path.join(CACHE_DIR, name)
         if name.startswith("hippos-rootfs-") and path not in (keep_archive, keep_archive + ".part"):
             log(f"Removing stale update download {name}")
             os.remove(path)
 
-
 def cmd_apply():
+    require_no_pending_update()
     cur = current_version()
     channel = get_channel()
     log(f"Current version: {cur}  channel: {channel}")
@@ -942,25 +761,23 @@ def cmd_apply():
             die("Cannot read UUID/PARTUUID from existing grub.cfg")
 
         running = current_subvol()
-        plan = plan_apply(
-            running, cur, remote, list_deployments(),
-            bare_rootfs_exists=os.path.isdir(os.path.join(BTRFS_MNT, BARE_ROOTFS)),
-        )
+        plan = plan_apply(running, cur, list_deployments())
+        staging_path = os.path.join(BTRFS_MNT, STAGING_ROOTFS)
 
-        for stale in plan.prune:
-            log(f"Pruning old deployment {stale}...")
+        stale = ([STAGING_ROOTFS] if os.path.isdir(staging_path) else []) + plan.prune
+        for name in stale:
+            log(f"Pruning old deployment {name}...")
             result = subprocess.run(
-                ["btrfs", "subvolume", "delete", os.path.join(BTRFS_MNT, stale)],
+                ["btrfs", "subvolume", "delete", os.path.join(BTRFS_MNT, name)],
                 check=False,
             )
             if result.returncode != 0:
-                log(f"WARNING: failed to prune {stale} (exit {result.returncode}) "
+                log(f"WARNING: failed to prune {name} (exit {result.returncode}) "
                     f"— it will be retried on the next update")
-        if plan.prune:
-            # Deleted subvolumes are only reclaimed by the btrfs cleaner
-            # thread afterwards; wait so the free-space check sees the result.
+        if stale:
             subprocess.run(["btrfs", "subvolume", "sync", BTRFS_MNT], check=False)
-            write_grub_cfg(running, plan.retained_deployments, uuid, partuuid)
+        if plan.prune and efi_partition_mounted():
+            write_grub_cfg(running, [running], uuid, partuuid)
             log("GRUB updated after pruning")
 
         shortfall = update_space_shortfall(
@@ -973,36 +790,28 @@ def cmd_apply():
 
         fetch_archive(url, archive, sha256)
 
-        backup_path = os.path.join(BTRFS_MNT, plan.backup_name)
-        running_path = os.path.join(BTRFS_MNT, running)
-        new_path = os.path.join(BTRFS_MNT, plan.new_subvol)
-
-        if plan.need_snapshot:
-            log(f"Snapshotting {running} → {plan.backup_name}...")
-            subprocess.run(
-                ["btrfs", "subvolume", "snapshot", "-r", running_path, backup_path],
-                check=True
-            )
-
-        log(f"Creating {plan.new_subvol}...")
-        subprocess.run(["btrfs", "subvolume", "create", new_path], check=True)
+        log(f"Creating {STAGING_ROOTFS}...")
+        subprocess.run(["btrfs", "subvolume", "create", staging_path], check=True)
 
         log(f"Extracting rootfs...")
         subprocess.run(
             ["tar", "--xattrs", "--acls", "--numeric-owner",
-             "-I", "zstd -d", "-xf", archive, "-C", new_path],
+             "-I", "zstd -d", "-xf", archive, "-C", staging_path],
             check=True
         )
 
-        # Preserve fstab — the rootfs tarball has the build-time placeholder;
-        # the real one contains machine-specific PARTUUIDs for EFI and userdata.
-        shutil.copy2("/etc/fstab", os.path.join(new_path, "etc", "fstab"))
+        shutil.copy2("/etc/fstab", os.path.join(staging_path, "etc", "fstab"))
         log("fstab preserved from running system")
 
-        write_grub_cfg(plan.new_subvol, plan.final_deployments, uuid, partuuid)
-        log(f"GRUB updated — default: {plan.new_subvol}")
+        if plan.retire_running_as:
+            log(f"Renaming {BARE_ROOTFS} → {plan.retire_running_as}...")
+            os.rename(os.path.join(BTRFS_MNT, BARE_ROOTFS),
+                      os.path.join(BTRFS_MNT, plan.retire_running_as))
+        os.rename(staging_path, os.path.join(BTRFS_MNT, BARE_ROOTFS))
+        open(UPDATE_PENDING, "w").close()
+        log(f"{remote} installed as {BARE_ROOTFS}")
 
-        arm_boot_counter()
+        update_boot_menu(BARE_ROOTFS, plan.final_deployments, uuid, partuuid)
     finally:
         umount_toplevel()
 
@@ -1013,13 +822,10 @@ def cmd_apply():
 
     log("Update complete. Reboot to apply the new version.")
 
-
 EMULATORS_DIR = "/userdata/emulators"
 FRONTEND_INSTALL_ROOT = "/"
 
-
 def installed_kernel_version():
-    """Return the newest hippos kernel version installed in /boot, or None."""
     kernels = []
     try:
         for f in os.listdir("/boot"):
@@ -1030,7 +836,6 @@ def installed_kernel_version():
     if not kernels:
         return None
     return sorted(kernels, key=lambda v: tuple(int(x) for x in v.replace("-hippos", "").split(".")))[-1]
-
 
 def cmd_list_kernel_update():
     manifest = fetch_manifest(get_channel())
@@ -1045,8 +850,8 @@ def cmd_list_kernel_update():
     if installed != remote:
         print(f"kernel\t{installed or 'not installed'} → {remote}")
 
-
 def cmd_update_kernel():
+    require_no_pending_update()
     manifest = fetch_manifest(get_channel())
     if not manifest:
         die("Could not fetch manifest")
@@ -1075,7 +880,6 @@ def cmd_update_kernel():
         running    = current_subvol()
         subvol_path = os.path.join(BTRFS_MNT, running)
 
-        # Snapshot current subvol for rollback before touching /boot
         if installed:
             snap_name = f"{KERNEL_SNAPSHOT_PREFIX}{installed}"
             snap_path = os.path.join(BTRFS_MNT, snap_name)
@@ -1086,8 +890,6 @@ def cmd_update_kernel():
                     check=True,
                 )
 
-        # Install kernel deb via dpkg in chroot — handles depmod + update-initramfs.
-        # update-grub will fail harmlessly (no real ESP/block devices in chroot).
         log("Installing kernel deb...")
         deb_in_chroot = f"/tmp/kernel-install.deb"
         subprocess.run(["cp", deb, os.path.join(subvol_path, "tmp", "kernel-install.deb")], check=True)
@@ -1100,17 +902,8 @@ def cmd_update_kernel():
                 ["chroot", subvol_path, "dpkg", "-i", "--force-confold", deb_in_chroot],
                 check=True,
             )
-            # Don't trust the kernel package's own postinst hooks to have run
-            # depmod/update-initramfs correctly inside this bind-mounted chroot —
-            # a machine that hit this silently boots with modules.dep missing or
-            # stale for the new kernel, which surfaces as every loadable
-            # filesystem/module failing to resolve ("unknown filesystem type")
-            # despite /lib/modules/<kver> itself existing. Regenerate explicitly.
             log("Regenerating module dependencies and initramfs...")
             subprocess.run(["chroot", subvol_path, "depmod", "-a", remote], check=True)
-            # -c (create) fails if the postinst hook already made one; -u (update)
-            # fails if it didn't. Try create first since that's the common case,
-            # fall back to update rather than guessing which already ran.
             if subprocess.run(
                 ["chroot", subvol_path, "update-initramfs", "-c", "-k", remote],
             ).returncode != 0:
@@ -1134,12 +927,8 @@ def cmd_update_kernel():
             die("Cannot read UUID/PARTUUID from existing grub.cfg")
 
         deployments = list_deployments()
-        write_grub_cfg(running, deployments, uuid, partuuid)
-        log("GRUB updated")
+        update_boot_menu(running, deployments, uuid, partuuid)
 
-        arm_boot_counter()
-
-        # Prune old kernel snapshots — keep only the one we just made
         keep = {snap_name} if installed else set()
         pruned = False
         for sv in deployments:
@@ -1150,7 +939,7 @@ def cmd_update_kernel():
                     check=False,
                 )
                 pruned = True
-        if pruned:
+        if pruned and efi_partition_mounted():
             write_grub_cfg(running, list_deployments(), uuid, partuuid)
             log("GRUB updated after pruning")
     finally:
@@ -1163,7 +952,6 @@ def cmd_update_kernel():
 
     log(f"Kernel updated to {remote}. Reboot to apply.")
 
-
 def installed_emulator_version(name):
     vf = os.path.join(EMULATORS_DIR, name, "version")
     try:
@@ -1171,11 +959,7 @@ def installed_emulator_version(name):
     except FileNotFoundError:
         return None
 
-
-# sha256 of the tarball an emulator was installed from. A packaging fix can
-# keep the upstream version, so the version alone doesn't say it's current.
 INSTALLED_SHA256_FILE = ".hippos-sha256"
-
 
 def emulator_up_to_date(name, info):
     try:
@@ -1185,25 +969,14 @@ def emulator_up_to_date(name, info):
     return (installed_emulator_version(name) == info.get("version", "")
             and installed_sha == info.get("sha256", ""))
 
-
 def installed_frontend_version(name):
-    # Version file is placed by pack-frontend.sh inside the tarball at ./version
-    # and extracted to the install root, so it lands at /version — use a dedicated
-    # path per frontend to avoid collisions.
     vf = f"/usr/share/hippos/frontend-{name}-version"
     try:
         return open(vf).read().strip()
     except FileNotFoundError:
         return None
 
-
 def manifest_emulators(manifest):
-    """The newest build of each emulator that this OS can run.
-
-    `emulators` holds builds every supported OS can run; it's all that clients
-    from before 0.6.8 read. `emulator_builds` adds builds that need a newer OS,
-    such as ones linked against a newer HippOS Qt, each with its `min_os`.
-    """
     payloads = manifest.get("payloads", {})
     chosen = dict(payloads.get("emulators", {}))
     os_version = ver_tuple(current_version())
@@ -1213,9 +986,7 @@ def manifest_emulators(manifest):
             chosen[name] = max(runnable, key=lambda b: ver_tuple(b["min_os"]))
     return chosen
 
-
 def cmd_list_emulator_updates():
-    """Print emulators with pending updates only, one per line: name\tinstalled → available."""
     manifest = fetch_manifest(get_channel())
     if not manifest:
         die("Could not fetch manifest")
@@ -1229,7 +1000,6 @@ def cmd_list_emulator_updates():
         if not emulator_up_to_date(name, info):
             status = f"{installed or 'not installed'} → {remote}"
             print(f"{name}\t{status}")
-
 
 def cmd_update_emulator(name, force=False):
     manifest = fetch_manifest(get_channel())
@@ -1261,8 +1031,6 @@ def cmd_update_emulator(name, force=False):
     fetch_archive(url, archive, sha256)
 
     dest = os.path.join(EMULATORS_DIR, name)
-    # Extract beside the old copy and swap, so files the new package dropped
-    # don't linger and a failed extraction leaves the old copy working.
     staging = dest + ".new"
     shutil.rmtree(staging, ignore_errors=True)
     os.makedirs(staging)
@@ -1275,8 +1043,6 @@ def cmd_update_emulator(name, force=False):
     )
     with open(os.path.join(staging, INSTALLED_SHA256_FILE), "w") as f:
         f.write(sha256 + "\n")
-    # current/ is a launcher runtime folder (model2emu, xenia) holding the
-    # user's configs and caches, not part of the package.
     runtime = os.path.join(dest, "current")
     if os.path.isdir(runtime):
         os.rename(runtime, os.path.join(staging, "current"))
@@ -1289,7 +1055,6 @@ def cmd_update_emulator(name, force=False):
         pass
 
     log(f"{name} updated to {remote}")
-
 
 def cmd_update_all_emulators():
     manifest = fetch_manifest(get_channel())
@@ -1305,9 +1070,7 @@ def cmd_update_all_emulators():
         else:
             cmd_update_emulator(name)
 
-
 def cmd_list_frontend_updates():
-    """Print frontends with pending updates only, one per line: name\tinstalled → available."""
     manifest = fetch_manifest(get_channel())
     if not manifest:
         die("Could not fetch manifest")
@@ -1321,7 +1084,6 @@ def cmd_list_frontend_updates():
         if installed != remote:
             status = f"{installed or 'not installed'} → {remote}"
             print(f"{name}\t{status}")
-
 
 def cmd_update_frontend(name):
     manifest = fetch_manifest(get_channel())
@@ -1363,13 +1125,11 @@ def cmd_update_frontend(name):
     log(f"Frontend {name} updated to {remote}")
     log("Restart EmulationStation to apply the update.")
 
-
 def applied_patch_ids():
     try:
         return set(json.load(open(PATCHES_STATE_FILE)))
     except Exception:
         return set()
-
 
 def mark_patch_applied(patch_id):
     ids = applied_patch_ids()
@@ -1377,7 +1137,6 @@ def mark_patch_applied(patch_id):
     os.makedirs(os.path.dirname(PATCHES_STATE_FILE), exist_ok=True)
     with open(PATCHES_STATE_FILE, "w") as f:
         json.dump(sorted(ids), f)
-
 
 def cmd_list_patches():
     manifest = fetch_manifest(get_channel())
@@ -1390,7 +1149,6 @@ def cmd_list_patches():
         dest = p.get("dest", "")
         if pid and pid not in applied:
             print(f"{pid}\t{dest}")
-
 
 def cmd_apply_patches():
     manifest = fetch_manifest(get_channel())
@@ -1436,9 +1194,7 @@ def cmd_apply_patches():
         mark_patch_applied(pid)
         log(f"Patch {pid} applied")
 
-
 def cmd_update_grub():
-    """Rewrite grub.cfg with current boot counter logic and btrfs subvol state."""
     try:
         mount_toplevel()
         uuid, partuuid = read_grub_uuid_partuuid()
@@ -1451,19 +1207,14 @@ def cmd_update_grub():
     finally:
         umount_toplevel()
 
-
-# ---------------------------------------------------------------------------
-
 def _require_root():
     if os.geteuid() != 0:
         result = subprocess.run(["sudo", sys.executable] + sys.argv)
         sys.exit(result.returncode)
 
-
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "apply"
 
-    # Read-only commands that don't need root
     READONLY_CMDS = {"check", "list-emulator-updates",
                      "list-frontend-updates", "list-kernel-update", "list-patches"}
     if cmd not in READONLY_CMDS:

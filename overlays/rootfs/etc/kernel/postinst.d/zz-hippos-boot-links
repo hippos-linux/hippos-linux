@@ -1,0 +1,17 @@
+#!/bin/sh
+# /boot/vmlinuz and /boot/initrd.img always point at the newest kernel
+# (/boot/vmlinuz.lts and /boot/initrd.img.lts at the newest LTS kernel).
+# A boot loader entry that isn't HippOS's own can name these and keep working
+# after kernel updates, e.g.:
+#   linux  /@rootfs/boot/vmlinuz root=PARTUUID=... rootflags=subvol=@rootfs ro quiet splash
+#   initrd /@rootfs/boot/initrd.img
+set -e
+
+version="$1"
+case "${version}" in
+    *-hippos-lts) suffix=".lts" ;;
+    *) suffix="" ;;
+esac
+
+ln -sfn "vmlinuz-${version}" "/boot/vmlinuz${suffix}"
+ln -sfn "initrd.img-${version}" "/boot/initrd.img${suffix}"

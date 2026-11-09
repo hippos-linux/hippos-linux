@@ -69,19 +69,20 @@ class SortDeploymentNamesTests(unittest.TestCase):
     def test_kernel_snapshots_sort_after_os_deployments(self):
         # Kernel snapshot names carry a kernel version that ver_tuple can't
         # parse; they must sort last so they become the boot-counter fallback.
-        names = ["@rootfs-kernel-6.12.1-hippos", "@rootfs-0.6.3", "@rootfs-0.6.2"]
+        names = ["@rootfs-kernel-6.12.1-hippos", "@rootfs", "@rootfs-0.6.3", "@rootfs-0.6.2"]
         self.assertEqual(
             hu.sort_deployment_names(names),
-            ["@rootfs-0.6.2", "@rootfs-0.6.3", "@rootfs-kernel-6.12.1-hippos"],
+            ["@rootfs-0.6.2", "@rootfs-0.6.3", "@rootfs", "@rootfs-kernel-6.12.1-hippos"],
         )
 
 
 class ParseDeploymentNamesTests(unittest.TestCase):
-    def test_filters_to_rootfs_prefixed_names_and_sorts_numerically(self):
-        output = _subvol_list_output(["@userdata", "@rootfs-0.5.10", "@rootfs-0.5.2", "@overlay"])
+    def test_filters_to_rootfs_names_and_sorts_numerically(self):
+        output = _subvol_list_output(
+            ["@userdata", "@rootfs", "@rootfs-0.5.10", "@rootfs-0.5.2", "@overlay", "@rootfs.new"])
         self.assertEqual(
             hu.parse_deployment_names(output),
-            ["@rootfs-0.5.2", "@rootfs-0.5.10"],
+            ["@rootfs-0.5.2", "@rootfs-0.5.10", "@rootfs"],
         )
 
     def test_empty_output_yields_empty_list(self):
@@ -106,91 +107,61 @@ class ParseCurrentSubvolTests(unittest.TestCase):
 
 
 class PlanApplyTests(unittest.TestCase):
-    """These assert the actual snapshot/create/prune *decisions* — the
-    externally meaningful behaviour of cmd_apply — not that some mock got
-    called."""
+    """These assert the actual prune/rename *decisions* — the externally
+    meaningful behaviour of cmd_apply — not that some mock got called."""
 
-    def test_first_update_from_bare_rootfs_snapshots_it(self):
+    def test_running_rootfs_is_renamed_to_its_version(self):
         plan = hu.plan_apply(
-            running="@rootfs", cur_version="0.1.0", remote_version="0.2.0",
-            existing_deployments=[],
+            running="@rootfs", cur_version="0.6.8",
+            existing_deployments=["@rootfs"],
         )
-        self.assertEqual(plan.backup_name, "@rootfs-0.1.0")
-        self.assertTrue(plan.need_snapshot)
-        self.assertEqual(plan.new_subvol, "@rootfs-0.2.0")
+        self.assertEqual(plan.retire_running_as, "@rootfs-0.6.8")
         self.assertEqual(plan.prune, [])
-        self.assertEqual(plan.final_deployments, ["@rootfs-0.1.0", "@rootfs-0.2.0"])
+        self.assertEqual(plan.final_deployments, ["@rootfs-0.6.8", "@rootfs"])
 
-    def test_steady_state_update_does_not_resnapshot_the_running_subvol(self):
-        # Post-first-update, running == f"@rootfs-{cur}" already — there is
-        # nothing to snapshot, since the running subvolume already occupies
-        # its own permanent slot (root is a read-only overlay lowerdir).
+    def test_steady_state_prunes_the_previous_rollback(self):
         plan = hu.plan_apply(
-            running="@rootfs-0.5.1", cur_version="0.5.1", remote_version="0.5.2",
-            existing_deployments=["@rootfs-0.5.1"],
+            running="@rootfs", cur_version="0.6.9",
+            existing_deployments=["@rootfs-0.6.8", "@rootfs"],
         )
-        self.assertFalse(plan.need_snapshot)
-        self.assertEqual(plan.prune, [])
-        self.assertEqual(plan.final_deployments, ["@rootfs-0.5.1", "@rootfs-0.5.2"])
+        self.assertEqual(plan.prune, ["@rootfs-0.6.8"])
+        self.assertEqual(plan.retire_running_as, "@rootfs-0.6.9")
+        self.assertEqual(plan.final_deployments, ["@rootfs-0.6.9", "@rootfs"])
 
-    def test_retrying_a_failed_apply_prunes_the_partial_subvol(self):
-        # A previous apply attempt created @rootfs-0.6.0 but didn't finish
-        # (e.g. extraction failed). Retrying must delete-then-recreate it,
-        # not skip creation because it "already exists".
+    def test_versioned_deployment_from_the_old_scheme_keeps_its_name(self):
+        # Systems updated before @rootfs was always the newest run from
+        # @rootfs-<version>, with the install-time @rootfs left behind.
         plan = hu.plan_apply(
-            running="@rootfs-0.5.1", cur_version="0.5.1", remote_version="0.6.0",
-            existing_deployments=["@rootfs-0.5.1", "@rootfs-0.6.0"],
+            running="@rootfs-0.6.7", cur_version="0.6.7",
+            existing_deployments=["@rootfs-0.6.6", "@rootfs-0.6.7", "@rootfs"],
         )
-        self.assertFalse(plan.need_snapshot)
-        self.assertEqual(plan.prune, ["@rootfs-0.6.0"])
-        self.assertEqual(plan.retained_deployments, ["@rootfs-0.5.1"])
+        self.assertIsNone(plan.retire_running_as)
+        self.assertEqual(plan.prune, ["@rootfs-0.6.6", "@rootfs"])
+        self.assertEqual(plan.final_deployments, ["@rootfs-0.6.7", "@rootfs"])
 
-    def test_prunes_the_oldest_deployment_not_the_current_or_new_one(self):
+    def test_update_while_rolled_back_replaces_the_newer_rootfs(self):
         plan = hu.plan_apply(
-            running="@rootfs-0.5.1", cur_version="0.5.1", remote_version="0.5.2",
-            existing_deployments=["@rootfs-0.4.0", "@rootfs-0.5.1"],
+            running="@rootfs-0.6.8", cur_version="0.6.8",
+            existing_deployments=["@rootfs-0.6.8", "@rootfs"],
         )
-        self.assertEqual(plan.prune, ["@rootfs-0.4.0"])
-        self.assertEqual(plan.retained_deployments, ["@rootfs-0.5.1"])
-        self.assertEqual(plan.final_deployments, ["@rootfs-0.5.1", "@rootfs-0.5.2"])
+        self.assertEqual(plan.prune, ["@rootfs"])
+        self.assertIsNone(plan.retire_running_as)
 
     def test_prune_order_uses_numeric_not_lexicographic_order(self):
-        # Lexicographically, "@rootfs-0.5.2" sorts *after* "@rootfs-0.5.10"
-        # and "@rootfs-0.5.11"; write_grub_cfg relies on version order to put
-        # the right deployment at the boot counter's fallback slot.
         plan = hu.plan_apply(
-            running="@rootfs-0.5.10", cur_version="0.5.10", remote_version="0.5.11",
+            running="@rootfs-0.5.10", cur_version="0.5.10",
             existing_deployments=["@rootfs-0.5.2", "@rootfs-0.5.9", "@rootfs-0.5.10"],
         )
         self.assertEqual(plan.prune, ["@rootfs-0.5.2", "@rootfs-0.5.9"])
-        self.assertEqual(plan.final_deployments, ["@rootfs-0.5.10", "@rootfs-0.5.11"])
-
-    def test_prunes_bare_rootfs_left_behind_by_the_first_update(self):
-        # Fresh 0.6.1 install updated to 0.6.2 leaves @rootfs, its snapshot
-        # @rootfs-0.6.1, and the running @rootfs-0.6.2.
-        plan = hu.plan_apply(
-            running="@rootfs-0.6.2", cur_version="0.6.2", remote_version="0.6.3",
-            existing_deployments=["@rootfs-0.6.1", "@rootfs-0.6.2"],
-            bare_rootfs_exists=True,
-        )
-        self.assertEqual(plan.prune, ["@rootfs", "@rootfs-0.6.1"])
-        self.assertEqual(plan.final_deployments, ["@rootfs-0.6.2", "@rootfs-0.6.3"])
 
     def test_os_update_prunes_kernel_snapshots(self):
         plan = hu.plan_apply(
-            running="@rootfs-0.6.2", cur_version="0.6.2", remote_version="0.6.3",
-            existing_deployments=["@rootfs-0.6.2", "@rootfs-kernel-6.12.1-hippos"],
+            running="@rootfs", cur_version="0.6.2",
+            existing_deployments=["@rootfs", "@rootfs-kernel-6.12.1-hippos"],
         )
         self.assertEqual(plan.prune, ["@rootfs-kernel-6.12.1-hippos"])
-        self.assertEqual(plan.final_deployments, ["@rootfs-0.6.2", "@rootfs-0.6.3"])
+        self.assertEqual(plan.final_deployments, ["@rootfs-0.6.2", "@rootfs"])
 
-    def test_never_prunes_bare_rootfs_while_it_is_running(self):
-        plan = hu.plan_apply(
-            running="@rootfs", cur_version="0.6.1", remote_version="0.6.2",
-            existing_deployments=[], bare_rootfs_exists=True,
-        )
-        self.assertEqual(plan.prune, [])
-        self.assertTrue(plan.need_snapshot)
 
 class UpdateSpaceShortfallTests(unittest.TestCase):
     GB = 1024 ** 3
