@@ -2,3 +2,6 @@
 
 # Broadcom VideoCore VII Vulkan driver (Raspberry Pi 5)
 vulkan-broadcom
+
+# box64 x86_64 translation layer (light x86 software only)
+box64
