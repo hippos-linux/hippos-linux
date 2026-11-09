@@ -25,6 +25,11 @@ export DISPLAY=:0
 # buttons in SDL's own order instead, which put Start on L2 and swapped the
 # face buttons for a DualSense. The kernel drives all of these pads.
 export SDL_JOYSTICK_HIDAPI=0
+# SDL minimizes a fullscreen window when it loses focus, and nothing maps ES
+# again afterwards: any window that takes focus without going through ES's
+# own launch path (an app started from a hotkey, a dialog) left a black
+# screen once it closed.
+export SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS=0
 unset XAUTHORITY
 
 # ES's own gettext lookup honors system.language directly (LANGUAGE env var,
