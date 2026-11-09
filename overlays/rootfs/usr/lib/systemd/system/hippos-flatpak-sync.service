@@ -1,6 +1,6 @@
 [Unit]
 Description=HippOS Flatpak launcher sync
-After=local-fs.target userdata.mount hippos-firstboot-flatpak.service
+After=local-fs.target userdata.mount hippos-firstboot-flatpak.service hippos-roms-pool.service
 Wants=userdata.mount
 StartLimitIntervalSec=0
 
