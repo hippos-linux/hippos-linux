@@ -19,8 +19,10 @@ Resolution order (highest to lowest):
 
 from __future__ import annotations
 
+import fcntl
 import os
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 USER_CONF      = Path('/userdata/system/hippos.conf')
@@ -47,9 +49,23 @@ def _parse(path: Path) -> dict[str, str]:
     return result
 
 
-def _write(path: Path, data: dict[str, str]) -> None:
+@contextmanager
+def _locked(path: Path):
+    """Serialises read-modify-write of the user config: a pad can fire a
+    mode switch twice, and two concurrent sets would each drop the other's
+    change. Read-only is enough to flock, so a lock file root created first
+    still works for hippos."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix('.tmp')
+    fd = os.open(path.with_name(f'.{path.name}.lock'), os.O_RDONLY | os.O_CREAT, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)
+
+
+def _write(path: Path, data: dict[str, str]) -> None:
+    tmp = path.with_name(f'.{path.name}.{os.getpid()}.tmp')
     tmp.write_text(''.join(f'{k}={v}\n' for k, v in sorted(data.items())), encoding='utf-8')
     # Boot services and migrations run this as root, but ES runs as the user and
     # saves this file in place, so losing its owner silently stops ES saving.
@@ -69,17 +85,19 @@ def cmd_get(key: str) -> int:
 
 
 def cmd_set(key: str, value: str) -> int:
-    data = _parse(USER_CONF)
-    data[key] = value
-    _write(USER_CONF, data)
+    with _locked(USER_CONF):
+        data = _parse(USER_CONF)
+        data[key] = value
+        _write(USER_CONF, data)
     return 0
 
 
 def cmd_del(key: str) -> int:
-    data = _parse(USER_CONF)
-    if key in data:
-        del data[key]
-        _write(USER_CONF, data)
+    with _locked(USER_CONF):
+        data = _parse(USER_CONF)
+        if key in data:
+            del data[key]
+            _write(USER_CONF, data)
     return 0
 
 
@@ -99,11 +117,12 @@ def cmd_dump() -> int:
 def cmd_sync() -> int:
     """Append any keys present in defaults but missing from user conf."""
     defaults = {**_parse(DEFAULTS_CONF), **_parse(HW_DEFAULTS)}
-    user = _parse(USER_CONF)
-    missing = {k: v for k, v in defaults.items() if k not in user}
-    if missing:
-        user.update(missing)
-        _write(USER_CONF, user)
+    with _locked(USER_CONF):
+        user = _parse(USER_CONF)
+        missing = {k: v for k, v in defaults.items() if k not in user}
+        if missing:
+            user.update(missing)
+            _write(USER_CONF, user)
     return 0
 
 
