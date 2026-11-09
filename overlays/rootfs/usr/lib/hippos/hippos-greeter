@@ -3,11 +3,15 @@
 
 Usage: hippos-greeter <session command...>
 
-Shown when system.autologin is off (see hippos-session-setup), on its own
-Xorg started by xinit.
-HippOS has one account, so it only asks for hippos's password. A keyboard
-types directly; a pad uses the on-screen keyboard. On success greetd starts
-the session command given on the command line.
+Shown when system.autologin is off (see hippos-session-setup). Started
+without a display, it runs itself again under xinit on its own short-lived
+Xorg, which uses the same drivers and xorg.conf.d as the session's and stops
+when the greeter exits.
+HippOS has one account, so it only asks for hippos's password, and whether
+to start in ES or the desktop. A keyboard types directly; a pad or a mouse
+uses the on-screen keyboard. On success greetd starts the session command
+given on the command line with HIPPOS_START_MODE set to that choice, which
+hippos-session also saves as the boot default.
 """
 import json
 import os
@@ -52,18 +56,27 @@ STICK_DEADZONE = 0.5
 REPEAT_DELAY, REPEAT_INTERVAL = 0.35, 0.09
 
 SHIFT, SPACE, DELETE, LOGIN = 'shift', 'space', 'delete', 'login'
-KEY_ROWS = [
+POWER, START_IN = 'power', 'start_in'
+# Everything a pad or mouse can select, top to bottom. The Power button sits
+# alone at the top, away from LOG IN.
+CONTROL_ROWS = [
+    [POWER],
+    [START_IN],
     list('1234567890'),
     list('qwertyuiop'),
     list('asdfghjkl') + ['-'],
     [SHIFT] + list('zxcvbnm') + ['.', '_'],
     [SPACE, DELETE, LOGIN],
 ]
+KEYBOARD_FIRST_ROW = 2
 SHIFTED = dict(zip('1234567890-._', '!@#$%^&*()+,?'))
 WIDE_KEYS = {SHIFT: 1.5, SPACE: 4, DELETE: 3, LOGIN: 3}
-KEY_LABELS = {SHIFT: 'SHIFT', SPACE: 'SPACE', DELETE: 'DELETE', LOGIN: 'LOG IN'}
+KEY_LABELS = {SHIFT: 'SHIFT', SPACE: 'SPACE', DELETE: 'DELETE', LOGIN: 'LOG IN', POWER: 'POWER'}
 
 POWER_ACTIONS = [('POWER OFF', 'poweroff'), ('RESTART', 'reboot'), ('CANCEL', None)]
+# The desktop itself is whichever system.desktop names.
+START_MODES = [('EMULATIONSTATION', 'es'), ('DESKTOP', 'desktop')]
+START_MODE_VALUES = [value for _, value in START_MODES]
 FOOTER_HINTS = [('A', 'TYPE'), ('B', 'DELETE'), ('START', 'LOG IN'), ('SELECT', 'POWER')]
 
 
@@ -90,21 +103,40 @@ class Greetd:
         return buf
 
 
-def login(greetd: Greetd, password: str, session_cmd: List[str]) -> Optional[str]:
-    """Logs hippos in and starts the session. Returns an error to show, or
-    None once greetd has accepted the session."""
+def setting(key: str, default: str) -> str:
+    result = subprocess.run(['hippos-settings', 'get', key], capture_output=True, text=True)
+    return result.stdout.strip() or default
+
+
+def login(greetd: Greetd, password: str, session_cmd: List[str], mode: str) -> Optional[str]:
+    """Logs hippos in and starts the session in the chosen mode. Returns an
+    error to show, or None once greetd has accepted the session."""
     reply = greetd.request({'type': 'create_session', 'username': USER})
     while reply['type'] == 'auth_message':
         response = password if reply['auth_message_type'] in ('secret', 'visible') else None
         reply = greetd.request({'type': 'post_auth_message_response', 'response': response})
     if reply['type'] == 'success':
-        reply = greetd.request({'type': 'start_session', 'cmd': session_cmd, 'env': []})
+        reply = greetd.request({'type': 'start_session', 'cmd': session_cmd,
+                                'env': [f'HIPPOS_START_MODE={mode}']})
         if reply['type'] == 'success':
             return None
     greetd.request({'type': 'cancel_session'})
     if reply.get('error_type') == 'auth_error':
         return 'Wrong password'
     return reply.get('description') or 'Login failed'
+
+
+class Popup:
+    """A short list over the screen, such as the power menu."""
+
+    def __init__(self, title: str, items: List[tuple], on_choose, selected: int = 0):
+        self.title = title
+        self.items = items
+        self.on_choose = on_choose
+        self.selected = selected
+
+    def choose(self, index: int):
+        self.on_choose(self.items[index][1])
 
 
 def scale_to_fill(image: pygame.Surface, w: int, h: int) -> pygame.Surface:
@@ -143,8 +175,13 @@ class Greeter:
         self.message = ''
         self.message_is_error = False
         self.shift = False
-        self.row, self.col = 1, 0
-        self.power_menu: Optional[int] = None
+        self.mode = setting('system.boot_session', 'es')
+        if self.mode not in START_MODE_VALUES:
+            self.mode = START_MODE_VALUES[0]
+        self.row, self.col = KEYBOARD_FIRST_ROW + 1, 0
+        self.popup: Optional[Popup] = None
+        # What the mouse can click, rebuilt each frame: (rect, target).
+        self.click_targets: List[tuple] = []
         self.held: Optional[tuple] = None
         self.next_repeat = 0.0
 
@@ -169,7 +206,7 @@ class Greeter:
             clock.tick(30)
 
     def handle(self, event):
-        if event.type == pygame.TEXTINPUT and self.power_menu is None:
+        if event.type == pygame.TEXTINPUT and self.popup is None:
             self.type_text(event.text)
         elif event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
@@ -177,23 +214,23 @@ class Greeter:
             elif event.key == pygame.K_BACKSPACE:
                 self.password = self.password[:-1]
             elif event.key == pygame.K_ESCAPE:
-                self.power_menu = None if self.power_menu is not None else 0
+                self.toggle_power_menu()
             elif event.key in (pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT) \
-                    and self.power_menu is not None:
+                    and self.popup is not None:
                 self.move(*{pygame.K_UP: (0, -1), pygame.K_DOWN: (0, 1),
                             pygame.K_LEFT: (-1, 0), pygame.K_RIGHT: (1, 0)}[event.key])
         elif event.type == pygame.JOYBUTTONDOWN:
             if event.button == BTN_A:
                 self.press_selected()
             elif event.button == BTN_B:
-                if self.power_menu is not None:
-                    self.power_menu = None
+                if self.popup is not None:
+                    self.popup = None
                 else:
                     self.password = self.password[:-1]
             elif event.button == BTN_START:
                 self.activate()
             elif event.button == BTN_SELECT:
-                self.power_menu = None if self.power_menu is not None else 0
+                self.toggle_power_menu()
         elif event.type == pygame.JOYHATMOTION:
             self.hold(event.value if event.value != (0, 0) else None, flip_y=True)
         elif event.type == pygame.JOYAXISMOTION and event.axis in (0, 1):
@@ -203,6 +240,10 @@ class Greeter:
                 dx = (x > STICK_DEADZONE) - (x < -STICK_DEADZONE)
                 dy = (y > STICK_DEADZONE) - (y < -STICK_DEADZONE)
                 self.hold((dx, dy) if dx or dy else None)
+        elif event.type == pygame.MOUSEMOTION:
+            pygame.mouse.set_visible(True)
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self.click(event.pos)
         elif event.type == pygame.JOYDEVICEADDED:
             j = pygame.joystick.Joystick(event.device_index)
             self.joysticks[j.get_instance_id()] = j
@@ -226,25 +267,29 @@ class Greeter:
             self.next_repeat = time.monotonic() + REPEAT_INTERVAL
 
     def move(self, dx: int, dy: int):
-        if self.power_menu is not None:
-            self.power_menu = (self.power_menu + dy + dx) % len(POWER_ACTIONS)
+        if self.popup is not None:
+            self.popup.selected = (self.popup.selected + dy + dx) % len(self.popup.items)
             return
         if dy:
-            old_row = KEY_ROWS[self.row]
-            self.row = (self.row + dy) % len(KEY_ROWS)
+            old_row = CONTROL_ROWS[self.row]
+            self.row = (self.row + dy) % len(CONTROL_ROWS)
             # Keep roughly the same horizontal position across rows of
             # different widths.
             fraction = (self.col + 0.5) / len(old_row)
-            self.col = min(int(fraction * len(KEY_ROWS[self.row])), len(KEY_ROWS[self.row]) - 1)
+            self.col = min(int(fraction * len(CONTROL_ROWS[self.row])), len(CONTROL_ROWS[self.row]) - 1)
         if dx:
-            self.col = (self.col + dx) % len(KEY_ROWS[self.row])
+            self.col = (self.col + dx) % len(CONTROL_ROWS[self.row])
 
     def press_selected(self):
-        if self.power_menu is not None:
-            self.run_power_action(POWER_ACTIONS[self.power_menu][1])
+        if self.popup is not None:
+            self.choose_in_popup(self.popup.selected)
             return
-        key = KEY_ROWS[self.row][self.col]
-        if key == SHIFT:
+        key = CONTROL_ROWS[self.row][self.col]
+        if key == POWER:
+            self.toggle_power_menu()
+        elif key == START_IN:
+            self.popup = Popup('START IN', START_MODES, self.set_mode, START_MODE_VALUES.index(self.mode))
+        elif key == SHIFT:
             self.shift = not self.shift
         elif key == SPACE:
             self.type_text(' ')
@@ -254,6 +299,32 @@ class Greeter:
             self.activate()
         else:
             self.type_text(self.key_char(key))
+
+    def click(self, pos: tuple):
+        for rect, target in reversed(self.click_targets):
+            if not rect.collidepoint(pos):
+                continue
+            if target[0] == 'popup_item':
+                self.choose_in_popup(target[1])
+            elif self.popup is None:
+                self.row, self.col = target[1], target[2]
+                self.press_selected()
+            return
+        # A click outside a popup closes it.
+        self.popup = None
+
+    def toggle_power_menu(self):
+        if self.popup is not None:
+            self.popup = None
+        else:
+            self.popup = Popup('', POWER_ACTIONS, self.run_power_action)
+
+    def choose_in_popup(self, index: int):
+        popup, self.popup = self.popup, None
+        popup.choose(index)
+
+    def set_mode(self, mode: str):
+        self.mode = mode
 
     def key_char(self, key: str) -> str:
         if not self.shift:
@@ -265,14 +336,14 @@ class Greeter:
         self.message = ''
 
     def activate(self):
-        if self.power_menu is not None:
+        if self.popup is not None:
             self.press_selected()
             return
         if not self.password:
             return
         self.message, self.message_is_error = 'Logging in', False
         self.draw()
-        error = login(self.greetd, self.password, self.session_cmd)
+        error = login(self.greetd, self.password, self.session_cmd, self.mode)
         if error is None:
             pygame.quit()
             sys.exit(0)
@@ -280,7 +351,6 @@ class Greeter:
         self.message, self.message_is_error = error, True
 
     def run_power_action(self, action: Optional[str]):
-        self.power_menu = None
         if action:
             subprocess.run(['systemctl', action], check=False)
 
@@ -288,9 +358,10 @@ class Greeter:
 
     def draw(self):
         u = self.unit
+        self.click_targets = []
         self.screen.blit(self.background, (0, 0))
 
-        panel_w, panel_h = round(720 * u), round(640 * u)
+        panel_w, panel_h = round(720 * u), round(720 * u)
         panel_x = round(self.w * 0.74 - panel_w / 2)
         panel_y = round((self.h - panel_h) / 2)
         panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
@@ -298,6 +369,9 @@ class Greeter:
         self.screen.blit(panel, (panel_x, panel_y))
 
         cx = panel_x + panel_w // 2
+        power = pygame.Rect(0, 0, round(120 * u), round(40 * u))
+        power.topright = (panel_x + panel_w - round(20 * u), panel_y + round(20 * u))
+        self.draw_control(power, 0, 0, POWER)
         y = panel_y + round(48 * u)
         title = self.font_title.render(USER, True, TEXT)
         self.screen.blit(title, title.get_rect(midtop=(cx, y)))
@@ -330,33 +404,63 @@ class Greeter:
             self.screen.blit(msg, msg.get_rect(midtop=(cx, y)))
         y += round(40 * u)
 
-        self.draw_keyboard(panel_x + round(40 * u), y, panel_w - round(80 * u))
+        y = self.draw_mode_choice(panel_x + round(40 * u), y, panel_w - round(80 * u))
+        self.draw_keyboard(panel_x + round(40 * u), y + round(20 * u), panel_w - round(80 * u))
         self.draw_footer()
-        if self.power_menu is not None:
-            self.draw_power_menu()
+        if self.popup is not None:
+            self.draw_popup()
         pygame.display.flip()
+
+    def draw_control(self, rect: pygame.Rect, r: int, c: int, key: str):
+        """Draws one selectable control and registers it for mouse clicks."""
+        u = self.unit
+        focused = (r, c) == (self.row, self.col) and self.popup is None
+        if focused:
+            fill = ACCENT
+        elif key == LOGIN:
+            fill = ACCENT_2
+        elif key == SHIFT and self.shift:
+            fill = mix(KEY, ACCENT, 0.5)
+        else:
+            fill = KEY
+        pygame.draw.rect(self.screen, fill, rect, border_radius=round(10 * u))
+        if key == START_IN:
+            label = START_MODES[START_MODE_VALUES.index(self.mode)][0]
+        else:
+            label = KEY_LABELS.get(key) or self.key_char(key)
+        font = self.font_small if key in KEY_LABELS or key == START_IN else self.font_key
+        text = font.render(label, True, TEXT)
+        self.screen.blit(text, text.get_rect(center=rect.center))
+        if key == START_IN:
+            # A drop-down arrow, drawn: the theme fonts have no arrow glyphs.
+            size = round(7 * u)
+            tip = (rect.right - round(24 * u), rect.centery + size // 2)
+            pygame.draw.polygon(self.screen, TEXT, [
+                (tip[0] - size, tip[1] - size), (tip[0] + size, tip[1] - size), tip])
+        self.click_targets.append((rect, ('control', r, c)))
+
+    def draw_mode_choice(self, x0: int, y: int, width: int) -> int:
+        """Draws the START IN drop-down; returns the y below it."""
+        u = self.unit
+        label = self.font_small.render('START IN', True, TEXT_DIM)
+        self.screen.blit(label, label.get_rect(midtop=(x0 + width // 2, y)))
+        y += label.get_height() + round(8 * u)
+        self.draw_control(pygame.Rect(x0, y, width, round(48 * u)), CONTROL_ROWS.index([START_IN]), 0, START_IN)
+        return y + round(48 * u)
 
     def draw_keyboard(self, x0: int, y: int, width: int):
         u = self.unit
         gap = round(8 * u)
         key_h = round(52 * u)
-        for r, row in enumerate(KEY_ROWS):
+        for r in range(KEYBOARD_FIRST_ROW, len(CONTROL_ROWS)):
+            row = CONTROL_ROWS[r]
             units = sum(WIDE_KEYS.get(k, 1) for k in row)
             unit_w = (width - gap * (len(row) - 1)) / max(units, 10)
             row_w = unit_w * units + gap * (len(row) - 1)
             x = x0 + (width - row_w) / 2
             for c, key in enumerate(row):
                 key_w = unit_w * WIDE_KEYS.get(key, 1)
-                rect = pygame.Rect(round(x), y, round(key_w), key_h)
-                selected = (r, c) == (self.row, self.col) and self.power_menu is None
-                fill = ACCENT if selected else (ACCENT_2 if key == LOGIN else KEY)
-                if key == SHIFT and self.shift and not selected:
-                    fill = mix(KEY, ACCENT, 0.5)
-                pygame.draw.rect(self.screen, fill, rect, border_radius=round(10 * u))
-                label = KEY_LABELS.get(key) or self.key_char(key)
-                font = self.font_small if key in KEY_LABELS else self.font_key
-                text = font.render(label, True, TEXT)
-                self.screen.blit(text, text.get_rect(center=rect.center))
+                self.draw_control(pygame.Rect(round(x), y, round(key_w), key_h), r, c, key)
                 x += key_w + gap
             y += key_h + gap
 
@@ -385,29 +489,54 @@ class Greeter:
         self.screen.blit(text, text.get_rect(midleft=(badge.right + round(10 * u), cy)))
         return badge.right + round(10 * u) + text.get_width() + round(36 * u)
 
-    def draw_power_menu(self):
+    def draw_popup(self):
         u = self.unit
+        popup = self.popup
         shade = pygame.Surface((self.w, self.h), pygame.SRCALPHA)
         shade.fill((*INK, 170))
         self.screen.blit(shade, (0, 0))
         item_h = round(64 * u)
-        box = pygame.Rect(0, 0, round(420 * u), item_h * len(POWER_ACTIONS) + round(48 * u))
+        title = self.font_small.render(popup.title, True, TEXT_DIM) if popup.title else None
+        title_h = title.get_height() + round(12 * u) if title else 0
+        box = pygame.Rect(0, 0, round(460 * u), title_h + item_h * len(popup.items) + round(48 * u))
         box.center = (self.w // 2, self.h // 2)
         pygame.draw.rect(self.screen, PANEL, box, border_radius=round(20 * u))
         y = box.top + round(24 * u)
-        for i, (label, _) in enumerate(POWER_ACTIONS):
+        if title:
+            self.screen.blit(title, title.get_rect(midtop=(box.centerx, y)))
+            y += title_h
+        for i, (label, _) in enumerate(popup.items):
             rect = pygame.Rect(box.left + round(24 * u), y, box.width - round(48 * u), item_h - round(8 * u))
-            if i == self.power_menu:
+            if i == popup.selected:
                 pygame.draw.rect(self.screen, ACCENT, rect, border_radius=round(12 * u))
             text = self.font_key.render(label, True, TEXT)
             self.screen.blit(text, text.get_rect(center=rect.center))
+            self.click_targets.append((rect, ('popup_item', i)))
             y += item_h
+
+
+def system_stopping() -> bool:
+    """True once a shutdown or reboot is queued. The manager reports itself
+    "stopping" only later, after sessions have already started to end."""
+    jobs = subprocess.run(['systemctl', 'list-jobs', '--no-legend', 'shutdown.target'],
+                          capture_output=True, text=True)
+    return bool(jobs.stdout.strip())
 
 
 def main() -> int:
     if len(sys.argv) < 2:
         print(__doc__.strip().splitlines()[2], file=sys.stderr)
         return 1
+    if 'DISPLAY' not in os.environ:
+        # greetd starts the greeter again whenever a session ends, shutdown
+        # included, when its Xorg could no longer take the VT.
+        if system_stopping():
+            return 0
+        # Display :1: a crashed greeter leaves its lock owned by _greetd,
+        # which hippos couldn't clear for the session's :0.
+        os.execvp('xinit', ['xinit', os.path.abspath(sys.argv[0]), *sys.argv[1:], '--',
+                            '/usr/lib/xorg/Xorg', ':1', f"vt{os.environ.get('XDG_VTNR', '7')}",
+                            '-keeptty', '-nolisten', 'tcp', '-logfile', '/tmp/Xorg.greeter.log'])
     Greeter(sys.argv[1:]).run()
     return 0
 

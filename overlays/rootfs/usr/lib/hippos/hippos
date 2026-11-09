@@ -41,6 +41,7 @@ Commands:
   switch es                      switch to EmulationStation
   switch desktop [de]            switch to desktop (lxqt, plasma, xfce, gnome, mate, cinnamon)
   restart session|xserver        restart the current mode, or Xorg and the mode
+  logout                         end the session and show the login screen
   logs [--lines N]               show recent hippos service logs (default: 50 lines)
   info                           show OS and hardware info
 
@@ -211,14 +212,23 @@ def cmd_switch(args: list[str]) -> int:
     return 1
 
 
+def _signal_session(signal: str) -> int:
+    """Signals hippos-session, the login session's main process."""
+    loop_pid = Path('/run/hippos/session-loop').read_text().strip()
+    return _run(['kill', signal, loop_pid]).returncode
+
+
 def cmd_restart(args: list[str]) -> int:
     target = args[0] if args else ''
     signals = {'session': '-USR2', 'xserver': '-HUP'}
     if target in signals:
-        loop_pid = Path('/run/hippos/session-loop').read_text().strip()
-        return _run(['kill', signals[target], loop_pid]).returncode
+        return _signal_session(signals[target])
     print('Usage: hippos restart session|xserver', file=sys.stderr)
     return 1
+
+
+def cmd_logout() -> int:
+    return _signal_session('-TERM')
 
 
 def cmd_logs(args: list[str]) -> int:
@@ -1126,6 +1136,8 @@ def main() -> int:
         return cmd_settings(rest)
     if cmd == 'switch':
         return cmd_switch(rest)
+    if cmd == 'logout':
+        return cmd_logout()
     if cmd == 'restart':
         return cmd_restart(rest)
     if cmd == 'logs':

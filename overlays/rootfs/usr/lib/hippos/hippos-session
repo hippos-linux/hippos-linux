@@ -7,9 +7,10 @@
 # chosen by system.session. switch-to-es and switch-to-desktop change the
 # setting and signal this loop; nothing logs in or out to switch.
 #
-# It must not exit on its own: greetd starts the autologin session once per
-# boot, so a session that ended would leave an autologin user at a password
-# prompt. A crashed mode is restarted, and so is a dead Xorg.
+# It ends only on a log out (SIGTERM, from hippos logout) or shutdown: greetd
+# starts the autologin session once per boot, so a session that ended on its
+# own would leave an autologin user at the login screen. A crashed mode is
+# restarted, and so is a dead Xorg.
 set -uo pipefail
 
 export DISPLAY=:0
@@ -22,6 +23,7 @@ SESSION_PROCS="/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/cgroup.procs"
 xorg_pid=""
 running_mode=""
 end_requested=0
+logout_requested=0
 
 start_xorg() {
     rm -f /tmp/.X0-lock /tmp/.X11-unix/X0
@@ -97,9 +99,20 @@ restart_xorg() {
 }
 trap restart_xorg HUP
 
+log_out() {
+    logout_requested=1
+    end_mode
+}
+trap log_out TERM
+
+# The login screen passes the mode chosen there, which becomes the boot
+# default too; autologin uses the boot default.
+if [[ -n "${HIPPOS_START_MODE:-}" ]]; then
+    hippos-settings set system.boot_session "${HIPPOS_START_MODE}"
+fi
 hippos-settings set system.session "$(hippos-settings get system.boot_session 2>/dev/null || echo es)"
 
-while [[ ! -f /run/hippos/quit-action ]]; do
+while [[ ! -f /run/hippos/quit-action ]] && (( ! logout_requested )); do
     if [[ -z "${xorg_pid}" ]] || ! kill -0 "${xorg_pid}" 2>/dev/null; then
         start_xorg || { sleep 2; continue; }
     fi
@@ -129,3 +142,4 @@ while [[ ! -f /run/hippos/quit-action ]]; do
 done
 
 kill "${xorg_pid}" 2>/dev/null
+wait "${xorg_pid}" 2>/dev/null

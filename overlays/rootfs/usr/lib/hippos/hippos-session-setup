@@ -20,11 +20,7 @@ SESSION_CMD="systemd-cat -t hippos-session /usr/lib/hippos/hippos-session"
     if [[ "$(hippos-settings get system.autologin 2>/dev/null)" != false ]]; then
         printf '[initial_session]\nuser = "hippos"\ncommand = "%s"\n\n' "${SESSION_CMD}"
     fi
-    # The login screen gets its own short-lived Xorg, on the same drivers and
-    # xorg.conf.d as the session's; xinit stops it once the greeter exits.
-    # Display :1 because a crashed greeter leaves its lock owned by _greetd,
-    # which hippos couldn't clear for :0. Output goes to the journal: written
-    # to tty7, it shows for a moment between the login screen and the session.
-    GREETER_CMD="xinit /usr/lib/hippos/hippos-greeter ${SESSION_CMD} -- /usr/lib/xorg/Xorg :1 vt7 -keeptty -nolisten tcp -logfile /tmp/Xorg.greeter.log"
-    printf '[default_session]\nuser = "_greetd"\ncommand = "systemd-cat -t hippos-greeter %s"\n' "${GREETER_CMD}"
+    # The greeter's output goes to the journal: written to tty7, it shows for a
+    # moment between the login screen and the session.
+    printf '[default_session]\nuser = "_greetd"\ncommand = "systemd-cat -t hippos-greeter /usr/lib/hippos/hippos-greeter %s"\n' "${SESSION_CMD}"
 } > /etc/greetd/config.toml
