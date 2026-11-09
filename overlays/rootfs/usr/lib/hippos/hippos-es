@@ -24,9 +24,13 @@ while true; do
         exit 1
     fi
 
-    # Stop any Plasma/desktop WM user services left from a previous desktop session.
+    # A desktop's own user units outlive its session scope: shell components
+    # bind to graphical-session.target, and apps it launched (GNOME's session
+    # manager and autostart apps among them) get app-*.scope/app-*.slice units.
+    # A leftover session manager stops the next desktop from starting. Never
+    # stop app.slice itself: that cuts the user manager off its bus.
     XDG_RUNTIME_DIR=/run/user/1000 systemctl --user stop \
-        plasmashell.service ksmserver.service 'plasma-*.service' 2>/dev/null || true
+        graphical-session.target 'app-*.scope' 'app-*.slice' 2>/dev/null || true
     pkill -KILL -u hippos -f "ksmserver|startplasma" 2>/dev/null || true
     # Wait for the previous WM to exit; force-kill if it lingers.
     for _ in $(seq 1 20); do

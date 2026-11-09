@@ -37,10 +37,13 @@ PAMName=hippos-session
 ExecStartPre=/bin/sh -c 'prev=""; for i in $(seq 1 30); do cur=$(DISPLAY=:0 xrandr --current 2>/dev/null | sed -n "/^Screen/s/.*current \\([0-9]*\\) x \\([0-9]*\\).*/\\1x\\2/p"); [ "$cur" = "$prev" ] && [ -n "$cur" ] && exit 0; prev=$cur; sleep 1; done; exit 0'
 ExecStart=/usr/lib/hippos/session-desktop
 # The desktop's own processes live in this unit's logind session scope and
-# are killed when it closes (see logind.conf.d/hippos-session.conf). Plasma
-# also runs its shell and kwin as systemd --user units under user@1000, which
-# no session scope covers, so those are stopped explicitly.
-ExecStopPost=-/usr/bin/env XDG_RUNTIME_DIR=/run/user/1000 systemctl --user stop plasmashell.service ksmserver.service plasma-*.service
+# are killed when it closes (see logind.conf.d/hippos-session.conf). Desktops
+# also run parts as systemd --user units under user@1000, which no session
+# scope covers: shell components bound to graphical-session.target, and the
+# app-*.scope/app-*.slice units of apps they launched (GNOME's session manager
+# and autostart apps). Not app.slice itself, which holds the user manager's
+# own services.
+ExecStopPost=-/usr/bin/env XDG_RUNTIME_DIR=/run/user/1000 systemctl --user stop graphical-session.target app-*.scope app-*.slice
 Restart=on-failure
 RestartSec=3
 StandardOutput=journal
