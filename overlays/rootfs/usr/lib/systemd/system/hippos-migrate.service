@@ -2,7 +2,7 @@
 Description=HippOS userdata version migration
 After=local-fs.target
 # Before the defaults sync, so settings it adds are never migrated as old values.
-Before=hippos-es.service hippos-desktop.service hippos-system-init.service
+Before=greetd.service hippos-system-init.service
 
 [Service]
 Type=oneshot

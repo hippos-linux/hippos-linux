@@ -2,7 +2,7 @@
 Description=HippOS Kernel Selection (GRUB_DEFAULT sync from system.kernel)
 After=local-fs.target userdata.mount
 Wants=userdata.mount
-Before=hippos-es.service hippos-desktop.service
+Before=greetd.service
 
 [Service]
 Type=oneshot

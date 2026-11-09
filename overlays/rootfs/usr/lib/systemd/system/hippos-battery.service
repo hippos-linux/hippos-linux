@@ -1,6 +1,6 @@
 [Unit]
 Description=HippOS battery monitor
-After=multi-user.target hippos-xserver.service
+After=multi-user.target greetd.service
 ConditionPathExists=/sys/class/power_supply
 
 [Service]

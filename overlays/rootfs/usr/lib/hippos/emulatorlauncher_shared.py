@@ -727,13 +727,11 @@ def wheel_proxy_context(ctx: LaunchContext, env: dict[str, str]):
             proc = subprocess.Popen(cmd, env=env, text=True)
             time.sleep(0.15)
             if proc.poll() is not None:
-                # hippos-wheel-proxy creates its own uinput device — same
-                # root:root /dev/uinput gap as hippos-hotkeys --send (see
-                # cmd_send's PermissionError fallback): emulatorlauncher runs
-                # as the hippos user, which most likely has no uaccess grant
-                # on /dev/uinput (only root's seat session does — see
-                # hippos-xserver.service). Retry once under sudo before
-                # giving up; hippos already has NOPASSWD sudo for everything.
+                # hippos-wheel-proxy creates its own uinput device.
+                # /dev/uinput is root:root; hippos reaches it through the
+                # seat session's uaccess ACL, which logind withdraws while
+                # the session isn't the active one. Retry once under sudo
+                # before giving up; hippos has NOPASSWD sudo for everything.
                 _log.warning(
                     "wheel proxy exited early for %s (code=%s) — retrying under sudo",
                     ctrl.device_path, proc.returncode,

@@ -71,20 +71,14 @@ cmd_switch() {
     local key="${1:-}"
     [[ -n "$key" ]] || { echo "Usage: desktop-switcher switch <id|es>"; cmd_list; exit 1; }
     if [[ "$key" == "es" ]]; then
-        hippos-settings set system.session es
-        echo "Switched to EmulationStation (game mode)"
-        echo "Apply with: systemctl restart hippos-session"
-        return 0
+        exec /usr/lib/hippos/switch-to-es
     fi
     [[ -v DESKTOP_LABELS[$key] ]] || { echo "Unknown desktop: $key"; exit 1; }
     if ! is_installed "$key"; then
         echo "${DESKTOP_LABELS[$key]} is not installed — run: desktop-switcher install $key"
         exit 1
     fi
-    hippos-settings set system.desktop "$key"
-    hippos-settings set system.session desktop
-    echo "Switched to ${DESKTOP_LABELS[$key]}"
-    echo "Apply with: systemctl restart hippos-session"
+    exec /usr/lib/hippos/switch-to-desktop "$key"
 }
 
 cmd_current() {

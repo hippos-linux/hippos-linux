@@ -101,8 +101,8 @@ prune_old_boot_logs() {
 # ---------------------------------------------------------------------------
 # Wait for frontend / desktop session
 #
-# hippos-es.service is dynamically started, so wait for the selected frontend
-# to either become active or fail.
+# greetd starts hippos-session, which starts ES or a desktop; wait for one of
+# them, or for greetd to fail.
 #
 # Maximum: 180 seconds.
 # ---------------------------------------------------------------------------
@@ -110,23 +110,19 @@ prune_old_boot_logs() {
 SESSION_STATE="timeout"
 
 for _ in $(seq 1 360); do
-    if systemctl is-active --quiet hippos-es.service; then
-        SESSION_STATE="hippos-es active"
+    if pgrep -f '^/usr/bin/emulationstation' >/dev/null; then
+        SESSION_STATE="es running"
         break
     fi
 
-    if systemctl is-active --quiet hippos-desktop.service; then
-        SESSION_STATE="hippos-desktop active"
+    if [[ "$(hippos-settings get system.session 2>/dev/null)" == desktop ]] \
+        && pgrep -u hippos -f '/usr/lib/hippos/session-desktop' >/dev/null; then
+        SESSION_STATE="desktop running"
         break
     fi
 
-    if systemctl is-failed --quiet hippos-es.service; then
-        SESSION_STATE="hippos-es failed"
-        break
-    fi
-
-    if systemctl is-failed --quiet hippos-desktop.service; then
-        SESSION_STATE="hippos-desktop failed"
+    if systemctl is-failed --quiet greetd.service; then
+        SESSION_STATE="greetd failed"
         break
     fi
 
@@ -191,11 +187,12 @@ journalctl -b --no-pager \
 journalctl -b -p warning..alert --no-pager \
     > "${OUT_DIR}/warnings.log" 2>&1 || true
 
+# Matches joined by '+' are OR'ed; hippos-session logs under an identifier.
 journalctl -b \
-    -u hippos-es.service \
-    -u hippos-desktop.service \
-    -u hippos-xserver.service \
-    -u hippos-hotkeys.service \
+    _SYSTEMD_UNIT=greetd.service + \
+    _SYSTEMD_UNIT=hippos-session-setup.service + \
+    _SYSTEMD_UNIT=hippos-hotkeys.service + \
+    SYSLOG_IDENTIFIER=hippos-session \
     --no-pager \
     > "${OUT_DIR}/frontend.log" 2>&1 || true
 
@@ -395,9 +392,8 @@ capture "critical-services.txt" \
         bluetooth.service \
         hippos-bluetooth-agent.service \
         nvidia-persistenced.service \
-        hippos-es.service \
-        hippos-desktop.service \
-        hippos-xserver.service \
+        hippos-session-setup.service \
+        greetd.service \
         hippos-hotkeys.service \
         --no-pager -l
 
@@ -442,16 +438,14 @@ capture "hippos-init-journal.txt" \
 # ===========================================================================
 # ROM / BIOS / Saves storage
 #
-# hippos-es.service's own After=/Wants= is directly gated on the pool
-# services (see hippos-es.service) — a hang/failure here is a direct
-# contributor to ES startup delay, not a side issue.
+# greetd is ordered after the pool services — a hang/failure here is a
+# direct contributor to ES startup delay, not a side issue.
 # ===========================================================================
 
 capture "hippos-storage-status.txt" \
     systemctl status \
         hippos-storage.service \
         hippos-storage-scan.service \
-        hippos-rom-scan.service \
         hippos-roms-pool.service \
         hippos-bios-pool.service \
         hippos-saves-pool.service \
@@ -463,7 +457,6 @@ capture "hippos-storage-journal.txt" \
     journalctl -b \
         -u hippos-storage.service \
         -u hippos-storage-scan.service \
-        -u hippos-rom-scan.service \
         -u hippos-roms-pool.service \
         -u hippos-bios-pool.service \
         -u hippos-saves-pool.service \

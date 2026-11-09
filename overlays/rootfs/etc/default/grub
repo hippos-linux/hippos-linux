@@ -25,10 +25,9 @@ GRUB_DISTRIBUTOR="HippOS"
 # Removed after a slow-USB2-flash real-hardware test (0.5.9) showed the global
 # 15s bound killing perfectly healthy units instead: /boot/efi's device wait
 # raced udev on the EFI PARTUUID, dbus/udisks2/logind/NetworkManager start-job
-# timeouts cascaded, and hippos-xserver's start-post was killed mid NVIDIA
-# driver init (crashing Xorg) on a cold hybrid-GPU boot — see
-# hippos-xserver.service's ExecStartPost `timeout` wrapper for the matching
-# per-unit fix. The AMD APU hang the 15s bound targeted was already reported
+# timeouts cascaded, and the X server unit's start-post was killed mid NVIDIA
+# driver init (crashing Xorg) on a cold hybrid-GPU boot — see the `timeout`
+# wrapper on xrandr in hippos-session for the matching fix. The AMD APU hang the 15s bound targeted was already reported
 # as "no failing unit ever printed" even at systemd's normal 90s default,
 # meaning it wasn't a timeout this knob could catch anyway. Restored to
 # upstream systemd defaults (90s) globally; give a unit its own explicit

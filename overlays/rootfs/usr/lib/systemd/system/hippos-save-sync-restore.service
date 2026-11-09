@@ -1,6 +1,6 @@
 [Unit]
 Description=HippOS save sync restore from cloud
-# network.target, not network-online.target: this unit is Before=hippos-es.service,
+# network.target, not network-online.target: this unit is Before=greetd.service,
 # so a Wants=network-online.target ordering directly gated the frontend on real
 # connectivity — up to NetworkManager-wait-online.service's own 60s NM_ONLINE_TIMEOUT
 # on a machine with no network at boot at all (same shape as hippos-waydroid-init.service,
@@ -8,7 +8,7 @@ Description=HippOS save sync restore from cloud
 # the restore itself still only actually does anything once real connectivity exists —
 # it just no longer blocks boot to find that out.
 After=network.target userdata.mount
-Before=hippos-es.service
+Before=greetd.service
 
 [Service]
 Type=oneshot

@@ -1,35 +1,18 @@
-// ES <-> desktop mode switching (switch-to-desktop / switch-to-es) — both run
-// `systemd-run --no-block --collect bash -c "systemctl stop ...; systemctl
-// start ..."` against the SYSTEM manager (no --user) as the hippos user, to
-// stop/start hippos-es.service/hippos-desktop.service from outside their own
-// cgroup. That StartTransientUnit call is what needs manage-units; nothing
-// in the switching path touches unit *files* (enable/disable/mask) or asks
-// for a daemon-reload, so this stays scoped to manage-units only — see the
-// separate, untouched rule below for manage-unit-files/reload-daemon.
-//
-// No subject.user check, for the same reason as the udisks2 rule further
-// down: manage-units defaults to allow_active=auth_admin_keep (interactive
-// admin authentication) whenever this rule doesn't match. switch-to-desktop
-// runs from inside hippos-es.service's bare X11 session — no window manager,
-// no XDG autostart, so no polkit agent (lxpolkit) is ever running there to
-// answer that prompt — the D-Bus call just sits until something times it
-// out. Matches real-hardware reports of ES<->desktop switching occasionally
-// failing or taking an abnormally long time. `systemd-run --no-block`
-// already returns as soon as the job is queued, so this authorization
-// round-trip is the only place that wait can come from. HippOS is
-// single-user (no other account exists to withhold this from), same as the
-// udisks2 case — drop the check rather than chase session resolution, and
-// do not replace it with an interactive prompt: mode switching must work
-// unattended from a session where no agent can ever be present.
+// hippos runs as the active seat0 session (greetd, see hippos-session-setup),
+// so polkit's allow_active defaults already cover mounting, eject, power-off
+// of drives, NetworkManager, and power/reboot/suspend. These rules cover only
+// what those defaults leave at auth_admin: HippOS has no other account to
+// withhold them from, and ES has no polkit agent to answer a prompt.
+
+// Starting and stopping system units: hippos-rom-scan restarts the ROM pool
+// when ES merges or ejects a drive, and hippos-session starts its failure
+// capture unit.
 polkit.addRule(function(action) {
     if (action.id == "org.freedesktop.systemd1.manage-units") {
         return polkit.Result.YES;
     }
 });
 
-// Allow the hippos user to manage unit files / trigger a daemon-reload.
-// Not currently exercised by ES<->desktop switching (that only needs
-// manage-units, above) — left as-is, unrelated to this investigation.
 polkit.addRule(function(action, subject) {
     if ((action.id == "org.freedesktop.systemd1.manage-unit-files" ||
          action.id == "org.freedesktop.systemd1.reload-daemon") &&
@@ -38,79 +21,39 @@ polkit.addRule(function(action, subject) {
     }
 });
 
-// Allow hippos to manage NetworkManager (wifi connect/disconnect/scan)
+// hippos-automount mounts drives as root from udev, outside udisks2's own
+// bookkeeping, so unmounting them from a file manager counts as unmounting
+// another user's mount. btrfs drives are still blocked by
+// 90-btrfs-no-udisks2.rules so hippos-storage handles them instead.
 polkit.addRule(function(action, subject) {
-    if (action.id.indexOf("org.freedesktop.NetworkManager.") === 0 &&
-        subject.user == "hippos") {
-        return polkit.Result.YES;
-    }
-});
-
-// Allow mount/unmount/eject of removable drives via udisks2 (hot-plug).
-// btrfs drives are still blocked by 90-btrfs-no-udisks2.rules so hippos-storage
-// handles them instead.
-//
-// No subject.user check: hippos-automount (see 80-hippos-storage.rules) mounts
-// drives directly via `mount`, as root, straight from udev — outside udisks2's
-// own bookkeeping. When the desktop file manager later asks udisks2 to
-// unmount/eject one of those mounts, udisks2 treats it as unmounting a mount
-// it doesn't own, which requires filesystem-unmount-others/eject-media/
-// power-off-drive rather than the free self-service path. Confirmed failing
-// even with the previous subject.user === "hippos" check in place (real
-// hardware report, "Not authorized to perform operation" from PCManFM-Qt) —
-// hippos-desktop.service/hippos-es.service have no PAMName= and never
-// register a real logind session, so subject.user may not be resolving the
-// way this assumed. HippOS is single-user (no other account exists to
-// withhold this from), so drop the check rather than chase session
-// resolution for it.
-//
-// The -other-seat variants are what udisks2 actually asks for from the
-// desktop: its logind session is Class=background with no seat, so every
-// drive counts as being on another seat (0.6.7 report: mounting and Disks'
-// power-off failed while unmount worked).
-polkit.addRule(function(action) {
     var udisksActions = [
-        "org.freedesktop.udisks2.filesystem-mount",
-        "org.freedesktop.udisks2.filesystem-mount-other-seat",
         "org.freedesktop.udisks2.filesystem-mount-system",
-        "org.freedesktop.udisks2.filesystem-unmount-others",
-        "org.freedesktop.udisks2.eject-media",
-        "org.freedesktop.udisks2.eject-media-other-seat",
-        "org.freedesktop.udisks2.power-off-drive",
-        "org.freedesktop.udisks2.power-off-drive-other-seat"
+        "org.freedesktop.udisks2.filesystem-unmount-others"
     ];
-    if (udisksActions.indexOf(action.id) >= 0) {
+    if (udisksActions.indexOf(action.id) >= 0 && subject.user == "hippos") {
         return polkit.Result.YES;
     }
 });
 
-// Allow hippos to set NTP and timezone (KDE Plasma System Settings → Date & Time)
+// Date & Time in desktop settings panels.
 polkit.addRule(function(action, subject) {
     var timedateActions = [
         "org.freedesktop.timedate1.set-ntp",
         "org.freedesktop.timedate1.set-timezone",
         "org.freedesktop.timedate1.set-time"
     ];
-    if (timedateActions.indexOf(action.id) >= 0 && subject.user === "hippos") {
+    if (timedateActions.indexOf(action.id) >= 0 && subject.user == "hippos") {
         return polkit.Result.YES;
     }
 });
 
-// Allow hippos to power off, reboot, suspend, and hibernate without a logind session
+// A desktop or game holding an inhibitor must not stop the user powering off.
 polkit.addRule(function(action, subject) {
     var powerActions = [
-        "org.freedesktop.login1.power-off",
-        "org.freedesktop.login1.power-off-multiple-sessions",
         "org.freedesktop.login1.power-off-ignore-inhibit",
-        "org.freedesktop.login1.reboot",
-        "org.freedesktop.login1.reboot-multiple-sessions",
-        "org.freedesktop.login1.reboot-ignore-inhibit",
-        "org.freedesktop.login1.suspend",
-        "org.freedesktop.login1.suspend-multiple-sessions",
-        "org.freedesktop.login1.hibernate",
-        "org.freedesktop.login1.hibernate-multiple-sessions"
+        "org.freedesktop.login1.reboot-ignore-inhibit"
     ];
-    if (powerActions.indexOf(action.id) >= 0 && subject.user === "hippos") {
+    if (powerActions.indexOf(action.id) >= 0 && subject.user == "hippos") {
         return polkit.Result.YES;
     }
 });

@@ -1,6 +1,6 @@
 [Unit]
 Description=HippOS Global Hotkeys
-After=local-fs.target userdata.mount hippos-xserver.service
+After=local-fs.target userdata.mount greetd.service
 Wants=userdata.mount
 
 [Service]

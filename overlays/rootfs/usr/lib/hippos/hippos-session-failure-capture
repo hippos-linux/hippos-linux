@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# hippos-session-failure-capture — targeted diagnostics for hippos-es.service/
-# hippos-desktop.service failing, invoked via those units' own OnFailure=.
+# hippos-session-failure-capture — targeted diagnostics when ES or a desktop
+# exits with an error, started by hippos-session through
+# hippos-session-failure-capture@<mode>.service.
 #
 # capture-boot-logs runs once per boot, close to boot time — it can't see a
 # session dying later (mode switch, exiting a game, hours into a session),
@@ -12,22 +13,22 @@
 # bounded rather than a second copy of the full boot sweep.
 set -uo pipefail
 
-UNIT="${1:?failed unit name required}"
+MODE="${1:?mode that failed (es or desktop) required}"
 LOG_DIR=/userdata/system/logs/boot
 BOOT_ID="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || date +%s)"
 OUT_DIR="${LOG_DIR}/${BOOT_ID}"
 mkdir -p "${OUT_DIR}"
 ln -sfn "${OUT_DIR}" "${LOG_DIR}/latest"
 
-OUT="${OUT_DIR}/session-failure-${UNIT}-$(date +%H%M%S).txt"
+OUT="${OUT_DIR}/session-failure-${MODE}-$(date +%H%M%S).txt"
 
 {
-    echo "===== HippOS session failure: ${UNIT} ====="
+    echo "===== HippOS session failure: ${MODE} ====="
     date --iso-8601=seconds
     echo
 
-    echo "----- unit status -----"
-    systemctl status "${UNIT}" --no-pager -l 2>&1
+    echo "----- hippos-session log -----"
+    journalctl -b --no-pager -n 80 SYSLOG_IDENTIFIER=hippos-session 2>&1
     echo
 
     echo "----- graphical.target -----"
@@ -35,7 +36,7 @@ OUT="${OUT_DIR}/session-failure-${UNIT}-$(date +%H%M%S).txt"
     echo
 
     echo "----- session units -----"
-    for u in hippos-session.service hippos-es.service hippos-desktop.service hippos-xserver.service; do
+    for u in hippos-session-setup.service greetd.service; do
         printf '%-28s %s\n' "${u}" "$(systemctl is-active "${u}" 2>&1)"
     done
     echo
@@ -59,9 +60,6 @@ OUT="${OUT_DIR}/session-failure-${UNIT}-$(date +%H%M%S).txt"
     loginctl list-sessions --no-pager 2>&1
     echo
 
-    echo "----- ${UNIT} recent journal -----"
-    journalctl -u "${UNIT}" -n 100 --no-pager 2>&1
-    echo
 
     echo "----- system journal around this failure (last 200 lines) -----"
     journalctl -n 200 --no-pager 2>&1

@@ -1,7 +1,131 @@
 #!/usr/bin/env bash
-BOOT=$(hippos-settings get system.boot_session 2>/dev/null || echo es)
-if [[ "$BOOT" == "desktop" ]]; then
-    systemctl start hippos-desktop.service
-else
-    systemctl start hippos-es.service
-fi
+# hippos-session — the HippOS login session, run as hippos by greetd.
+#
+# greetd opens this as an active seat0 logind session (see
+# hippos-session-setup), so hippos gets the seat's device access and polkit's
+# allow_active defaults. It runs Xorg and one mode at a time, ES or a desktop,
+# chosen by system.session. switch-to-es and switch-to-desktop change the
+# setting and signal this loop; nothing logs in or out to switch.
+#
+# It must not exit on its own: greetd starts the autologin session once per
+# boot, so a session that ended would leave an autologin user at a password
+# prompt. A crashed mode is restarted, and so is a dead Xorg.
+set -uo pipefail
+
+export DISPLAY=:0
+mkdir -p /run/hippos
+echo $$ > /run/hippos/session-loop
+
+# Every process of ours in this login session, the complete list: desktops
+# start children in new process groups.
+SESSION_PROCS="/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/cgroup.procs"
+xorg_pid=""
+running_mode=""
+end_requested=0
+
+start_xorg() {
+    rm -f /tmp/.X0-lock /tmp/.X11-unix/X0
+    /usr/lib/xorg/Xorg :0 vt"${XDG_VTNR}" -keeptty -nolisten tcp -ac -logfile /tmp/Xorg.0.log &
+    xorg_pid=$!
+    for _ in $(seq 1 40); do
+        [[ -S /tmp/.X11-unix/X0 ]] && break
+        kill -0 "${xorg_pid}" 2>/dev/null || break
+        sleep 0.25
+    done
+    if [[ ! -S /tmp/.X11-unix/X0 ]]; then
+        echo "hippos-session: Xorg did not start, see /tmp/Xorg.0.log" >&2
+        return 1
+    fi
+    # The socket appearing doesn't mean the driver has finished init (cold
+    # NVIDIA or hybrid-GPU boot), and an unbounded xrandr can hang on it.
+    timeout -k 5 20 xrandr --auto || true
+    /usr/lib/hippos/hippos-xorg-setup post || true
+}
+
+# Signals every process of ours in the session except this loop and Xorg.
+signal_mode() {
+    local pid
+    while read -r pid; do
+        [[ "${pid}" == "$$" || "${pid}" == "${xorg_pid}" ]] && continue
+        [[ -O "/proc/${pid}" ]] || continue
+        kill "-$1" "${pid}" 2>/dev/null
+    done < "${SESSION_PROCS}"
+}
+
+# Desktops also run parts as systemd --user units, outside this session's
+# cgroup: shell components bind to graphical-session.target, and the apps they
+# launch (GNOME's session manager and autostart apps among them) get
+# app-*.scope and app-*.slice units. A leftover session manager stops the next
+# desktop from starting. Never app.slice itself: stopping it cuts the user
+# manager off its bus.
+stop_desktop_units() {
+    systemctl --user stop graphical-session.target 'app-*.scope' 'app-*.slice' 2>/dev/null
+}
+
+# The mode the settings ask for: switching between two desktops changes only
+# system.desktop.
+wanted_mode() {
+    if [[ "$(hippos-settings get system.session 2>/dev/null)" == desktop ]]; then
+        echo "desktop:$(hippos-settings get system.desktop 2>/dev/null)"
+    else
+        echo es
+    fi
+}
+
+# Ends the current mode on request; the loop then starts whichever mode the
+# settings name, which may be the same one again.
+end_mode() {
+    end_requested=1
+    signal_mode TERM
+}
+
+# switch-to-es/switch-to-desktop. A pad can fire one press twice, so a request
+# for the mode already running is ignored rather than restarting it.
+request_switch() {
+    [[ "$(wanted_mode)" == "${running_mode}" ]] || end_mode
+}
+trap request_switch USR1
+# hippos restart session.
+trap end_mode USR2
+
+# hippos restart xserver: the mode can't outlive X, so end it first, and wait
+# for Xorg to exit so the loop doesn't start the next mode on a dying server.
+restart_xorg() {
+    end_mode
+    kill "${xorg_pid}" 2>/dev/null
+    wait "${xorg_pid}" 2>/dev/null
+}
+trap restart_xorg HUP
+
+hippos-settings set system.session "$(hippos-settings get system.boot_session 2>/dev/null || echo es)"
+
+while [[ ! -f /run/hippos/quit-action ]]; do
+    if [[ -z "${xorg_pid}" ]] || ! kill -0 "${xorg_pid}" 2>/dev/null; then
+        start_xorg || { sleep 2; continue; }
+    fi
+
+    running_mode="$(wanted_mode)"
+    mode="${running_mode%%:*}"
+    echo "hippos-session: starting ${running_mode}"
+    end_requested=0
+    "/usr/lib/hippos/session-${mode}" &
+    mode_pid=$!
+    # A trapped signal interrupts wait; keep waiting until the mode has gone.
+    # bash keeps a reaped child's status, so the last wait returns the mode's
+    # own exit code rather than the interrupted wait's.
+    while kill -0 "${mode_pid}" 2>/dev/null; do wait "${mode_pid}"; done
+    wait "${mode_pid}"; status=$?
+    echo "hippos-session: ${mode} ended (${status})"
+
+    # Whatever ignored the switch's TERM, or outlived a crashed mode.
+    signal_mode KILL
+    stop_desktop_units
+
+    if (( ! end_requested && status != 0 )); then
+        systemctl start --no-block "hippos-session-failure-capture@${mode}.service"
+    fi
+    # A mode that dies at once must not spin.
+    (( end_requested )) || sleep 1
+done
+
+kill "${xorg_pid}" 2>/dev/null

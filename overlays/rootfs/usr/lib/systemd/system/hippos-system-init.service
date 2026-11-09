@@ -1,7 +1,7 @@
 [Unit]
 Description=HippOS system settings initialisation (hostname, locale, SSH, WiFi, CPU governor)
 After=NetworkManager.service
-Before=hippos-xserver.service
+Before=greetd.service
 Wants=NetworkManager.service
 
 [Service]

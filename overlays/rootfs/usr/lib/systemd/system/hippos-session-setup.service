@@ -1,0 +1,9 @@
+[Unit]
+Description=HippOS session setup (Xorg config, greetd autologin)
+After=local-fs.target userdata.mount hippos-gpu-init.service hippos-system-init.service
+Before=greetd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/hippos/hippos-session-setup

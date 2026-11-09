@@ -70,10 +70,8 @@ case "${1,,}" in
 
         ES_PID=$(check_esrun)
         if [[ "${1,,}" == "--shutdown" && ${ES_PID} -ne 0 ]]; then
-            systemctl stop hippos-es.service 2>/dev/null || true
             systemctl poweroff; ret=11
         elif [[ "${1,,}" == "--reboot" && ${ES_PID} -ne 0 ]]; then
-            systemctl stop hippos-es.service 2>/dev/null || true
             systemctl reboot; ret=10
         fi
     ;;

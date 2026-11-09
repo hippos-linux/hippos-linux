@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# hippos-xorg-setup — Xorg configuration for hippos-xserver.service.
-#   hippos-xorg-setup        ExecStartPre: write xorg.conf.d snippets
-#   hippos-xorg-setup post   ExecStartPost: settings applied over the running server
+# hippos-xorg-setup — Xorg configuration for hippos-session.
+#   hippos-xorg-setup        as root, before X starts (hippos-session-setup):
+#                            write xorg.conf.d snippets
+#   hippos-xorg-setup post   in the session, once X is up: settings applied
+#                            over the running server
 # NVIDIA Xorg driver assignment is handled by the nvidia package's own
 # /usr/share/X11/xorg.conf.d/nvidia-drm-outputclass.conf (OutputClass approach).
 

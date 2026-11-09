@@ -1,6 +1,6 @@
 [Unit]
 Description=HippOS storage scanner
-After=hippos-es.service hippos-desktop.service
+After=greetd.service
 
 [Service]
 Type=oneshot

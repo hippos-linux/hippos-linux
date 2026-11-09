@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# A misbehaving input device can dispatch this multiple times for one
-# button press; without the lock, concurrent runs race their `systemctl
-# stop hippos-es`/`start hippos-desktop` calls against each other and the
-# switch silently fails.
-exec 9>/run/hippos/switch-to-desktop.lock
-flock -n 9 || exit 0
-
 DESKTOP="${1:-$(hippos-settings get system.desktop)}"
 
 desktop_session_cmd() {
@@ -31,7 +24,5 @@ fi
 hippos-settings set system.desktop "$DESKTOP"
 hippos-settings set system.session desktop
 
-# Stop ES first so it releases VT1, then start desktop on VT1.
-# Run outside this cgroup so stopping ES doesn't kill this script.
-systemd-run --no-block --collect bash -c \
-    "systemctl stop hippos-es.service; systemctl start hippos-desktop.service"
+# hippos-session ends the current mode and starts this desktop.
+kill -USR1 "$(cat /run/hippos/session-loop)"

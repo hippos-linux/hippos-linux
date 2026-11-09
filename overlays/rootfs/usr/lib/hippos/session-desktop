@@ -46,12 +46,8 @@ unset XAUTHORITY
 # shellcheck disable=SC1091
 [[ -f /run/hippos/prime.env ]] && source /run/hippos/prime.env
 
-# XDG_SESSION_ID must reach user@1000.service's own activation environment —
-# see session-es for the full explanation. This is the desktop-mode half of
-# the same fix; plasma-polkit-agent.service is the concrete unit this was
-# confirmed against (0.6.1 beta boot captures: registration failing with
-# "Cannot create unix session" despite hippos-desktop.service's own
-# PAMName=hippos-session session registering correctly).
+# XDG_SESSION_ID for systemd --user units, plasma-polkit-agent among them; see
+# session-es.
 dbus-update-activation-environment --systemd DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS XDG_CONFIG_HOME HOME XDG_SESSION_ID 2>/dev/null || true
 
 # Ensure wifi radio is on when entering desktop (NM may have saved a disabled state at boot)
@@ -73,9 +69,7 @@ fi
 xset -dpms 2>/dev/null || true
 xset s off 2>/dev/null || true
 
-# A desktop's own Log Out ends its session cleanly, and with nothing else on
-# VT1 that would strand the user on a dead screen until reboot — return to ES
-# instead. A crash still exits non-zero for Restart=on-failure, and a switch
-# to ES started elsewhere stops this unit (SIGTERM) before reaching this.
+# A desktop's own Log Out returns to ES rather than ending the login session.
+# A crash still exits non-zero, so hippos-session captures diagnostics.
 "$SESSION_CMD" || exit
-exec /usr/lib/hippos/switch-to-es
+hippos-settings set system.session es

@@ -19,10 +19,17 @@ _DEVICE_MAPPING_DIRS = [
 ]
 
 _HIPPOS_SERVICES = [
-    'hippos-xserver.service',
-    'hippos-es.service',
-    'hippos-desktop.service',
+    'greetd.service',
+    'hippos-session-setup.service',
     'hippos-hotkeys.service',
+]
+
+# hippos-session (Xorg, ES, desktops) runs in the greetd login session and
+# logs under its own identifier rather than a unit. Matches joined by '+' are
+# OR'ed; journalctl's -u and -t would AND.
+_JOURNAL_MATCHES = [
+    *[m for svc in _HIPPOS_SERVICES for m in (f'_SYSTEMD_UNIT={svc}', '+')],
+    'SYSLOG_IDENTIFIER=hippos-session',
 ]
 
 _USAGE = """\
@@ -33,7 +40,7 @@ Commands:
   settings <args>                delegate to hippos-settings
   switch es                      switch to EmulationStation
   switch desktop [de]            switch to desktop (lxqt, plasma, xfce, gnome, mate, cinnamon)
-  restart es|desktop|xserver     restart a hippos service
+  restart session|xserver        restart the current mode, or Xorg and the mode
   logs [--lines N]               show recent hippos service logs (default: 50 lines)
   info                           show OS and hardware info
 
@@ -205,20 +212,13 @@ def cmd_switch(args: list[str]) -> int:
 
 
 def cmd_restart(args: list[str]) -> int:
-    if not args:
-        print('Usage: hippos restart es|desktop|xserver', file=sys.stderr)
-        return 1
-    target = args[0]
-    svc_map = {
-        'es':       'hippos-es.service',
-        'desktop':  'hippos-desktop.service',
-        'xserver':  'hippos-xserver.service',
-    }
-    svc = svc_map.get(target)
-    if svc is None:
-        print(f'Unknown target: {target}', file=sys.stderr)
-        return 1
-    return _run(['systemctl', 'restart', svc]).returncode
+    target = args[0] if args else ''
+    signals = {'session': '-USR2', 'xserver': '-HUP'}
+    if target in signals:
+        loop_pid = Path('/run/hippos/session-loop').read_text().strip()
+        return _run(['kill', signals[target], loop_pid]).returncode
+    print('Usage: hippos restart session|xserver', file=sys.stderr)
+    return 1
 
 
 def cmd_logs(args: list[str]) -> int:
@@ -228,11 +228,7 @@ def cmd_logs(args: list[str]) -> int:
         if i + 1 < len(args):
             lines = args[i + 1]
 
-    units = []
-    for svc in _HIPPOS_SERVICES:
-        units += ['-u', svc]
-
-    return _run(['journalctl', '--no-pager', '-n', lines] + units).returncode
+    return _run(['journalctl', '--no-pager', '-n', lines, *_JOURNAL_MATCHES]).returncode
 
 
 def cmd_info() -> int:
@@ -924,8 +920,7 @@ def cmd_diag(args: list[str]) -> int:
     capture(str(HIPPOS_SETTINGS), 'list')
 
     section('Services')
-    capture('systemctl', 'status', '--no-pager', '--lines=5',
-            *[s for svc in _HIPPOS_SERVICES for s in [svc]])
+    capture('systemctl', 'status', '--no-pager', '--lines=5', *_HIPPOS_SERVICES)
 
     section('OS Info')
     capture('uname', '-a')
@@ -973,10 +968,7 @@ def cmd_diag(args: list[str]) -> int:
         buf.write('(evdev not available)\n')
 
     section('Journal (hippos services, last 50 lines)')
-    units = []
-    for svc in _HIPPOS_SERVICES:
-        units += ['-u', svc]
-    capture('journalctl', '--no-pager', '-n', '50', *units)
+    capture('journalctl', '--no-pager', '-n', '50', *_JOURNAL_MATCHES)
 
     report = buf.getvalue()
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
