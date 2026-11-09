@@ -503,7 +503,10 @@ class HotkeyDaemon:
                     self._handle_controller_button(state, event)
 
                 if event.code in state.action_map and event.value in (0, 1):
-                    consumed = self.execute_action(state.action_map[event.code], event.value == 1)
+                    action = state.action_map[event.code]
+                    if not state.grabbed and self._resolve_action(action) == event.code:
+                        continue
+                    consumed = self.execute_action(action, event.value == 1)
                     if consumed:
                         if event.value == 1:
                             state.consumed_keys.add(event.code)
