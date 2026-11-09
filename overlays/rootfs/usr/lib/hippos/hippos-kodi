@@ -1,19 +1,13 @@
 #!/usr/bin/env bash
-# hippos-kodi — ES's KODI MEDIA CENTER entry (ApiSystem::launchKodi). ES passes
-# its controller arguments, which Kodi doesn't use. ES reads the exit code:
-# 10 reboot, 11 shut down, anything else back to ES.
 
 command -v kodi >/dev/null || { echo "hippos-kodi: kodi is not installed" >&2; exit 1; }
 
-# Suspend PipeWire's sinks so Kodi can open the audio device for passthrough
-# straight away instead of after PipeWire's idle timeout.
 deadline=$(( $(cut -d. -f1 /proc/uptime) + 5 ))
 while fuser -s /dev/snd/pcmC*p 2>/dev/null && (( $(cut -d. -f1 /proc/uptime) < deadline )); do
     pactl list short sinks 2>/dev/null | cut -f2 | while read -r sink; do pactl suspend-sink "${sink}" 1; done
     sleep 0.1
 done
 
-# Kodi's own exit codes (xbmc/application/ApplicationEnums.h).
 EXITCODE_POWERDOWN=64
 EXITCODE_RESTARTAPP=65
 EXITCODE_REBOOT=66

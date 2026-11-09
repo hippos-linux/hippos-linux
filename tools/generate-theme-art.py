@@ -22,14 +22,11 @@ from PIL import Image, ImageDraw
 
 WIDTH, HEIGHT = 1600, 900
 JPEG_QUALITY = 84
-# A planet too large for the frame, lit from behind: the crescent frames the
-# text column on the left and leaves the dark side calm under the carousel.
-PLANET_CENTER = (0.93, 1.12)  # fractions of width and height
-PLANET_RADIUS = 0.94  # fraction of height
+PLANET_CENTER = (0.93, 1.12)
+PLANET_RADIUS = 0.94
 LIGHT = np.array([-0.60, -0.56, -0.40])
 LIGHT = LIGHT / np.linalg.norm(LIGHT)
 INK = np.array([0.020, 0.016, 0.042])
-
 
 @dataclass(frozen=True)
 class World:
@@ -37,11 +34,9 @@ class World:
     mid: str
     bright: str
     glow: str
-    surface: str  # bands, continents, craters or ice
+    surface: str
     ring: bool = False
 
-
-# Colours follow each system's hardware or brand era, not its logo artwork.
 WORLDS = {
     "nes": World("3a0c12", "c5283a", "e8dcd2", "ff4d5e", "continents"),
     "famicom": World("4a0d10", "b3262c", "e8cfa0", "ff5a48", "continents"),
@@ -101,7 +96,6 @@ WORLDS = {
     "auto-allgames": World("06183f", "1a6fff", "cfe0ff", "4d8dff", "continents", True),
 }
 
-# HippOS purple and blue lead so unlisted systems stay on brand.
 FALLBACK_WORLDS = [
     World("140a3a", "7b3fff", "dcd0ff", "9b6bff", "bands"),
     World("06183f", "1a6fff", "cfe0ff", "4d8dff", "ice"),
@@ -113,10 +107,8 @@ FALLBACK_WORLDS = [
     World("10241e", "3fb890", "d0f7e6", "50e0b0", "ice"),
 ]
 
-
 def to_rgb(hex_color: str) -> np.ndarray:
     return np.array([int(hex_color[i : i + 2], 16) / 255 for i in (0, 2, 4)])
-
 
 def fractal_noise(rng: np.random.Generator, shape: tuple[int, int], base: int, octaves: int) -> np.ndarray:
     total = np.zeros(shape)
@@ -131,9 +123,7 @@ def fractal_noise(rng: np.random.Generator, shape: tuple[int, int], base: int, o
     total -= total.min()
     return total / total.max()
 
-
 def warped_noise(rng: np.random.Generator, shape: tuple[int, int], base: int, octaves: int, strength: float) -> np.ndarray:
-    """Domain-warped noise: gives swirls and coastlines instead of grid-aligned blobs."""
     field = fractal_noise(rng, shape, base, octaves)
     offset_y = (fractal_noise(rng, shape, base, 4) - 0.5) * strength * shape[0]
     offset_x = (fractal_noise(rng, shape, base, 4) - 0.5) * strength * shape[1]
@@ -142,7 +132,6 @@ def warped_noise(rng: np.random.Generator, shape: tuple[int, int], base: int, oc
     warped -= warped.min()
     return warped / warped.max()
 
-
 def gaussian_blur(values: np.ndarray, sigma: float) -> np.ndarray:
     radius = int(sigma * 3 + 0.5)
     kernel = np.exp(-(np.arange(-radius, radius + 1) ** 2) / (2 * sigma**2))
@@ -150,7 +139,6 @@ def gaussian_blur(values: np.ndarray, sigma: float) -> np.ndarray:
     for axis in (0, 1):
         values = np.apply_along_axis(np.convolve, axis, values, kernel, mode="same")
     return values
-
 
 def sample_bilinear(texture: np.ndarray, v: np.ndarray, u: np.ndarray) -> np.ndarray:
     v0, u0 = np.floor(v).astype(int), np.floor(u).astype(int)
@@ -162,14 +150,11 @@ def sample_bilinear(texture: np.ndarray, v: np.ndarray, u: np.ndarray) -> np.nda
     bottom = texture[v1, u0] * (1 - fu) + texture[v1, u1] * fu
     return top * (1 - fv) + bottom * fv
 
-
 def lerp_palette(value: np.ndarray, stops: list[tuple[float, np.ndarray]]) -> np.ndarray:
     positions = [stop[0] for stop in stops]
     return np.stack([np.interp(value, positions, [stop[1][c] for stop in stops]) for c in range(3)], axis=-1)
 
-
 def surface_maps(world: World, rng: np.random.Generator, size: int = 2048) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Albedo, height and night-light maps, size x size/2, for the sphere's visible face."""
     deep, mid, bright = to_rgb(world.deep), to_rgb(world.mid), to_rgb(world.bright)
     shape = (size // 2, size)
     detail = warped_noise(rng, shape, 5, 8, 0.10)
@@ -204,7 +189,6 @@ def surface_maps(world: World, rng: np.random.Generator, size: int = 2048) -> tu
         albedo = lerp_palette(value, [(0, deep), (0.35, mid), (0.70, (mid + bright) / 2), (1, bright)])
         return albedo, value * 0.5, night
 
-    # Craters: relief carries the shape, so they read as terrain, not outlines.
     ridges = 1 - np.abs(warped_noise(rng, shape, 7, 8, 0.08) * 2 - 1)
     height = 0.55 * detail + 0.45 * ridges**2
     longitude, latitude = np.meshgrid(np.arange(size), np.arange(size // 2))
@@ -219,7 +203,6 @@ def surface_maps(world: World, rng: np.random.Generator, size: int = 2048) -> tu
     albedo = lerp_palette(height, [(0, deep), (0.50, mid), (1, (mid + bright) / 2)])
     return albedo, height * 1.5, night
 
-
 def starfield(rng: np.random.Generator) -> np.ndarray:
     tints = np.array([[1.0, 0.86, 0.72], [0.82, 0.88, 1.0], [1.0, 1.0, 1.0], [0.92, 0.85, 1.0]])
     layers = np.zeros((HEIGHT, WIDTH, 3))
@@ -233,7 +216,6 @@ def starfield(rng: np.random.Generator) -> np.ndarray:
         layers += points * gain
     return np.clip(layers, 0, 1)
 
-
 def add_rings(canvas, world, dx, dy, inside, rng):
     squash, angle = 0.20, rng.uniform(-0.62, -0.46)
     along = dx * np.cos(angle) + dy * np.sin(angle)
@@ -244,10 +226,9 @@ def add_rings(canvas, world, dx, dy, inside, rng):
     band = profile[np.clip(((distance - inner) / (outer - inner) * 4095).astype(int), 0, 4095)]
     edges = np.clip((distance - inner) / 0.03, 0, 1) * np.clip((outer - distance) / 0.10, 0, 1)
     alpha = edges * (0.05 + 0.40 * band**1.8)
-    alpha = np.where(inside & (across < 0), 0, alpha)  # far side passes behind the planet
+    alpha = np.where(inside & (across < 0), 0, alpha)
     color = to_rgb(world.bright) * 0.7 + to_rgb(world.glow) * 0.3
     return canvas * (1 - alpha[..., None]) + color[None, None] * alpha[..., None]
-
 
 def add_moon(canvas, world, rng):
     center_x, center_y = rng.uniform(0.60, 0.70) * WIDTH, rng.uniform(0.10, 0.20) * HEIGHT
@@ -261,7 +242,6 @@ def add_moon(canvas, world, rng):
     edge = np.clip((1 - distance) * radius / 1.2, 0, 1)[..., None]
     halo = (np.exp(-np.maximum(distance - 1, 0) * 3.2) * 0.10 * (distance >= 1))[..., None]
     return canvas * (1 - edge) + surface * edge + to_rgb(world.glow)[None, None] * halo
-
 
 def render(world: World, seed: int) -> Image.Image:
     rng = np.random.default_rng(seed)
@@ -281,7 +261,6 @@ def render(world: World, seed: int) -> Image.Image:
     canvas += mid[None, None] * (np.clip(wisps - 0.46, 0, 1) ** 2 * 0.42 * falloff)[..., None]
     canvas += starfield(rng) * np.clip(1.15 - dust * 1.1, 0.12, 1)[..., None]
 
-    # Atmosphere outside the limb, strongest where the light grazes it.
     outside = np.maximum(distance - 1, 0)
     facing = np.clip((dx * LIGHT[0] + dy * LIGHT[1]) / np.maximum(distance, 1e-6) / np.hypot(LIGHT[0], LIGHT[1]), 0, 1)
     scatter = np.exp(-outside * 90) * 1.0 + np.exp(-outside * 20) * 0.42 + np.exp(-outside * 5.5) * 0.15
@@ -298,15 +277,12 @@ def render(world: World, seed: int) -> Image.Image:
     tilted_y = dx * np.sin(tilt) + dy * np.cos(tilt)
     albedo_map, height_map, night_map = surface_maps(world, rng)
     map_h, map_w = height_map.shape
-    # Arcsine on both axes keeps the map's poles out of view; a true latitude
-    # mapping pinches visibly where the limb meets a pole.
     u = (np.arcsin(np.clip(tilted_x, -1, 1)) / np.pi + 0.5) * (map_w - 1)
     v = (np.arcsin(np.clip(tilted_y, -1, 1)) / np.pi + 0.5) * (map_h - 1)
     albedo = sample_bilinear(albedo_map, v, u)
     height = sample_bilinear(height_map, v, u)
     night = sample_bilinear(night_map, v, u)
 
-    # Bump mapping from the height field; relief is what makes terrain look solid.
     slope_y, slope_x = np.gradient(gaussian_blur(height, 0.7))
     bump = 5.0
     nx, ny, nzb = dx - slope_x * bump, dy - slope_y * bump, nz + 0.02
@@ -315,7 +291,6 @@ def render(world: World, seed: int) -> Image.Image:
     terminator = np.clip((dx * LIGHT[0] + dy * LIGHT[1] + nz * LIGHT[2] + 0.10) / 0.55, 0, 1)
     shaded = albedo * (0.004 + 0.92 * (terminator**1.5 * (0.45 + 0.55 * np.minimum(lambert * 3.2, 1)))[..., None])
 
-    # Light through the atmosphere tints the lit limb and the sunset band.
     limb = (1 - nz) ** 2.6
     shaded += glow[None, None] * (limb * terminator**0.8 * 0.70)[..., None]
     shaded += (glow * 0.7 + bright * 0.3)[None, None] * (np.exp(-(1 - distance) * 130) * facing**3 * 0.75)[..., None]
@@ -325,7 +300,6 @@ def render(world: World, seed: int) -> Image.Image:
     edge = np.clip((1 - distance) * radius / 1.5, 0, 1)[..., None]
     canvas = canvas * (1 - edge) + shaded * edge
 
-    # Sun just cresting the limb, placed where the light direction meets it.
     light_length = np.hypot(LIGHT[0], LIGHT[1])
     flare_x = center_x + LIGHT[0] / light_length * radius
     flare_y = center_y + LIGHT[1] / light_length * radius
@@ -335,35 +309,27 @@ def render(world: World, seed: int) -> Image.Image:
     flare += 0.20 * np.exp(-np.abs(flare_dy) * 620) * np.exp(-np.abs(flare_dx) * 6.5)
     canvas += (bright * 0.5 + glow * 0.2 + 0.3)[None, None] * flare[..., None]
 
-    # Keeps the left column calm enough for large text.
     calm = np.clip((xs / WIDTH - 0.06) / 0.42, 0, 1) ** 1.2
     canvas = INK + (canvas - INK) * (0.20 + 0.80 * calm)[..., None]
-    canvas += rng.normal(0, 1.2 / 255, canvas.shape)  # dither: JPEG bands smooth gradients otherwise
+    canvas += rng.normal(0, 1.2 / 255, canvas.shape)
     return Image.fromarray((np.clip(canvas, 0, 1) ** (1 / 1.08) * 255 + 0.5).astype(np.uint8))
 
-
 def save_world(image: Image.Image, path: Path) -> None:
-    # Full-resolution chroma: subsampling leaves colour blocks in the dark sky.
     image.save(path, quality=JPEG_QUALITY, subsampling=0, optimize=True, progressive=True)
-
 
 def rounded_mask(size: int, radius: int, scale: int = 4) -> np.ndarray:
     mask = Image.new("L", (size * scale, size * scale), 0)
     ImageDraw.Draw(mask).rounded_rectangle((0, 0, size * scale - 1, size * scale - 1), radius * scale, fill=255)
     return np.asarray(mask.resize((size, size), Image.LANCZOS), dtype=np.float64) / 255
 
-
 def logo_with_alpha(source: Path, box: tuple[int, int, int, int] | None = None) -> Image.Image:
-    """Recover transparency from artwork drawn on black, so it composites on any world."""
     pixels = np.asarray(Image.open(source).convert("RGB"), dtype=np.float64) / 255
     alpha = pixels.max(axis=-1)
     color = pixels / np.maximum(alpha[..., None], 1e-3)
     image = Image.fromarray((np.dstack([np.clip(color, 0, 1), alpha]) * 255 + 0.5).astype(np.uint8), "RGBA")
     return image.crop(box) if box else image
 
-
 def wordmark_svg(font_path: Path, text: str) -> str:
-    """Text as outlines in white, so ES can tint it like any other system logo."""
     font = TTFont(font_path)
     glyphs, cmap, metrics = font.getGlyphSet(), font.getBestCmap(), font["hmtx"]
     ascent, descent = font["hhea"].ascent, font["hhea"].descent
@@ -371,7 +337,6 @@ def wordmark_svg(font_path: Path, text: str) -> str:
     x = 0
     for character in text:
         glyph = cmap[ord(character)]
-        # Font outlines have y pointing up, SVG has it pointing down.
         glyphs[glyph].draw(TransformPen(pen, (1, 0, 0, -1, x, ascent)))
         x += metrics[glyph][0]
     return (
@@ -379,15 +344,11 @@ def wordmark_svg(font_path: Path, text: str) -> str:
         f'<path fill="#fff" d="{pen.getCommands()}"/></svg>\n'
     )
 
-
 def render_chrome(theme_dir: Path) -> None:
     assets = theme_dir / "assets"
-    # The Quiver name is the project's mark and its logo can't be copied or
-    # imitated, so its system logo is only the name, in this theme's own font.
     (theme_dir / "art" / "quiver.svg").write_text(wordmark_svg(assets / "fonts" / "Sora-ExtraBold.ttf", "Quiver"))
     Image.new("RGBA", (4, 4), (255, 255, 255, 255)).save(assets / "white.png")
 
-    # Menu panel: a ninepatch, so its size must stay three times its corner size.
     size, radius = 96, 26
     outer = rounded_mask(size, radius)
     inner = np.zeros_like(outer)
@@ -398,7 +359,6 @@ def render_chrome(theme_dir: Path) -> None:
     frame[..., 3] = inner + border * 0.34
     Image.fromarray((frame * 255 + 0.5).astype(np.uint8), "RGBA").save(assets / "menu-frame.png")
 
-    # Sun flare sprite: pulsed by the theme over the flare baked into each world.
     size = 512
     ys, xs = np.mgrid[0:size, 0:size].astype(np.float64)
     dx, dy = (xs - size / 2) / size, (ys - size / 2) / size
@@ -412,7 +372,6 @@ def render_chrome(theme_dir: Path) -> None:
     source = Path(__file__).parent / "theme-art" / "hippos-logo.png"
     logo_with_alpha(source, (90, 855, 1165, 1035)).resize((538, 90), Image.LANCZOS).save(assets / "wordmark.png", optimize=True)
 
-    # Placeholder for games with no artwork.
     size = (640, 400)
     placeholder = Image.new("RGBA", size, (16, 12, 34, 255))
     mark = logo_with_alpha(source, (110, 140, 1140, 830)).resize((387, 259), Image.LANCZOS)
@@ -420,17 +379,14 @@ def render_chrome(theme_dir: Path) -> None:
     placeholder.alpha_composite(mark, ((size[0] - 387) // 2, (size[1] - 259) // 2))
     placeholder.convert("RGB").save(assets / "no-art.jpg", quality=88)
 
-    # Boot splash: the HippOS world, with the logo where the eye lands first.
     seed = int.from_bytes(hashlib.sha256(b"default").digest()[:8], "big")
     splash = render(WORLDS["auto-lastplayed"], seed).convert("RGBA")
     logo = logo_with_alpha(source).resize((600, 600), Image.LANCZOS)
     splash.alpha_composite(logo, (150, 150))
     save_world(splash.convert("RGB"), assets / "splash.jpg")
 
-
 def world_for(system: str, seed: int) -> World:
     return WORLDS.get(system) or FALLBACK_WORLDS[seed % len(FALLBACK_WORLDS)]
-
 
 def main() -> None:
     theme_dir = Path(sys.argv[1])
@@ -444,7 +400,6 @@ def main() -> None:
         seed = int.from_bytes(hashlib.sha256(system.encode()).digest()[:8], "big")
         save_world(render(world_for(system, seed), seed), output / f"{system}.jpg")
         print(system, flush=True)
-
 
 if __name__ == "__main__":
     main()

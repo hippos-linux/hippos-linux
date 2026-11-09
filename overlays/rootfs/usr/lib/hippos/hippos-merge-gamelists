@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-"""Merge gamelist.xml files from all mergerfs ROM pool branches into the RW branch.
-
-Called after mount-roms-pool completes. Reads /proc/mounts to locate the
-mergerfs roms pool, then for each system directory merges gamelist.xml entries
-from all RO branches into the RW (first) branch. RW branch entries win on
-path conflicts so user-scraped metadata is never overwritten by external media.
-"""
 
 from __future__ import annotations
 
@@ -27,9 +20,7 @@ _log = logging.getLogger(__name__)
 
 ROMS_POOL = Path('/userdata/roms')
 
-
 def _mergerfs_branches(pool: Path) -> list[Path]:
-    """Return the ordered branch list for a fuse.mergerfs mount, or []."""
     pool_str = str(pool)
     try:
         with open('/proc/mounts') as fh:
@@ -49,34 +40,26 @@ def _mergerfs_branches(pool: Path) -> list[Path]:
         _log.warning("could not read /proc/mounts: %s", exc)
     return []
 
-
 def _normalise_path(raw: str, system_pool_path: Path, branch_system_path: Path) -> str:
-    """Return a normalised relative path for a gamelist <path> value."""
     p = raw.strip()
-    # Already relative
     if p.startswith('./') or not p.startswith('/'):
         return p if p.startswith('./') else './' + p
 
     path = Path(p)
-    # Absolute under the pool mount (e.g. /userdata/roms/ps3/game.iso)
     try:
         rel = path.relative_to(system_pool_path)
         return './' + str(rel)
     except ValueError:
         pass
-    # Absolute under this branch's system dir (e.g. /userdata/.roms-rw/ps3/game.iso)
     try:
         rel = path.relative_to(branch_system_path)
         return './' + str(rel)
     except ValueError:
         pass
-    # Fallback: keep as-is
     return p
-
 
 def _key(path_str: str) -> str:
     return path_str.strip().lstrip('./').lower()
-
 
 _AMP_RE = re.compile(r'&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#[0-9]+|#x[0-9a-fA-F]+);)')
 _XML_DECL_RE = re.compile(rb'<\?xml[^?]*\?>', re.IGNORECASE)
@@ -84,44 +67,33 @@ _INVALID_XML_CHARS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]')
 
 _UTF8_DECL = b"<?xml version='1.0' encoding='utf-8'?>\n"
 
-
 def _normalise_xml_bytes(text: str) -> bytes:
-    """Strip all XML declarations, escape bare &, strip invalid chars, re-encode as UTF-8."""
     text = _AMP_RE.sub('&amp;', text)
     text = _INVALID_XML_CHARS.sub('', text)
     raw_out = text.encode('utf-8')
-    # Remove ALL <?xml...?> occurrences (duplicates inside content corrupt the doc)
     raw_out = _XML_DECL_RE.sub(b'', raw_out)
     return _UTF8_DECL + raw_out.lstrip()
-
 
 def _normalise(raw: bytes) -> bytes:
     return _normalise_xml_bytes(raw.decode('latin-1'))
 
-
 def _try_parse_xml(raw: bytes) -> ET.Element | None:
-    """Try multiple strategies to parse a potentially malformed gamelist.xml."""
-    # Pass 1: direct parse (well-formed UTF-8)
     try:
         return ET.fromstring(raw)
     except ET.ParseError:
         pass
 
-    # Pass 2: cp1252 → UTF-8 (handles Windows-encoded files, errors='replace' for undefined bytes)
     try:
         text = raw.decode('cp1252', errors='replace')
         return ET.fromstring(_normalise_xml_bytes(text))
     except ET.ParseError:
         pass
 
-    # Pass 3: latin-1 (always succeeds) → UTF-8 with full sanitisation
     try:
         return ET.fromstring(_normalise(raw))
     except ET.ParseError:
         pass
 
-    # Pass 4: lxml recovery — handles files with binary blobs inside elements.
-    # Parse each <game> child individually; corrupt elements are skipped.
     if _LXML:
         try:
             fixed = _normalise(raw)
@@ -147,10 +119,8 @@ def _try_parse_xml(raw: bytes) -> ET.Element | None:
 
     return None
 
-
 def _parse_gamelist(xml_path: Path, system_pool_path: Path,
                     branch_system_path: Path) -> dict[str, ET.Element]:
-    """Parse a gamelist.xml and return {normalised_path_key: game_element}."""
     raw = xml_path.read_bytes()
     root = _try_parse_xml(raw)
     if root is None:
@@ -166,7 +136,6 @@ def _parse_gamelist(xml_path: Path, system_pool_path: Path,
         entries[_key(normalised)] = game
     return entries
 
-
 def _write_gamelist(entries: dict[str, ET.Element], dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     root = ET.Element('gameList')
@@ -175,18 +144,14 @@ def _write_gamelist(entries: dict[str, ET.Element], dest: Path) -> None:
     tree = ET.ElementTree(root)
     ET.indent(tree, space='  ')
     tree.write(str(dest), encoding='utf-8', xml_declaration=True)
-    # This runs as root at boot; a root-owned gamelist stops ES saving it.
     parent = dest.parent.stat()
     os.chown(dest, parent.st_uid, parent.st_gid)
 
-
 def merge_system(system: str, rw_branch: Path, ro_branches: list[Path]) -> int:
-    """Merge gamelists for one system. Returns count of entries added from RO branches."""
     system_pool_path = ROMS_POOL / system
     rw_system = rw_branch / system
     rw_xml = rw_system / 'gamelist.xml'
 
-    # Load RW gamelist (authoritative)
     rw_entries: dict[str, ET.Element] = {}
     if rw_xml.exists():
         rw_entries = _parse_gamelist(rw_xml, system_pool_path, rw_system)
@@ -209,7 +174,6 @@ def merge_system(system: str, rw_branch: Path, ro_branches: list[Path]) -> int:
 
     return added
 
-
 def main() -> int:
     branches = _mergerfs_branches(ROMS_POOL)
     if not branches:
@@ -223,7 +187,6 @@ def main() -> int:
         _log.debug("no RO branches — nothing to merge")
         return 0
 
-    # Collect all system names that appear in any RO branch
     systems: set[str] = set()
     for ro in ro_branches:
         if not ro.exists():
@@ -246,7 +209,6 @@ def main() -> int:
         _log.debug("merge complete: nothing new")
 
     return 0
-
 
 if __name__ == '__main__':
     sys.exit(main())

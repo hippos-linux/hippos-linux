@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
-# Enable Wake-on-LAN (magic packet) on all physical ethernet interfaces.
-# Controlled by network.wol.enabled in hippos-settings.
 
 ENABLED="$(hippos-settings get network.wol.enabled 2>/dev/null || true)"
 [[ "$ENABLED" != "true" ]] && exit 0
 
 changed=0
 while IFS= read -r IFACE; do
-    # Skip virtual/loopback (no /sys/class/net/IFACE/device = no physical NIC)
     [[ -e "/sys/class/net/$IFACE/device" ]] || continue
 
     if ethtool "$IFACE" 2>/dev/null | grep -qE "Supports Wake-on:.*g"; then

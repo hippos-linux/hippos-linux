@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""HippOS bezel project manager — installs system bezels from The Bezel Project."""
 
 import json
 import os
@@ -35,19 +34,16 @@ SYSTEMS = [
 
 BASE_URL = "https://github.com/thebezelproject/bezelproject-{repo}/archive/refs/heads/master.tar.gz"
 
-
 def load_state():
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE) as f:
             return json.load(f)
     return {}
 
-
 def save_state(state):
     os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
-
 
 def cmd_list():
     state = load_state()
@@ -57,7 +53,6 @@ def cmd_list():
         url = BASE_URL.format(repo=repo)
         dest = os.path.join(DECORATIONS_DIR, "thebezelproject", system_id)
         print(f"{prefix} {system_id} {url} {dest}")
-
 
 def cmd_install(system_id):
     entry = next(((r, s) for r, _, s in SYSTEMS if s == system_id), None)
@@ -115,7 +110,6 @@ def cmd_install(system_id):
     save_state(state)
     print(f"Done: bezels for {system_id} installed to {dest}", flush=True)
 
-
 def cmd_remove(system_id):
     dest = os.path.join(DECORATIONS_DIR, "thebezelproject", system_id)
     if os.path.isdir(dest):
@@ -125,7 +119,6 @@ def cmd_remove(system_id):
     state.pop(system_id, None)
     save_state(state)
     print(f"Done: bezels for {system_id} removed.", flush=True)
-
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""

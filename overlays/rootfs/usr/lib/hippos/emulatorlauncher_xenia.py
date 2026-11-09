@@ -23,11 +23,8 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import CACHE, HOME, SAVES, USERDATA
 
-
 def _is_canary(ctx: LaunchContext) -> bool:
-    """Decided by the emulator: ES's core name is xenia_canary, not xenia-canary."""
     return ctx.emulator == 'xenia-canary'
-
 
 def _xenia_runtime_paths(canary: bool) -> tuple[Path, Path, Path]:
     runtime_dir = XENIA_CANARY_RUNTIME_DIR if canary else XENIA_RUNTIME_DIR
@@ -58,7 +55,6 @@ def _xenia_runtime_paths(canary: bool) -> tuple[Path, Path, Path]:
     if not portable_txt.exists():
         portable_txt.touch()
     return runtime_dir, prefix_dir, config_dir
-
 
 def _xenia_base_config(display_resolution: Optional[tuple[int, int]]) -> dict[str, object]:
     return {
@@ -93,7 +89,6 @@ def _xenia_base_config(display_resolution: Optional[tuple[int, int]]) -> dict[st
         'Vulkan': {'vulkan_sparse_shared_memory': False},
         'XConfig': {'user_country': 103, 'user_language': 1},
     }
-
 
 def _write_xenia_config(ctx: LaunchContext) -> tuple[Path, Path, Path]:
     conf = _load_effective_hippos_conf()
@@ -174,7 +169,6 @@ def _write_xenia_config(ctx: LaunchContext) -> tuple[Path, Path, Path]:
 
     return runtime_dir, prefix_dir, config_dir
 
-
 def launch_xenia(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin(ctx.emulator)
     if bin_path is None:
@@ -222,7 +216,6 @@ def launch_xenia(ctx: LaunchContext) -> int:
 
     result = _run_game_command(ctx, ctx.emulator, cmd, env, cwd=config_dir)
     return result.returncode
-
 
 XENIA_RUNTIME_DIR = USERDATA / 'emulators' / 'xenia' / 'current'
 XENIA_CANARY_RUNTIME_DIR = USERDATA / 'emulators' / 'xenia-canary' / 'current'

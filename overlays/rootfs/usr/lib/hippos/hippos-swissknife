@@ -1,7 +1,4 @@
 #!/bin/bash
-# HippOS Swiss Knife for EmulationStation
-# EC: 20-SIGTERM ok, 22-SIGKILL fallback, 21-no emulator found
-#     10-poweroff, 11-reboot, 1-general error, 0-okay
 
 waitTimer=5
 
@@ -25,11 +22,9 @@ function check_esrun() {
 function emu_kill() {
     RC_PID=$(check_emurun)
     if [[ $RC_PID -ne 0 ]]; then
-        # Graceful exit: inject the context-appropriate key combo
         /usr/lib/hippos/hippos-hotkeys --send exit &
         ret=20
         timeout "${waitTimer}" tail -q --pid="${RC_PID}" -f /dev/null 2>/dev/null && return $ret
-        # Graceful exit timed out — walk and SIGKILL process tree
         getcpid "$RC_PID"
         for ((z=${#pidarray[*]}-1; z>-1; z--)); do
             kill -9 "${pidarray[z]}" 2>/dev/null; sleep 1

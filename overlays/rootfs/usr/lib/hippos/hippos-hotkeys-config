@@ -1,18 +1,4 @@
 #!/usr/bin/env python3
-"""
-ES hotkeys config interface for HippOS.
-
-Modes:
-  (no args)            Output <hotkeys> XML: per-device configured bindings
-  --values             Output <mapping> XML: available action names
-  --detect             Output <keys> XML: connected gamepads + their bound keys
-  --detect --count 1 --nowait --evformat --device <path>
-                       Detect single button press on device, output <keys> XML
-  --set --config <cfg> --key <key> --action <action>
-                       Write one binding to user mapping file
-  --remove --config <cfg> --key <key>
-                       Remove a binding from user mapping file
-"""
 from __future__ import annotations
 import json, re, sys, time
 from pathlib import Path
@@ -106,7 +92,6 @@ def cmd_detect(device_path: str | None, count: int, nowait: bool) -> None:
         except Exception:
             pass
     else:
-        # List all connected gamepad bindings
         for dev in _gamepads():
             mapping = _device_mapping(dev)
             fname = _mapping_filename(dev.name, dev.info.vendor, dev.info.product)

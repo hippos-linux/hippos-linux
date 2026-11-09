@@ -1,9 +1,3 @@
-"""
-hippos_switchres — thin ctypes wrapper around libswitchres.so.
-
-Only used when /etc/switchres.ini is present (CRT mode active).
-Falls back gracefully if the library is absent.
-"""
 from __future__ import annotations
 
 import ctypes
@@ -17,7 +11,6 @@ _LIBPATH  = "/usr/lib/libswitchres.so"
 _INI_PATH = "/etc/switchres.ini"
 
 SR_MODE_INTERLACED = 1 << 0
-
 
 class _SrMode(ctypes.Structure):
     _fields_ = [
@@ -45,7 +38,6 @@ class _SrMode(ctypes.Structure):
         ("id",             ctypes.c_int),
     ]
 
-
 def _load() -> ctypes.CDLL | None:
     try:
         lib = ctypes.CDLL(_LIBPATH)
@@ -68,21 +60,12 @@ def _load() -> ctypes.CDLL | None:
     lib.sr_deinit.argtypes         = []
     return lib
 
-
 def is_available() -> bool:
-    """True when libswitchres.so and /etc/switchres.ini are both present."""
     return os.path.isfile(_LIBPATH) and os.path.isfile(_INI_PATH)
-
 
 _VIDEOMODE_RE = re.compile(r'^(\d+)[xX](\d+)(i)?(?:@([\d.]+))?$')
 
-
 def parse_videomode(s: str) -> tuple[int, int, float, bool] | None:
-    """Parse a videomode string into (w, h, hz, interlaced).
-
-    Accepts: '256x240@60', '640x480i', '320x240', '640x480i@50'
-    Returns None if unparseable.
-    """
     m = _VIDEOMODE_RE.match(s.strip())
     if not m:
         return None
@@ -91,13 +74,7 @@ def parse_videomode(s: str) -> tuple[int, int, float, bool] | None:
     hz         = float(m.group(4)) if m.group(4) else 60.0
     return w, h, hz, interlaced
 
-
 def switch_to_mode(w: int, h: int, hz: float, interlaced: bool = False) -> bool:
-    """Apply a CRT modeline via libswitchres.so.
-
-    Reads display and monitor profile from /etc/switchres.ini (written by
-    hippos-crt-setup). Returns True if the mode was applied successfully.
-    """
     lib = _load()
     if lib is None:
         _log.warning("switchres: libswitchres.so not found at %s", _LIBPATH)

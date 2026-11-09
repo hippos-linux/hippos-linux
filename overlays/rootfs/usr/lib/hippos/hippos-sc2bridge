@@ -1,16 +1,4 @@
 #!/usr/bin/env python3
-"""Steam Controller 2 (Bluetooth 28de:1303) userspace bridge.
-
-Only for kernels whose hid-steam lacks Steam Controller 2 support: those bind
-it to hid-generic, which exposes the raw HID reports plus keyboard/mouse
-fallback interfaces. This decodes the raw
-reports into a virtual gamepad (with rumble) and a virtual trackpad mouse,
-and grabs the fallback interfaces so nothing else sees them.
-
-Started per controller by udev (70-hippos-sc2bridge.rules) as
-hippos-sc2bridge@hidrawN.service. Report decoding derived from Vesra's
-Workshop sc2bridge v1.0.0.
-"""
 
 from __future__ import annotations
 
@@ -58,11 +46,11 @@ BUTTONS = {
     0x00000400: e.BTN_DPAD_DOWN,
     0x00001000: e.BTN_DPAD_LEFT,
     0x00000800: e.BTN_DPAD_RIGHT,
-    0x00000010: e.BTN_TRIGGER_HAPPY1,  # QAM
-    0x00020000: e.BTN_TRIGGER_HAPPY2,  # L4
-    0x00040000: e.BTN_TRIGGER_HAPPY3,  # L5
-    0x00000080: e.BTN_TRIGGER_HAPPY4,  # R4
-    0x00000100: e.BTN_TRIGGER_HAPPY5,  # R5
+    0x00000010: e.BTN_TRIGGER_HAPPY1,
+    0x00020000: e.BTN_TRIGGER_HAPPY2,
+    0x00040000: e.BTN_TRIGGER_HAPPY3,
+    0x00000080: e.BTN_TRIGGER_HAPPY4,
+    0x00000100: e.BTN_TRIGGER_HAPPY5,
 }
 
 LEFT_PAD_TOUCH = 0x02000000
@@ -72,30 +60,22 @@ RIGHT_PAD_TOUCH = 0x00200000
 STICK_ABS = AbsInfo(0, -32768, 32767, STICK_DEADZONE, 128, 0)
 TRIGGER_ABS = AbsInfo(0, 0, 32767, 0, 0, 0)
 
-
 def log(msg: str) -> None:
     print(f'[hippos-sc2bridge] {msg}', flush=True)
-
 
 def s16(buf: bytes, off: int) -> int:
     return struct.unpack_from('<h', buf, off)[0]
 
-
 def u16(buf: bytes, off: int) -> int:
     return struct.unpack_from('<H', buf, off)[0]
-
 
 def u32(buf: bytes, off: int) -> int:
     return struct.unpack_from('<I', buf, off)[0]
 
-
 def deadzone(v: int) -> int:
     return 0 if abs(v) < STICK_DEADZONE else v
 
-
 def grab_fallback_interfaces(hidraw: str) -> list[evdev.InputDevice]:
-    """hid-generic registers the input interfaces before the hidraw node, so
-    by the time udev starts us for hidrawN its sibling event nodes exist."""
     hid_dir = Path('/sys/class/hidraw') / Path(hidraw).name / 'device'
     grabbed = []
     for event_dir in sorted(hid_dir.glob('input/input*/event*')):
@@ -104,7 +84,6 @@ def grab_fallback_interfaces(hidraw: str) -> list[evdev.InputDevice]:
         grabbed.append(dev)
         log(f'grabbed fallback interface {dev.path} {dev.name}')
     return grabbed
-
 
 def make_gamepad() -> UInput:
     cap = {
@@ -122,7 +101,6 @@ def make_gamepad() -> UInput:
     return UInput(cap, name='Steam Controller 2 Bridge',
                   vendor=VENDOR_ID, product=PRODUCT_ID, version=1, max_effects=16)
 
-
 def make_mouse() -> UInput:
     cap = {
         e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT],
@@ -131,13 +109,11 @@ def make_mouse() -> UInput:
     return UInput(cap, name='Steam Controller 2 Mouse',
                   vendor=VENDOR_ID, product=PRODUCT_ID, version=1)
 
-
 def scale_haptic_gain(magnitude: int) -> int:
     magnitude = max(0, min(65535, magnitude))
     if magnitude == 0:
         return 0
     return min(HAPTIC_MAX_GAIN, 1 + (magnitude * 127) // 65535)
-
 
 def send_rumble(fd: int, strong: int, weak: int) -> None:
     left_gain = scale_haptic_gain(strong)
@@ -150,10 +126,7 @@ def send_rumble(fd: int, strong: int, weak: int) -> None:
     )
     os.write(fd, packet)
 
-
 def forward_rumble(gamepad: UInput, fd: int) -> None:
-    """Service FF uploads/plays on the virtual gamepad and translate active
-    rumble effects into SC2 haptic reports."""
     effects: dict[int, object] = {}
     active: set[int] = set()
 
@@ -185,10 +158,7 @@ def forward_rumble(gamepad: UInput, fd: int) -> None:
                 active.discard(event.code)
             update()
 
-
 class TrackpadMouse:
-    """Right pad → relative pointer motion; left pad physical click →
-    left/right button depending on which half is pressed."""
 
     def __init__(self, mouse: UInput) -> None:
         self.mouse = mouse
@@ -243,7 +213,6 @@ class TrackpadMouse:
         self.mouse.write(e.EV_KEY, e.BTN_RIGHT, 0)
         self.mouse.syn()
 
-
 def write_gamepad_state(gamepad: UInput, report: bytes, buttons: int) -> None:
     for mask, code in BUTTONS.items():
         gamepad.write(e.EV_KEY, code, 1 if buttons & mask else 0)
@@ -254,7 +223,6 @@ def write_gamepad_state(gamepad: UInput, report: bytes, buttons: int) -> None:
     gamepad.write(e.EV_ABS, e.ABS_RX, deadzone(s16(report, 14)))
     gamepad.write(e.EV_ABS, e.ABS_RY, deadzone(s16(report, 16)))
     gamepad.syn()
-
 
 def run(hidraw: str) -> None:
     fd = os.open(hidraw, os.O_RDWR)
@@ -287,16 +255,14 @@ def run(hidraw: str) -> None:
         try:
             send_rumble(fd, 0, 0)
         except OSError:
-            pass  # controller already gone
+            pass
         os.close(fd)
-
 
 def main() -> None:
     if len(sys.argv) != 2:
         sys.exit('usage: hippos-sc2bridge /dev/hidrawN')
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     run(sys.argv[1])
-
 
 if __name__ == '__main__':
     main()

@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# hippos-upload-logs — collect system logs and upload them.
-# Usage: hippos-upload-logs [issue description]
-# Requires updates.token in /userdata/system/hippos.conf (sent via Discord DM
-# when you received Early Access or Dev Access).
 
 set -euo pipefail
 
@@ -10,8 +6,6 @@ UPLOAD_URL="${HIPPOS_UPLOAD_URL:-https://logs.hippos-linux.org/upload-logs}"
 
 echo "HippOS Log Uploader"
 echo "==================="
-
-# ── Token ─────────────────────────────────────────────────────────────────────
 
 TOKEN="$(hippos-settings get updates.token 2>/dev/null || true)"
 if [[ -z "${TOKEN}" ]]; then
@@ -24,11 +18,6 @@ fi
 echo "Token:  ${TOKEN:0:8}…"
 echo "Server: ${UPLOAD_URL}"
 echo ""
-
-# ── Issue description ─────────────────────────────────────────────────────────
-#
-# Passed as arguments by EmulationStation's UPLOAD LOGS menu entry, which has
-# no terminal to prompt on; prompted for interactively otherwise.
 
 if [[ $# -gt 0 ]]; then
     ISSUE="$*"
@@ -50,20 +39,6 @@ if [[ -z "${ISSUE}" ]]; then
 fi
 echo ""
 
-# ── Collect ───────────────────────────────────────────────────────────────────
-#
-# capture-boot-logs (runs automatically at boot, into
-# /userdata/system/logs/boot/<boot_id>/) is the canonical, comprehensive
-# system snapshot — version/kernel/CPU/memory/PCI/storage/GPU/display/EDID/
-# service status+journals/GRUB/modprobe conf/coredumps/and more. This tool
-# used to re-collect most of that itself by hand, duplicating it and drifting
-# out of sync (e.g. stale unit names journalctl'd here that no longer exist).
-# Re-run it now rather than trust whatever the boot-time run already wrote:
-# boot_id is stable for the whole session, so this overwrites that same
-# directory with a fresh, up-to-the-moment capture (journalctl -b covers the
-# whole current boot regardless of when it's invoked) — meaningfully better
-# for a runtime issue reported hours into a session, not just a boot issue.
-
 WORK="$(mktemp -d /tmp/hippos-upload.XXXXXX)"
 trap 'rm -rf "${WORK}"' EXIT
 LOGS="${WORK}/logs"
@@ -73,31 +48,17 @@ printf '%s\n' "${ISSUE}" > "${LOGS}/issue.txt"
 echo -n "  Settings...            "
 {
     echo "=== hippos.conf (secrets redacted) ==="
-    # Bundles leave the machine. Per-game keys are left out of the match
-    # (no quotes allowed) so a ROM name can't redact its own settings.
     sed -E 's/^([^="]*\.(key|token|password|passwd|pass|psk|secret)\s*=\s*).*/\1<redacted>/' \
         /userdata/system/hippos.conf 2>/dev/null || echo "(not found)"
 } > "${LOGS}/settings.txt" 2>&1
 echo "done"
 
 echo -n "  Refreshing boot capture..."
-# capture-boot-logs normally runs as root via its systemd service and writes
-# into a root-owned directory — needs sudo here since this tool runs as the
-# interactive hippos user (which already has passwordless sudo, see
-# /etc/sudoers.d/hippos).
 sudo /usr/lib/hippos/capture-boot-logs 2>/dev/null || true
 echo " done"
 
 echo -n "  Boot capture...        "
-# Just this boot's capture, not the whole retained history under
-# /userdata/system/logs/boot/ (up to 20 boots — see LOG_RETENTION_COUNT in
-# capture-boot-logs) — a support bundle needs the current issue, not a
-# multi-boot log archive.
 if [[ -d /userdata/system/logs/boot/latest ]]; then
-    # -L: `latest` is itself a symlink (see capture-boot-logs); plain `cp -r`
-    # copies the symlink itself rather than dereferencing it, so the bundle
-    # ends up with a dangling link to a path that doesn't exist off-device
-    # instead of the actual capture files.
     cp -rL /userdata/system/logs/boot/latest "${LOGS}/boot-capture"
     _count="$(find /userdata/system/logs/boot/latest -type f | wc -l)"
     echo " ${_count} file(s)"
@@ -105,15 +66,11 @@ else
     echo " directory not found"
 fi
 
-# ── Bundle ────────────────────────────────────────────────────────────────────
-
 BUNDLE="${WORK}/hippos-logs.tar.gz"
 echo -n "  Bundling...            "
 tar -czf "${BUNDLE}" -C "${WORK}" logs/
 _size="$(du -sh "${BUNDLE}" | cut -f1)"
 echo "${_size}"
-
-# ── Upload ────────────────────────────────────────────────────────────────────
 
 echo ""
 echo -n "Uploading... "

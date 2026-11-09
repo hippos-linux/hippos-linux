@@ -5,9 +5,6 @@ POOL=/userdata/roms
 RW=/userdata/.roms-rw
 OPTS="cache.files=off,dropcacheonclose=true,allow_other,use_ino,moveonenospc=false"
 MEDIA=/media
-# Drives join the pool only after the user accepts ES's merge prompt, which
-# records their ROM directory here. Network shares are pooled whenever they
-# are mounted, since the user lists them in roms-sources.conf themselves.
 EXTERNAL_ROMS=/userdata/system/configs/hippos/external-roms.conf
 
 log() { printf '[hippos-roms-pool] %s\n' "$*"; }
@@ -16,8 +13,6 @@ is_rom_root() {
     local root="$1"
     [[ -d "${root}" ]] || return 1
 
-    # Common system directory names from EmulationStation. This lets a mounted
-    # network share whose root is the ROM library be pooled directly.
     local system
     for system in \
         3do arcade atomiswave dreamcast fbneo gamecube gba gbc genesis mame \
@@ -29,22 +24,12 @@ is_rom_root() {
     [[ -f "${root}/gamelist.xml" ]]
 }
 
-# All discovered branches are writable, not just the internal one — an
-# external drive being used as a ROM source should be a valid write target
-# too, not just merged in read-only, or new ROMs always land on the internal
-# drive regardless of which one actually has room for them.
 add_branch() {
     local branch="$1"
     [[ -d "${branch}" ]] || return 0
-    # A listed drive that isn't plugged in leaves an empty mountpoint behind;
-    # pooling that would send writes to the root filesystem.
     [[ "$(findmnt -n -o TARGET -T "${branch}" 2>/dev/null)" == "${MEDIA}"/* ]] || return 0
     [[ "${branch}" == "${RW}" || "${branch}" == "${POOL}" ]] && return 0
     [[ ":${branches}:" == *":${branch}=RW:"* ]] && return 0
-    # Claim just the branch root for uid 1000, and only if it isn't already
-    # — new top-level entries (a new system folder) need it writable, but
-    # nothing below it is touched, and drives already set up correctly (FAT
-    # mounted with uid=1000, or already-1000-owned) get left alone entirely.
     if [[ "$(stat -c '%u' "${branch}" 2>/dev/null)" != "1000" ]]; then
         chown 1000:1000 "${branch}" 2>/dev/null || true
     fi
@@ -56,7 +41,6 @@ if findmnt "${POOL}" >/dev/null 2>&1; then
     exit 0
 fi
 
-# Migrate existing roms content into the RW branch on first run.
 mkdir -p "${RW}"
 chown 1000:1000 "${RW}"
 if [[ -d "${POOL}" && -n "$(ls -A "${POOL}" 2>/dev/null)" && -z "$(ls -A "${RW}" 2>/dev/null)" ]]; then
@@ -65,7 +49,6 @@ if [[ -d "${POOL}" && -n "$(ls -A "${POOL}" 2>/dev/null)" && -z "$(ls -A "${RW}"
     chown -R 1000:1000 "${RW}"
 fi
 
-# Earlier merges left root-owned gamelists that ES can't save to.
 find "${RW}" -mindepth 2 -maxdepth 2 -name gamelist.xml ! -user 1000 -exec chown 1000:1000 {} +
 
 mkdir -p "${POOL}"
@@ -89,13 +72,10 @@ for dir in "${MEDIA}"/*/; do
     add_branch "${dir%/}/roms"
     add_branch "${dir%/}/userdata/roms"
 
-    # A share mounted directly at its ROM root, for example
-    # nfs:host:/exports/roms -> /media/host_exports_roms.
     if is_rom_root "${dir%/}"; then
         add_branch "${dir%/}"
     fi
 
-    # Bounded discovery for nested layouts such as /media/NAS/userdata/roms.
     while IFS= read -r -d '' roms_dir; do
         add_branch "${roms_dir}"
     done < <(find "${dir%/}" -mindepth 1 -maxdepth 2 -type d -iname roms -print0 2>/dev/null)
@@ -105,11 +85,6 @@ log "branches: ${branches}"
 
 if mergerfs -o "${OPTS}" "${branches}" "${POOL}"; then
     log "mergerfs pool mounted at ${POOL}"
-    # Mirror top-level directories from RO branches into the RW branch.
-    # mergerfs create policy (epmfs) requires the parent dir to exist in a
-    # writable branch; without this, writes into dirs that came only from a
-    # Batocera/external RO branch fail with EROFS even though the pool appears
-    # writable.  Creating the dir in RW shadows the RO copy for new files.
     find "${POOL}" -mindepth 1 -maxdepth 1 -type d | while read -r d; do
         rw_dir="${RW}/$(basename "${d}")"
         if [[ ! -d "${rw_dir}" ]]; then

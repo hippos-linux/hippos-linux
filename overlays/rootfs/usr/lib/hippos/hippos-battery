@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# hippos-battery — battery monitor daemon
-# Polls sysfs every 5s. Switches power mode on AC plug/unplug.
-# Shows low-battery OSD via zenity when discharging below thresholds.
 
 LOG="/userdata/system/logs/hippos-battery.log"
 mkdir -p "$(dirname "${LOG}")"
@@ -38,7 +35,6 @@ osd_warn() {
         --title="HippOS Battery" --text="${msg}" &>/dev/null &
 }
 
-# No battery: apply the AC power mode once, nothing to monitor
 if [[ -z "$(battery_level)" ]]; then
     log "No battery detected — applying AC power mode and exiting"
     hippos-power-mode ac
@@ -60,7 +56,6 @@ while true; do
     level="$(battery_level)"
     new_ac="$(ac_connected)"
 
-    # AC plug/unplug
     if [[ "${new_ac}" != "${ac}" ]]; then
         if [[ "${new_ac}" == 0 ]]; then
             log "AC disconnected — switching to battery power mode"
@@ -72,7 +67,6 @@ while true; do
         ac="${new_ac}"
     fi
 
-    # Low battery warnings (only when discharging)
     if [[ "${new_ac}" == 0 && -n "${level}" && "${level}" != "${last_level}" ]]; then
         if [[ "${level}" -le 5 && "${level}" -lt "${last_level}" ]]; then
             log "Critical battery: ${level}%"

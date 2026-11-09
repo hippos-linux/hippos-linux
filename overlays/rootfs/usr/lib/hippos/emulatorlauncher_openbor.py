@@ -20,7 +20,6 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import CONFIGS, SAVES, USERDATA
 
-
 def _openbor_guess_core(rom: Path) -> str:
     match = re.search(r'\[.*([0-9]{4})\]+', rom.name)
     if match is None:
@@ -33,7 +32,6 @@ def _openbor_guess_core(rom: Path) -> str:
     if version < 7530:
         return 'openbor7142'
     return 'openbor7530'
-
 
 def _openbor_binding_value(
     profile: Optional[ESControllerProfile],
@@ -82,7 +80,6 @@ def _openbor_binding_value(
     if binding.type != 'keyboard':
         value += 600
     return value
-
 
 def _write_openbor_config(ctx: LaunchContext) -> str:
     conf = _load_hippos_conf()
@@ -137,7 +134,6 @@ def _write_openbor_config(ctx: LaunchContext) -> str:
     _write_unix_settings_file(config_path, items)
     return core
 
-
 def launch_openbor(ctx: LaunchContext) -> int:
     core = _write_openbor_config(ctx)
     binary_name = OPENBOR_BINARIES.get(core, 'OpenBOR7530')
@@ -150,7 +146,6 @@ def launch_openbor(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     result = _run_game_command(ctx, 'openbor', cmd, env, cwd=OPENBOR_ROM_DIR)
     return result.returncode
-
 
 OPENBOR_CONFIG_DIR = CONFIGS / 'openbor'
 OPENBOR_SAVE_DIR = SAVES / 'openbor'

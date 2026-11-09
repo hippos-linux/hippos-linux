@@ -1,7 +1,4 @@
 #!/bin/sh
-# Generate a support tarball for HippOS diagnostics.
-# Usage: hippos-support [output_path]
-# Output defaults to /userdata/saves/hippos-support-<timestamp>.tar.gz
 
 GTMP="/tmp"
 DHOME="/userdata/system"
@@ -52,9 +49,6 @@ if test -z "${DISPLAY:-}"; then
     export DISPLAY=:0
 fi
 
-# -----------------------------------------------------------------------------
-# SYSTEM
-# -----------------------------------------------------------------------------
 dmesg                                   > "${DSYSTEM}/dmesg.txt"
 ps -ef                                  > "${DSYSTEM}/ps.txt"
 hippos-version                          > "${DSYSTEM}/hippos.version" 2>/dev/null
@@ -72,9 +66,6 @@ if command -v libinput >/dev/null 2>&1; then
     libinput list-devices > "${DJOYS}/libinput_list.txt" 2>/dev/null
 fi
 
-# -----------------------------------------------------------------------------
-# AUDIO
-# -----------------------------------------------------------------------------
 amixer                                  > "${DAUDIO}/amixer.txt" 2>/dev/null
 aplay -l                                > "${DAUDIO}/aplay-l.txt" 2>/dev/null
 aplay -L                                > "${DAUDIO}/aplay-L.txt" 2>/dev/null
@@ -83,17 +74,11 @@ hippos-audio list                       > "${DAUDIO}/hippos-audio-list.txt" 2>/d
 wpctl status                            > "${DAUDIO}/wireplumber.txt" 2>/dev/null
 command -v pw-dump >/dev/null 2>&1 && pw-dump > "${DAUDIO}/pipewire_dump.json" 2>/dev/null
 
-# -----------------------------------------------------------------------------
-# BLUETOOTH
-# -----------------------------------------------------------------------------
 hciconfig -a                            > "${DBLUETOOTH}/bt-capabilities.txt" 2>/dev/null
 command -v bluetoothctl >/dev/null 2>&1 && bluetoothctl show > "${DBLUETOOTH}/controller_info.txt" 2>/dev/null
 command -v bluetoothctl >/dev/null 2>&1 && bluetoothctl devices > "${DBLUETOOTH}/paired_devices.txt" 2>/dev/null
 rfkill list                             > "${DBLUETOOTH}/rfkill_status.txt" 2>/dev/null
 
-# -----------------------------------------------------------------------------
-# NETWORK
-# -----------------------------------------------------------------------------
 ss -tuan                                > "${DNETWORK}/ss.txt" 2>/dev/null
 ip a                                    > "${DNETWORK}/ip_addr.txt" 2>/dev/null
 ip r                                    > "${DNETWORK}/ip_routes.txt" 2>/dev/null
@@ -102,9 +87,6 @@ nmcli device                            > "${DNETWORK}/nmcli-devices.txt" 2>/dev
 iw dev                                  > "${DNETWORK}/iw-dev.txt" 2>/dev/null
 iw phy phy0 info                        > "${DNETWORK}/iw-phy0-info.txt" 2>/dev/null
 
-# -----------------------------------------------------------------------------
-# HARDWARE
-# -----------------------------------------------------------------------------
 lsmod                                   > "${DHARDWARE}/lsmod.txt"
 df -h                                   > "${DHARDWARE}/df.txt"
 mount                                   > "${DHARDWARE}/mount_options.txt"
@@ -123,9 +105,6 @@ if command -v smartctl >/dev/null 2>&1; then
     done
 fi
 
-# -----------------------------------------------------------------------------
-# DISPLAY
-# -----------------------------------------------------------------------------
 if command -v glxinfo >/dev/null 2>&1; then
     glxinfo > "${DDISPLAY}/glxinfo.txt" 2>/dev/null
 fi
@@ -153,24 +132,15 @@ fi
 
 f_cp /var/log/Xorg.0.log               "${DDISPLAY}"
 
-# -----------------------------------------------------------------------------
-# CONFIGS
-# -----------------------------------------------------------------------------
 f_cp /userdata/system/hippos.conf                                   "${DCONFIGS}"
 f_cp /userdata/system/configs/emulationstation/es_settings.cfg      "${DCONFIGS}"
 f_cp /userdata/system/configs/emulationstation/es_input.cfg         "${DCONFIGS}"
 hippos-systems                          > "${DCONFIGS}/bios.txt" 2>/dev/null
 
-# -----------------------------------------------------------------------------
-# LOGS
-# -----------------------------------------------------------------------------
 d_cp /userdata/system/logs              "${TMPDIR}"
 f_cp /userdata/system/configs/emulationstation/es_log.txt           "${DLOGS}"
 journalctl -b --no-pager -o short-precise > "${DLOGS}/journal_boot.txt" 2>/dev/null
 
-# -----------------------------------------------------------------------------
-# SANITIZE
-# -----------------------------------------------------------------------------
 sed -i -e s+"^.*password.*$"+""+gI "${DCONFIGS}/es_settings.cfg" 2>/dev/null
 sed -i -e s+"^.*pass.*$"+""+gI     "${DCONFIGS}/es_settings.cfg" 2>/dev/null
 sed -i -e s+"^.*wifi.*$"+""+gI     "${DCONFIGS}/hippos.conf" 2>/dev/null
@@ -178,9 +148,6 @@ sed -i -e s+"^.*password.*$"+""+gI "${DCONFIGS}/hippos.conf" 2>/dev/null
 sed -i -e s+"^.*token.*$"+""+gI    "${DCONFIGS}/hippos.conf" 2>/dev/null
 sed -i -e s+"^.*retroachievements.*$"+""+gI "${DCONFIGS}/hippos.conf" 2>/dev/null
 
-# -----------------------------------------------------------------------------
-# JOYSTICKS
-# -----------------------------------------------------------------------------
 find /dev/input > "${DJOYS}/inputs.txt" 2>/dev/null
 for J in /dev/input/event*; do
     N=$(basename "${J}")
@@ -189,17 +156,11 @@ for J in /dev/input/event*; do
 done
 sdl2-jstest -l > "${DJOYS}/sdl2-jstest.txt" 2>/dev/null
 
-# -----------------------------------------------------------------------------
-# CORE DUMPS
-# -----------------------------------------------------------------------------
 DCORE="${TMPDIR}/coredumps"
 for C in /userdata/system/logs/core.*; do
     f_cp "${C}" "${DCORE}"
 done
 
-# -----------------------------------------------------------------------------
-# PACK
-# -----------------------------------------------------------------------------
 if ! (cd "${GTMP}" && tar cf - "${REPORTNAME}" | gzip -c > "${OUTPUTFILE}"); then
     echo "Failed to create tarball" >&2
     exit 1

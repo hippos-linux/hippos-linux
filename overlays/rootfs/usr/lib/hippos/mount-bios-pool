@@ -8,18 +8,11 @@ MEDIA=/media
 
 log() { printf '[hippos-bios-pool] %s\n' "$*"; }
 
-# All discovered branches are writable, not just the internal one — an
-# external drive being used as a BIOS store should be a valid write target
-# too, not just merged in read-only.
 add_branch() {
     local branch="$1"
     [[ -d "${branch}" ]] || return 0
     [[ "${branch}" == "${RW}" || "${branch}" == "${POOL}" ]] && return 0
     [[ ":${branches}:" == *":${branch}=RW:"* ]] && return 0
-    # Claim just the branch root for uid 1000, and only if it isn't already
-    # — new top-level entries need it writable, but nothing below it is
-    # touched, and drives already set up correctly (FAT mounted with
-    # uid=1000, or already-1000-owned) get left alone entirely.
     if [[ "$(stat -c '%u' "${branch}" 2>/dev/null)" != "1000" ]]; then
         chown 1000:1000 "${branch}" 2>/dev/null || true
     fi
@@ -31,7 +24,6 @@ if findmnt "${POOL}" >/dev/null 2>&1; then
     exit 0
 fi
 
-# Migrate existing bios content into the RW branch on first run.
 mkdir -p "${RW}"
 chown 1000:1000 "${RW}"
 if [[ -d "${POOL}" && -n "$(ls -A "${POOL}" 2>/dev/null)" && -z "$(ls -A "${RW}" 2>/dev/null)" ]]; then
@@ -48,10 +40,6 @@ for dir in "${MEDIA}"/*/; do
     add_branch "${dir%/}/bios"
     add_branch "${dir%/}/userdata/bios"
 
-    # Bounded discovery for nested layouts such as /media/USB/userdata/bios.
-    # maxdepth 4 was too permissive and picked up unrelated dirs named "bios"
-    # further down a ROM tree (e.g. a MAME romset's own bios/ subfolder),
-    # polluting the system bios pool with non-system files.
     while IFS= read -r -d '' bios_dir; do
         add_branch "${bios_dir}"
     done < <(find "${dir%/}" -mindepth 1 -maxdepth 2 -type d -iname bios -print0 2>/dev/null)

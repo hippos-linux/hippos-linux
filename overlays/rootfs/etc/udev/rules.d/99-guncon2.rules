@@ -1,6 +1,3 @@
-# Namco GunCon2 (0b9a:016a) — set permissions and classify as light gun.
-# Without this rule the device is misidentified as a joystick, which causes
-# duplicate input events when used with RetroArch udev joypad driver.
 SUBSYSTEM=="input", ACTION=="add", KERNEL=="event*", \
   ATTRS{idVendor}=="0b9a", ATTRS{idProduct}=="016a", \
   MODE="0666", \

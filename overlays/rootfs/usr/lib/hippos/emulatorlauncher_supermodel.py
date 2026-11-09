@@ -15,11 +15,7 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import CONFIGS
 
-
 def _prepare_run_dir(variant: str, share: Path) -> Path:
-    """Supermodel uses ./Config, ./NVRAM, ./Saves and ./Assets when a Config
-    folder exists in its working directory (every version checks there first),
-    so each variant gets its own run folder. Games.xml follows the artifact."""
     run_dir = CONFIGS / variant
     config_dir = run_dir / 'Config'
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -32,12 +28,10 @@ def _prepare_run_dir(variant: str, share: Path) -> Path:
         assets.symlink_to(share / 'Assets')
     return run_dir
 
-
 def write_supermodel_config(ctx: LaunchContext, run_dir: Path, share: Path) -> None:
     target = _new_ini_parser()
     template = share / 'Config' / 'Supermodel.ini'
     if template.exists():
-        # Supermodel writes sections as "[ Global ]"; configparser keeps the spaces.
         raw = _new_ini_parser()
         raw.read(template, encoding='utf-8')
         for section in raw.sections():
@@ -101,10 +95,7 @@ def write_supermodel_config(ctx: LaunchContext, run_dir: Path, share: Path) -> N
     with (run_dir / 'Config' / 'Supermodel.ini').open('w', encoding='utf-8') as fh:
         target.write(fh)
 
-
-# Builds of the same emulator: upstream, a fork, and the 0.3a line.
 SUPERMODEL_VARIANTS = ('supermodel', 'supermodel-es', 'supermodel-legacy')
-
 
 def launch_supermodel(ctx: LaunchContext) -> int:
     variant = ctx.emulator if ctx.emulator in SUPERMODEL_VARIANTS else 'supermodel'
@@ -132,4 +123,3 @@ def launch_supermodel(ctx: LaunchContext) -> int:
     env['SDL_JOYSTICK_HIDAPI'] = '0'
     result = _run_game_command(ctx, 'supermodel', cmd, env, cwd=run_dir)
     return result.returncode
-

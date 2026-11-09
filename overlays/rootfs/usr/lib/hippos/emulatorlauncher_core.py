@@ -31,7 +31,6 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import BIOS, CONFIGS, EMULATORLAUNCHER_DATA_DIR, SAVES, SCREENSHOTS, USERDATA
 
-
 def _write_mame_config(conf: dict[str, str]) -> None:
     MAME_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     (SAVES / 'mame').mkdir(parents=True, exist_ok=True)
@@ -76,19 +75,14 @@ def _write_mame_config(conf: dict[str, str]) -> None:
         for key, value in lines:
             fh.write(f'{key:<{col}}{value}\n')
 
-
 @dataclass(frozen=True)
 class _MessMachine:
     machine: str
     media: str
     autoboot: str
 
-
 @cache
 def _mess_machines() -> dict[str, _MessMachine]:
-    """messSystems.csv: system;MAME machine;default media switch;autoboot
-    command (typed on start, e.g. CLOAD). Systems with no machine there are
-    run like arcade sets."""
     machines = {}
     with (EMULATORLAUNCHER_DATA_DIR / 'mame' / 'messSystems.csv').open(encoding='utf-8') as fh:
         for row in csv.reader(fh, delimiter=';', quotechar="'"):
@@ -96,9 +90,6 @@ def _mess_machines() -> dict[str, _MessMachine]:
                 machines[row[0]] = _MessMachine(row[1], row[2], row[3] if len(row) > 3 else '')
     return machines
 
-
-# Systems whose games come on more than one medium: extension -> media switch,
-# anything else uses the messSystems.csv default.
 _MESS_MEDIA_BY_EXTENSION: dict[str, dict[str, str]] = {
     'adam':     {'.ddp': 'cass1', '.dsk': 'flop1'},
     'coco':     {'.cas': 'cass', '.dsk': 'flop1'},
@@ -107,16 +98,12 @@ _MESS_MEDIA_BY_EXTENSION: dict[str, dict[str, str]] = {
     'sc3000':   {'.cas': 'cass', '.wav': 'cass', '.bit': 'cass'},
     'segaai':   {'.wav': 'cass', '.flac': 'cass', '.cas': 'cass'},
 }
-# Slot options a machine needs for the media its games come on.
 _MESS_MACHINE_OPTIONS: dict[str, list[str]] = {
-    'enterprise': ['-exp', 'exdos'],  # the floppy drive is the EXDOS expansion
+    'enterprise': ['-exp', 'exdos'],
 }
-# The machine's default for the other extensions, where it differs from the CSV.
 _MESS_MEDIA_DEFAULT: dict[str, str] = {'adam': 'cart1', 'coco': 'cart', 'dragon64': 'cart', 'mc10': 'cart', 'sc3000': 'cart'}
 
-
 def _mess_args(system: str, rom: Path) -> list[str] | None:
-    """Machine, media switch and ROM for a computer/console system; None for arcade."""
     mess = _mess_machines().get(system)
     if mess is None:
         return None
@@ -126,7 +113,6 @@ def _mess_args(system: str, rom: Path) -> list[str] | None:
     if mess.autoboot:
         args += ['-autoboot_delay', '3', '-autoboot_command', mess.autoboot]
     return args
-
 
 def launch_mame(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('mame')
@@ -150,16 +136,12 @@ def launch_mame(ctx: LaunchContext) -> int:
     elif ctx.wheel:
         game_flags += ['-dial_device', 'mouse', '-trackball_device', 'mouse', '-paddle_device', 'mouse', '-positional_device', 'mouse', '-mouse_device', 'mouse', '-ui_mouse']
 
-    # The ROM's own folder, then BIOS sets (e.g. bios/coco.zip) and arcade ROMs.
     rompath = ';'.join(str(p) for p in (ctx.rom.parent, BIOS, BIOS / 'mame', MAME_ROMS))
     cmd = [str(bin_path), '-inipath', f'{MAME_CONFIG_DIR};/etc/mame', '-rompath', rompath, *game_flags]
-    # Arcade sets are run by path; computers and consoles need the machine
-    # and a media switch, or MAME reports an unknown system.
     cmd += _mess_args(ctx.system, ctx.rom) or [str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     result = _run_game_command(ctx, 'mame', cmd, env)
     return result.returncode
-
 
 def _write_dolphin_config(ctx: LaunchContext) -> None:
     conf = _load_effective_hippos_conf()
@@ -247,7 +229,6 @@ def _write_dolphin_config(ctx: LaunchContext) -> None:
 
     _write_dolphin_controller_configs(ctx, profiles)
 
-
 def launch_dolphin(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('dolphin-emu') or _find_emulator_bin('dolphin')
     if bin_path is None:
@@ -260,13 +241,12 @@ def launch_dolphin(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'dolphin', cmd, env)
     return result.returncode
 
-
 def _lightgun_color(index: int) -> str:
     palette = (
-        '-1073741571',  # Red
-        '-1057153792',  # Blue
-        '-1073479933',  # Green
-        '-1056964609',  # White
+        '-1073741571',
+        '-1057153792',
+        '-1073479933',
+        '-1056964609',
     )
     return palette[(index - 1) % len(palette)]
 
@@ -415,7 +395,6 @@ def _write_mupen_config(ctx: LaunchContext) -> None:
 
     _log.info("Wrote Mupen config: %s", MUPEN_CUSTOM)
 
-
 def _write_duckstation_config(ctx: LaunchContext) -> None:
     conf = _load_effective_hippos_conf()
     DUCKSTATION_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -447,7 +426,6 @@ def _write_duckstation_config(ctx: LaunchContext) -> None:
     settings.set('ControllerPorts', 'PointerXInvert', 'false')
     settings.set('ControllerPorts', 'PointerYInvert', 'false')
 
-    # Clear all Pad sections then rebuild from connected controllers
     for i in range(1, 9):
         pad = f'Pad{i}'
         if settings.has_section(pad):
@@ -455,7 +433,6 @@ def _write_duckstation_config(ctx: LaunchContext) -> None:
         settings.add_section(pad)
         settings.set(pad, 'Type', 'None')
 
-    # MultitapMode: auto-detect from controller count
     multitap = 'Disabled'
     for nplayer in range(1, len(ctx.controllers[:8]) + 1):
         if nplayer > 2:
@@ -464,7 +441,6 @@ def _write_duckstation_config(ctx: LaunchContext) -> None:
             multitap = 'BothPorts'
     settings.set('ControllerPorts', 'MultitapMode', multitap)
 
-    # Per-pad SDL button mappings
     for nplayer, ctrl in enumerate(ctx.controllers[:8], start=1):
         pad_num  = f'Pad{nplayer}'
         sdl_num  = f'SDL-{ctrl.index}'
@@ -586,7 +562,6 @@ def _write_duckstation_config(ctx: LaunchContext) -> None:
 
     _log.info("Wrote DuckStation config: %s", DUCKSTATION_SETTINGS)
 
-
 def _launch_duckstation(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('duckstation-qt') or _find_emulator_bin('duckstation-nogui') or _find_emulator_bin('duckstation')
     if bin_path is None:
@@ -597,7 +572,6 @@ def _launch_duckstation(ctx: LaunchContext) -> int:
     _write_duckstation_config(ctx)
 
     conf = _load_hippos_conf()
-    # Write SDL controller DB so DuckStation can identify controllers by GUID
     db_path = DUCKSTATION_CONFIG_DIR / 'game_controller_db.txt'
     db_path.write_text(generate_sdl_game_controller_config(ctx.controllers))
 
@@ -613,10 +587,9 @@ def _launch_duckstation(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'duckstation', cmd, env)
     return result.returncode
 
-
 _FLYCAST_MAPPING_DIR = CONFIGS / 'flycast' / 'mappings'
 
-_FLYCAST_HAT_CODES = {1: 256, 2: 259, 4: 257, 8: 258}  # ES hat value → Flycast code
+_FLYCAST_HAT_CODES = {1: 256, 2: 259, 4: 257, 8: 258}
 
 _FLYCAST_DREAMCAST_MAP = {
     'up':            {'button': 'btn_dpad1_up',       'hat': 'btn_dpad1_up',       'axis': 'btn_dpad1_up'},
@@ -656,9 +629,7 @@ _FLYCAST_AXIS_OPPOSITE = {
     'left':          'btn_dpad1_right',
 }
 
-
 def _write_flycast_controller_mapping(ctx: LaunchContext) -> None:
-    """Write per-controller SDL_<name>.cfg mapping files for Flycast."""
     arcade_systems = {'naomi', 'naomi2', 'atomiswave', 'hikaru'}
     mapping = _FLYCAST_ARCADE_MAP if ctx.system in arcade_systems else _FLYCAST_DREAMCAST_MAP
     suffix = '_arcade' if ctx.system in arcade_systems else ''
@@ -697,12 +668,10 @@ def _write_flycast_controller_mapping(ctx: LaunchContext) -> None:
                 digital_bind += 1
 
             elif btype == 'axis':
-                # triggers use positive axis, sticks use negative (primary direction)
                 sign = '+' if es_name in ('l2', 'r2') else '-'
                 code = f'{binding.code}{sign}'
                 cfg.set('analog', f'bind{analog_bind}', f'{code}:{action}')
                 analog_bind += 1
-                # write the opposite direction too
                 opposite = _FLYCAST_AXIS_OPPOSITE.get(es_name)
                 if opposite:
                     opp_sign = '+' if sign == '-' else '-'
@@ -719,7 +688,6 @@ def _write_flycast_controller_mapping(ctx: LaunchContext) -> None:
         with cfg_path.open('w') as fh:
             cfg.write(fh)
         _log.info("Wrote Flycast controller mapping: %s", cfg_path)
-
 
 def _write_flycast_config(ctx: LaunchContext) -> None:
     conf = _load_effective_hippos_conf()
@@ -780,7 +748,6 @@ def _write_flycast_config(ctx: LaunchContext) -> None:
 
     _log.info("Wrote Flycast config: %s", FLYCAST_EMU_CFG)
 
-
 def _launch_flycast(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('flycast')
     if bin_path is None:
@@ -800,10 +767,8 @@ def _launch_flycast(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'flycast', cmd, env)
     return result.returncode
 
-
 launch_duckstation = _launch_duckstation
 launch_flycast = _launch_flycast
-
 
 MAME_CONFIG_DIR = CONFIGS / 'mame'
 MAME_INI        = MAME_CONFIG_DIR / 'mame.ini'
@@ -822,7 +787,6 @@ FLYCAST_EMU_CFG    = FLYCAST_CONFIG_DIR / 'emu.cfg'
 
 MUPEN_CONFIG_DIR   = CONFIGS / 'mupen64'
 MUPEN_CUSTOM       = MUPEN_CONFIG_DIR / 'mupen64plus.cfg'
-
 
 MUPEN_VALID_N64_CONTROLLER_GUIDS = {
     "050000007e0500001920000001800000",
@@ -943,13 +907,11 @@ MUPEN_N64_MAPPING: dict[str, str] = {
     'joystick2right': '',
 }
 
-
 def _gun_type(ctx: LaunchContext) -> str:
     gun_type = ctx.game_gun.get('type', '').strip().lower()
     if gun_type in ('justifier', 'guncon'):
         return gun_type
     return 'guncon'
-
 
 def _write_dolphin_controller_configs(ctx: LaunchContext, profiles: list[ESControllerProfile]) -> None:
     if ctx.system not in ('gamecube', 'triforce'):
@@ -989,12 +951,10 @@ def _write_dolphin_controller_configs(ctx: LaunchContext, profiles: list[ESContr
                 fh.write(f'{target} = {value}\n')
             fh.write('\n')
 
-
 def _mupen_selected_mapping(ctrl: ControllerInfo) -> dict[str, str]:
     if ctrl.guid in MUPEN_VALID_N64_CONTROLLER_GUIDS or ctrl.name in MUPEN_VALID_N64_CONTROLLER_NAMES:
         return MUPEN_N64_MAPPING
     return MUPEN_DEFAULT_MAPPING
-
 
 def _mupen_analog_peak(conf: dict[str, str], key: str) -> str:
     default_value = 32768
@@ -1006,7 +966,6 @@ def _mupen_analog_peak(conf: dict[str, str], key: str) -> str:
     adjusted = round(default_value * multiplier)
     return f'{adjusted},{adjusted}'
 
-
 def _mupen_analog_deadzone(conf: dict[str, str], key: str, default_peak: str) -> str:
     default_value = int(default_peak.split(',')[0])
     try:
@@ -1015,7 +974,6 @@ def _mupen_analog_deadzone(conf: dict[str, str], key: str, default_peak: str) ->
         deadzone_multiplier = 0.01
     deadzone = round(default_value * deadzone_multiplier)
     return f'{deadzone},{deadzone}'
-
 
 def _write_mupen_controller_configs(ctx: LaunchContext, profiles: list[ESControllerProfile], parser: configparser.ConfigParser, conf: dict[str, str]) -> None:
     for ctrl in ctx.controllers:
@@ -1057,7 +1015,6 @@ def _write_mupen_controller_configs(ctx: LaunchContext, profiles: list[ESControl
         if parser.has_section(section):
             parser.remove_section(section)
 
-
 def _es_binding_to_dolphin(binding: ESBinding, target: str, ctrl: ControllerInfo, profile: ESControllerProfile) -> Optional[str]:
     if binding.type == 'button':
         return f'`Button {binding.code}`'
@@ -1078,7 +1035,6 @@ def _es_binding_to_dolphin(binding: ESBinding, target: str, ctrl: ControllerInfo
         return f'`Button {binding.code}`'
 
     return None
-
 
 def _es_binding_to_mupen(binding: ESBinding, target: str, ctrl: ControllerInfo, profile: ESControllerProfile) -> Optional[str]:
     if binding.type == 'button':

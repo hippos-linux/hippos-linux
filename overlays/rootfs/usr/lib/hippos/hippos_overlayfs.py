@@ -1,8 +1,3 @@
-"""OverlayFS mount helpers for emulatorlauncher.
-
-Stacks a writable overlay over a read-only lower directory so saves
-persist to /userdata/saves while the source ROM stays immutable.
-"""
 
 from __future__ import annotations
 
@@ -15,17 +10,10 @@ _log = logging.getLogger(__name__)
 
 _OVERLAY_ROOT = Path('/var/run/hippos/overlays')
 
-# emulatorlauncher runs as hippos; mounting overlayfs needs root.
 _SUDO = ['sudo', '-n']
-
 
 @contextmanager
 def mount_overlayfs(lower: Path, upper_root: Path):
-    """Mount overlayfs over *lower*, yield the mount point.
-
-    Writes go to upper_root/upper/; kernel bookkeeping in upper_root/work/.
-    Mount point is /var/run/hippos/overlays/<lower.name>.
-    """
     upper = upper_root / 'upper'
     work  = upper_root / 'work'
     mount_point = _OVERLAY_ROOT / lower.name
@@ -52,7 +40,6 @@ def mount_overlayfs(lower: Path, upper_root: Path):
             mount_point.rmdir()
         except OSError:
             pass
-        # Remove empty work dir; leave upper (it holds saves).
         try:
             work.rmdir()
         except OSError:

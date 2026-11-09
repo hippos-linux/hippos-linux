@@ -2,7 +2,6 @@
 Description=HippOS Quiver Launcher library sync
 After=local-fs.target userdata.mount
 Wants=userdata.mount
-# Quiver can install or remove several apps in quick succession.
 StartLimitIntervalSec=0
 
 [Service]

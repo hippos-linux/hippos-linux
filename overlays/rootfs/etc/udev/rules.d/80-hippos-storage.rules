@@ -1,6 +1,3 @@
-# HippOS general storage automount
-# Covers USB drives, SD cards, and NVMe/SATA partitions.
-# hippos-storage-udev queues events during boot and dispatches after ready.
 
 SUBSYSTEM!="block", GOTO="hippos_storage_end"
 ENV{ID_FS_TYPE}=="", GOTO="hippos_storage_end"

@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# hippos-services — manage user-defined services from /userdata/system/services/.
-# Usage: hippos-services list [all|system|user]
-#        hippos-services enable|disable|start|stop|restart|status <name>
 
 SYSTEM_SERVICES_DIR="/usr/share/hippos/services"
 USER_SERVICES_DIR="/userdata/system/services"
@@ -49,7 +46,6 @@ cmd_list() {
             local name
             name="$(basename "${sfile}")"
             _valid_name "${name}" || continue
-            # Deduplicate (user overrides system)
             local dup=0
             for s in "${seen[@]}"; do [[ "$s" == "$name" ]] && dup=1 && break; done
             [[ "${dup}" -eq 1 ]] && continue

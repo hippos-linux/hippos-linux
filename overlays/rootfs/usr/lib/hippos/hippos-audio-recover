@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Called on audio device removal. If the saved sink is gone, fall back to
-# PipeWire's automatic default so audio doesn't go silent.
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
@@ -15,7 +13,6 @@ if [[ "$SAVED" == "default" ]]; then
     exit 0
 fi
 
-# Give PipeWire a moment to process the removal
 sleep 1
 
 if pactl list sinks short 2>/dev/null | grep -q $'\t'"${SAVED}"$'\t'; then

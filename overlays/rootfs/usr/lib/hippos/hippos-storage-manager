@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator, Optional
 
-
 USERDATA = Path("/userdata")
 SYSTEM = USERDATA / "system"
 HIPPOS_CONFIG = SYSTEM / "configs" / "hippos"
@@ -53,14 +52,11 @@ CACHE_DIR_NAMES = {"cache", "caches", "shadercache", "shader_cache", "shaders", 
 CACHE_EXTS = {".cache", ".tmp", ".bak", ".old", ".log"}
 HASHABLE_CATEGORIES = {"rom", "save", "media", "theme", "screenshot"}
 
-
 _HIPPOS_UID = 1000
 _HIPPOS_GID = 1000
 
-
 def log(msg: str) -> None:
     print(f"[hippos-storage-manager] {msg}", file=sys.stderr)
-
 
 def _chown_hippos(path: Path) -> None:
     try:
@@ -68,13 +64,11 @@ def _chown_hippos(path: Path) -> None:
     except OSError:
         pass
 
-
 def ensure_dirs() -> None:
     CACHE_ROOT.mkdir(parents=True, exist_ok=True)
     QUARANTINE_ROOT.mkdir(parents=True, exist_ok=True)
     _chown_hippos(CACHE_ROOT)
     _chown_hippos(QUARANTINE_ROOT)
-
 
 def connect_db() -> sqlite3.Connection:
     ensure_dirs()
@@ -85,7 +79,6 @@ def connect_db() -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA temp_store=MEMORY")
     return conn
-
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(
@@ -167,7 +160,6 @@ def init_db(conn: sqlite3.Connection) -> None:
     )
     conn.commit()
 
-
 def set_state(conn: sqlite3.Connection, key: str, value: str) -> None:
     conn.execute(
         "INSERT INTO state(key, value) VALUES(?, ?) "
@@ -175,11 +167,9 @@ def set_state(conn: sqlite3.Connection, key: str, value: str) -> None:
         (key, value),
     )
 
-
 def get_state(conn: sqlite3.Connection, key: str, default: str = "") -> str:
     row = conn.execute("SELECT value FROM state WHERE key=?", (key,)).fetchone()
     return default if row is None else str(row["value"])
-
 
 def file_category(path: Path, root_kind: str) -> str:
     name = path.name.lower()
@@ -203,7 +193,6 @@ def file_category(path: Path, root_kind: str) -> str:
         return "cache"
     return "other"
 
-
 def file_type_from_path(path: Path) -> str:
     suffix = path.suffix.lower()
     if suffix in DISC_EXTS:
@@ -217,7 +206,6 @@ def file_type_from_path(path: Path) -> str:
     if suffix in {".mp3", ".flac", ".ogg", ".wav", ".m4a"}:
         return "audio"
     return "file"
-
 
 def iter_roots(cli_roots: list[str] | None = None) -> list[tuple[Path, str]]:
     if cli_roots:
@@ -234,15 +222,11 @@ def iter_roots(cli_roots: list[str] | None = None) -> list[tuple[Path, str]]:
             roots.append((path, kind))
     return roots
 
-
-# ES scraper creates these subdirs inside ROM folders; they are media/metadata, not ROMs.
 _ES_MEDIA_DIRS = frozenset({
     "images", "videos", "media", "music", "manuals",
     "backdrops", "marquees", "screenshots", "thumbnails",
 })
-# ES scraper/tool files that should never be counted as ROMs.
 _ES_SKIP_FILES = frozenset({"_info.txt", "gamelist.xml"})
-
 
 def walk_files(roots: list[tuple[Path, str]]) -> Iterator[tuple[Path, Path, str]]:
     for root, kind in roots:
@@ -272,7 +256,6 @@ def walk_files(roots: list[tuple[Path, str]]) -> Iterator[tuple[Path, Path, str]
             except OSError:
                 continue
 
-
 def hash_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
     h = hashlib.sha256()
     with path.open("rb") as fh:
@@ -282,7 +265,6 @@ def hash_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
                 break
             h.update(data)
     return h.hexdigest()
-
 
 @dataclass
 class FileRecord:
@@ -298,18 +280,14 @@ class FileRecord:
     category: str
     content_hash: Optional[str]
 
-
 def get_existing(conn: sqlite3.Connection, path: str) -> Optional[sqlite3.Row]:
     return conn.execute(
         "SELECT * FROM files WHERE path=?",
         (path,),
     ).fetchone()
 
-
 def _s64(v: int) -> int:
-    """Reinterpret unsigned 64-bit int as signed so it fits SQLite INTEGER."""
     return v if v < (1 << 63) else v - (1 << 64)
-
 
 def store_file(conn: sqlite3.Connection, scan_id: int, rec: FileRecord) -> int:
     existing = get_existing(conn, rec.path)
@@ -357,7 +335,6 @@ def store_file(conn: sqlite3.Connection, scan_id: int, rec: FileRecord) -> int:
         ),
     )
     return int(existing["id"])
-
 
 def scan_roots(conn: sqlite3.Connection, roots: list[tuple[Path, str]], hash_threshold: int, size_limit: int) -> dict:
     started = int(time.time())
@@ -419,7 +396,6 @@ def scan_roots(conn: sqlite3.Connection, roots: list[tuple[Path, str]], hash_thr
     conn.execute("DELETE FROM duplicate_group_members")
     conn.execute("DELETE FROM cleanup_candidates WHERE file_id NOT IN (SELECT id FROM files)")
 
-    # Fast path: reuse hashes already present in DB and compute clusters from them.
     groups = conn.execute(
         """
         SELECT content_hash, COUNT(*) AS count, SUM(size) AS total_size
@@ -450,7 +426,6 @@ def scan_roots(conn: sqlite3.Connection, roots: list[tuple[Path, str]], hash_thr
         ).fetchall()
         if not members:
             continue
-        # Keep the first path by lexicographic order; mark the rest as duplicates.
         sorted_members = sorted(members, key=lambda r: (r["category"] != "rom", r["path"]))
         keeper = sorted_members[0]
         for idx, member in enumerate(sorted_members):
@@ -472,7 +447,6 @@ def scan_roots(conn: sqlite3.Connection, roots: list[tuple[Path, str]], hash_thr
                 (member["id"], "duplicate", f"Duplicate of {keeper['path']}", int(member["size"]), "medium"),
             )
 
-    # Large files
     large_threshold = 2 * 1024 * 1024 * 1024
     large_rows = conn.execute(
         "SELECT id, path, size, category FROM files WHERE last_seen_scan_id=? AND size >= ?",
@@ -487,7 +461,6 @@ def scan_roots(conn: sqlite3.Connection, roots: list[tuple[Path, str]], hash_thr
             (row["id"], "large-file", "Large file review", int(row["size"]), "low"),
         )
 
-    # Cache and shader cleanup candidates
     cache_rows = conn.execute(
         """
         SELECT id, path, size, category
@@ -504,7 +477,6 @@ def scan_roots(conn: sqlite3.Connection, roots: list[tuple[Path, str]], hash_thr
         (scan_id,),
     ).fetchall()
     for row in cache_rows:
-        # Normalize to 'cache' or 'shader'; log files are low-risk disposable cache too.
         if row["category"] == "shader":
             ctype, risk = "shader", "low"
         else:
@@ -517,7 +489,6 @@ def scan_roots(conn: sqlite3.Connection, roots: list[tuple[Path, str]], hash_thr
             (row["id"], ctype, "Disposable cache review", int(row["size"]), risk),
         )
 
-    # CHD suggestions: disc media in ROM roots that are not already CHD.
     chd_rows = conn.execute(
         """
         SELECT id, path, size
@@ -562,17 +533,14 @@ def scan_roots(conn: sqlite3.Connection, roots: list[tuple[Path, str]], hash_thr
     _chown_hippos(REPORT_PATH)
     return summary
 
-
 def current_scan_id(conn: sqlite3.Connection) -> Optional[int]:
     row = conn.execute("SELECT id FROM scans ORDER BY id DESC LIMIT 1").fetchone()
     return int(row["id"]) if row else None
-
 
 def current_files_clause(scan_id: Optional[int]) -> tuple[str, tuple]:
     if scan_id is None:
         return "1=0", ()
     return "last_seen_scan_id = ?", (scan_id,)
-
 
 def build_summary(conn: sqlite3.Connection) -> dict:
     scan_id = current_scan_id(conn)
@@ -667,7 +635,6 @@ def build_summary(conn: sqlite3.Connection) -> dict:
         "chd": chd,
     }
 
-
 def format_bytes(num: int) -> str:
     units = ["B", "KiB", "MiB", "GiB", "TiB"]
     value = float(num)
@@ -678,7 +645,6 @@ def format_bytes(num: int) -> str:
     if idx == 0:
         return f"{int(value)} {units[idx]}"
     return f"{value:.1f} {units[idx]}"
-
 
 def print_summary(summary: dict) -> None:
     totals = summary.get("totals", {})
@@ -692,12 +658,10 @@ def print_summary(summary: dict) -> None:
     print(f"  Cache candidates: {len(summary.get('caches', []))}")
     print(f"  CHD suggestions: {len(summary.get('chd', []))}")
 
-
 def format_candidate(row: dict) -> str:
     size = format_bytes(int(row.get("size", 0)))
     save = format_bytes(int(row.get("estimated_space_saved", 0)))
     return f"{row['id']}|{row['type']}|{row['risk_level']}|{save}|{size}|{row['path']}|{row['reason']}"
-
 
 def list_candidates(conn: sqlite3.Connection, kind: str) -> list[dict]:
     scan_id = current_scan_id(conn)
@@ -715,7 +679,6 @@ def list_candidates(conn: sqlite3.Connection, kind: str) -> list[dict]:
     ).fetchall()
     return [dict(row) for row in rows]
 
-
 def list_duplicates(conn: sqlite3.Connection) -> list[str]:
     out = []
     summary = build_summary(conn)
@@ -725,20 +688,17 @@ def list_duplicates(conn: sqlite3.Connection) -> list[str]:
             out.append(f"  {member['retention_recommendation']}|{format_bytes(int(member['size']))}|{member['path']}")
     return out
 
-
 def quarantine_path(candidate_id: int, file_path: Path) -> Path:
     stamp = time.strftime("%Y%m%d-%H%M%S")
     target = QUARANTINE_ROOT / stamp / str(candidate_id) / file_path.relative_to(file_path.anchor)
     target.parent.mkdir(parents=True, exist_ok=True)
     return target
 
-
 def move_to_quarantine(candidate_id: int, file_path: Path) -> Path:
     target = quarantine_path(candidate_id, file_path)
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(file_path), str(target))
     return target
-
 
 def compress_file(candidate_id: int, file_path: Path) -> Path:
     target = file_path.with_suffix(file_path.suffix + ".gz")
@@ -747,7 +707,6 @@ def compress_file(candidate_id: int, file_path: Path) -> Path:
     with file_path.open("rb") as src, gzip.open(target, "wb") as dst:
         shutil.copyfileobj(src, dst)
     return target
-
 
 def cleanup(conn: sqlite3.Connection, candidate_ids: list[int], action: str, yes: bool, dry_run: bool) -> int:
     if not candidate_ids:
@@ -815,11 +774,9 @@ def cleanup(conn: sqlite3.Connection, candidate_ids: list[int], action: str, yes
     conn.commit()
     return 0 if affected else 1
 
-
 def print_lines(lines: Iterable[str]) -> None:
     for line in lines:
         print(line)
-
 
 def storage_roots_from_config() -> list[str]:
     if not EXTERNAL_ROM_CONFIG.exists():
@@ -831,7 +788,6 @@ def storage_roots_from_config() -> list[str]:
             out.append(line)
     return out
 
-
 def network_sources() -> list[str]:
     if not NETWORK_ROM_CONFIG.exists():
         return []
@@ -841,11 +797,9 @@ def network_sources() -> list[str]:
         if line.strip() and not line.strip().startswith("#")
     ]
 
-
 def write_network_sources(lines: list[str]) -> None:
     NETWORK_ROM_CONFIG.parent.mkdir(parents=True, exist_ok=True)
     NETWORK_ROM_CONFIG.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-
 
 def network_mount_path(source: str) -> Optional[Path]:
     if source.startswith("nfs:"):
@@ -858,23 +812,18 @@ def network_mount_path(source: str) -> Optional[Path]:
         return MEDIA_ROOT / share_path.replace("/", "_")
     return None
 
-
 def run_quiet(cmd: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-
 
 def run_text(cmd: list[str]) -> str:
     proc = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
     return proc.stdout if proc.returncode == 0 else ""
 
-
 def is_mountpoint(path: Path) -> bool:
     return run_quiet(["findmnt", str(path)]).returncode == 0
 
-
 def is_true(value: str) -> bool:
     return value.lower() in {"1", "true", "yes", "on"}
-
 
 def setting(key: str, default: str = "") -> str:
     proc = subprocess.run(
@@ -886,7 +835,6 @@ def setting(key: str, default: str = "") -> str:
     )
     value = proc.stdout.strip()
     return value if proc.returncode == 0 and value else default
-
 
 def post_es(path: str, body: str = "", method: str = "POST") -> bool:
     data = body.encode("utf-8") if body else None
@@ -902,18 +850,14 @@ def post_es(path: str, body: str = "", method: str = "POST") -> bool:
     except (OSError, urllib.error.URLError):
         return False
 
-
 def notify_es(message: str) -> None:
     post_es("/notify", message)
-
 
 def reload_es_games() -> None:
     post_es("/reloadgames", method="GET")
 
-
 def storage_event_es(event: str) -> None:
     post_es("/storage/event", event)
-
 
 def mounted_media_roots() -> list[tuple[str, Path, str, str]]:
     if not MEDIA_ROOT.exists():
@@ -921,8 +865,6 @@ def mounted_media_roots() -> list[tuple[str, Path, str, str]]:
 
     try:
         proc = subprocess.run(
-            # /media itself is not a mountpoint, so list every mount and keep
-            # those directly below it.
             ["findmnt", "-J", "--list", "-o", "TARGET,SOURCE,FSTYPE"],
             text=True,
             stdout=subprocess.PIPE,
@@ -957,7 +899,6 @@ def mounted_media_roots() -> list[tuple[str, Path, str, str]]:
             if child.is_dir() and is_mountpoint(child):
                 mounts.append((child.name, child, "", ""))
 
-    # Deduplicate in case findmnt reports layered mounts.
     seen: set[Path] = set()
     out: list[tuple[str, Path, str, str]] = []
     for name, path, source, fstype in mounts:
@@ -967,19 +908,15 @@ def mounted_media_roots() -> list[tuple[str, Path, str, str]]:
         out.append((name, path, source, fstype))
     return out
 
-
 def sanitize_event_field(value: str) -> str:
     return value.replace(":", "_").replace("\n", " ").strip()
-
 
 def device_path(device: str) -> Path:
     devname = device.removeprefix("/dev/")
     return Path("/dev") / devname
 
-
 def device_name(device: str) -> str:
     return device_path(device).name
-
 
 def parent_disk(devname: str) -> str:
     if devname.startswith("nvme") or devname.startswith("mmcblk"):
@@ -1000,7 +937,6 @@ def parent_disk(devname: str) -> str:
         check=False,
     ).stdout.strip() or devname
 
-
 def device_unique_id(devname: str) -> str:
     dev = f"/dev/{parent_disk(devname)}"
     props = run_text(["udevadm", "info", "--query=property", "--name", dev])
@@ -1016,23 +952,19 @@ def device_unique_id(devname: str) -> str:
     info = run_text(["lsblk", "-dnro", "VENDOR,MODEL,SIZE", dev]).strip()
     return sanitize_event_field(f"{info}_{Path(dev).name}" if info else Path(dev).name)
 
-
 def ignored_device_ids() -> set[str]:
     if not IGNORED_DEVICES.exists():
         return set()
     return {line.strip() for line in IGNORED_DEVICES.read_text(encoding="utf-8").splitlines() if line.strip()}
-
 
 def is_ignored_device(devname: str) -> bool:
     unique_id = device_unique_id(devname)
     ids = ignored_device_ids()
     return unique_id in ids or unique_id.split(":", 1)[0] in ids
 
-
 def mounted_path_for_device(devname: str) -> Optional[Path]:
     target = run_text(["findmnt", "-n", "-S", f"/dev/{devname}", "-o", "TARGET"]).splitlines()
     return Path(target[0]) if target else None
-
 
 def block_devices() -> list[dict[str, str]]:
     text = run_text(["lsblk", "-J", "-o", "NAME,PATH,TYPE,FSTYPE,LABEL,SIZE,MODEL,MOUNTPOINT,RM,PKNAME"])
@@ -1056,14 +988,7 @@ def block_devices() -> list[dict[str, str]]:
     visit(data.get("blockdevices") or [])
     return rows
 
-
 def is_system_device(devname: str) -> bool:
-    # Matches the system mountpoints' own partitions only — a sibling
-    # partition on the same physical disk (e.g. a user-created ROMS
-    # partition alongside the HippOS install) is a normal, expected layout
-    # and must stay mountable. A same-disk blanket exclusion previously
-    # caught those too (beta report: atari1050, "Disk Roms partition not
-    # recognized — same disk as HippOS install").
     dev = f"/dev/{devname}"
     for mountpoint in ("/", "/boot", "/boot/efi", "/userdata"):
         source = run_text(["findmnt", "-n", "-o", "SOURCE", mountpoint]).strip()
@@ -1071,11 +996,9 @@ def is_system_device(devname: str) -> bool:
             return True
     return False
 
-
 def has_child_partitions(devname: str) -> bool:
     names = run_text(["lsblk", "-lnro", "NAME", f"/dev/{devname}"]).splitlines()
     return len([name for name in names if name.strip()]) > 1
-
 
 def is_rom_root(root: Path) -> bool:
     if not root.is_dir():
@@ -1088,13 +1011,11 @@ def is_rom_root(root: Path) -> bool:
     }
     return any((root / system).is_dir() for system in systems) or (root / "gamelist.xml").exists()
 
-
 def rom_branch_for_mount(mount_path: Path) -> Optional[Path]:
     for candidate in (mount_path / "roms", mount_path / "userdata" / "roms", mount_path):
         if candidate.is_dir() and (candidate.name == "roms" or is_rom_root(candidate)):
             return candidate
     return None
-
 
 def list_mountable_devices() -> list[str]:
     out: list[str] = []
@@ -1121,7 +1042,6 @@ def list_mountable_devices() -> list[str]:
         out.append("|".join((label.strip(), path, fstype, row.get("size", ""), mounted, status, ignored, device_unique_id(name))))
     return out
 
-
 def list_ejectable() -> list[str]:
     out = []
     for name, path, _source, fstype in mounted_media_roots():
@@ -1135,7 +1055,6 @@ def list_ejectable() -> list[str]:
         if path.exists() and all(str(path) != item.split(":", 1)[1] for item in out if ":" in item):
             out.append(f"{path.name}:{path}")
     return out
-
 
 def remove_external_rom_config_path(path: Path) -> None:
     if not EXTERNAL_ROM_CONFIG.exists():
@@ -1151,19 +1070,14 @@ def remove_external_rom_config_path(path: Path) -> None:
     EXTERNAL_ROM_CONFIG.parent.mkdir(parents=True, exist_ok=True)
     EXTERNAL_ROM_CONFIG.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
-
 def rebuild_rom_pool() -> None:
-    # Blocking, so the games reload that follows sees the rebuilt pool.
     subprocess.run(["/usr/lib/hippos/hippos-rom-scan"], check=False)
-
 
 def rebuild_bios_pool() -> None:
     subprocess.run(["systemctl", "restart", "--no-block", "hippos-bios-pool.service"], check=False)
 
-
 def rebuild_saves_pool() -> None:
     subprocess.run(["systemctl", "restart", "--no-block", "hippos-saves-pool.service"], check=False)
-
 
 def rebuild_and_reload() -> None:
     rebuild_rom_pool()
@@ -1171,13 +1085,11 @@ def rebuild_and_reload() -> None:
     rebuild_saves_pool()
     reload_es_games()
 
-
 def unmount_rom_pool() -> None:
     if is_mountpoint(ROMS_POOL):
         run_quiet(["umount", str(ROMS_POOL)])
         if is_mountpoint(ROMS_POOL):
             run_quiet(["umount", "-l", str(ROMS_POOL)])
-
 
 def cmd_eject(mount_path: str) -> int:
     path = Path(mount_path)
@@ -1205,7 +1117,6 @@ def cmd_eject(mount_path: str) -> int:
     rebuild_and_reload()
     return 0
 
-
 def cmd_merge(mount_path: str) -> int:
     path = Path(mount_path)
     if not path.exists():
@@ -1221,10 +1132,7 @@ def cmd_merge(mount_path: str) -> int:
     subprocess.run(["/usr/lib/hippos/hippos-merge-gamelists"], check=False)
     return 0
 
-
 def merge_request(devname: str, mount_path: Path) -> Optional[str]:
-    """The REQUEST_MERGE event asking the user to pool a drive's ROMs, or None
-    when the drive has no ROMs, is already pooled, or must not be asked about."""
     branch = rom_branch_for_mount(mount_path)
     if branch is None or str(branch) in storage_roots_from_config():
         return None
@@ -1234,15 +1142,10 @@ def merge_request(devname: str, mount_path: Path) -> Optional[str]:
     size = sanitize_event_field(run_text(["lsblk", "-dnro", "SIZE", f"/dev/{devname}"]).strip())
     return f"REQUEST_MERGE:{devname}:{model}:{size}:{mount_path}:{device_unique_id(devname)}"
 
-
 def cmd_pending_merges() -> int:
-    """Merge prompts for drives mounted before ES could show them (at boot).
-    Each drive is asked about once per boot, so declining "this time" holds
-    when ES restarts after desktop mode."""
     PROMPTED_THIS_BOOT.parent.mkdir(parents=True, exist_ok=True)
     prompted = set(PROMPTED_THIS_BOOT.read_text(encoding="utf-8").split()) if PROMPTED_THIS_BOOT.exists() else set()
     for _name, path, source, _fstype in mounted_media_roots():
-        # btrfs subvolume mounts report their source as /dev/sdb1[/subvol].
         device = source.split("[", 1)[0]
         if not device.startswith("/dev/") or device in prompted:
             continue
@@ -1252,7 +1155,6 @@ def cmd_pending_merges() -> int:
             prompted.add(device)
     PROMPTED_THIS_BOOT.write_text("\n".join(sorted(prompted)) + "\n", encoding="utf-8")
     return 0
-
 
 def cmd_mount(device: str) -> int:
     devname = device.removeprefix("/dev/")
@@ -1287,7 +1189,6 @@ def cmd_mount(device: str) -> int:
         rebuild_saves_pool()
     return proc.returncode
 
-
 def cmd_unmount(target: str) -> int:
     if target.startswith("/dev/"):
         devname = Path(target).name
@@ -1296,23 +1197,19 @@ def cmd_unmount(target: str) -> int:
         return proc.returncode
     return cmd_eject(target)
 
-
 def cmd_mount_network() -> int:
     proc = subprocess.run(["/usr/lib/hippos/mount-network-roms"], check=False)
     rebuild_and_reload()
     return proc.returncode
-
 
 def cmd_list_drives() -> int:
     for name, path, source, fstype in mounted_media_roots():
         print("|".join((name, str(path), source, fstype)))
     return 0
 
-
 def cmd_list_devices() -> int:
     print_lines(list_mountable_devices())
     return 0
-
 
 def cmd_list_network() -> int:
     for source in network_sources():
@@ -1320,7 +1217,6 @@ def cmd_list_network() -> int:
         status = "mounted" if path and is_mountpoint(path) else "configured"
         print("|".join((source, str(path or ""), status)))
     return 0
-
 
 def cmd_add_network(source: str) -> int:
     if not (source.startswith("nfs:") or source.startswith("cifs://")):
@@ -1332,7 +1228,6 @@ def cmd_add_network(source: str) -> int:
         write_network_sources(lines)
     return cmd_mount_network()
 
-
 def cmd_remove_network(source: str) -> int:
     lines = [line for line in network_sources() if line != source]
     write_network_sources(lines)
@@ -1340,7 +1235,6 @@ def cmd_remove_network(source: str) -> int:
     if path and path.exists():
         cmd_eject(str(path))
     return cmd_mount_network()
-
 
 def cmd_format(device: str, fs_type: str) -> int:
     devname = device.removeprefix("/dev/")
@@ -1371,7 +1265,6 @@ def cmd_format(device: str, fs_type: str) -> int:
     time.sleep(1)
     return cmd_mount(devname)
 
-
 def cmd_ignore(device_id: str) -> int:
     ignore_path = IGNORED_DEVICES
     ignore_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1381,7 +1274,6 @@ def cmd_ignore(device_id: str) -> int:
     existing.add(device_id)
     ignore_path.write_text("\n".join(sorted(existing)) + "\n", encoding="utf-8")
     return 0
-
 
 def cmd_delete_file(path_str: str) -> int:
     target = Path(path_str).resolve()
@@ -1395,7 +1287,6 @@ def cmd_delete_file(path_str: str) -> int:
         return 1
     target.unlink()
     return 0
-
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="hippos-storage-manager")
@@ -1445,8 +1336,6 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    # ES runs these as hippos; mount, umount and mkfs need root. The sudoers
-    # grant covers it, as for hippos-tdp.
     if args.command in MOUNT_COMMANDS and os.geteuid() != 0:
         os.execvp("sudo", ["sudo", "-n", str(Path(__file__).resolve()), *sys.argv[1:]])
 
@@ -1516,7 +1405,6 @@ def main() -> int:
     if args.command == "cleanup":
         return cleanup(conn, args.ids, args.action, args.yes, args.dry_run)
     return 1
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

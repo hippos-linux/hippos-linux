@@ -18,13 +18,10 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import BIOS, CACHE, CONFIGS, SAVES, SCREENSHOTS, USERDATA
 
-
 PCSX2_CONFIG_DIR   = CONFIGS / 'PCSX2'
 PCSX2_INI          = PCSX2_CONFIG_DIR / 'inis' / 'PCSX2.ini'
 
-
 def _write_pcsx2_config(conf: dict[str, str], ctx: Optional['LaunchContext'] = None) -> None:
-    """Write PCSX2 INI config from hippos.conf values."""
     PCSX2_INI.parent.mkdir(parents=True, exist_ok=True)
     (SAVES / 'ps2' / 'pcsx2' / 'sstates').mkdir(parents=True, exist_ok=True)
     (SAVES / 'ps2' / 'pcsx2').mkdir(parents=True, exist_ok=True)
@@ -37,12 +34,10 @@ def _write_pcsx2_config(conf: dict[str, str], ctx: Optional['LaunchContext'] = N
     for section in ('UI', 'Folders', 'EmuCore', 'EmuCore/GS', 'Achievements', 'InputSources', 'Hotkeys'):
         _ensure_section(parser, section)
 
-    # Clear saved window geometry — a crashed session can leave a tiny/corrupt position
     for key in ('MainWindowGeometry', 'MainWindowState'):
         if parser.has_option('UI', key):
             parser.remove_option('UI', key)
 
-    # UI
     parser.set('UI', 'SettingsVersion',         '1')
     parser.set('UI', 'InhibitScreensaver',       'true')
     parser.set('UI', 'ConfirmShutdown',          'false')
@@ -54,7 +49,6 @@ def _write_pcsx2_config(conf: dict[str, str], ctx: Optional['LaunchContext'] = N
     parser.set('UI', 'HideMainWindowWhenRunning', 'true')
     parser.set('UI', 'DoubleClickTogglesFullscreen', 'false')
 
-    # Folders — absolute paths; relative paths resolve from inis/ subdir and land wrong
     parser.set('Folders', 'Bios',        str(BIOS / 'ps2'))
     parser.set('Folders', 'Snapshots',   str(SCREENSHOTS))
     parser.set('Folders', 'Savestates',  str(SAVES / 'ps2' / 'pcsx2' / 'sstates'))
@@ -63,7 +57,6 @@ def _write_pcsx2_config(conf: dict[str, str], ctx: Optional['LaunchContext'] = N
     parser.set('Folders', 'Cache',       str(CACHE / 'ps2'))
     parser.set('Folders', 'Textures',    str(PCSX2_CONFIG_DIR / 'textures'))
 
-    # EmuCore
     parser.set('EmuCore', 'EnableDiscordPresence',       'false')
     fast_boot = _conf_value(conf, 'global.pcsx2_fastboot', '')
     parser.set('EmuCore', 'EnableFastBoot', 'false' if fast_boot == 'false' else 'true')
@@ -72,7 +65,6 @@ def _write_pcsx2_config(conf: dict[str, str], ctx: Optional['LaunchContext'] = N
     parser.set('EmuCore', 'EnableNoInterlacingPatches',  _conf_value(conf, 'global.pcsx2_interlacing_patches', 'false'))
     parser.set('EmuCore', 'SaveStateOnShutdown',         'true' if _conf_bool(conf, 'global.autosave') else 'false')
 
-    # EmuCore/GS (graphics)
     parser.set('EmuCore/GS', 'Renderer',          _conf_value(conf, 'global.pcsx2_gfxbackend', '-1'))
     parser.set('EmuCore/GS', 'AspectRatio',        _conf_value(conf, 'global.pcsx2_ratio', 'Auto 4:3/3:2'))
     parser.set('EmuCore/GS', 'VsyncEnable',        _conf_value(conf, 'global.pcsx2_vsync', '0'))
@@ -92,19 +84,16 @@ def _write_pcsx2_config(conf: dict[str, str], ctx: Optional['LaunchContext'] = N
     parser.set('EmuCore/GS', 'linear_present_mode', _conf_value(conf, 'global.pcsx2_bilinear_filtering', '1'))
     parser.set('EmuCore/GS', 'OsdShowMessages',    _conf_value(conf, 'global.pcsx2_osd_messages', 'true'))
 
-    # Achievements
     parser.set('Achievements', 'Enabled',           'false')
     parser.set('Achievements', 'TestMode',           'false')
     parser.set('Achievements', 'UnofficialTestMode', 'false')
     parser.set('Achievements', 'Notifications',      'true')
     parser.set('Achievements', 'SoundEffects',       'true')
 
-    # InputSources
     parser.set('InputSources', 'Keyboard', 'true')
     parser.set('InputSources', 'Mouse',    'true')
     parser.set('InputSources', 'SDL',      'true')
 
-    # Hotkeys
     parser.set('Hotkeys', 'ToggleFullscreen', 'Keyboard/Alt & Keyboard/Return')
     parser.set('Hotkeys', 'LoadStateFromSlot', 'Keyboard/F3')
     parser.set('Hotkeys', 'SaveStateToSlot',   'Keyboard/F1')
@@ -112,12 +101,10 @@ def _write_pcsx2_config(conf: dict[str, str], ctx: Optional['LaunchContext'] = N
     parser.set('Hotkeys', 'OpenPauseMenu',     'Keyboard/Escape')
     parser.set('Hotkeys', 'TogglePause',       'Keyboard/Space')
 
-    # Pad / Multitap
     _ensure_section(parser, 'Pad')
     parser.set('Pad', 'MultitapPort1', 'false')
     parser.set('Pad', 'MultitapPort2', 'false')
 
-    # Clear stale Pad1-Pad8 sections then rebuild from connected controllers
     for i in range(1, 9):
         if parser.has_section(f'Pad{i}'):
             parser.remove_section(f'Pad{i}')
@@ -170,7 +157,6 @@ def _write_pcsx2_config(conf: dict[str, str], ctx: Optional['LaunchContext'] = N
         parser.write(fh)
     _log.info("Wrote PCSX2 config: %s", PCSX2_INI)
 
-
 def launch_pcsx2(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('pcsx2')
     if bin_path is None:
@@ -179,7 +165,6 @@ def launch_pcsx2(ctx: LaunchContext) -> int:
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
     conf = _load_hippos_conf()
     _write_pcsx2_config(conf, ctx)
-    # Write SDL controller DB
     pcsx2_db = PCSX2_INI.parent / 'game_controller_db.txt'
     pcsx2_db.parent.mkdir(parents=True, exist_ok=True)
     pcsx2_db.write_text(generate_sdl_game_controller_config(ctx.controllers))
@@ -187,7 +172,6 @@ def launch_pcsx2(ctx: LaunchContext) -> int:
     cmd = [str(bin_path), '-nogui', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
-    # Wheels break with SDL_GAMECONTROLLERCONFIG — exclude if wheel is active
     if ctx.wheel:
         env.pop('SDL_GAMECONTROLLERCONFIG', None)
     result = _run_game_command(ctx, 'pcsx2', cmd, env, cwd=bin_path.parent)

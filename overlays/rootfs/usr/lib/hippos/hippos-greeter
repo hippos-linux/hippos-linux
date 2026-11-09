@@ -22,13 +22,11 @@ import sys
 import time
 from typing import List, Optional
 
-# Pad buttons are numbered from evdev like ES and LutrisView, not by SDL's
-# HIDAPI drivers.
 os.environ.setdefault('SDL_JOYSTICK_HIDAPI', '0')
 os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
-import pygame  # noqa: E402
+import pygame
 
-from hippos_theme import DEFAULT_THEME_DIR, Theme, mix  # noqa: E402
+from hippos_theme import DEFAULT_THEME_DIR, Theme, mix
 
 USER = 'hippos'
 
@@ -44,21 +42,16 @@ KEY = mix(INK, TEXT, 0.12)
 FONT_DISPLAY = THEME.font('fontDisplay')
 FONT_STRONG = THEME.font('fontStrong')
 FONT_REGULAR = THEME.font('fontRegular')
-# The splash carries the HippOS logo on its left; the panel sits on the right.
 BACKGROUND = THEME.art('assets', 'splash.jpg')
 
 PANEL_ALPHA = 225
 
-# evdev order: south, east, north, west, L1, R1, L2, R2, select, start.
 BTN_A, BTN_B, BTN_SELECT, BTN_START = 0, 1, 8, 9
 STICK_DEADZONE = 0.5
-# Held d-pad or stick: first repeat after the delay, then every interval.
 REPEAT_DELAY, REPEAT_INTERVAL = 0.35, 0.09
 
 SHIFT, SPACE, DELETE, LOGIN = 'shift', 'space', 'delete', 'login'
 POWER, START_IN = 'power', 'start_in'
-# Everything a pad or mouse can select, top to bottom. The Power button sits
-# alone at the top, away from LOG IN.
 CONTROL_ROWS = [
     [POWER],
     [START_IN],
@@ -74,14 +67,11 @@ WIDE_KEYS = {SHIFT: 1.5, SPACE: 4, DELETE: 3, LOGIN: 3}
 KEY_LABELS = {SHIFT: 'SHIFT', SPACE: 'SPACE', DELETE: 'DELETE', LOGIN: 'LOG IN', POWER: 'POWER'}
 
 POWER_ACTIONS = [('POWER OFF', 'poweroff'), ('RESTART', 'reboot'), ('CANCEL', None)]
-# The desktop itself is whichever system.desktop names.
 START_MODES = [('EMULATIONSTATION', 'es'), ('DESKTOP', 'desktop')]
 START_MODE_VALUES = [value for _, value in START_MODES]
 FOOTER_HINTS = [('A', 'TYPE'), ('B', 'DELETE'), ('START', 'LOG IN'), ('SELECT', 'POWER')]
 
-
 class Greetd:
-    """greetd's IPC: a native-endian u32 length, then a JSON message."""
 
     def __init__(self, path: str):
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -102,15 +92,11 @@ class Greetd:
             buf += chunk
         return buf
 
-
 def setting(key: str, default: str) -> str:
     result = subprocess.run(['hippos-settings', 'get', key], capture_output=True, text=True)
     return result.stdout.strip() or default
 
-
 def login(greetd: Greetd, password: str, session_cmd: List[str], mode: str) -> Optional[str]:
-    """Logs hippos in and starts the session in the chosen mode. Returns an
-    error to show, or None once greetd has accepted the session."""
     reply = greetd.request({'type': 'create_session', 'username': USER})
     while reply['type'] == 'auth_message':
         response = password if reply['auth_message_type'] in ('secret', 'visible') else None
@@ -125,9 +111,7 @@ def login(greetd: Greetd, password: str, session_cmd: List[str], mode: str) -> O
         return 'Wrong password'
     return reply.get('description') or 'Login failed'
 
-
 class Popup:
-    """A short list over the screen, such as the power menu."""
 
     def __init__(self, title: str, items: List[tuple], on_choose, selected: int = 0):
         self.title = title
@@ -138,14 +122,12 @@ class Popup:
     def choose(self, index: int):
         self.on_choose(self.items[index][1])
 
-
 def scale_to_fill(image: pygame.Surface, w: int, h: int) -> pygame.Surface:
     scale = max(w / image.get_width(), h / image.get_height())
     scaled = pygame.transform.smoothscale(
         image, (round(image.get_width() * scale), round(image.get_height() * scale)))
     x, y = (scaled.get_width() - w) // 2, (scaled.get_height() - h) // 2
     return scaled.subsurface((x, y, w, h)).copy()
-
 
 class Greeter:
     def __init__(self, session_cmd: List[str]):
@@ -180,7 +162,6 @@ class Greeter:
             self.mode = START_MODE_VALUES[0]
         self.row, self.col = KEYBOARD_FIRST_ROW + 1, 0
         self.popup: Optional[Popup] = None
-        # What the mouse can click, rebuilt each frame: (rect, target).
         self.click_targets: List[tuple] = []
         self.held: Optional[tuple] = None
         self.next_repeat = 0.0
@@ -193,8 +174,6 @@ class Greeter:
             surface = pygame.Surface((self.w, self.h))
             surface.fill(INK)
             return surface
-
-    # ── Input ────────────────────────────────────────────────────────────────
 
     def run(self):
         clock = pygame.time.Clock()
@@ -251,7 +230,6 @@ class Greeter:
             self.joysticks.pop(event.instance_id, None)
 
     def hold(self, direction: Optional[tuple], flip_y: bool = False):
-        """Moves once now and keeps repeating while the direction is held."""
         if direction and flip_y:
             direction = (direction[0], -direction[1])
         if direction == self.held:
@@ -273,8 +251,6 @@ class Greeter:
         if dy:
             old_row = CONTROL_ROWS[self.row]
             self.row = (self.row + dy) % len(CONTROL_ROWS)
-            # Keep roughly the same horizontal position across rows of
-            # different widths.
             fraction = (self.col + 0.5) / len(old_row)
             self.col = min(int(fraction * len(CONTROL_ROWS[self.row])), len(CONTROL_ROWS[self.row]) - 1)
         if dx:
@@ -310,7 +286,6 @@ class Greeter:
                 self.row, self.col = target[1], target[2]
                 self.press_selected()
             return
-        # A click outside a popup closes it.
         self.popup = None
 
     def toggle_power_menu(self):
@@ -354,8 +329,6 @@ class Greeter:
         if action:
             subprocess.run(['systemctl', action], check=False)
 
-    # ── Drawing ──────────────────────────────────────────────────────────────
-
     def draw(self):
         u = self.unit
         self.click_targets = []
@@ -384,10 +357,8 @@ class Greeter:
         field.midtop = (cx, y)
         pygame.draw.rect(self.screen, INK, field, border_radius=round(14 * u))
         pygame.draw.rect(self.screen, ACCENT, field, width=max(2, round(2 * u)), border_radius=round(14 * u))
-        # Dots are drawn: the theme fonts have no bullet glyph.
         clip = field.inflate(-round(32 * u), 0)
         radius, step = round(7 * u), round(24 * u)
-        # Long passwords scroll so the newest dots stay in view.
         x = clip.left + radius + min(0, clip.width - step * (len(self.password) + 1))
         self.screen.set_clip(clip)
         for _ in self.password:
@@ -412,7 +383,6 @@ class Greeter:
         pygame.display.flip()
 
     def draw_control(self, rect: pygame.Rect, r: int, c: int, key: str):
-        """Draws one selectable control and registers it for mouse clicks."""
         u = self.unit
         focused = (r, c) == (self.row, self.col) and self.popup is None
         if focused:
@@ -432,7 +402,6 @@ class Greeter:
         text = font.render(label, True, TEXT)
         self.screen.blit(text, text.get_rect(center=rect.center))
         if key == START_IN:
-            # A drop-down arrow, drawn: the theme fonts have no arrow glyphs.
             size = round(7 * u)
             tip = (rect.right - round(24 * u), rect.centery + size // 2)
             pygame.draw.polygon(self.screen, TEXT, [
@@ -440,7 +409,6 @@ class Greeter:
         self.click_targets.append((rect, ('control', r, c)))
 
     def draw_mode_choice(self, x0: int, y: int, width: int) -> int:
-        """Draws the START IN drop-down; returns the y below it."""
         u = self.unit
         label = self.font_small.render('START IN', True, TEXT_DIM)
         self.screen.blit(label, label.get_rect(midtop=(x0 + width // 2, y)))
@@ -477,7 +445,6 @@ class Greeter:
         self.screen.blit(clock, clock.get_rect(midright=(self.w - round(32 * u), self.h - bar_h // 2)))
 
     def draw_hint(self, button: str, action: str, x: int, cy: int) -> int:
-        """Draws a pad button badge and its action; returns the next x."""
         u = self.unit
         label = self.font_badge.render(button, True, INK)
         badge_h = round(30 * u)
@@ -514,32 +481,23 @@ class Greeter:
             self.click_targets.append((rect, ('popup_item', i)))
             y += item_h
 
-
 def system_stopping() -> bool:
-    """True once a shutdown or reboot is queued. The manager reports itself
-    "stopping" only later, after sessions have already started to end."""
     jobs = subprocess.run(['systemctl', 'list-jobs', '--no-legend', 'shutdown.target'],
                           capture_output=True, text=True)
     return bool(jobs.stdout.strip())
-
 
 def main() -> int:
     if len(sys.argv) < 2:
         print(__doc__.strip().splitlines()[2], file=sys.stderr)
         return 1
     if 'DISPLAY' not in os.environ:
-        # greetd starts the greeter again whenever a session ends, shutdown
-        # included, when its Xorg could no longer take the VT.
         if system_stopping():
             return 0
-        # Display :1: a crashed greeter leaves its lock owned by _greetd,
-        # which hippos couldn't clear for the session's :0.
         os.execvp('xinit', ['xinit', os.path.abspath(sys.argv[0]), *sys.argv[1:], '--',
                             '/usr/lib/xorg/Xorg', ':1', f"vt{os.environ.get('XDG_VTNR', '7')}",
                             '-keeptty', '-nolisten', 'tcp', '-logfile', '/tmp/Xorg.greeter.log'])
     Greeter(sys.argv[1:]).run()
     return 0
-
 
 if __name__ == '__main__':
     sys.exit(main())

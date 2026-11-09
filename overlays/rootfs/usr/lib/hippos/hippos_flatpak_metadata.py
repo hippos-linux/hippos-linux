@@ -1,4 +1,3 @@
-"""Read an installed app's own AppStream description and icon, with no network access."""
 from __future__ import annotations
 
 import re
@@ -9,23 +8,19 @@ from pathlib import Path
 _INSTALL_ROOTS = (Path('/userdata/.local/share/flatpak/app'), Path('/var/lib/flatpak/app'))
 _LANG = '{http://www.w3.org/XML/1998/namespace}lang'
 
-
 @dataclass(frozen=True)
 class AppDetails:
     description: str | None = None
     developer: str | None = None
     icon: Path | None = None
 
-
 def _text(element: ET.Element) -> str:
     return re.sub(r'\s+', ' ', ''.join(element.itertext())).strip()
-
 
 def _untranslated(parent: ET.Element | None, tag: str) -> ET.Element | None:
     if parent is None:
         return None
     return next((child for child in parent.findall(tag) if _LANG not in child.attrib), None)
-
 
 def _description(component: ET.Element) -> str | None:
     lines: list[str] = []
@@ -43,16 +38,13 @@ def _description(component: ET.Element) -> str | None:
     summary = _untranslated(component, 'summary')
     return _text(summary) if summary is not None else None
 
-
 def _developer(component: ET.Element) -> str | None:
     element = _untranslated(_untranslated(component, 'developer'), 'name')
     if element is None:
         element = _untranslated(component, 'developer_name')
     return _text(element) if element is not None else None
 
-
 def _icon(share: Path, app_id: str) -> Path | None:
-    """A vector icon if there is one, otherwise the largest bitmap."""
     hicolor = share / 'icons' / 'hicolor'
     vector = hicolor / 'scalable' / 'apps' / f'{app_id}.svg'
     if vector.is_file():
@@ -64,7 +56,6 @@ def _icon(share: Path, app_id: str) -> Path | None:
     ]
     return max(sized, key=lambda item: item[0])[1] if sized else None
 
-
 def read_app_details(app_id: str) -> AppDetails:
     for root in _INSTALL_ROOTS:
         share = root / app_id / 'current' / 'active' / 'export' / 'share'
@@ -73,13 +64,12 @@ def read_app_details(app_id: str) -> AppDetails:
         return read_share_details(share, app_id)
     return AppDetails()
 
-
 def read_share_details(share: Path, app_id: str) -> AppDetails:
     description = developer = None
     try:
         component = ET.parse(share / 'metainfo' / f'{app_id}.metainfo.xml').getroot()
     except (OSError, ET.ParseError):
-        pass  # metainfo is optional; the icon can still be used
+        pass
     else:
         description, developer = _description(component), _developer(component)
     return AppDetails(description, developer, _icon(share, app_id))

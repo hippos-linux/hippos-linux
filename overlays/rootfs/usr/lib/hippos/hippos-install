@@ -1,17 +1,4 @@
 #!/usr/bin/env bash
-# hippos-install — disk install/clone utility
-# Commands:
-#   listDisks                                    list non-boot block devices
-#   listArchs                                    print running architecture
-#   listHipposDisks                              list non-boot disks with HippOS btrfs label
-#   listAllPartitions <disk>                     list all partitions on disk (for warnings)
-#   listInstallTargets <disk>                    list non-EFI partitions ≥16GiB on disk
-#   listEfiPartitions <disk>                     list FAT/EFI partitions on disk
-#   listFreeSpace <disk>                         list unallocated extents ≥16GiB on disk
-#   install <target> <arch>                      clone boot disk → target (full disk wipe)
-#   cloneFrom <source> <target>                  clone <source> HippOS disk → target
-#   installToPartition <btrfs-part> <efi-part>   install into existing partition
-#   installInFreeSpace <disk> <s> <e> <efi-part> create partition then install
 
 set -euo pipefail
 
@@ -22,8 +9,6 @@ TOOLS_SIZE_MB=16
 
 die()  { echo "ERROR: $*" >&2; exit 1; }
 log()  { echo ">>> $*"; }
-
-# ── helpers ──────────────────────────────────────────────────────────────────
 
 part_dev() {
     local disk="$1" num="$2"
@@ -58,13 +43,6 @@ is_efi_partition() {
     [[ "$parttype" == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" ]]
 }
 
-# The source EFI partition is the running system's own boot disk, which is
-# normally already mounted at /boot/efi — a second real `mount` of the same
-# device can be refused ("already mounted on /boot/efi") depending on how
-# udisks2/the kernel is holding it. Bind-mount the existing mountpoint
-# instead of remounting the device when there is one; nothing under the
-# result is ever written to, so losing the explicit `-o ro` on that path
-# doesn't matter.
 mount_src_efi() {
     local src_efi="$1" mnt="$2"
     local existing
@@ -76,12 +54,6 @@ mount_src_efi() {
     fi
 }
 
-# ── enumeration commands ──────────────────────────────────────────────────────
-
-# Real, installable disks: excludes optical drives (-e 11), the disk HippOS
-# itself booted from, and zram — lsblk reports zram devices as TYPE=disk same
-# as any real block device, but they're volatile RAM-backed swap, never a
-# valid install target. Echoes "name size model" per candidate.
 list_candidate_disks() {
     local boot_disk
     boot_disk=$(get_boot_disk)
@@ -184,8 +156,6 @@ cmd_list_free_space() {
     local disk="$1"
     [[ -b "$disk" ]] || die "disk not found: $disk"
     local min_mib=16384
-    # parted -s unit MiB print free: free-space lines have no partition number,
-    # start with whitespace, and contain "Free Space" as the filesystem field.
     parted -s "$disk" unit MiB print free 2>/dev/null \
     | awk -v min="$min_mib" '
         /Free Space/ {
@@ -199,8 +169,6 @@ cmd_list_free_space() {
         }
     '
 }
-
-# ── shared btrfs clone ────────────────────────────────────────────────────────
 
 _clone_btrfs_subvolumes() {
     local SRC_MAIN="$1" TGT_MAIN="$2" SRC_BTRFS="$3" TGT_BTRFS="$4" TMP_MNT="$5"
@@ -288,8 +256,6 @@ _install_grub() {
     || log "grub-install failed (non-fatal)"
 }
 
-# ── target-disk unmount ──────────────────────────────────────────────────────
-
 _unmount_disk() {
     local disk="$1"
 
@@ -298,7 +264,6 @@ _unmount_disk() {
         < <(lsblk -nlpo PATH "$disk" 2>/dev/null | grep -v "^$disk$")
     [[ ${#parts[@]} -eq 0 ]] && return 0
 
-    # Direct mountpoints for each partition on this disk
     local direct=()
     for pdev in "${parts[@]}"; do
         while IFS= read -r mnt; do
@@ -307,8 +272,6 @@ _unmount_disk() {
     done
     [[ ${#direct[@]} -eq 0 ]] && return 0
 
-    # Union/overlay mounts (e.g. mergerfs) whose source path references this disk.
-    # These must be torn down before the underlying partition mounts.
     local overlays=()
     for dm in "${direct[@]}"; do
         local rel="${dm#/}"
@@ -333,8 +296,6 @@ _unmount_disk() {
         umount "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
     done
 }
-
-# ── full-disk clone ───────────────────────────────────────────────────────────
 
 clone_disk() {
     local SRC_DISK="$1"
@@ -373,7 +334,6 @@ clone_disk() {
     }
     trap _cleanup EXIT
 
-    # 1. Partition target
     log "Unmounting any existing mounts on $TGT_DISK..."
     _unmount_disk "$TGT_DISK"
 
@@ -395,16 +355,13 @@ clone_disk() {
     [[ -b "$TGT_EFI"  ]] || die "target EFI partition not found after partitioning: $TGT_EFI"
     [[ -b "$TGT_MAIN" ]] || die "target HippOS partition not found after partitioning: $TGT_MAIN"
 
-    # 2. Format target
     log "Formatting target partitions..."
     mkfs.vfat -F 32 -n EFI   "$TGT_EFI"
     [[ -b "$TGT_TOOLS" ]] && mkfs.vfat -F 32 -n Tools "$TGT_TOOLS" || true
     mkfs.btrfs -f -L HippOS  "$TGT_MAIN"
 
-    # 3. Clone btrfs subvolumes
     _clone_btrfs_subvolumes "$SRC_MAIN" "$TGT_MAIN" "$SRC_BTRFS" "$TGT_BTRFS" "$TMP_MNT"
 
-    # 4. Collect UUIDs
     local OLD_EFI_PARTUUID OLD_MAIN_PARTUUID OLD_MAIN_UUID
     OLD_EFI_PARTUUID=$(blkid  -s PARTUUID -o value "$SRC_EFI"  2>/dev/null || true)
     OLD_MAIN_PARTUUID=$(blkid -s PARTUUID -o value "$SRC_MAIN" 2>/dev/null || true)
@@ -415,7 +372,6 @@ clone_disk() {
     TGT_MAIN_PARTUUID=$(blkid -s PARTUUID -o value "$TGT_MAIN" 2>/dev/null || true)
     TGT_MAIN_UUID=$(blkid     -s UUID     -o value "$TGT_MAIN" 2>/dev/null || true)
 
-    # 5. Update fstab
     log "Updating /etc/fstab..."
     local FSTAB="$TGT_BTRFS/@rootfs/etc/fstab"
     if [[ -f "$FSTAB" ]]; then
@@ -426,13 +382,11 @@ clone_disk() {
     umount "$SRC_BTRFS"
     umount "$TGT_BTRFS"
 
-    # 6. Clone EFI partition
     log "Cloning EFI partition..."
     mount_src_efi "$SRC_EFI" "$SRC_EFI_MNT"
     mount "$TGT_EFI" "$TGT_EFI_MNT"
     rsync -rlt --delete "$SRC_EFI_MNT/" "$TGT_EFI_MNT/"
 
-    # 7. Update bootloader config
     log "Updating bootloader config..."
     local GRUB_CFG="$TGT_EFI_MNT/grub/grub.cfg"
     if [[ -f "$GRUB_CFG" ]]; then
@@ -444,7 +398,6 @@ clone_disk() {
         [[ -n "$OLD_MAIN_PARTUUID" ]] && sed -i "s/${OLD_MAIN_PARTUUID}/${TGT_MAIN_PARTUUID}/g" "$CMDLINE_TXT"
     fi
 
-    # 8. Reinstall GRUB
     if [[ ! -f "$TGT_EFI_MNT/cmdline.txt" ]]; then
         log "Reinstalling GRUB on $TGT_DISK..."
         _install_grub "$TGT_EFI_MNT" "$TGT_DISK" "BOOT" "yes"
@@ -454,7 +407,6 @@ clone_disk() {
     umount "$SRC_EFI_MNT"
     umount "$TGT_EFI_MNT"
 
-    # 9. Copy Tools partition
     if [[ -b "$SRC_TOOLS" ]]; then
         local SRC_TOOLS_MNT="${TMP_MNT}/src-tools"
         local TGT_TOOLS_MNT="${TMP_MNT}/tgt-tools"
@@ -469,7 +421,6 @@ clone_disk() {
         fi
     fi
 
-    # 10. Expand btrfs
     log "Expanding btrfs filesystem to fill $TGT_MAIN..."
     mount "$TGT_MAIN" "$TGT_BTRFS"
     btrfs filesystem resize max "$TGT_BTRFS"
@@ -478,8 +429,6 @@ clone_disk() {
 
     log "Done. $TGT_DISK is ready to boot."
 }
-
-# ── partition install (no repartition) ───────────────────────────────────────
 
 install_to_partition() {
     local TGT_MAIN="$1"
@@ -515,20 +464,16 @@ install_to_partition() {
     }
     trap _cleanup EXIT
 
-    # 1. Unmount target partitions (e.g. leftover foreign filesystem auto-mounted at boot)
     local TGT_DISK
     TGT_DISK="/dev/$(lsblk -ndo PKNAME "$TGT_MAIN")"
     log "Unmounting any existing mounts on $TGT_DISK..."
     _unmount_disk "$TGT_DISK"
 
-    # 2. Format target btrfs partition
     log "Formatting $TGT_MAIN as btrfs (HippOS)..."
     mkfs.btrfs -f -L HippOS "$TGT_MAIN"
 
-    # 3. Clone btrfs subvolumes
     _clone_btrfs_subvolumes "$SRC_MAIN" "$TGT_MAIN" "$SRC_BTRFS" "$TGT_BTRFS" "$TMP_MNT"
 
-    # 4. Collect UUIDs
     local OLD_EFI_PARTUUID OLD_MAIN_PARTUUID OLD_MAIN_UUID
     OLD_EFI_PARTUUID=$(blkid  -s PARTUUID -o value "$SRC_EFI"  2>/dev/null || true)
     OLD_MAIN_PARTUUID=$(blkid -s PARTUUID -o value "$SRC_MAIN" 2>/dev/null || true)
@@ -539,7 +484,6 @@ install_to_partition() {
     TGT_MAIN_PARTUUID=$(blkid -s PARTUUID -o value "$TGT_MAIN"     2>/dev/null || true)
     TGT_MAIN_UUID=$(blkid     -s UUID     -o value "$TGT_MAIN"     2>/dev/null || true)
 
-    # 5. Update fstab
     log "Updating /etc/fstab..."
     local FSTAB="$TGT_BTRFS/@rootfs/etc/fstab"
     if [[ -f "$FSTAB" ]]; then
@@ -550,14 +494,9 @@ install_to_partition() {
     umount "$SRC_BTRFS"
     umount "$TGT_BTRFS"
 
-    # 6. Set up GRUB in EFI/HippOS/ (non-destructive to existing EFI contents)
     log "Mounting source EFI..."
     mount_src_efi "$SRC_EFI" "$SRC_EFI_MNT"
 
-    # Unlike clone_disk's freshly-created target EFI, this partition is an
-    # existing one that may be a shared ESP with other OSes — desktop
-    # automount (udisks2) can pick it back up during the btrfs clone above.
-    # Re-check and free it right before claiming it.
     if findmnt -n -o TARGET --source "$TGT_EFI_PART" >/dev/null 2>&1; then
         log "Target EFI partition already mounted elsewhere, unmounting..."
         while IFS= read -r mnt; do
@@ -568,7 +507,6 @@ install_to_partition() {
     log "Mounting target EFI partition ($TGT_EFI_PART)..."
     mount "$TGT_EFI_PART" "$TGT_EFI_MNT"
 
-    # Copy GRUB config from source, patch UUIDs
     log "Writing GRUB config..."
     local SRC_GRUB_CFG="$SRC_EFI_MNT/grub/grub.cfg"
     local TGT_GRUB_DIR="$TGT_EFI_MNT/grub"
@@ -579,11 +517,9 @@ install_to_partition() {
         [[ -n "$OLD_MAIN_PARTUUID" ]] && sed -i "s/${OLD_MAIN_PARTUUID}/${TGT_MAIN_PARTUUID}/g" "$TGT_GRUB_DIR/grub.cfg"
     fi
 
-    # Copy grubenv if present
     local SRC_GRUBENV="$SRC_EFI_MNT/grub/grubenv"
     [[ -f "$SRC_GRUBENV" ]] && cp "$SRC_GRUBENV" "$TGT_GRUB_DIR/grubenv" || true
 
-    # Install GRUB into EFI/HippOS/ — adds UEFI boot entry, does not overwrite EFI/BOOT/
     log "Installing GRUB on $TGT_DISK (EFI/HippOS/)..."
     _install_grub "$TGT_EFI_MNT" "$TGT_DISK" "HippOS" "no"
 
@@ -591,7 +527,6 @@ install_to_partition() {
     umount "$SRC_EFI_MNT"
     umount "$TGT_EFI_MNT"
 
-    # 7. Expand btrfs
     log "Expanding btrfs filesystem to fill $TGT_MAIN..."
     mount "$TGT_MAIN" "$TGT_BTRFS"
     btrfs filesystem resize max "$TGT_BTRFS"
@@ -600,8 +535,6 @@ install_to_partition() {
 
     log "Done. HippOS installed to $TGT_MAIN."
 }
-
-# ── install in free space ─────────────────────────────────────────────────────
 
 install_in_free_space() {
     local DISK="$1"
@@ -612,7 +545,6 @@ install_in_free_space() {
     [[ -b "$DISK"    ]] || die "disk not found: $DISK"
     [[ -b "$EFI_PART" ]] || die "EFI partition not found: $EFI_PART"
 
-    # Snapshot existing partitions so we can identify the new one
     local BEFORE
     BEFORE=$(lsblk -nlpo PATH "$DISK" 2>/dev/null | grep -v "^$DISK$" | sort)
 
@@ -630,8 +562,6 @@ install_in_free_space() {
     log "New partition: $NEW_PART"
     install_to_partition "$NEW_PART" "$EFI_PART"
 }
-
-# ── dispatch ──────────────────────────────────────────────────────────────────
 
 CMD="${1:-}"
 case "$CMD" in

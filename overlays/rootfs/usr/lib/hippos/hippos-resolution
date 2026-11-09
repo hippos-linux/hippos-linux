@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
-# ES API: resolution listModes/setMode/currentMode/currentResolution/listOutputs/currentOutput/setOutput/supportVrr
 export DISPLAY="${DISPLAY:-:0}"
 
 _current_output() {
     xrandr --query 2>/dev/null | awk '/connected primary/{print $1; exit} /connected/{o=$1} END{if(o)print o}'
 }
 
-# CRT mode is active when hippos-crt-setup has written /etc/switchres.ini.
-# Avoids a hippos-settings subprocess on every call.
 _crt_active() { [[ -f /etc/switchres.ini ]]; }
 
-# Parse a videomodes.conf mode key (e.g. 320x240.60.00013) and apply it via
-# switchres. switchres reads monitor profile, output, and api from /etc/switchres.ini.
 _crt_setmode() {
     local mode="$1"
     local w h hz rest
@@ -27,7 +22,6 @@ _crt_setmode() {
     switchres "${w}" "${h}" "${hz}" 2>/dev/null
 }
 
-# Restore the CRT session's base resolution (used after a game exits).
 _crt_restore() {
     local boot_res w rest h hz
     boot_res="$(hippos-settings get crt.boot_resolution 2>/dev/null || echo '640x480i')"
@@ -107,8 +101,6 @@ case "${1:-}" in
         if _crt_active; then
             _crt_restore
         else
-            # Pick highest mode with width ≤ 1920 and height ≤ 1080.
-            # xrandr lists modes in descending order so first match is best.
             BEST=$(xrandr --query 2>/dev/null | awk -v s="$PSCREEN" '
                 /^[^ ]+ connected/ { in_s=($1==s) }
                 in_s && /^[[:space:]]+[0-9]+x[0-9]+/ {
@@ -132,8 +124,6 @@ case "${1:-}" in
         '
         ;;
     supportVrr)
-        # amdgpu and modesetting (Intel, nouveau) expose the kernel's vrr_capable
-        # property. It comes from the display's EDID, so it stays 1 with VRR off.
         vrr_capable=$(xrandr --prop 2>/dev/null | awk -v s="$PSCREEN" '
             /^[^ \t]+ (connected|disconnected)/ { in_s=($1==s) }
             in_s && $1=="vrr_capable:" { print $2; exit }
@@ -142,9 +132,6 @@ case "${1:-}" in
             [[ "$vrr_capable" == 1 ]]
             exit
         fi
-        # NVIDIA: 1 G-SYNC, 2 G-SYNC Compatible. Monitors NVIDIA hasn't validated
-        # only do VRR with the AllowGSYNCCompatible=On MetaMode token, which
-        # hippos-xorg-setup doesn't set, so they get no switch.
         command -v nvidia-settings >/dev/null || exit 1
         vrr_mode=$(nvidia-settings -t -q "[dpy:${PSCREEN}]/DisplayVRRMode" 2>/dev/null)
         [[ "$vrr_mode" == 1 || "$vrr_mode" == 2 ]]

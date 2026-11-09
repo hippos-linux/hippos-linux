@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
 . /usr/lib/hippos/emulator-env
-# Machines and extensions ship with the artifact, not at the compiled-in path.
 export OPENMSX_SYSTEM_DATA=/opt/emulators/openmsx/share
 exec /opt/emulators/openmsx/bin/openmsx "$@"

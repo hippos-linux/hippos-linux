@@ -15,12 +15,9 @@ from pathlib import Path
 from hippos_apt import image_packages, installed_user_packages, package_files
 from hippos_ports import PORTS_DIR, claimed_packages, launcher_path, read_desktop_file, read_marker, write_launcher
 
-# Marks launchers sync owns: '# hippos-ports-apt <package> <desktop file>'.
-# Launchers without it (user-made, catalog) are never touched.
 _APT_MARKER = 'hippos-ports-apt'
 _APPLICATIONS = Path('/usr/share/applications')
 _ES_RELOAD = 'http://127.0.0.1:1234/reloadgames'
-
 
 def add(file: Path) -> int:
     if not file.is_file():
@@ -41,9 +38,7 @@ def add(file: Path) -> int:
     print(f'Added {name}: {path}')
     return 0
 
-
 def _installed_games(image: frozenset[str]) -> dict[Path, tuple[str, str, str]]:
-    """desktop file -> (package, name, command) for the user's apt games."""
     games = {}
     covered = claimed_packages()
     for package in installed_user_packages(image):
@@ -56,7 +51,6 @@ def _installed_games(image: frozenset[str]) -> dict[Path, tuple[str, str, str]]:
             if app is not None and 'Game' in app.categories:
                 games[path] = (package, app.name, app.command)
     return games
-
 
 def sync() -> int:
     image = image_packages()
@@ -82,7 +76,7 @@ def sync() -> int:
         if desktop in managed:
             continue
         path = launcher_path(name)
-        if path.exists():  # the user's own launcher for it, or a name clash
+        if path.exists():
             continue
         write_launcher(path, name, command, marker=shlex.join([_APT_MARKER, package, str(desktop)]))
         print(f'Added {name} ({package}): {path.name}')
@@ -92,9 +86,8 @@ def sync() -> int:
         try:
             urllib.request.urlopen(_ES_RELOAD, timeout=2).close()
         except OSError:
-            pass  # ES isn't running; it reads the ports folder when it starts
+            pass
     return 0
-
 
 def main() -> int:
     match sys.argv[1:]:
@@ -105,7 +98,6 @@ def main() -> int:
         case _:
             print(__doc__.strip(), file=sys.stderr)
             return 1
-
 
 if __name__ == '__main__':
     sys.exit(main())

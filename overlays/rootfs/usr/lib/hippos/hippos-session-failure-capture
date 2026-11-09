@@ -1,16 +1,4 @@
 #!/usr/bin/env bash
-# hippos-session-failure-capture — targeted diagnostics when ES or a desktop
-# exits with an error, started by hippos-session through
-# hippos-session-failure-capture@<mode>.service.
-#
-# capture-boot-logs runs once per boot, close to boot time — it can't see a
-# session dying later (mode switch, exiting a game, hours into a session),
-# and by the time a user manages to report one of those, the machine has
-# often already been rebooted. This runs at the moment of failure instead,
-# writes into that same boot's capture-boot-logs directory so it rides along
-# with the existing upload/retention path (see hippos-upload-logs,
-# capture-boot-logs' own LOG_RETENTION_COUNT pruning), and stays small and
-# bounded rather than a second copy of the full boot sweep.
 set -uo pipefail
 
 MODE="${1:?mode that failed (es or desktop) required}"
@@ -59,7 +47,6 @@ OUT="${OUT_DIR}/session-failure-${MODE}-$(date +%H%M%S).txt"
     echo "----- loginctl sessions -----"
     loginctl list-sessions --no-pager 2>&1
     echo
-
 
     echo "----- system journal around this failure (last 200 lines) -----"
     journalctl -n 200 --no-pager 2>&1

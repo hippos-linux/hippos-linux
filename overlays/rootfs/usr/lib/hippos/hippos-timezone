@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# ES API: timezone get/detect/set
 [[ "${1:-}" == "set" && "${EUID}" -ne 0 ]] && exec sudo "$0" "$@"
 case "${1:-}" in
     get)
@@ -7,7 +6,6 @@ case "${1:-}" in
             cat /etc/timezone 2>/dev/null || echo "UTC"
         ;;
     detect)
-        # Try to detect timezone from IP geolocation (best-effort)
         curl -sf --max-time 5 "https://ipapi.co/timezone" 2>/dev/null || \
             timedatectl show --property=Timezone --value 2>/dev/null || echo "UTC"
         ;;

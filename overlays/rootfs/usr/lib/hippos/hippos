@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""hippos — HippOS control center CLI."""
 
 from __future__ import annotations
 
@@ -24,9 +23,6 @@ _HIPPOS_SERVICES = [
     'hippos-hotkeys.service',
 ]
 
-# hippos-session (Xorg, ES, desktops) runs in the greetd login session and
-# logs under its own identifier rather than a unit. Matches joined by '+' are
-# OR'ed; journalctl's -u and -t would AND.
 _JOURNAL_MATCHES = [
     *[m for svc in _HIPPOS_SERVICES for m in (f'_SYSTEMD_UNIT={svc}', '+')],
     'SYSLOG_IDENTIFIER=hippos-session',
@@ -107,33 +103,23 @@ Commands:
   preflight                      check hardware/firmware readiness
 """
 
-
-# ── Helpers ────────────────────────────────────────────────────────────────────
-
 def _run(cmd: list[str], *, capture: bool = False) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=capture, text=True)
 
-
 def _delegate(script: str, args: list[str]) -> int:
     return subprocess.run([script] + args).returncode
-
 
 def _setting(key: str) -> str:
     r = subprocess.run([str(HIPPOS_SETTINGS), 'get', key],
                        capture_output=True, text=True)
     return r.stdout.strip() if r.returncode == 0 else ''
 
-
 def _service_active(name: str) -> bool:
     r = subprocess.run(['systemctl', 'is-active', '--quiet', name])
     return r.returncode == 0
 
-
 def _service_status(name: str) -> str:
     return 'active' if _service_active(name) else 'inactive'
-
-
-# ── Commands ───────────────────────────────────────────────────────────────────
 
 def cmd_status() -> int:
     session = _setting('system.session') or 'es'
@@ -149,7 +135,6 @@ def cmd_status() -> int:
         short = svc.replace('.service', '')
         print(f'    {short:<30} {state}')
 
-    # Controllers via /dev/input/event*
     try:
         controllers = _detect_controllers()
         print()
@@ -159,7 +144,6 @@ def cmd_status() -> int:
     except Exception:
         pass
 
-    # Uptime
     try:
         r = subprocess.run(['uptime', '-p'], capture_output=True, text=True)
         if r.returncode == 0:
@@ -169,9 +153,7 @@ def cmd_status() -> int:
 
     return 0
 
-
 def _detect_controllers() -> list[str]:
-    """Read /proc/bus/input/devices for joystick/gamepad entries."""
     devices = []
     try:
         text = Path('/proc/bus/input/devices').read_text()
@@ -187,14 +169,12 @@ def _detect_controllers() -> list[str]:
         pass
     return devices
 
-
 def cmd_settings(args: list[str]) -> int:
     if not HIPPOS_SETTINGS.exists():
         print('hippos-settings not found', file=sys.stderr)
         return 1
     result = subprocess.run([str(HIPPOS_SETTINGS)] + args)
     return result.returncode
-
 
 def cmd_switch(args: list[str]) -> int:
     if not args:
@@ -211,12 +191,9 @@ def cmd_switch(args: list[str]) -> int:
     print(f'Unknown target: {target}', file=sys.stderr)
     return 1
 
-
 def _signal_session(signal: str) -> int:
-    """Signals hippos-session, the login session's main process."""
     loop_pid = Path('/run/hippos/session-loop').read_text().strip()
     return _run(['kill', signal, loop_pid]).returncode
-
 
 def cmd_restart(args: list[str]) -> int:
     target = args[0] if args else ''
@@ -226,10 +203,8 @@ def cmd_restart(args: list[str]) -> int:
     print('Usage: hippos restart session|xserver', file=sys.stderr)
     return 1
 
-
 def cmd_logout() -> int:
     return _signal_session('-TERM')
-
 
 def cmd_logs(args: list[str]) -> int:
     lines = '50'
@@ -239,7 +214,6 @@ def cmd_logs(args: list[str]) -> int:
             lines = args[i + 1]
 
     return _run(['journalctl', '--no-pager', '-n', lines, *_JOURNAL_MATCHES]).returncode
-
 
 def cmd_info() -> int:
     cmds: list[tuple[str, list[str]]] = [
@@ -253,19 +227,14 @@ def cmd_info() -> int:
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode == 0 and r.stdout.strip():
             val = r.stdout.strip().splitlines()[0]
-            # Trim "model name\t: " prefix from cpuinfo
             if ': ' in val and label == 'CPU':
                 val = val.split(': ', 1)[1]
             print(f'{label}: {val}')
     return 0
 
-
-# ── Controller tools ───────────────────────────────────────────────────────────
-
 def _mapping_filename(name: str, vendor: int, product: int) -> str:
     safe = re.sub(r'[^a-zA-Z0-9_]', '', name.replace(' ', '_'))
     return f'{safe}-{vendor:x}-{product:x}.mapping'
-
 
 def _find_mapping(filename: str) -> str:
     for d in _DEVICE_MAPPING_DIRS:
@@ -273,7 +242,6 @@ def _find_mapping(filename: str) -> str:
         if p.exists():
             return str(p)
     return '(none)'
-
 
 def _load_mapping(path: Path) -> dict:
     import json
@@ -284,14 +252,12 @@ def _load_mapping(path: Path) -> dict:
             return {}
     return {}
 
-
 def _save_mapping(path: Path, data: dict) -> None:
     import json
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix('.tmp')
     tmp.write_text(json.dumps(data, indent=4) + '\n')
     tmp.replace(path)
-
 
 def _valid_actions() -> list[str]:
     import json
@@ -303,7 +269,6 @@ def _valid_actions() -> list[str]:
         except Exception:
             pass
     return []
-
 
 def _evdev_gamepads() -> list:
     try:
@@ -326,7 +291,6 @@ def _evdev_gamepads() -> list:
         except OSError:
             continue
     return found
-
 
 def cmd_controller(args: list[str]) -> int:
     subcmd = args[0] if args else 'list'
@@ -355,7 +319,6 @@ def cmd_controller(args: list[str]) -> int:
 
     return 0
 
-
 def cmd_controller_map(args: list[str]) -> int:
     import json
     subcmd = args[0] if args else 'show'
@@ -379,7 +342,6 @@ def cmd_controller_map(args: list[str]) -> int:
             return 1
         dev = gamepads[player - 1]
         mf = _mapping_filename(dev.name, dev.info.vendor, dev.info.product)
-        # User mapping overrides OS mapping
         user_path = user_mapping_dir / mf
         os_path   = Path('/usr/share/hippos/hotkeys/devices') / mf
         path = user_path if user_path.exists() else (os_path if os_path.exists() else None)
@@ -409,7 +371,6 @@ def cmd_controller_map(args: list[str]) -> int:
         dev = gamepads[player - 1]
         mf = _mapping_filename(dev.name, dev.info.vendor, dev.info.product)
         path = user_mapping_dir / mf
-        # Start from OS mapping if no user copy yet
         if not path.exists():
             os_path = Path('/usr/share/hippos/hotkeys/devices') / mf
             data = _load_mapping(os_path)
@@ -446,9 +407,6 @@ def cmd_controller_map(args: list[str]) -> int:
     print(f'Unknown map subcommand: {subcmd}', file=sys.stderr)
     return 1
 
-
-# ── Audio tools ────────────────────────────────────────────────────────────────
-
 def _pipewire_env() -> dict[str, str]:
     env = dict(os.environ)
     xdg = env.get('XDG_RUNTIME_DIR', '/run/user/1000')
@@ -456,7 +414,6 @@ def _pipewire_env() -> dict[str, str]:
     env.setdefault('DBUS_SESSION_BUS_ADDRESS', f'unix:path={xdg}/bus')
     env.setdefault('PIPEWIRE_RUNTIME_DIR', xdg)
     return env
-
 
 def cmd_audio(args: list[str]) -> int:
     subcmd = args[0] if args else 'list'
@@ -533,7 +490,6 @@ def cmd_audio(args: list[str]) -> int:
         if r.returncode != 0:
             print(f'pactl error: {r.stderr.strip()}', file=sys.stderr)
             return 1
-        # Persist: read back actual volume and save
         r2 = subprocess.run(['pactl', 'get-sink-volume', '@DEFAULT_SINK@'],
                             capture_output=True, text=True, env=env)
         if r2.returncode == 0:
@@ -547,14 +503,10 @@ def cmd_audio(args: list[str]) -> int:
     print('Usage: hippos audio list|get|set|volume', file=sys.stderr)
     return 1
 
-
-# ── Display tools ──────────────────────────────────────────────────────────────
-
 def _xrandr_query() -> str:
     r = subprocess.run(['xrandr', '--query'], capture_output=True, text=True,
                        env={**os.environ, 'DISPLAY': os.environ.get('DISPLAY', ':0')})
     return r.stdout if r.returncode == 0 else ''
-
 
 def cmd_display(args: list[str]) -> int:
     subcmd = args[0] if args else 'list'
@@ -588,7 +540,6 @@ def cmd_display(args: list[str]) -> int:
             return 1
         mode = args[1]
         subprocess.run([str(HIPPOS_SETTINGS), 'set', 'display.resolution', mode])
-        # Apply now if X is running
         output = _setting('display.output')
         if not output:
             output = _xrandr_current_output()
@@ -633,15 +584,11 @@ def cmd_display(args: list[str]) -> int:
     print(f'Unknown display subcommand: {subcmd}', file=sys.stderr)
     return 1
 
-
 def _xrandr_current_output() -> str:
     for line in _xrandr_query().splitlines():
         if ' connected' in line:
             return line.split()[0]
     return ''
-
-
-# ── Screenshot ──────────────────────────────────────────────────────────────────
 
 def cmd_screenshot(args: list[str]) -> int:
     import time as _time
@@ -656,7 +603,6 @@ def cmd_screenshot(args: list[str]) -> int:
 
     env = {**os.environ, 'DISPLAY': os.environ.get('DISPLAY', ':0')}
 
-    # Try scrot first, then import (ImageMagick), then xwd+convert
     for cmd in (
         ['scrot', '-z', out_path],
         ['import', '-window', 'root', out_path],
@@ -672,23 +618,17 @@ def cmd_screenshot(args: list[str]) -> int:
     print('No screenshot tool found (install scrot or imagemagick)', file=sys.stderr)
     return 1
 
-
-# ── Wi-Fi ──────────────────────────────────────────────────────────────────────
-
 def _nmcli(*args: str, capture: bool = True) -> tuple[int, str]:
     r = subprocess.run(['nmcli'] + list(args), capture_output=capture, text=True)
     return r.returncode, (r.stdout + r.stderr).strip()
 
-
 def _wifi_device() -> str:
-    """Return first Wi-Fi device name from nmcli."""
     rc, out = _nmcli('-t', '-f', 'DEVICE,TYPE', 'dev', 'status')
     for line in out.splitlines():
         parts = line.split(':')
         if len(parts) >= 2 and parts[1] == 'wifi':
             return parts[0]
     return 'wlan0'
-
 
 def cmd_wifi(args: list[str]) -> int:
     subcmd = args[0] if args else 'status'
@@ -771,13 +711,9 @@ def cmd_wifi(args: list[str]) -> int:
     print(f'Unknown wifi subcommand: {subcmd}', file=sys.stderr)
     return 1
 
-
-# ── Bluetooth ───────────────────────────────────────────────────────────────────
-
 def _btctl(*args: str) -> tuple[int, str]:
     r = subprocess.run(['bluetoothctl', *args], capture_output=True, text=True)
     return r.returncode, (r.stdout + r.stderr).strip()
-
 
 def cmd_bluetooth(args: list[str]) -> int:
     subcmd = args[0] if args else 'list'
@@ -803,13 +739,11 @@ def cmd_bluetooth(args: list[str]) -> int:
             if i + 1 < len(args):
                 secs = args[i + 1]
         print(f'Scanning for {secs}s... (put device in pairing mode now)')
-        # Power on, then scan with timeout
         _btctl('power', 'on')
         r = subprocess.run(
             ['timeout', secs, 'bluetoothctl', 'scan', 'on'],
             capture_output=True, text=True,
         )
-        # List devices found
         _, devices = _btctl('devices')
         if devices:
             print('Discovered:')
@@ -858,14 +792,8 @@ def cmd_bluetooth(args: list[str]) -> int:
     print(f'Unknown bluetooth subcommand: {subcmd}', file=sys.stderr)
     return 1
 
-
-# ── Shutdown / power ───────────────────────────────────────────────────────────
-
 def cmd_power(action: str) -> int:
     return _run(['/usr/lib/hippos/hippos-shutdown', action]).returncode
-
-
-# ── Timezone ────────────────────────────────────────────────────────────────────
 
 def cmd_timezone(args: list[str]) -> int:
     subcmd = args[0] if args else 'get'
@@ -879,9 +807,6 @@ def cmd_timezone(args: list[str]) -> int:
     print(f'Unknown timezone subcommand: {subcmd}', file=sys.stderr)
     return 1
 
-
-# ── Brightness ──────────────────────────────────────────────────────────────────
-
 def cmd_brightness(args: list[str]) -> int:
     subcmd = args[0] if args else 'get'
     if subcmd == 'get':
@@ -893,9 +818,6 @@ def cmd_brightness(args: list[str]) -> int:
         return _run(['/usr/lib/hippos/hippos-brightness', 'set', args[1]]).returncode
     print(f'Unknown brightness subcommand: {subcmd}', file=sys.stderr)
     return 1
-
-
-# ── Diagnostics ─────────────────────────────────────────────────────────────────
 
 def cmd_diag(args: list[str]) -> int:
     import time as _time
@@ -987,7 +909,6 @@ def cmd_diag(args: list[str]) -> int:
     print(f'\nDiagnostics saved to: {out_path}')
     return 0
 
-
 def cmd_update(args: list[str]) -> int:
     import datetime
     sub = args[0] if args else 'check'
@@ -1041,7 +962,6 @@ def cmd_update(args: list[str]) -> int:
     print('Usage: hippos update check|apply|rollback', file=sys.stderr)
     return 1
 
-
 def cmd_preflight(_args: list[str]) -> int:
     passed = failed = warned = 0
 
@@ -1053,13 +973,11 @@ def cmd_preflight(_args: list[str]) -> int:
         elif status == 'fail': failed  += 1
         else:                  warned  += 1
 
-    # UEFI
     if Path('/sys/firmware/efi').exists():
         check('pass', 'Boot mode: UEFI')
     else:
         check('fail', 'Boot mode: Legacy BIOS — HippOS requires UEFI')
 
-    # RAM
     try:
         mem_kb = int(next(
             l for l in Path('/proc/meminfo').read_text().splitlines()
@@ -1075,7 +993,6 @@ def cmd_preflight(_args: list[str]) -> int:
     except Exception:
         check('warn', 'RAM: could not determine')
 
-    # Disk
     try:
         r = subprocess.run(['df', '-BG', '--output=avail', '/'], capture_output=True, text=True)
         free_gb = int(r.stdout.splitlines()[-1].strip().rstrip('G'))
@@ -1088,7 +1005,6 @@ def cmd_preflight(_args: list[str]) -> int:
     except Exception:
         check('warn', 'Disk: could not determine free space')
 
-    # GPU
     try:
         lspci_out = subprocess.run(['lspci'], capture_output=True, text=True).stdout.lower()
         if 'nvidia' in lspci_out:
@@ -1107,7 +1023,6 @@ def cmd_preflight(_args: list[str]) -> int:
     except Exception:
         check('warn', 'GPU: could not query PCI devices')
 
-    # /userdata
     try:
         r = subprocess.run(['mountpoint', '-q', '/userdata'])
         check('pass' if r.returncode == 0 else 'warn',
@@ -1118,9 +1033,6 @@ def cmd_preflight(_args: list[str]) -> int:
     print()
     print(f'Summary: {passed} pass, {warned} warn, {failed} fail')
     return 0 if failed == 0 else 1
-
-
-# ── Entry point ────────────────────────────────────────────────────────────────
 
 def main() -> int:
     args = sys.argv[1:]
@@ -1180,7 +1092,6 @@ def main() -> int:
     print(f'Unknown command: {cmd}\n', file=sys.stderr)
     print(_USAGE, file=sys.stderr)
     return 1
-
 
 if __name__ == '__main__':
     sys.exit(main())

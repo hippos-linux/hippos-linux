@@ -27,7 +27,6 @@ from HipposPaths import BIOS, CONFIGS, SAVES, USERDATA
 from hippos_launcher_sync import CLIENT_ENTRY
 import hippos_quiver
 
-
 _VICE_MACHINE_NAMES: dict[str, str] = {
     'x64':     'C64SC',
     'x64sc':   'C64SC',
@@ -41,8 +40,6 @@ _VICE_MACHINE_NAMES: dict[str, str] = {
     'xcbm5x0': 'CBM-II-5x0',
 }
 
-# Joystick port for each player. Most C64-family games read port 2; the
-# VIC-20 has a single port; the PET and CBM-II 600/700 have none.
 _VICE_PLAYER_PORTS: dict[str, tuple[int, ...]] = {
     'x64':     (2, 1),
     'x64sc':   (2, 1),
@@ -67,13 +64,10 @@ _VICE_BORDER_OPTION: dict[str, str] = {
 _VICE_BORDER_NONE = '3'
 
 LUTRISVIEW = '/usr/lib/hippos/lutrisview'
-# LutrisView takes its colours, fonts and background from the default ES theme.
 LUTRISVIEW_THEME = '/usr/share/emulationstation/themes/es-theme-hippos'
 
-# VICE's -joydevN numbering: 0 none, 1 numpad, 2-3 keysets, then host devices.
 _VICE_JOYDEV_FIRST_HOST = 4
 
-# .vjm columns: device input-type input-index action [pin]
 _VICE_INPUT_AXIS, _VICE_INPUT_BUTTON = 0, 1
 _VICE_ACTION_JOYSTICK, _VICE_ACTION_UI_ACTIVATE = 1, 4
 _VICE_PIN_UP, _VICE_PIN_DOWN, _VICE_PIN_LEFT, _VICE_PIN_RIGHT = 1, 2, 4, 8
@@ -87,10 +81,9 @@ _VICE_BUTTON_ACTIONS: tuple[tuple[int, int, int], ...] = (
     (ecodes.BTN_DPAD_DOWN,  _VICE_ACTION_JOYSTICK,    _VICE_PIN_DOWN),
     (ecodes.BTN_DPAD_LEFT,  _VICE_ACTION_JOYSTICK,    _VICE_PIN_LEFT),
     (ecodes.BTN_DPAD_RIGHT, _VICE_ACTION_JOYSTICK,    _VICE_PIN_RIGHT),
-    (ecodes.BTN_SELECT,     _VICE_ACTION_UI_ACTIVATE, 0),  # opens VICE's menu
+    (ecodes.BTN_SELECT,     _VICE_ACTION_UI_ACTIVATE, 0),
 )
 
-# (axis, pin when negative, pin when positive)
 _VICE_AXIS_ACTIONS: tuple[tuple[int, int, int], ...] = (
     (ecodes.ABS_HAT0X, _VICE_PIN_LEFT, _VICE_PIN_RIGHT),
     (ecodes.ABS_HAT0Y, _VICE_PIN_UP,   _VICE_PIN_DOWN),
@@ -108,20 +101,13 @@ _VICE_GAMEPAD_AXES = frozenset({
     ecodes.ABS_HAT0X, ecodes.ABS_HAT0Y,
 })
 
-
 @dataclass(frozen=True)
 class _ViceJoystick:
     path: str
     buttons: tuple[int, ...]
     axes: tuple[int, ...]
 
-
 def _vice_joysticks() -> list[_ViceJoystick]:
-    """Host joysticks numbered the way VICE's Linux evdev driver numbers
-    them: /dev/input entries in alphabetical order, keeping the ones it can
-    open that have a gamepad button and a stick or hat axis. Buttons are the
-    key codes from BTN_JOYSTICK up and axes every ABS code, hats included,
-    each in code order."""
     joysticks = []
     for node in sorted(Path('/dev/input').glob('event*')):
         try:
@@ -140,7 +126,6 @@ def _vice_joysticks() -> list[_ViceJoystick]:
             ))
     return joysticks
 
-
 def _vice_joymap_lines(device: int, joystick: _ViceJoystick) -> list[str]:
     lines = []
     for code, action, pin in _VICE_BUTTON_ACTIONS:
@@ -154,11 +139,7 @@ def _vice_joymap_lines(device: int, joystick: _ViceJoystick) -> list[str]:
             lines.append(f'{device} {_VICE_INPUT_AXIS} {row + 1} {_VICE_ACTION_JOYSTICK} {negative_pin}')
     return lines
 
-
 def _configure_vice_joysticks(ctx: LaunchContext, binary: str) -> list[str]:
-    """Write VICE's default joymap for the binary's machine (it reads
-    $XDG_CONFIG_HOME/vice/gtk3-joymap-<machine>.vjm) and return the -joydevN
-    arguments putting each player's controller in its joystick port."""
     joysticks = _vice_joysticks()
     device_by_path = {joystick.path: index for index, joystick in enumerate(joysticks)}
     ports = _VICE_PLAYER_PORTS.get(binary, ())
@@ -177,7 +158,6 @@ def _configure_vice_joysticks(ctx: LaunchContext, binary: str) -> list[str]:
     joymap.write_text('\n'.join(lines) + '\n', encoding='utf-8')
     return args
 
-
 def launch_vice(ctx: LaunchContext) -> int:
     binary = ctx.core or 'x64'
     bin_path = _find_emulator_bin_in_package('vice', binary)
@@ -194,7 +174,6 @@ def launch_vice(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'vice', cmd, env)
     return result.returncode
 
-
 def launch_simcoupe(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin_in_package('samcoupe', 'samcoupe', 'simcoupe')
     if bin_path is None:
@@ -206,10 +185,8 @@ def launch_simcoupe(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'samcoupe', cmd, env)
     return result.returncode
 
-
 def launch_sh(ctx: LaunchContext) -> int:
     rom = ctx.rom
-    # squashfs mounts arrive as a directory; look for run.sh inside
     script = (rom / 'run.sh') if rom.is_dir() and (rom / 'run.sh').exists() else rom
     if not script.exists():
         return 1
@@ -218,14 +195,13 @@ def launch_sh(ctx: LaunchContext) -> int:
         try:
             script.chmod(mode | 0o111)
         except PermissionError:
-            pass  # already executable or on a filesystem that doesn't support chmod
+            pass
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
     result = _run_game_command(ctx, 'shell', ['/bin/bash', str(script)], env,
                                cwd=script.parent)
     return result.returncode
-
 
 def launch_flatpak(ctx: LaunchContext) -> int:
     try:
@@ -243,7 +219,6 @@ def launch_flatpak(ctx: LaunchContext) -> int:
     _log.info("Launching Flatpak: %s", app_id)
     result = _run_game_command(ctx, 'flatpak', cmd, env)
     return result.returncode
-
 
 def launch_heroic(ctx: LaunchContext) -> int:
     wrapper = Path('/usr/lib/hippos/hippos-heroic')
@@ -265,12 +240,7 @@ def launch_heroic(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'heroic', cmd, env)
     return result.returncode
 
-
 def launch_lutris(ctx: LaunchContext) -> int:
-    """A .lutris file (hippos-lutris-sync) holds a game's Lutris id, or the marker
-    for the Lutris entry, which opens LutrisView: a controller frontend for the
-    library and store that hands games and installs to Lutris. Lutris quits once
-    a game started with lutris:rungameid exits."""
     try:
         target = ctx.rom.read_text(encoding='utf-8').strip()
     except OSError as exc:
@@ -281,13 +251,9 @@ def launch_lutris(ctx: LaunchContext) -> int:
         return 1
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
-    # Same dirs as the desktop session, where the games were installed:
-    # pga.db, game configs and cover art live under these.
     env['XDG_CONFIG_HOME'] = '/userdata/system/.config'
     env['XDG_DATA_HOME'] = '/userdata/.local/share'
     env['XDG_CACHE_HOME'] = '/userdata/.cache'
-    # Debian installs Lutris and tools it runs, like gamemoderun, to /usr/games,
-    # which isn't on the service manager's PATH. session-desktop adds the same.
     env['PATH'] = f"{env.get('PATH', '')}:/usr/local/games:/usr/games"
     if target == CLIENT_ENTRY:
         env['LUTRISVIEW_THEME'] = LUTRISVIEW_THEME
@@ -297,11 +263,7 @@ def launch_lutris(ctx: LaunchContext) -> int:
     _log.info("Launching Lutris: %s", target)
     return _run_game_command(ctx, 'lutris', cmd, env).returncode
 
-
 def launch_quiver(ctx: LaunchContext) -> int:
-    """A .quiver file (hippos-quiver-sync) holds an app's Quiver folder name,
-    or the marker for Quiver's own entry. Quiver picks the executable and runs
-    Windows apps through its configured Wine command."""
     try:
         target = ctx.rom.read_text(encoding='utf-8').strip()
     except OSError as exc:
@@ -318,7 +280,6 @@ def launch_quiver(ctx: LaunchContext) -> int:
     _log.info("Launching Quiver: %s", target)
     return _run_game_command(ctx, 'quiver', cmd, env).returncode
 
-
 def launch_pygame(ctx: LaunchContext) -> int:
     pygame_dir = Path('/opt/emulators/python-pygame2')
     conf = _load_hippos_conf()
@@ -332,7 +293,6 @@ def launch_pygame(ctx: LaunchContext) -> int:
                                cwd=ctx.rom.parent)
     return result.returncode
 
-
 def launch_ruffle(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('ruffle')
     if bin_path is None:
@@ -342,7 +302,6 @@ def launch_ruffle(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     result = _run_game_command(ctx, 'ruffle', cmd, env)
     return result.returncode
-
 
 def launch_lightspark(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('lightspark')
@@ -354,7 +313,6 @@ def launch_lightspark(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'lightspark', cmd, env)
     return result.returncode
 
-
 def launch_pyxel(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('pyxel')
     if bin_path is None:
@@ -362,14 +320,11 @@ def launch_pyxel(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     cmd = [str(bin_path), 'play' if ctx.rom.suffix == '.pyxapp' else 'run', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
-    # bin/pyxel is a plain script; the package sits at the top of the artifact.
     env['PYTHONPATH'] = str(bin_path.parent.parent)
     result = _run_game_command(ctx, 'pyxel', cmd, env)
     return result.returncode
 
-
 def _clk_media(rom: Path) -> Path:
-    """Clock Signal can't read inside a zip, and picks its machine from the file."""
     if not zipfile.is_zipfile(rom):
         return rom
     extract_dir = Path('/tmp/clk') / rom.stem
@@ -377,7 +332,6 @@ def _clk_media(rom: Path) -> Path:
     with zipfile.ZipFile(rom) as archive:
         archive.extractall(extract_dir)
         return extract_dir / sorted(archive.namelist())[0]
-
 
 def launch_clk(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('clksignal', 'clk')
@@ -397,7 +351,6 @@ def launch_clk(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'clk', cmd, env)
     return result.returncode
 
-
 def launch_tsugaru(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('Tsugaru_CUI', 'tsugaru')
     if bin_path is None:
@@ -415,7 +368,6 @@ def launch_tsugaru(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     result = _run_game_command(ctx, 'tsugaru', cmd, env)
     return result.returncode
-
 
 def launch_x16emu(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('x16emu')
@@ -452,7 +404,6 @@ def launch_x16emu(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'x16emu', cmd, env)
     return result.returncode
 
-
 def launch_ioquake3(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('ioquake3')
     if bin_path is None:
@@ -460,7 +411,6 @@ def launch_ioquake3(ctx: LaunchContext) -> int:
         return 1
     conf = _load_hippos_conf()
     cmd: list[str] = [str(bin_path)]
-    # .quake3 rom file contains command-line args (e.g. +set fs_game baseq3)
     try:
         args = ctx.rom.read_text(encoding='utf-8').strip().split()
         cmd.extend(args)
@@ -471,9 +421,8 @@ def launch_ioquake3(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'ioquake3', cmd, env, cwd=ctx.rom.parent)
     return result.returncode
 
-
 def launch_lexaloffle(ctx: LaunchContext) -> int:
-    system = ctx.system  # 'pico8' or 'voxatron'
+    system = ctx.system
     if system == 'pico8':
         bin_path = BIOS / 'pico-8' / 'pico8'
         controllers_file = USERDATA / '.lexaloffle' / 'pico-8' / 'sdl_controllers.txt'
@@ -514,7 +463,6 @@ def launch_lexaloffle(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'lexaloffle', cmd, env)
     return result.returncode
 
-
 def launch_uqm(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('urquan', 'uqm')
     if bin_path is None:
@@ -531,7 +479,6 @@ def launch_uqm(ctx: LaunchContext) -> int:
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
     result = _run_game_command(ctx, 'uqm', cmd, env)
     return result.returncode
-
 
 def launch_redream(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('redream')
@@ -606,7 +553,6 @@ def launch_redream(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'redream', cmd, env)
     return result.returncode
 
-
 def launch_corsixth(ctx: LaunchContext) -> int:
     import locale
     bin_path = _find_emulator_bin('corsixth', 'corsix-th', 'CorsixTH')
@@ -624,7 +570,6 @@ def launch_corsixth(ctx: LaunchContext) -> int:
     w, h = ctx.resolution if ctx.resolution else (1920, 1080)
     conf = _load_hippos_conf()
 
-    # Language mapping from system locale
     _lang_map = {
         'en_US': 'en', 'en_GB': 'en', 'fr_FR': 'fr', 'oc_FR': 'fr',
         'de_DE': 'de', 'es_ES': 'es', 'es_MX': 'es', 'it_IT': 'it',
@@ -666,7 +611,6 @@ def launch_corsixth(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'corsixth', cmd, env)
     return result.returncode
 
-
 _GZDOOM_JOY_BINDINGS: dict[str, str] = {
     'b':        '+use',
     'x':        '+jump',
@@ -684,14 +628,11 @@ _GZDOOM_JOY_AUTOMAP_BINDINGS: dict[str, str] = {
     'pagedown': 'am_zoomout',
 }
 
-
 def _gzdoom_ini_set(sections: dict, section: str, key: str, value: str) -> None:
     sections.setdefault(section, {})[key] = value
 
-
 def _gzdoom_ini_set_if_missing(sections: dict, section: str, key: str, value: str) -> None:
     sections.setdefault(section, {}).setdefault(key, value)
-
 
 def _gzdoom_read_ini(path: Path) -> dict[str, dict[str, str]]:
     sections: dict[str, dict[str, str]] = {}
@@ -708,7 +649,6 @@ def _gzdoom_read_ini(path: Path) -> dict[str, dict[str, str]]:
             sections[current][k.strip()] = v.strip()
     return sections
 
-
 def _gzdoom_write_ini(path: Path, sections: dict[str, dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open('w', encoding='utf-8') as f:
@@ -717,7 +657,6 @@ def _gzdoom_write_ini(path: Path, sections: dict[str, dict[str, str]]) -> None:
             for k, v in kv.items():
                 f.write(f'{k}={v}\n')
             f.write('\n')
-
 
 def launch_gzdoom(ctx: LaunchContext) -> int:
     import shlex as _shlex
@@ -736,14 +675,12 @@ def launch_gzdoom(ctx: LaunchContext) -> int:
     logs_dir    = USERDATA / 'system' / 'logs'
     logs_dir.mkdir(parents=True, exist_ok=True)
 
-    # GPU API selection
     gz_api = _conf_value(conf, 'gz_api', '0')
     if gz_api == '3':
         api_cfg = 'gl_es 1\nvid_preferbackend 3\ngles_use_mapped_buffer true\n'
     else:
         api_cfg = f'vid_preferbackend {gz_api}\n'
 
-    # Script file
     show_fps = _conf_bool(conf, 'show_fps', False)
     script_path.write_text(
         f'logfile "{logs_dir / "gzdoom.log"}"\n'
@@ -758,7 +695,6 @@ def launch_gzdoom(ctx: LaunchContext) -> int:
     _gzdoom_ini_set(sections, '[GlobalSettings]', 'vid_vsync', _conf_value(conf, 'gz_vsync', 'false'))
     _gzdoom_ini_set(sections, '[GlobalSettings]', 'use_joystick', 'true')
 
-    # ROM search paths
     rom_parent = str(ctx.rom.parent)
     for sec in ('[IWADSearch.Directories]', '[FileSearch.Directories]'):
         existing_vals = set(sections.get(sec, {}).values())
@@ -766,7 +702,6 @@ def launch_gzdoom(ctx: LaunchContext) -> int:
             idx = len(sections.get(sec, {}))
             _gzdoom_ini_set_if_missing(sections, sec, f'Path_{idx}', rom_parent)
 
-    # Sound font paths
     for p in ['/usr/share/gzdoom/soundfonts', '/usr/share/gzdoom/fm_banks',
               str(cfg_dir / 'soundfonts'), str(cfg_dir / 'fm_banks')]:
         _gzdoom_ini_set_if_missing(sections, '[SoundfontSearch.Directories]', f'Path_{p}', p)
@@ -811,7 +746,6 @@ def launch_gzdoom(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'gzdoom', cmd, env, cwd=ctx.rom.parent)
     return result.returncode
 
-
 _RYUJINX_CTRL_TEMPLATE: dict = {
     'left_joycon_stick':  {'joystick': 'Left', 'invert_stick_x': False, 'invert_stick_y': False, 'rotate90_cw': False, 'stick_button': 'LeftStick'},
     'right_joycon_stick': {'joystick': 'Right', 'invert_stick_x': False, 'invert_stick_y': False, 'rotate90_cw': False, 'stick_button': 'RightStick'},
@@ -832,9 +766,7 @@ _RYUJINX_CTRL_TEMPLATE: dict = {
     'backend': 'GamepadSDL2',
 }
 
-
 def _ryujinx_ctrl_uuid(ctrl) -> str:
-    """Generate a Ryujinx-compatible device UUID from SDL GUID."""
     guid = (ctrl.guid or '').lower().replace('-', '')
     if len(guid) == 32:
         bustype    = guid[0:8]
@@ -845,7 +777,6 @@ def _ryujinx_ctrl_uuid(ctrl) -> str:
         ver_rev    = version[2:4] + version[0:2]
         return f'{ctrl.index}-{bustype}-{vendor}-0000-{prod_rev}-0000{ver_rev}0000'
     return f'{ctrl.index}-00000003-0000-0000-0000-000000000000'
-
 
 def launch_ryujinx(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('Ryujinx.sh', 'Ryujinx', 'ryujinx')
@@ -878,7 +809,6 @@ def launch_ryujinx(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     result = _run_game_command(ctx, 'ryujinx', cmd, env)
     return result.returncode
-
 
 CLK_QUICKLOAD_SYSTEMS = {'amstradcpc', 'archimedes', 'electron', 'msx1', 'msx2', 'oricatmos', 'zxspectrum'}
 CLK_SVIDEO_SYSTEMS = {'colecovision', 'mastersystem'}

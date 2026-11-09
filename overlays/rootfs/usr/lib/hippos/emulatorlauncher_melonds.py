@@ -15,17 +15,10 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import BIOS, CONFIGS, SAVES
 
-
 MELONDS_CONFIG_DIR = CONFIGS / 'melonDS'
 MELONDS_TOML       = MELONDS_CONFIG_DIR / 'melonDS.toml'
 
-
 def _write_melonds_config(conf: dict[str, str]) -> None:
-    """Write melonDS TOML config from hippos.conf values.
-
-    melonDS uses a TOML config file. We use the _write_toml / _read_toml
-    helpers already present in this module.
-    """
     MELONDS_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     (SAVES / 'nds').mkdir(parents=True, exist_ok=True)
 
@@ -110,7 +103,6 @@ def _write_melonds_config(conf: dict[str, str]) -> None:
     existing.update(base)
     _write_toml(MELONDS_TOML, existing)
     _log.info("Wrote melonDS config: %s", MELONDS_TOML)
-
 
 def launch_melonds(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('melonds')

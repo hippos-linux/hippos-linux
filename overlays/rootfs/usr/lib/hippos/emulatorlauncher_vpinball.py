@@ -18,7 +18,6 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import CONFIGS
 
-
 def write_vpinball_config(ctx: LaunchContext) -> None:
     conf = _load_effective_hippos_conf()
     VPINBALL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -171,7 +170,6 @@ def write_vpinball_config(ctx: LaunchContext) -> None:
     with VPINBALL_INI.open('w', encoding='utf-8') as fh:
         parser.write(fh)
 
-
 def launch_vpinball(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('vpinball')
     if bin_path is None:
@@ -185,7 +183,6 @@ def launch_vpinball(ctx: LaunchContext) -> int:
     env['SDL_RENDER_VSYNC'] = '0'
     result = _run_game_command(ctx, 'vpinball', cmd, env)
     return result.returncode
-
 
 VPINBALL_CONFIG_DIR = CONFIGS / 'vpinball'
 VPINBALL_INI = VPINBALL_CONFIG_DIR / 'VPinballX.ini'

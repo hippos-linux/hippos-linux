@@ -15,7 +15,6 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import CONFIGS, SAVES
 
-
 _SYSTEM_MAP: dict[str, str] = {
     'nes':          'Famicom',
     'fds':          'Famicom',
@@ -55,8 +54,6 @@ _SYSTEM_MAP: dict[str, str] = {
     'zxspectrum128': 'ZX Spectrum 128',
 }
 
-# Maps ES input name → ares VirtualPad settings.bml key
-# Key is the sanitised BML node name (spaces→dot, (→dot, )→removed)
 _ES_TO_VIRTUALPAD: dict[str, str] = {
     'up':            'Pad.Up',
     'down':          'Pad.Down',
@@ -84,37 +81,29 @@ _ES_TO_VIRTUALPAD: dict[str, str] = {
     'joystick2right':'R-Right',
 }
 
-
 def _binding_to_ares(binding: ESBinding, device_ident: str) -> str:
-    """Convert ESBinding to an ares input assignment string."""
-    # Ares group IDs: 0=Axis, 1=Hat, 2=Trigger, 3=Button
     if binding.type == 'button':
         return f'{device_ident}/3/{binding.code}'
     if binding.type == 'hat':
-        # Ares encodes each physical hat as two axis-like inputs:
-        # hat_n * 2     = X (horizontal): Lo=left, Hi=right
-        # hat_n * 2 + 1 = Y (vertical):   Lo=up,   Hi=down
         hat_x = binding.code * 2
         hat_y = binding.code * 2 + 1
-        if binding.value == 1:   # up
+        if binding.value == 1:
             return f'{device_ident}/1/{hat_y}/Lo'
-        if binding.value == 4:   # down
+        if binding.value == 4:
             return f'{device_ident}/1/{hat_y}/Hi'
-        if binding.value == 8:   # left
+        if binding.value == 8:
             return f'{device_ident}/1/{hat_x}/Lo'
-        if binding.value == 2:   # right
+        if binding.value == 2:
             return f'{device_ident}/1/{hat_x}/Hi'
     if binding.type == 'axis':
         qualifier = 'Lo' if binding.value < 0 else 'Hi'
         return f'{device_ident}/0/{binding.code}/{qualifier}'
     return ''
 
-
 def _write_ares_settings(settings_file: Path, ctx: LaunchContext) -> None:
     profiles = _load_es_input_configs()
     guid_seen: dict[str, int] = {}
 
-    # Build per-player VirtualPad BML blocks
     pad_blocks: list[str] = []
     for nplayer, ctrl in enumerate(ctx.controllers, start=1):
         profile = _pick_es_profile(profiles, ctrl)
@@ -133,11 +122,9 @@ def _write_ares_settings(settings_file: Path, ctx: LaunchContext) -> None:
                 continue
             assignment = _binding_to_ares(binding, device_ident)
             if assignment:
-                # BindingLimit=3: write first binding, leave other 2 empty
                 lines.append(f'  {bml_key}: {assignment};;')
         pad_blocks.append('\n'.join(lines))
 
-    # Assemble settings.bml
     bml_parts = [
         'Input',
         '  Driver',
@@ -147,7 +134,6 @@ def _write_ares_settings(settings_file: Path, ctx: LaunchContext) -> None:
 
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file.write_text('\n'.join(bml_parts) + '\n', encoding='utf-8')
-
 
 def launch_ares(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('ares')

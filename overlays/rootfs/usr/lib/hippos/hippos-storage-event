@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Dispatch a single storage add/remove event then trigger a ROM pool rescan.
 
-ACTION="$1"   # mount | umount
+ACTION="$1"
 DEVNAME="$2"
 DEVTYPE="$3"
 

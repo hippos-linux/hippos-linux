@@ -12,45 +12,24 @@ fi
 
 mkdir -p /userdata/system/configs/emulationstation
 
-# Undo the desktop session's hotkey context (see session-desktop).
 /usr/lib/hippos/hippos-hotkeys --default-context || true
 
 export HOME=/userdata
 export XDG_RUNTIME_DIR=/run/user/1000
 export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus"
 export DISPLAY=:0
-# ES must see controllers the way emulators do: RetroArch reads evdev
-# (input_joypad_driver=udev) and the launcher writes ES's button indices into
-# its config. SDL's HIDAPI drivers (DualSense, DualShock 4, Steam) number
-# buttons in SDL's own order instead, which put Start on L2 and swapped the
-# face buttons for a DualSense. The kernel drives all of these pads.
 export SDL_JOYSTICK_HIDAPI=0
-# SDL minimizes a fullscreen window when it loses focus, and nothing maps ES
-# again afterwards: any window that takes focus without going through ES's
-# own launch path (an app started from a hotkey, a dialog) left a black
-# screen once it closed.
 export SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS=0
 unset XAUTHORITY
 
-# ES's own gettext lookup honors system.language directly (LANGUAGE env var,
-# set in EsLocale::init), but LC_ALL/LANG drives everything else locale-
-# dependent (date/number formatting, sorting) and nothing else in this
-# launch chain sets it. Leave unset when no preference is saved — the OS-
-# wide default locale (see configure-rootfs.sh) already covers that case.
 hippos_lang="$(hippos-settings get system.language 2>/dev/null)"
 if [[ -n "${hippos_lang}" ]]; then
     export LC_ALL="${hippos_lang}.UTF-8"
     export LANG="${LC_ALL}"
 fi
 
-# systemd --user units (polkit agents among them) run in user@1000's cgroup,
-# outside the greetd login session, so sd_pid_get_session() can't find the
-# session for them by cgroup. They need XDG_SESSION_ID in their environment,
-# or polkit agent registration fails with "Cannot create unix session".
 dbus-update-activation-environment --systemd DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS HOME XDG_SESSION_ID 2>/dev/null || true
 
-# Display first: hippos-audio-setup only waits for an HDMI sink when the
-# codec's ELD reports a monitor, and that needs the output to be lit.
 /usr/lib/hippos/hippos-display-setup
 /usr/lib/hippos/hippos-audio-setup
 
@@ -82,17 +61,13 @@ fi
 
 xsetroot -solid black
 
-# HDMI-CEC: power on TV and switch to our input (runs in background, non-blocking)
 /usr/lib/hippos/hippos-cec on &
 
-# Sleep timer: auto-suspend after configured idle period
 _SLEEP_TIMER="$(hippos-settings get system.sleep_timer 2>/dev/null || true)"
 if [[ -n "$_SLEEP_TIMER" && "$_SLEEP_TIMER" != "0" ]]; then
     ( while true; do sleep 30; _idle=$(xprintidle 2>/dev/null || echo 0); [ "$_idle" -ge "$((_SLEEP_TIMER * 60000))" ] && /usr/bin/hippos-shutdown suspend; done ) &
 fi
 
-# Translate display.output (xrandr name) → SDL display index so ES opens on the right screen.
-# SDL enumerates active displays in xrandr output order.
 _DISPLAY_OUTPUT=$(hippos-settings get display.output 2>/dev/null || true)
 _MONITOR_IDX=""
 if [[ -n "$_DISPLAY_OUTPUT" && "$_DISPLAY_OUTPUT" != "all" ]]; then
@@ -109,6 +84,4 @@ fi
 _ES_CMD="/usr/bin/emulationstation"
 [[ -n "$_MONITOR_IDX" ]] && _ES_CMD="$_ES_CMD --monitor $_MONITOR_IDX"
 
-# openbox outlives its startup command, so end it with ES: otherwise a crashed ES
-# leaves a black screen, because hippos-es only starts a new session once this exits.
 exec openbox --sm-disable --startup "sh -c '$_ES_CMD; openbox --exit'"

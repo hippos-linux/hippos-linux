@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# File manager action: create an ES Ports launcher for an AppImage or .desktop file.
 
 if out=$(/usr/lib/hippos/hippos-ports add "$1" 2>&1); then
     notify-send "ES Ports" "${out}" --icon=emblem-favorite 2>/dev/null || true

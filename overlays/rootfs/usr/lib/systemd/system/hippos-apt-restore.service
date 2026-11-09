@@ -1,11 +1,8 @@
 [Unit]
 Description=HippOS reinstall of the user's apt packages after an OS update
-# Like hippos-apt-update.service: no wait for connectivity. Without network the
-# restore fails, keeps its pending flag and runs again next boot.
 After=network.target local-fs.target hippos-apt-update.service
 
 [Service]
-# simple, not oneshot: reinstalling can take minutes and must not hold up boot.
 Type=simple
 Environment=DEBIAN_FRONTEND=noninteractive
 ExecStart=/usr/lib/hippos/hippos-apt-packages boot

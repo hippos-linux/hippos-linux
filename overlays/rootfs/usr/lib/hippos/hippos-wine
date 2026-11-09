@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# hippos-wine — unified Windows game launcher
-# Usage:
-#   hippos-wine <system> play    <game>.exe|wine|pc|msi
-#   hippos-wine <system> install <game>.exe|msi|iso
-#   hippos-wine <system> stop
 
 SYSTEM="${1,,}"
 ACTION="${2,,}"
@@ -17,15 +12,11 @@ WINE_RUNNERS_DIR="/userdata/system/wine-runners"
 WINE_BASE="/opt/wine-builds"
 SECONDS=0
 
-# ── Runner selection ───────────────────────────────────────────────────────
-
 init_wine() {
     local runner="${HIPPOS_RUNNER:-}"
-    # Priority: env var > global setting > default
     [[ -z "${runner}" ]] && runner="$(hippos-settings get "windows.wine-runner" 2>/dev/null || true)"
     [[ -z "${runner}" ]] && runner="wine-tkg"
 
-    # Resolve runner directory: user-downloaded runners take priority
     local runner_dir=""
     if [[ -d "${WINE_RUNNERS_DIR}/${runner}" ]]; then
         runner_dir="${WINE_RUNNERS_DIR}/${runner}"
@@ -60,13 +51,11 @@ init_wine() {
     export WINEARCH=win64
     ulimit -n 524288 2>/dev/null || true
 
-    # ── Wine performance flags ─────────────────────────────────────────────
     local fsync esync dxvk
     fsync="$(hippos-settings get windows.fsync 2>/dev/null || true)"
     esync="$(hippos-settings get windows.esync 2>/dev/null || true)"
     dxvk="$(hippos-settings get windows.dxvk 2>/dev/null || true)"
 
-    # fsync takes priority over esync
     if [[ "${fsync}" == "true" ]]; then
         export WINEFSYNC=1
         export WINEESYNC=0
@@ -75,7 +64,6 @@ init_wine() {
     fi
 
     if [[ "${dxvk}" == "false" ]]; then
-        # Disable DXVK overrides so Wine's built-in D3D is used
         export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:+${WINEDLLOVERRIDES};}d3d9,d3d10core,d3d11,dxgi=b"
     fi
 
@@ -85,8 +73,6 @@ init_wine() {
     res="$(hippos-settings get windows.desktop_resolution 2>/dev/null || true)"
     WINE_RESOLUTION="${res}"
 }
-
-# ── Display resolution ────────────────────────────────────────────────────
 
 XRANDR_ORIGINAL_MODE=""
 XRANDR_OUTPUT=""
@@ -113,8 +99,6 @@ xrandr_restore_resolution() {
     XRANDR_ORIGINAL_MODE=""
 }
 
-# ── Wineserver ─────────────────────────────────────────────────────────────
-
 wait_wineserver() {
     [[ "${USE_UMU:-0}" == "1" ]] && return 0
     local pid
@@ -129,8 +113,6 @@ stop_wine() {
     wait_wineserver 10
     xrandr_restore_resolution
 }
-
-# ── Bottle helpers ─────────────────────────────────────────────────────────
 
 create_bottle() {
     local prefix="$1"
@@ -163,8 +145,6 @@ get_wine_var() {
         printf '%s' "${default}"
     fi
 }
-
-# ── Launch helpers ─────────────────────────────────────────────────────────
 
 do_launch() {
     local prefix="$1" game="$2"
@@ -241,8 +221,6 @@ install_iso() {
     wait_wineserver
     umount "${mnt}" && rmdir "${mnt}" || true
 }
-
-# ── Main ───────────────────────────────────────────────────────────────────
 
 trap stop_wine SIGHUP SIGINT SIGTERM
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# ES API: audio list/get/set/list-profiles/get-profile/set-profile/getSystemVolume/setSystemVolume
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
 export PIPEWIRE_RUNTIME_DIR="${XDG_RUNTIME_DIR}"

@@ -1,6 +1,3 @@
-# HippOS GRUB theme: the ES theme's splash, with the boot menu on a panel
-# over the planet, matching the login screen. Positions are in percent
-# because grub.cfg uses gfxmode=auto.
 
 title-text: ""
 desktop-image: "background.jpg"
@@ -53,7 +50,6 @@ terminal-border: "0"
   font = "Sora Regular 20"
 }
 
-# Under the logo, where the background stays dark; the planet fills the right.
 + label {
   left = 4%
   top = 100%-48

@@ -18,30 +18,28 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import CONFIGS, SAVES
 
-
 PPSSPP_CONFIG_DIR    = CONFIGS / 'ppsspp'
 PPSSPP_INI           = PPSSPP_CONFIG_DIR / 'PSP' / 'SYSTEM' / 'ppsspp.ini'
 PPSSPP_CONTROLS_INI  = PPSSPP_CONFIG_DIR / 'PSP' / 'SYSTEM' / 'controls.ini'
 
-
 _PPSSPP_NKCODE = {
-    'b':        189,  # A  → Circle
-    'a':        190,  # B  → Cross
-    'y':        191,  # X  → Triangle (note: ES y = Square label, PPSSPP Triangle)
-    'x':        188,  # Y  → Square
-    'select':   196,  # Select/Back
-    'start':    197,  # Start
-    'pageup':   193,  # L
-    'pagedown': 192,  # R
+    'b':        189,
+    'a':        190,
+    'y':        191,
+    'x':        188,
+    'select':   196,
+    'start':    197,
+    'pageup':   193,
+    'pagedown': 192,
     'up':        19,
     'down':      20,
     'left':      21,
     'right':     22,
 }
-_PPSSPP_HAT_DIR = {1: 19, 2: 22, 4: 20, 8: 21}  # SDL hat bitmask → NKCODE
-_PPSSPP_AXIS_ID = {0: 0, 1: 1, 2: 11, 3: 14, 4: 17, 5: 18}  # SDL axis → PPSSPP axis
+_PPSSPP_HAT_DIR = {1: 19, 2: 22, 4: 20, 8: 21}
+_PPSSPP_AXIS_ID = {0: 0, 1: 1, 2: 11, 3: 14, 4: 17, 5: 18}
 _PPSSPP_AXIS_BASE = 4000
-_PPSSPP_DEVICE_BASE = 10  # DEVICE_ID_PAD_0
+_PPSSPP_DEVICE_BASE = 10
 
 _PPSSPP_BTN_MAP: dict[str, str] = {
     'a': 'Circle', 'b': 'Cross', 'x': 'Triangle', 'y': 'Square',
@@ -56,19 +54,15 @@ _PPSSPP_AXIS_MAP: dict[str, tuple[str, str]] = {
     'joystick2up':    ('RightAn.Up',    'RightAn.Down'),
 }
 
-
 def _write_ppsspp_config(conf: dict[str, str]) -> None:
-    """Write PPSSPP INI config from hippos.conf values."""
     PPSSPP_INI.parent.mkdir(parents=True, exist_ok=True)
     parser = _new_ini_parser()
     if PPSSPP_INI.exists():
-        # PPSSPP saves its ini with a byte order mark.
         parser.read(PPSSPP_INI, encoding='utf-8-sig')
 
     for section in ('Graphics', 'SystemParam', 'General', 'Upgrade'):
         _ensure_section(parser, section)
 
-    # Graphics section
     parser.set('Graphics', 'GraphicsBackend',     _conf_value(conf, 'global.gfxbackend', '0 (OPENGL)'))
     parser.set('Graphics', 'InternalResolution',  _conf_value(conf, 'global.internal_resolution', '1'))
     parser.set('Graphics', 'SoftwareRenderer',    'False')
@@ -105,12 +99,10 @@ def _write_ppsspp_config(conf: dict[str, str]) -> None:
     parser.set('Graphics', 'Smart2DTexFiltering', 'True' if smart2d == 'True' else 'False')
     parser.set('Graphics', 'DisplayIntegerScale', 'False')
 
-    # SystemParam section
     parser.set('SystemParam', 'NickName',     'HippOS')
     parser.set('SystemParam', 'EncryptSave',  'False')
     parser.set('SystemParam', 'MemStickSize', '32')
 
-    # General section
     parser.set('General', 'FirstRun',            'False')
     rewind = _conf_bool(conf, 'global.rewind')
     parser.set('General', 'RewindFlipFrequency', '300' if rewind else '0')
@@ -118,7 +110,6 @@ def _write_ppsspp_config(conf: dict[str, str]) -> None:
     parser.set('General', 'EnableCheats',        'True' if cheats == 'True' else 'False')
     parser.set('General', 'CheckForNewVersion',  'False')
 
-    # Upgrade section - suppress update prompts
     parser.set('Upgrade', 'UpgradeMessage',   '')
     parser.set('Upgrade', 'UpgradeVersion',   '')
     parser.set('Upgrade', 'DismissedVersion', '')
@@ -127,14 +118,11 @@ def _write_ppsspp_config(conf: dict[str, str]) -> None:
         parser.write(fh)
     _log.info("Wrote PPSSPP config: %s", PPSSPP_INI)
 
-
 def _ppsspp_axis_code(axis_id: int, direction: int) -> int:
     d = 1 if direction < 0 else 0
     return _PPSSPP_AXIS_BASE + axis_id * 2 + d
 
-
 def _write_ppsspp_controls(ctx: LaunchContext) -> None:
-    """Write PPSSPP controls.ini from the connected P1 ES controller profile."""
     PPSSPP_CONTROLS_INI.parent.mkdir(parents=True, exist_ok=True)
     profiles = _load_es_input_configs()
     p1 = next((c for c in ctx.controllers if c.player == 1), None)
@@ -154,7 +142,6 @@ def _write_ppsspp_controls(ctx: LaunchContext) -> None:
         existing = parser.get(section, key, fallback='')
         parser.set(section, key, f'{existing},{val}' if existing else val)
 
-    # Buttons
     for es_name, ppsspp_name in _PPSSPP_BTN_MAP.items():
         binding = profile.inputs.get(es_name)
         if binding is None:
@@ -172,7 +159,6 @@ def _write_ppsspp_controls(ctx: LaunchContext) -> None:
             code = _ppsspp_axis_code(raw_id, binding.value)
             _append(ppsspp_name, f'{device_id}-{code}')
 
-    # Analog sticks
     for es_name, (ppsspp_neg, ppsspp_pos) in _PPSSPP_AXIS_MAP.items():
         binding = profile.inputs.get(es_name)
         if binding is None or binding.type != 'axis':
@@ -183,7 +169,6 @@ def _write_ppsspp_controls(ctx: LaunchContext) -> None:
         _append(ppsspp_neg, f'{device_id}-{neg_code}')
         _append(ppsspp_pos, f'{device_id}-{pos_code}')
 
-    # Hotkeys (keyboard bindings for F-keys)
     parser.set(section, 'Rewind',        '1-131')
     parser.set(section, 'Fast-forward',  '1-132')
     parser.set(section, 'Save State',    '1-133')
@@ -197,7 +182,6 @@ def _write_ppsspp_controls(ctx: LaunchContext) -> None:
         parser.write(fh)
     _log.info("Wrote PPSSPP controls: %s", PPSSPP_CONTROLS_INI)
 
-
 def launch_ppsspp(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('ppsspp')
     if bin_path is None:
@@ -207,10 +191,8 @@ def launch_ppsspp(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     _write_ppsspp_config(conf)
     _write_ppsspp_controls(ctx)
-    # --fullscreen and SDL_GAMECONTROLLERCONFIG without hotkey
     cmd = [str(bin_path), '--fullscreen', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
-    # PPSSPP uses hotkey button as menu toggle — exclude it from SDL mapping
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(
         ctx.controllers, ignore_buttons=['hotkey']
     )

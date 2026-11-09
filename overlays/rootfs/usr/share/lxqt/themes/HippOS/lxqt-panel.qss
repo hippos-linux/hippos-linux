@@ -1,6 +1,3 @@
-/*
- * General panel settings
- */
 
 LXQtPanel #BackgroundWidget {
     background: rgba(0, 0, 0, 50%);
@@ -13,10 +10,6 @@ QToolTip {
     margin: 0px;
     color: #DEDEDE
 }
-
-/*
- * General plugins settings
- */
 
 Plugin,
 LXQtPanelPlugin {
@@ -53,9 +46,6 @@ LXQtPanelPlugin > QToolButton:pressed {
     padding: 4px;
 }
 
-/*
- * Volume plugin
- */
 VolumePopup {
     background: hsv(0, 0, 41);
     margin: 2px;
@@ -87,7 +77,7 @@ VolumePopup > QSlider::handle:vertical {
     height: 10px;
     background: #DEDEDE;
     border-radius: 5px;
-    margin: 0 -4px; /* expand outside the groove */
+    margin: 0 -4px;
 }
 
 VolumePopup > QSlider::add-page:vertical {
@@ -103,9 +93,6 @@ VolumePopup > QSlider::sub-page:vertical {
     border-radius: 3px;
 }
 
-/*
- *Backlight Plugin
- */
 #Backlight QToolButton {
     color: #f2f1f0;
     background: #363532;
@@ -138,7 +125,7 @@ VolumePopup > QSlider::sub-page:vertical {
     height: 10px;
     background: #DEDEDE;
     border-radius: 4px;
-    margin: 0 -4px; /* expand outside the groove */
+    margin: 0 -4px;
 }
 
 #Backlight > SliderDialog > QSlider::add-page:vertical {
@@ -151,9 +138,6 @@ VolumePopup > QSlider::sub-page:vertical {
     background: rgba(0, 0, 0, 80%);
 }
 
-/*
- * Desktopswitch
- */
 #DesktopSwitch QToolButton:hover {
     border: 1px solid rgba(0, 0, 0, 50%);
     background: rgba(255, 255, 255, 20%);
@@ -181,9 +165,6 @@ VolumePopup > QSlider::sub-page:vertical {
     border: 1px solid #9966ff;
 }
 
-/*
- * QuickLaunch
- */
 #QuickLaunchPlaceHolder {
     color: #AAAAAA;
     padding: 0 5px;
@@ -204,9 +185,6 @@ VolumePopup > QSlider::sub-page:vertical {
     padding: 4px;
 }
 
-/*
- * TaskBar
- */
 #TaskBar QToolButton {
     margin: 2px;
     padding: 2px;
@@ -237,9 +215,6 @@ VolumePopup > QSlider::sub-page:vertical {
     ;
 }
 
-/*
- * Calendar Widget
- */
 QCalendarWidget QAbstractItemView:enabled {
     color: white;
     background: black;
@@ -291,9 +266,6 @@ QCalendarWidget #qt_calendar_prevmonth {
     qproperty-icon: url(calendar-popup/left-arrow.svg);
 }
 
-/*
- * Clock
- */
 #Clock:hover {
     border: 1px solid rgba(0, 0, 0, 50%);
     background: rgba(255, 255, 255, 20%);
@@ -315,9 +287,6 @@ QCalendarWidget #qt_calendar_prevmonth {
     margin-left: 2px;
 }
 
-/*
- * Tray
- */
 #Tray {
     min-width: 6px;
     padding-left: 2px;
@@ -327,10 +296,6 @@ QCalendarWidget #qt_calendar_prevmonth {
 TrayIcon {
     margin: 2px;
 }
-
-/*
- * All menus
- */
 
 QMenu {
     margin: 0px;
@@ -409,10 +374,6 @@ QMenu::indicator:non-exclusive:checked {
     image: url(checked.svg);
 }
 
-/*
- * Main menu
- */
-
 #MainMenu {
     margin: 2px;
     padding: 2px;
@@ -456,9 +417,6 @@ QMenu::indicator:non-exclusive:checked {
     color: white;
 }
 
-/*
- * Fancy menu
- */
 #FancyMenu {
     margin: 0px;
     padding: 0px;
@@ -469,7 +427,7 @@ QMenu::indicator:non-exclusive:checked {
 }
 
 LXQtFancyMenuWindow {
-    background: rgba(0, 0, 0, 0%);/*disabled transparency because buggy*/
+    background: rgba(0, 0, 0, 0%);
 }
 
 #FancyMenu QLineEdit {
@@ -580,9 +538,6 @@ LXQtFancyMenuWindow {
     background: transparent;
 }
 
-/*
- * Mount plugin
- */
 #LXQtMountPlugin {
     margin: 2px;
 }
@@ -615,18 +570,11 @@ LXQtFancyMenuWindow {
     color: #CCCCCC;
 }
 
-
-/*
- * ShowDesktop
- */
 #ShowDesktop > QToolButton:hover {
     border: 1px solid rgba(0, 0, 0, 50%);
     background: rgba(255, 255, 255, 20%);
 }
 
-/*
- * KbIndicator
- */
 #KbIndicator > QLabel {
     padding: 3px;
     border: 0px;
@@ -642,9 +590,6 @@ LXQtFancyMenuWindow {
     background: #4d22a0;
 }
 
-/*
- * SysStat
- */
 #SysStat {
     padding: 2px 2px 2px 2px;
     margin: 2px;
@@ -670,9 +615,6 @@ LXQtFancyMenuWindow {
     qproperty-netTransmittedColor: rgb(128, 128, 0);
 }
 
-/*
- * WorldClock
- */
 #WorldClock:hover {
     border: 1px solid rgba(0, 0, 0, 50%);
     background: rgba(255, 255, 255, 20%);
@@ -686,16 +628,10 @@ LXQtFancyMenuWindow {
     background: transparent;
 }
 
-/*
- * CPU monitor
- */
 #LXQtCpuLoad {
     qproperty-fontColor: #DEDEDE;
 }
 
-/*
- * Spacer
- */
 #Spacer {
     background-position: center center;
 }
@@ -719,10 +655,6 @@ LXQtFancyMenuWindow {
     margin-right: 2px;
     margin-left: 2px;
 }
-
-/*
- * CustomCommand Plugin
- */
 
 #Custom::hover {
     background: black;

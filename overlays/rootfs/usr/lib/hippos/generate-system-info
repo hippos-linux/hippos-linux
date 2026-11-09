@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Generate _info.txt in each ROM directory from es_systems.cfg metadata."""
 
 import xml.etree.ElementTree as ET
 import os
@@ -51,7 +50,7 @@ def main():
         try:
             with open(info_path, "w") as f:
                 f.write("\n".join(lines) + "\n")
-            os.chown(info_path, 1000, 100)  # hippos:users
+            os.chown(info_path, 1000, 100)
             count += 1
         except OSError as e:
             print(f"[generate-system-info] could not write {info_path}: {e}", file=sys.stderr)

@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# hippos-brightness — get/set/boot display brightness.
-# Usage:
-#   hippos-brightness get            print current brightness as 0-100
-#   hippos-brightness set <0-100>    set brightness and save to hippos.conf
-#   hippos-brightness boot           apply saved display.brightness on startup
 
 case "${1:-boot}" in
     get)

@@ -1,12 +1,10 @@
 screen_w = Window.GetWidth();
 screen_h = Window.GetHeight();
 
-// Background
 wallpaper = Image("wallpaper.png");
 bg = Sprite(wallpaper.Scale(screen_w, screen_h));
 bg.SetZ(-100);
 
-// Progress bar — 55% width, near bottom
 bar_w   = Math.Int(screen_w * 0.55);
 bar_h   = 4;
 bar_x   = Math.Int((screen_w - bar_w) / 2);
@@ -32,7 +30,6 @@ fun progress_callback(duration, progress) {
 }
 Plymouth.SetBootProgressFunction(progress_callback);
 
-// Spinner — 8 dots in circle above progress bar
 num_dots = 8;
 dot_src  = Image("dot.png");
 dot_hw   = Math.Int(dot_src.GetWidth()  / 2);
@@ -49,7 +46,6 @@ for (i = 0; i < num_dots; i++) {
     dot_spr[i].SetZ(10);
 }
 
-// Opacity steps for 8 dots (avoids integer division)
 opacity_step[0] = 1.0;
 opacity_step[1] = 0.875;
 opacity_step[2] = 0.75;

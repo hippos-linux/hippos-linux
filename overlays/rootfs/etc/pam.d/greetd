@@ -1,8 +1,3 @@
-#%PAM-1.0
-# Debian's greetd PAM file, plus the session type. greetd registers its
-# sessions with logind as Type=tty; HippOS sessions are X11, and desktops
-# check the type. pam_env must run before pam_systemd (in common-session,
-# via login) to set it.
 session      required        pam_env.so conffile=/etc/security/hippos-session-env.conf readenv=0
 @include login
 

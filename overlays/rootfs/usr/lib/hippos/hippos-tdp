@@ -1,46 +1,15 @@
 #!/usr/bin/env bash
-# hippos-tdp — AMD TDP limits via ryzenadj, and ACPI platform profile.
-#
-# TDP settings (global.tdp, <system>.tdp, …) are a percentage of the CPU's
-# maximum, detected at boot and published as system.cpu.tdp (watts). The
-# platform profiles the firmware offers are published as
-# system.platformprofile.choices. ES hides each option while its key is
-# empty, and offers only the listed profiles.
-#
-#   hippos-tdp boot        detect + publish, apply global.platformprofile and global.tdp
-#   hippos-tdp detect-max  print the detected maximum TDP in watts (empty if unsupported)
-#   hippos-tdp profile [NAME]
-#                          print the current platform profile, or switch to NAME
-#                          (exit 0 only if it changed)
-#   hippos-tdp set PCT [SETTLE]
-#                          apply PCT% of the maximum (in-game override)
-#   hippos-tdp save        remember the current limits, before a game changes them
-#   hippos-tdp restore [SETTLE]
-#                          back to global.tdp, or else the saved limits
-#
-# SETTLE waits that many seconds first, for use right after a profile switch.
-#
-# All subcommands serialise on a lock: the launcher runs restore detached, and
-# a quick relaunch's set must not land before it.
 
-# Called by emulatorlauncher, which runs as hippos; sysfs and ryzenadj need root.
 [[ "${EUID}" -ne 0 ]] && exec sudo -n "$0" "$@"
 
 log() { printf '[hippos-tdp] %s\n' "$*"; }
 
 LOCK=/run/hippos/tdp.lock
-# Firmware limits from before a game changed them, for restore when no
-# global.tdp is set: "stapm_mw fast_mw slow_mw".
 SAVED_LIMITS=/run/hippos/tdp.saved
 PLATFORM_PROFILE_DIR=/sys/class/platform-profile
-# Firmware applies a profile's own power limits about a second after a switch,
-# overwriting anything set in the meantime.
 PROFILE_SETTLE_SECONDS=2
-# Highest-power profile names, best first: the firmware reports its true
-# maximum limits only in one of these.
 HIGHEST_POWER_PROFILES=(custom max-power performance)
 
-# ── Device table: model_key → "label;min_w;max_w" ────────────────────────────
 declare -A DEVICES=(
     ["Jupiter"]="Steam Deck LCD;3;15"
     ["Galileo"]="Steam Deck OLED;3;15"
@@ -61,8 +30,6 @@ setting() {
     printf '%s' "${value}"
 }
 
-# ── Platform profile ─────────────────────────────────────────────────────────
-
 profile_handlers() {
     compgen -G "${PLATFORM_PROFILE_DIR}/platform-profile-*" || true
 }
@@ -82,13 +49,11 @@ current_profile() {
     done
 }
 
-# Returns 0 if any handler changed to the profile.
 set_profile() {
     local profile="$1" handler changed=1
     for handler in $(profile_handlers); do
         grep -qw -- "${profile}" "${handler}/choices" || continue
         [[ "$(cat "${handler}/profile")" == "${profile}" ]] && continue
-        # The class interface, unlike /sys/firmware/acpi/platform_profile, accepts custom
         if echo "${profile}" > "${handler}/profile" 2>/dev/null \
                 && [[ "$(cat "${handler}/profile")" == "${profile}" ]]; then
             changed=0
@@ -98,16 +63,12 @@ set_profile() {
     return "${changed}"
 }
 
-# ── TDP ──────────────────────────────────────────────────────────────────────
-
 ryzenadj_supported() {
     command -v ryzenadj >/dev/null 2>&1 \
         && grep -q AuthenticAMD /proc/cpuinfo \
         && ! ryzenadj -i 2>&1 | grep -qi 'unsupported model'
 }
 
-# ryzenadj -i prints "| PPT LIMIT FAST | 30.000 | fast-limit |" rows, in watts.
-# Prints the named row in milliwatts; nothing if it's missing or not a number.
 read_limit_mw() {
     ryzenadj -i 2>/dev/null | awk -F'|' -v name="$1" '
         { gsub(/^ +| +$/, "", $2); gsub(/ /, "", $3) }
@@ -160,7 +121,6 @@ apply_percent() {
         log "Device: ${label} (${model}) — range ${tdp_min}–${tdp_max}W"
     fi
 
-    # Allow up to 20% OC above the device (or detected) max
     local oc_ceil=$(( tdp_max * 120 / 100 ))
     if (( tdp < tdp_min )); then
         log "TDP ${tdp}W below minimum ${tdp_min}W — clamping"
@@ -203,8 +163,6 @@ restore_limits() {
     fi
     rm -f "${SAVED_LIMITS}"
 }
-
-# ── Commands ─────────────────────────────────────────────────────────────────
 
 mkdir -p "$(dirname "${LOCK}")"
 exec 9>"${LOCK}"

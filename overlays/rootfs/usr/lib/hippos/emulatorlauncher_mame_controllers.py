@@ -26,7 +26,6 @@ _SPECIAL_CONTROL_LIST = [
     'vgmplay', 'pdp1', 'vc4000', 'fmtmarty', 'gp32', 'apple2p', 'apple2e', 'apple2ee',
 ]
 
-
 def get_mame_alt_layout(conf: dict[str, str], rom_path: Path) -> str:
     controller_type = conf.get('altlayout', 'auto')
     if controller_type in ('default', 'neomini', 'neocd', 'twinstick', 'qbert'):
@@ -79,7 +78,6 @@ def get_mame_alt_layout(conf: dict[str, str], rom_path: Path) -> str:
             return 'mddefault'
 
     return 'default'
-
 
 def generate_mame_pads_config(cfg_dir: Path, ctx: LaunchContext, conf: dict[str, str]) -> None:
     cfg_dir.mkdir(parents=True, exist_ok=True)
@@ -350,14 +348,12 @@ def generate_mame_pads_config(cfg_dir: Path, ctx: LaunchContext, conf: dict[str,
             dom_str = os.linesep.join(s for s in config_alt.toprettyxml().splitlines() if s.strip())
             f.write(dom_str)
 
-
 def _reverse_mapping(key: str) -> str | None:
     if key == 'joystick1down':  return 'joystick1up'
     if key == 'joystick1right': return 'joystick1left'
     if key == 'joystick2down':  return 'joystick2up'
     if key == 'joystick2right': return 'joystick2left'
     return None
-
 
 def _input2definition(profile: ESControllerProfile, key: str, binding: ESBinding, joycode: int,
                       reversed: bool, alt_layout: str | None,
@@ -430,7 +426,6 @@ def _input2definition(profile: ESControllerProfile, key: str, binding: ESBinding
 
     return 'unknown'
 
-
 def _gen_port(profile: ESControllerProfile, config: minidom.Document,
               nplayer: int, padindex: int, mapping: str, key: str, binding: ESBinding,
               reversed: bool, alt_layout: str | None, gun_mappings: dict[str, str],
@@ -451,7 +446,6 @@ def _gen_port(profile: ESControllerProfile, config: minidom.Document,
         keyval += f' OR {suffix}'
     xml_newseq.appendChild(config.createTextNode(keyval))
     return xml_port
-
 
 def _gen_special_port_player(profile: ESControllerProfile, config: minidom.Document,
                               tag: str, nplayer: int, padindex: int,
@@ -480,7 +474,6 @@ def _gen_special_port_player(profile: ESControllerProfile, config: minidom.Docum
     xml_newseq.appendChild(config.createTextNode(keyval))
     return xml_port
 
-
 def _gen_special_port(profile: ESControllerProfile, config: minidom.Document,
                       tag: str, nplayer: int, padindex: int,
                       mapping: str, key: str, binding: ESBinding,
@@ -498,7 +491,6 @@ def _gen_special_port(profile: ESControllerProfile, config: minidom.Document,
         _input2definition(profile, key, binding, padindex + 1, reversed, None)))
     return xml_port
 
-
 def _gen_combo_port(profile: ESControllerProfile, config: minidom.Document,
                     tag: str, padindex: int, mapping: str, kbkey: str,
                     key: str, binding: ESBinding,
@@ -514,7 +506,6 @@ def _gen_combo_port(profile: ESControllerProfile, config: minidom.Document,
     xml_newseq.appendChild(config.createTextNode(
         f'KEYCODE_{kbkey} OR {_input2definition(profile, key, binding, padindex + 1, reversed, None)}'))
     return xml_port
-
 
 def _gen_analog_port(profile: ESControllerProfile, config: minidom.Document,
                      tag: str, nplayer: int, padindex: int, mapping: str,
@@ -545,7 +536,6 @@ def _gen_analog_port(profile: ESControllerProfile, config: minidom.Document,
     xml_newseq_std.appendChild(config.createTextNode(std_val))
     return xml_port
 
-
 def _add_common_player_ports(config: minidom.Document, xml_input: minidom.Element, nplayer: int) -> None:
     for axis, nanalog in (('X', 1), ('Y', 2)):
         xml_port = config.createElement('port')
@@ -559,7 +549,6 @@ def _add_common_player_ports(config: minidom.Document, xml_input: minidom.Elemen
         xml_newseq.appendChild(config.createTextNode(f'GUNCODE_{nplayer}_{axis}AXIS'))
         xml_input.appendChild(xml_port)
 
-
 def _get_root(config: minidom.Document, name: str) -> minidom.Element:
     nodes = config.getElementsByTagName(name)
     if nodes:
@@ -568,7 +557,6 @@ def _get_root(config: minidom.Document, name: str) -> minidom.Element:
     config.appendChild(node)
     return node
 
-
 def _get_section(config: minidom.Document, xml_root: minidom.Element, name: str) -> minidom.Element:
     nodes = xml_root.getElementsByTagName(name)
     if nodes:
@@ -576,7 +564,6 @@ def _get_section(config: minidom.Document, xml_root: minidom.Element, name: str)
     node = config.createElement(name)
     xml_root.appendChild(node)
     return node
-
 
 def _remove_section(config: minidom.Document, xml_root: minidom.Element, name: str) -> None:
     nodes = xml_root.getElementsByTagName(name)

@@ -1,7 +1,6 @@
 [Unit]
 Description=HippOS pad2key for arcade encoder %I
 BindsTo=dev-input-%i.device
-# Configs may live in /userdata/system/configs/pad2key.
 After=dev-input-%i.device local-fs.target
 
 [Service]

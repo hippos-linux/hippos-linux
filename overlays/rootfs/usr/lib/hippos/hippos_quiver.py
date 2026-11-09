@@ -1,4 +1,3 @@
-"""Quiver Launcher paths and identifiers shared by its launcher and library sync."""
 from __future__ import annotations
 
 from pathlib import Path

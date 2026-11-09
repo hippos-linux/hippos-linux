@@ -1,4 +1,3 @@
-# Sourced by emulator launch wrappers.
 export HOME=/userdata
 export XDG_CONFIG_HOME=/userdata/system/configs
 export XDG_DATA_HOME=/userdata

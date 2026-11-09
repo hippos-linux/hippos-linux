@@ -2,7 +2,6 @@
 Description=HippOS Lutris launcher sync
 After=local-fs.target userdata.mount
 Wants=userdata.mount
-# Lutris writes pga.db several times per launch, install and exit.
 StartLimitIntervalSec=0
 
 [Service]

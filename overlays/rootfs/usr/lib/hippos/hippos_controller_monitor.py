@@ -1,8 +1,3 @@
-"""Background controller hot-plug monitor for emulatorlauncher.
-
-Watches for joystick add/remove events via pyudev.
-On change: rebuilds device-path map, updates ctx.controllers, restarts evmapy.
-"""
 
 from __future__ import annotations
 
@@ -21,19 +16,13 @@ _log = logging.getLogger(__name__)
 
 _lock: threading.Lock = threading.Lock()
 
-
 def _js_devices() -> list[Path]:
-    """Return sorted list of /dev/input/js* paths currently present."""
     return sorted(Path('/dev/input').glob('js*'))
 
-
 def _vendor_product(js: Path) -> tuple[str, str]:
-    """Read vendor/product hex from sysfs for a js device node."""
     try:
-        # Resolve the underlying event device via sysfs
         real = js.resolve()
-        name = real.name  # e.g. js0
-        # Walk up to find id dir
+        name = real.name
         sysfs = Path(f'/sys/class/input/{name}')
         vendor  = (sysfs / 'device' / 'id' / 'vendor').read_text().strip()
         product = (sysfs / 'device' / 'id' / 'product').read_text().strip()
@@ -41,25 +30,14 @@ def _vendor_product(js: Path) -> tuple[str, str]:
     except OSError:
         return '', ''
 
-
 def _guid_prefix(vendor: str, product: str) -> str:
-    """Build a partial GUID string (bus+vendor+product) for matching."""
     return f'{vendor.lower()}{product.lower()}'
 
-
 def _rebuild_path_map(controllers: list[ControllerInfo]) -> dict[int, str]:
-    """
-    Return {controller.index: new_device_path}.
-
-    Matching strategy:
-    1. Try GUID vendor/product prefix against sysfs data.
-    2. Fall back to index order (js0 → index 0, js1 → index 1, etc.).
-    """
     js_paths = _js_devices()
     if not js_paths:
         return {}
 
-    # Build sysfs info for each available js device
     js_info: list[tuple[Path, str]] = []
     for js in js_paths:
         v, p = _vendor_product(js)
@@ -73,14 +51,12 @@ def _rebuild_path_map(controllers: list[ControllerInfo]) -> dict[int, str]:
             ctrl.guid[16:20] if len(ctrl.guid) >= 20 else '',
         )
 
-        # Try vendor/product match first
         matched = None
         for js, prefix in js_info:
             if prefix and ctrl_prefix and prefix == ctrl_prefix:
                 matched = str(js)
                 break
 
-        # Fall back to index order
         if matched is None and ctrl.index < len(js_info):
             matched = str(js_info[ctrl.index][0])
 
@@ -88,7 +64,6 @@ def _rebuild_path_map(controllers: list[ControllerInfo]) -> dict[int, str]:
             result[ctrl.index] = matched
 
     return result
-
 
 def _reconfigure_evmapy(
     system: str,
@@ -103,7 +78,6 @@ def _reconfigure_evmapy(
     time.sleep(0.5)
     _prepare(system, emulator, rom, controllers, profiles)
     subprocess.call([str(HIPPOS_EVMAPY), 'start'], stderr=subprocess.DEVNULL)
-
 
 def _monitor_loop(
     ctx: LaunchContext,
@@ -128,7 +102,7 @@ def _monitor_loop(
         _log.info("controller monitor: joystick event '%s' on %s",
                   device.action, device.sys_path)
 
-        time.sleep(1)  # let device settle
+        time.sleep(1)
 
         with _lock:
             new_map = _rebuild_path_map(ctx.controllers)
@@ -149,12 +123,10 @@ def _monitor_loop(
             ctx.controllers, profiles,
         )
 
-
 def start_controller_monitor(
     ctx: LaunchContext,
     profiles: list[ESControllerProfile],
 ) -> threading.Thread:
-    """Start and return the background monitor thread (daemon)."""
     initial_paths = [c.device_path for c in ctx.controllers]
     t = threading.Thread(
         target=_monitor_loop,

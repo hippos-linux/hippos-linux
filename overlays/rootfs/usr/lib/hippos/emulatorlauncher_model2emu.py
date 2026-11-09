@@ -19,14 +19,12 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import CONFIGS, USERDATA
 
-
 def _model2_border_thickness(width: int) -> str:
     if width <= 640:
         return '1'
     if width <= 1080:
         return '2'
     return '3'
-
 
 def _modify_lua_model2_sinden(file_path: Path, enabled: bool, thickness: str) -> None:
     try:
@@ -52,7 +50,6 @@ def _modify_lua_model2_sinden(file_path: Path, enabled: bool, thickness: str) ->
     except OSError:
         pass
 
-
 def _modify_lua_model2_option(file_path: Path, needle: str, enabled: bool) -> None:
     try:
         text = file_path.read_text(encoding='utf-8', errors='ignore')
@@ -74,7 +71,6 @@ def _modify_lua_model2_option(file_path: Path, needle: str, enabled: bool) -> No
         except OSError:
             pass
 
-
 def _ensure_model2_runtime_root(bin_path: Path) -> Path:
     source_root = bin_path.parent.parent
     source_emu = source_root / 'emulator'
@@ -88,7 +84,6 @@ def _ensure_model2_runtime_root(bin_path: Path) -> Path:
     _sync_tree(source_emu / 'scripts', MODEL2_RUNTIME_EMU / 'scripts')
     _sync_tree(source_emu / 'CFG', MODEL2_RUNTIME_EMU / 'CFG')
     return MODEL2_RUNTIME_EMU
-
 
 def _write_model2_config(ctx: LaunchContext, runtime_emu: Path) -> Path:
     conf = _load_effective_hippos_conf()
@@ -155,7 +150,6 @@ def _write_model2_config(ctx: LaunchContext, runtime_emu: Path) -> Path:
 
     return config_path
 
-
 def launch_model2emu(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('model2emu')
     if bin_path is None:
@@ -179,8 +173,6 @@ def launch_model2emu(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'model2emu', cmd, env, cwd=runtime_emu)
     return result.returncode
 
-
-# Outside the package: updates replace the package directory, and it's synced from.
 MODEL2_RUNTIME_ROOT = CONFIGS / 'model2emu'
 MODEL2_RUNTIME_EMU  = MODEL2_RUNTIME_ROOT / 'emulator'
 MODEL2_SOURCE_EMU   = Path('/opt/emulators/model2emu/emulator')

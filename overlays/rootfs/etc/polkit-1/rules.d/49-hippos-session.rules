@@ -1,12 +1,4 @@
-// hippos runs as the active seat0 session (greetd, see hippos-session-setup),
-// so polkit's allow_active defaults already cover mounting, eject, power-off
-// of drives, NetworkManager, and power/reboot/suspend. These rules cover only
-// what those defaults leave at auth_admin: HippOS has no other account to
-// withhold them from, and ES has no polkit agent to answer a prompt.
 
-// Starting and stopping system units: hippos-rom-scan restarts the ROM pool
-// when ES merges or ejects a drive, and hippos-session starts its failure
-// capture unit.
 polkit.addRule(function(action) {
     if (action.id == "org.freedesktop.systemd1.manage-units") {
         return polkit.Result.YES;
@@ -21,10 +13,6 @@ polkit.addRule(function(action, subject) {
     }
 });
 
-// hippos-automount mounts drives as root from udev, outside udisks2's own
-// bookkeeping, so unmounting them from a file manager counts as unmounting
-// another user's mount. btrfs drives are still blocked by
-// 90-btrfs-no-udisks2.rules so hippos-storage handles them instead.
 polkit.addRule(function(action, subject) {
     var udisksActions = [
         "org.freedesktop.udisks2.filesystem-mount-system",
@@ -35,7 +23,6 @@ polkit.addRule(function(action, subject) {
     }
 });
 
-// Date & Time in desktop settings panels.
 polkit.addRule(function(action, subject) {
     var timedateActions = [
         "org.freedesktop.timedate1.set-ntp",
@@ -47,7 +34,6 @@ polkit.addRule(function(action, subject) {
     }
 });
 
-// A desktop or game holding an inhibitor must not stop the user powering off.
 polkit.addRule(function(action, subject) {
     var powerActions = [
         "org.freedesktop.login1.power-off-ignore-inhibit",

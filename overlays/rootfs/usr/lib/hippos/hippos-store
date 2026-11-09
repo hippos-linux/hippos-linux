@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""HippOS content store — packages from catalog + wine runners from GitHub."""
 
 import json
 import os
@@ -32,7 +31,7 @@ STATE_DIR      = "/userdata/system/hippos-store"
 STATE_FILE     = os.path.join(STATE_DIR, "installed.json")
 CACHE_DIR      = os.path.join(STATE_DIR, "cache")
 WINE_CACHE     = os.path.join(STATE_DIR, "wine-runners.json")
-WINE_CACHE_TTL = 3600          # 1 hour
+WINE_CACHE_TTL = 3600
 WINE_RUNNERS_DIR = "/userdata/system/wine-runners"
 
 INSTALL_ROOTS = {
@@ -75,12 +74,7 @@ WINE_SOURCES = [
     },
 ]
 
-WINE_LIST_LIMIT = 10  # most recent releases shown per source in the store
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+WINE_LIST_LIMIT = 10
 
 def _gh_get(url):
     req = urllib.request.Request(url, headers={
@@ -91,7 +85,6 @@ def _gh_get(url):
     with urllib.request.urlopen(req, timeout=20) as r:
         return json.loads(r.read())
 
-
 def load_catalog():
     req = urllib.request.Request(CATALOG_URL, headers={"User-Agent": "hippos-store/1.0"})
     try:
@@ -101,23 +94,16 @@ def load_catalog():
         print(f"Error: could not fetch catalog: {exc}", file=sys.stderr)
         return []
 
-
 def load_state():
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE) as f:
             return json.load(f)
     return {}
 
-
 def save_state(state):
     os.makedirs(STATE_DIR, exist_ok=True)
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
-
-
-# ---------------------------------------------------------------------------
-# Wine runner catalog — fetched from GitHub, cached on disk
-# ---------------------------------------------------------------------------
 
 def _runner_id(source_id, asset_name):
     stem = asset_name
@@ -125,11 +111,9 @@ def _runner_id(source_id, asset_name):
         stem = stem.removesuffix(ext)
     return f"wine::{source_id}::{stem}"
 
-
 def _runner_install_dir(runner_id):
     stem = runner_id.split("::", 2)[-1]
     return os.path.join(WINE_RUNNERS_DIR, stem)
-
 
 def load_wine_runners(force_refresh=False):
     if not force_refresh and os.path.exists(WINE_CACHE):
@@ -166,11 +150,6 @@ def load_wine_runners(force_refresh=False):
 
     return runners
 
-
-# ---------------------------------------------------------------------------
-# list
-# ---------------------------------------------------------------------------
-
 def _pkg_node(root, pkg_id, repository, version, description, group, packager, installed, url, download_size, preview_url):
     node = ET.SubElement(root, "package")
     ET.SubElement(node, "name").text              = pkg_id
@@ -184,7 +163,6 @@ def _pkg_node(root, pkg_id, repository, version, description, group, packager, i
     ET.SubElement(node, "download_size").text     = str(download_size)
     ET.SubElement(node, "installed_size").text    = str(download_size)
     ET.SubElement(node, "preview_url").text       = preview_url
-
 
 def cmd_list():
     catalog = load_catalog()
@@ -207,7 +185,6 @@ def cmd_list():
             preview_url   = pkg.get("preview_url", ""),
         )
 
-    # Bezels — delegated to hippos-bezelproject
     try:
         result = subprocess.run(["hippos-bezelproject", "list"], capture_output=True, text=True, timeout=5)
         for line in result.stdout.splitlines():
@@ -231,7 +208,6 @@ def cmd_list():
     except Exception as e:
         print(f"WARNING: Could not load bezels: {e}", file=sys.stderr)
 
-    # Wine runners — capped at WINE_LIST_LIMIT most recent per source
     try:
         runners = load_wine_runners()
         counts  = {}
@@ -260,11 +236,6 @@ def cmd_list():
         print(ET.tostring(pkg_node, encoding="unicode"), flush=True)
     print("</packages>", flush=True)
 
-
-# ---------------------------------------------------------------------------
-# install helpers
-# ---------------------------------------------------------------------------
-
 def _download(url, dest_path, label):
     req = urllib.request.Request(url, headers={"User-Agent": "hippos-store/1.0"})
     print(f"Downloading {label}...", flush=True)
@@ -276,7 +247,6 @@ def _download(url, dest_path, label):
             done += len(chunk)
             if total:
                 print(f"Downloading {label}... {done * 100 // total}%", flush=True)
-
 
 def _extract_tarball(archive, dest, strip_components, source_subdir):
     print("Extracting...", flush=True)
@@ -294,7 +264,6 @@ def _extract_tarball(archive, dest, strip_components, source_subdir):
                         members.append(m)
                 tf.extractall(tmpdir, members=members)
         except tarfile.CompressionError:
-            # xz archives — fall back to system tar
             subprocess.run(["tar", "-xf", archive, "-C", tmpdir], check=True)
 
         src = os.path.join(tmpdir, source_subdir) if source_subdir else tmpdir
@@ -310,7 +279,6 @@ def _extract_tarball(archive, dest, strip_components, source_subdir):
             else:
                 shutil.copy2(s, d)
 
-
 def _install_wine_runner(pkg):
     dest = _runner_install_dir(pkg["id"])
     os.makedirs(CACHE_DIR, exist_ok=True)
@@ -318,13 +286,11 @@ def _install_wine_runner(pkg):
     ext  = ".tar.xz" if url.endswith(".tar.xz") else ".tar.gz"
     archive = os.path.join(CACHE_DIR, pkg["id"].replace("::", "_") + ext)
     _download(url, archive, pkg["name"])
-    # Wine runner tarballs have a top-level directory — strip it
     _extract_tarball(archive, dest, strip_components=1, source_subdir="")
     try:
         os.remove(archive)
     except Exception:
         pass
-
 
 def _install_catalog_tarball(pkg):
     category     = pkg.get("category", "")
@@ -335,7 +301,6 @@ def _install_catalog_tarball(pkg):
     archive = os.path.join(CACHE_DIR, pkg["id"] + ".tar.gz")
     _download(pkg["url"], archive, pkg["name"])
     _extract_tarball(archive, dest, pkg.get("strip_components", 1), pkg.get("source_subdir", ""))
-
 
 PORTS_GAMELIST   = "/userdata/roms/ports/gamelist.xml"
 SCUMMVM_ROMS     = "/userdata/roms/scummvm"
@@ -365,7 +330,6 @@ def _gamelist_add(pkg):
         f.write(b'<?xml version="1.0"?>\n')
         ET.ElementTree(root).write(f, encoding="utf-8", xml_declaration=False)
 
-
 def _gamelist_remove(pkg_id):
     launcher = f"./{pkg_id}.sh"
     try:
@@ -382,7 +346,6 @@ def _gamelist_remove(pkg_id):
     with open(PORTS_GAMELIST, "wb") as f:
         f.write(b'<?xml version="1.0"?>\n')
         ET.ElementTree(root).write(f, encoding="utf-8", xml_declaration=False)
-
 
 def _scummvm_add(pkg):
     scummvm_id = pkg["scummvm_id"]
@@ -414,7 +377,6 @@ def _scummvm_add(pkg):
         f.write(b'<?xml version="1.0"?>\n')
         ET.ElementTree(root).write(f, encoding="utf-8", xml_declaration=False)
 
-
 def _scummvm_remove(pkg):
     scummvm_id = pkg["scummvm_id"]
     dot_scummvm = os.path.join(SCUMMVM_ROMS, f"{scummvm_id}.scummvm")
@@ -437,18 +399,13 @@ def _scummvm_remove(pkg):
         f.write(b'<?xml version="1.0"?>\n')
         ET.ElementTree(root).write(f, encoding="utf-8", xml_declaration=False)
 
-
 def _install_apt(pkg):
     apt_pkgs     = pkg.get("apt_packages", [])
     launcher_cmd = pkg.get("launcher_command", "")
     scummvm_id   = pkg.get("scummvm_id", "")
     print(f"Installing {pkg['name']} via apt...", flush=True)
     env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive"}
-    # apt needs root; the rest of the store stays hippos so files it writes
-    # under /userdata keep the user's ownership.
     subprocess.call(["sudo", "-n", "apt-get", "update", "-qq"], env=env)
-    # Claimed before apt runs, so its hippos-ports hook doesn't add a
-    # second Ports entry next to ours.
     set_claimed(apt_pkgs, True)
     ret = subprocess.call(["sudo", "-n", "apt-get", "install", "-y", "--no-install-recommends"] + apt_pkgs, env=env)
     if ret != 0:
@@ -465,15 +422,9 @@ def _install_apt(pkg):
         os.chmod(launcher, 0o755)
         _gamelist_add(pkg)
 
-
-# ---------------------------------------------------------------------------
-# install / remove
-# ---------------------------------------------------------------------------
-
 def cmd_install(name):
     state = load_state()
 
-    # Bezel package?
     if name.startswith("bezels-"):
         system_id = name[len("bezels-"):]
         print(f"Installing bezels for {system_id}...", flush=True)
@@ -483,7 +434,6 @@ def cmd_install(name):
             sys.exit(1)
         return
 
-    # Wine runner?
     if name.startswith("wine::"):
         runners = load_wine_runners()
         pkg = next((r for r in runners if r["id"] == name), None)
@@ -496,7 +446,6 @@ def cmd_install(name):
         print(f"Done: {pkg['name']} installed to {_runner_install_dir(name)}", flush=True)
         return
 
-    # Catalog package
     catalog = load_catalog()
     pkg = next((p for p in catalog if p["id"] == name), None)
     if pkg is None:
@@ -511,7 +460,6 @@ def cmd_install(name):
     state[name] = {"version": pkg.get("version", "latest")}
     save_state(state)
     print(f"Done: {pkg['name']} installed.", flush=True)
-
 
 def cmd_remove(name):
     state = load_state()
@@ -561,14 +509,8 @@ def cmd_remove(name):
     save_state(state)
     print(f"Done: {pkg['name']} removed.", flush=True)
 
-
-# ---------------------------------------------------------------------------
-# refresh / clean-all / update
-# ---------------------------------------------------------------------------
-
 def cmd_refresh():
     load_wine_runners(force_refresh=True)
-
 
 def cmd_clean_all():
     if os.path.isdir(CACHE_DIR):
@@ -576,15 +518,11 @@ def cmd_clean_all():
     if os.path.exists(WINE_CACHE):
         os.remove(WINE_CACHE)
 
-
 def cmd_update():
     state = load_state()
     for name in list(state.keys()):
         print(f"Updating {name}...", flush=True)
         cmd_install(name)
-
-
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""

@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Run at boot after /userdata is ready.
-# Sets the ready flag then replays any events queued during early boot.
 
 READY_FLAG="/run/hippos-storage-ready"
 DELAY_DIR="/run/hippos-storage-delay"

@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
-# hippos-power-mode — set CPU governor + Energy Performance Preference
-# Usage: hippos-power-mode [ac|battery|highperformance|balanced|powersaver|default]
-#   ac / battery   apply global.powermode / global.batterymode
-#   default        whichever of ac / battery matches the current power state
 
-# Called by emulatorlauncher, which runs as hippos; cpufreq sysfs needs root.
 [[ "${EUID}" -ne 0 ]] && exec sudo -n "$0" "$@"
 
 POLICY0="/sys/devices/system/cpu/cpufreq/policy0"
@@ -17,7 +12,6 @@ on_battery() {
     local supply
     for supply in /sys/class/power_supply/*; do
         [[ "$(cat "${supply}/type" 2>/dev/null)" == Battery ]] || continue
-        # Controller / peripheral batteries report scope=Device
         [[ "$(cat "${supply}/scope" 2>/dev/null)" == Device ]] && continue
         [[ "$(cat "${supply}/status" 2>/dev/null)" == Discharging ]] && return 0
     done

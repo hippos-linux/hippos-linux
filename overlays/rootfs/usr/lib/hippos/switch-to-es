@@ -1,4 +1,3 @@
 #!/usr/bin/env bash
-# Ends the current mode; hippos-session then starts ES.
 hippos-settings set system.session es
 kill -USR1 "$(cat /run/hippos/session-loop)"

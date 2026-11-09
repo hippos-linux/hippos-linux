@@ -1,4 +1,3 @@
-"""Computer emulator generators — dosbox, hatari, scummvm, fsuae, openmsx, mupen64plus."""
 
 from __future__ import annotations
 
@@ -24,9 +23,6 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import BIOS, CONFIGS, SAVES, SCREENSHOTS
 
-
-# ── DOS ────────────────────────────────────────────────────────────────────────
-
 def launch_dosbox_staging(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     rom  = ctx.rom
@@ -39,7 +35,6 @@ def launch_dosbox_staging(ctx: LaunchContext) -> int:
 
     cmd: list[str] = [str(bin_path), '--fullscreen']
 
-    # Use dosbox.cfg/dosbox.conf from ROM directory if present
     for cfg_name in ('dosbox.cfg', 'dosbox.conf'):
         cfg_file = rom.parent / cfg_name
         if cfg_file.exists():
@@ -64,7 +59,6 @@ def launch_dosbox_staging(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     return _run_game_command(ctx, 'dosbox-staging', cmd, env).returncode
 
-
 def launch_dosbox_x(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     rom  = ctx.rom
@@ -75,7 +69,6 @@ def launch_dosbox_x(ctx: LaunchContext) -> int:
         _log.error("dosbox-x: binary not found")
         return 1
 
-    # Write a custom conf that dosbox-x won't overwrite
     cfg_dir = CONFIGS / 'dosbox'
     cfg_dir.mkdir(parents=True, exist_ok=True)
     custom_cfg = cfg_dir / 'dosboxx-custom.conf'
@@ -87,7 +80,6 @@ def launch_dosbox_x(ctx: LaunchContext) -> int:
     if not custom_cfg.exists():
         custom_cfg.write_text('[sdl]\noutput=opengl\n\n[autoexec]\n')
 
-    # Append ROM-specific autoexec if dosbox.aut exists
     aut = rom.parent / 'dosbox.aut'
     if aut.exists():
         existing = custom_cfg.read_text()
@@ -107,24 +99,18 @@ def launch_dosbox_x(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     return _run_game_command(ctx, 'dosbox-x', cmd, env).returncode
 
-
-# ── Hatari ─────────────────────────────────────────────────────────────────────
-
 _HATARI_MACHINES = {'st', 'ste', 'megaste', 'tt', 'falcon'}
 _HATARI_EXTS_FLOPPY = {'.st', '.msa', '.stx', '.dim', '.ipf'}
 _HATARI_EXTS_HDD    = {'.hd', '.hdv', '.gem', '.sh3'}
 _HATARI_EXTS_ACSI   = {'.img', '.vhd'}
 
-
 def _hatari_find_tos(machine: str) -> Optional[Path]:
-    """Search /userdata/bios for a TOS ROM appropriate for the machine type."""
     bios_dir = BIOS
     patterns = ['tos*.img', 'tos*.rom', 'TOS*.img', 'TOS*.ROM', '*.img', '*.rom']
     for pat in patterns:
         for candidate in sorted(bios_dir.glob(pat)):
             return candidate
     return None
-
 
 def launch_hatari(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -140,12 +126,10 @@ def launch_hatari(ctx: LaunchContext) -> int:
     if machine not in _HATARI_MACHINES:
         machine = 'st'
 
-    # Write hatari.cfg with joystick mappings
     cfg_dir  = CONFIGS / 'hatari'
     cfg_dir.mkdir(parents=True, exist_ok=True)
     cfg_file = cfg_dir / 'hatari.cfg'
 
-    # Hatari matches keys case-sensitively (cfgopts.c strcmp), so keep their case.
     parser = configparser.ConfigParser(strict=False, interpolation=None)
     parser.optionxform = str
     if cfg_file.exists():
@@ -153,7 +137,6 @@ def launch_hatari(ctx: LaunchContext) -> int:
 
     profiles = _load_es_input_configs()
 
-    # Disable previous joystick config first
     for i in range(1, 6):
         section = f'Joystick{i}'
         if parser.has_section(section):
@@ -168,7 +151,6 @@ def launch_hatari(ctx: LaunchContext) -> int:
         parser.set(section, 'nJoyId',        str(ctrl.index))
         parser.set(section, 'nJoystickMode', '1')
 
-        # Read actual button codes from ES profile (y=fire1, b=fire2, a=fire3)
         _pad_map = {'y': 'nButton1', 'b': 'nButton2', 'a': 'nButton3'}
         _defaults = {'nButton1': '0', 'nButton2': '1', 'nButton3': '2'}
         if profile is not None:
@@ -209,16 +191,12 @@ def launch_hatari(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     return _run_game_command(ctx, 'hatari', cmd, env).returncode
 
-
-# ── ScummVM ────────────────────────────────────────────────────────────────────
-
 def launch_scummvm(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     rom  = ctx.rom
     saves_dir   = SAVES / 'scummvm'
     extra_dir   = BIOS / 'scummvm' / 'extra'
     cfg_dir     = CONFIGS / 'scummvm'
-    # ScummVM refuses to start if any of its path options doesn't exist.
     for directory in (saves_dir, extra_dir, cfg_dir, SCREENSHOTS):
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -227,7 +205,6 @@ def launch_scummvm(ctx: LaunchContext) -> int:
         _log.error("scummvm: binary not found")
         return 1
 
-    # Write minimal scummvm.ini
     ini = cfg_dir / 'scummvm.ini'
     if not ini.exists():
         ini.write_text('[scummvm]\ngui_browser_native=false\n')
@@ -254,7 +231,6 @@ def launch_scummvm(ctx: LaunchContext) -> int:
     if p1 is not None:
         cmd += [f'--joystick={p1.index}']
 
-    # A .scummvm file holds the game id, or is empty and named after it.
     if rom.suffix.lower() == '.scummvm':
         game_id = rom.read_text(encoding='utf-8', errors='replace').strip() or rom.stem
         cmd += [f'--path={rom.parent}', game_id]
@@ -265,9 +241,6 @@ def launch_scummvm(ctx: LaunchContext) -> int:
 
     env = _build_game_env(conf, ctx)
     return _run_game_command(ctx, 'scummvm', cmd, env).returncode
-
-
-# ── Mupen64plus ────────────────────────────────────────────────────────────────
 
 def launch_mupen64plus(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -282,7 +255,6 @@ def launch_mupen64plus(ctx: LaunchContext) -> int:
         _log.error("mupen64plus: binary not found")
         return 1
 
-    # Write mupen64plus.cfg with paths and video settings
     cfg_file = cfg_dir / 'mupen64plus-custom.ini'
     parser = configparser.ConfigParser(strict=False)
     if cfg_file.exists():
@@ -323,7 +295,6 @@ def launch_mupen64plus(ctx: LaunchContext) -> int:
     with cfg_file.open('w') as f:
         parser.write(f)
 
-    # Find plugin paths
     lib_dirs = [
         Path('/opt/emulators/mupen64plus/lib'),
         Path('/usr/lib/mupen64plus'),
@@ -360,18 +331,13 @@ def launch_mupen64plus(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     return _run_game_command(ctx, 'mupen64plus', cmd, env).returncode
 
-
-# ── FS-UAE (Amiga) ─────────────────────────────────────────────────────────────
-
 _FSUAE_MODELS = {
     'A500':  'A500',  'A500+': 'A500+', 'A600': 'A600',
     'A1000': 'A1000', 'A3000': 'A3000', 'A1200': 'A1200',
     'A4000': 'A4000', 'CD32':  'CD32',  'CDTV': 'CDTV',
 }
 
-
 def _fsuae_floppy_list(rom: Path) -> list[Path]:
-    """Return ordered floppy list from a multi-disk ROM."""
     if not rom.is_dir() and zipfile.is_zipfile(rom):
         tmp = Path('/tmp/fsuae') / rom.stem
         tmp.mkdir(parents=True, exist_ok=True)
@@ -383,14 +349,11 @@ def _fsuae_floppy_list(rom: Path) -> list[Path]:
         return sorted(p for p in rom.iterdir()
                       if p.suffix.lower() in ('.adf', '.adz', '.dms', '.fdi', '.ipf'))
 
-    # Single file — look for siblings with same prefix
     stem = rom.stem
-    # Strip trailing digit e.g. "game1" → "game"
     base = stem.rstrip('0123456789')
     siblings = sorted(p for p in rom.parent.iterdir()
                       if p.stem.startswith(base) and p.suffix == rom.suffix)
     return siblings if len(siblings) > 1 else [rom]
-
 
 def launch_fsuae(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -429,7 +392,6 @@ def launch_fsuae(ctx: LaunchContext) -> int:
             cmd.append(f'--floppy_image_{i}={floppy}')
             cmd.append(f'--floppy_drive_{i}={floppy}')
 
-    # Joystick ports — use real controller name so FS-UAE picks the right device
     for ctrl in ctx.controllers[:4]:
         port_name = ctrl.name if ctrl.name else 'auto'
         cmd.append(f'--joystick_port_{ctrl.player - 1}={port_name}')
@@ -437,33 +399,25 @@ def launch_fsuae(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     return _run_game_command(ctx, 'fsuae', cmd, env).returncode
 
-
-# ── Basilisk II (68k Macintosh) ────────────────────────────────────────────────
-
 _BASILISK2_ROM_DIR = BIOS / 'macintosh'
-
 
 def launch_basilisk2(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('basilisk2')
     if bin_path is None:
         _log.error("basilisk2: binary not found")
         return 1
-    # Basilisk II needs a Mac II-class ROM image; names vary by model.
     mac_rom = next((path for path in sorted(_BASILISK2_ROM_DIR.glob('*'))
                     if path.suffix.lower() == '.rom'), None)
     if mac_rom is None:
         _log.error("basilisk2: no Macintosh ROM (*.rom) in %s", _BASILISK2_ROM_DIR)
         return 1
-    # Settings go in the prefs file: the GTK build hands --screen to GTK
-    # (X screen number), and Basilisk II rewrites the file on exit, so only
-    # the keys set here are replaced.
     prefs = CONFIGS / 'basilisk2' / 'prefs'
     prefs.parent.mkdir(parents=True, exist_ok=True)
     managed = {
         'rom': str(mac_rom),
         'disk': str(ctx.rom),
-        'nogui': 'true',      # otherwise it opens its settings window
-        'screen': 'dga/0/0',  # fullscreen at the display's size
+        'nogui': 'true',
+        'screen': 'dga/0/0',
     }
     kept = [line for line in (prefs.read_text(encoding='utf-8').splitlines() if prefs.exists() else [])
             if line.split(' ', 1)[0] not in managed]
@@ -473,11 +427,6 @@ def launch_basilisk2(ctx: LaunchContext) -> int:
     env = _build_game_env(_load_hippos_conf(), ctx)
     return _run_game_command(ctx, 'basilisk2', cmd, env).returncode
 
-
-# ── OpenMSX ────────────────────────────────────────────────────────────────────
-
-# Machines shipped in openMSX's share/machines. An MSX2 runs MSX1 software, and
-# the Boosted_* machines need the system ROMs hippos-systems lists per system.
 _OPENMSX_MACHINES = {
     'msx1':       'Boosted_MSX2_EN',
     'msx2':       'Boosted_MSX2_EN',
@@ -486,7 +435,6 @@ _OPENMSX_MACHINES = {
     'colecovision': 'ColecoVision_SGM',
     'spectravideo': 'Spectravideo_SVI-328',
 }
-# LaserDisc games need the Pioneer PX-7, whatever the system.
 _OPENMSX_LASERDISC_MACHINE = 'Pioneer_PX-7'
 
 _OPENMSX_MEDIA_EXTS = {
@@ -497,15 +445,11 @@ _OPENMSX_MEDIA_EXTS = {
     '.ogv': '-laserdisc',
 }
 
-
 def _openmsx_write_settings(cfg_dir: Path, system_share: Path, controllers: list[ControllerInfo]) -> Path:
     share_dir = cfg_dir / 'share'
     share_dir.mkdir(parents=True, exist_ok=True)
 
-    # settings.xml
     settings_file = share_dir / 'settings.xml'
-    # openMSX's own layout (src/config/SettingsConfig.cc): values under a nested
-    # <settings>, key bindings beside it, and a DOCTYPE it refuses to load without.
     root = ET.Element('settings')
     values_el = ET.SubElement(root, 'settings')
 
@@ -515,7 +459,6 @@ def _openmsx_write_settings(cfg_dir: Path, system_share: Path, controllers: list
 
     _setting('fullspeedwhenloading', 'true')
     _setting('save_settings_on_exit', 'false')
-    # Read before the machine is created, so its system ROMs resolve from /userdata/bios.
     _setting('__filepool', ' '.join((
         f'{{-path {BIOS}/Machines -types system_rom}}',
         f'{{-path {BIOS}/openmsx -types system_rom}}',
@@ -540,7 +483,6 @@ def _openmsx_write_settings(cfg_dir: Path, system_share: Path, controllers: list
         encoding='utf-8',
     )
 
-    # script.tcl — full joystick port and button bindings
     script_file = share_dir / 'script.tcl'
     profiles = _load_es_input_configs()
     lines = ['# -= Controller config =-']
@@ -559,7 +501,7 @@ def _openmsx_write_settings(cfg_dir: Path, system_share: Path, controllers: list
             for es_name, tcl_cmd in (
                 ('y',        f'"keymatrixdown 6 0x40"'),
                 ('x',        f'"keymatrixdown 6 0x80"'),
-                ('pagedown', None),   # fast-forward toggle
+                ('pagedown', None),
                 ('select',   f'"toggle pause"'),
                 ('start',    f'"main_menu_toggle"'),
                 ('l3',       f'"toggle_osd_keyboard"'),
@@ -577,7 +519,6 @@ def _openmsx_write_settings(cfg_dir: Path, system_share: Path, controllers: list
     script_file.write_text('\n'.join(lines) + '\n')
     return share_dir
 
-
 def launch_openmsx(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     rom  = ctx.rom
@@ -591,13 +532,11 @@ def launch_openmsx(ctx: LaunchContext) -> int:
         _log.error("openmsx: binary not found")
         return 1
 
-    # openMSX looks for machines and extensions next to its binary's install.
     system_share = bin_path.parent.parent / 'share'
     share_dir = _openmsx_write_settings(cfg_dir, system_share, ctx.controllers)
 
     machine = _OPENMSX_MACHINES.get(ctx.system, 'Boosted_MSX2_EN')
 
-    # Extract ZIP if needed
     if rom.suffix.lower() == '.zip' and zipfile.is_zipfile(rom):
         tmp = Path('/tmp/openmsx') / rom.stem
         tmp.mkdir(parents=True, exist_ok=True)
@@ -619,7 +558,6 @@ def launch_openmsx(ctx: LaunchContext) -> int:
     ]
 
     env = _build_game_env(conf, ctx)
-    # User data (settings.xml, script.tcl) under cfg_dir/share.
     env['OPENMSX_HOME'] = str(cfg_dir)
     env['OPENMSX_SYSTEM_DATA'] = str(system_share)
     return _run_game_command(ctx, 'openmsx', cmd, env).returncode

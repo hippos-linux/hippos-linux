@@ -1,21 +1,4 @@
 #!/usr/bin/env python3
-"""hippos-settings — unified HippOS settings backend.
-
-Commands:
-  get <key>           print effective value (resolution order below)
-  set <key> <value>   write to user conf
-  del <key>           remove from user conf
-  list                print all effective key=value pairs
-  dump                print user conf only
-  sync                append missing default keys into user conf
-
-Also callable as hippos-settings-get / hippos-settings-set via symlinks.
-
-Resolution order (highest to lowest):
-  /userdata/system/hippos.conf          user settings
-  /run/hippos/hardware-defaults.conf    hardware profile defaults (written at boot)
-  /usr/share/hippos/hippos-defaults.conf  OS defaults
-"""
 
 from __future__ import annotations
 
@@ -30,7 +13,6 @@ HW_DEFAULTS    = Path('/run/hippos/hardware-defaults.conf')
 DEFAULTS_CONF  = Path('/usr/share/hippos/hippos-defaults.conf')
 
 _USAGE = 'Usage: hippos-settings get <key> | set <key> <value> | del <key> | list | dump | sync'
-
 
 def _parse(path: Path) -> dict[str, str]:
     result: dict[str, str] = {}
@@ -48,13 +30,8 @@ def _parse(path: Path) -> dict[str, str]:
         pass
     return result
 
-
 @contextmanager
 def _locked(path: Path):
-    """Serialises read-modify-write of the user config: a pad can fire a
-    mode switch twice, and two concurrent sets would each drop the other's
-    change. Read-only is enough to flock, so a lock file root created first
-    still works for hippos."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path.with_name(f'.{path.name}.lock'), os.O_RDONLY | os.O_CREAT, 0o644)
     try:
@@ -63,17 +40,13 @@ def _locked(path: Path):
     finally:
         os.close(fd)
 
-
 def _write(path: Path, data: dict[str, str]) -> None:
     tmp = path.with_name(f'.{path.name}.{os.getpid()}.tmp')
     tmp.write_text(''.join(f'{k}={v}\n' for k, v in sorted(data.items())), encoding='utf-8')
-    # Boot services and migrations run this as root, but ES runs as the user and
-    # saves this file in place, so losing its owner silently stops ES saving.
     if os.geteuid() == 0 and path.exists():
         owner = path.stat()
         os.chown(tmp, owner.st_uid, owner.st_gid)
     tmp.replace(path)
-
 
 def cmd_get(key: str) -> int:
     for src in (USER_CONF, HW_DEFAULTS, DEFAULTS_CONF):
@@ -83,14 +56,12 @@ def cmd_get(key: str) -> int:
             return 0
     return 1
 
-
 def cmd_set(key: str, value: str) -> int:
     with _locked(USER_CONF):
         data = _parse(USER_CONF)
         data[key] = value
         _write(USER_CONF, data)
     return 0
-
 
 def cmd_del(key: str) -> int:
     with _locked(USER_CONF):
@@ -100,22 +71,18 @@ def cmd_del(key: str) -> int:
             _write(USER_CONF, data)
     return 0
 
-
 def cmd_list() -> int:
     merged = {**_parse(DEFAULTS_CONF), **_parse(HW_DEFAULTS), **_parse(USER_CONF)}
     for k, v in sorted(merged.items()):
         print(f'{k}={v}')
     return 0
 
-
 def cmd_dump() -> int:
     for k, v in sorted(_parse(USER_CONF).items()):
         print(f'{k}={v}')
     return 0
 
-
 def cmd_sync() -> int:
-    """Append any keys present in defaults but missing from user conf."""
     defaults = {**_parse(DEFAULTS_CONF), **_parse(HW_DEFAULTS)}
     with _locked(USER_CONF):
         user = _parse(USER_CONF)
@@ -124,7 +91,6 @@ def cmd_sync() -> int:
             user.update(missing)
             _write(USER_CONF, user)
     return 0
-
 
 def main() -> int:
     name = os.path.basename(sys.argv[0])
@@ -162,7 +128,6 @@ def main() -> int:
 
     print(_USAGE, file=sys.stderr)
     return 1
-
 
 if __name__ == '__main__':
     sys.exit(main())

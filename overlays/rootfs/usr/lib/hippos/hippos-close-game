@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
-# hippos-close-game — exit hotkey for anything closed with Alt+F4.
-# Asks the window to close, then ends whatever is still running: Alt+F4 only
-# dismisses an error dialog, a first-run screen can refuse it, and an app that
-# crashed may have no window at all.
 set -u
 
-# Long enough for an emulator to write its saves after a close request.
 CLOSE_GRACE_SECONDS=8
 
-# A second press mustn't send Alt+F4 to ES after the game has gone.
 exec 9>/run/hippos/close-game.lock
 flock -n 9 || exit 0
 
@@ -29,5 +23,4 @@ descendants() {
     done
 }
 
-# shellcheck disable=SC2046  # one PID per word
 kill -TERM $(descendants "${launcher}") 2>/dev/null

@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-"""hippos-content — HippOS content downloader.
-
-Downloads bezels, shaders, cheats, themes and extra cores from the HippOS
-content catalog into /userdata.
-
-Progress lines on stdout use the ES-compatible format:  >>>N  (N = 0-100)
-"""
 from __future__ import annotations
 
 import hashlib
@@ -23,8 +16,6 @@ from typing import Optional
 
 from hippos_ports import PORTS_DIR, set_claimed, write_launcher
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
-
 USERDATA        = Path('/userdata')
 CONTENT_CACHE   = USERDATA / 'system' / 'content-cache'
 INSTALLED_FILE  = CONTENT_CACHE / 'installed.json'
@@ -41,7 +32,6 @@ INSTALL_ROOTS: dict[str, Path] = {
     'ports':     PORTS_DIR,
 }
 
-
 _USAGE = """\
 Usage: hippos-content <command> [args]
 
@@ -53,14 +43,8 @@ Commands:
   remove <id>            remove an installed package
 """
 
-
-# ── Progress ───────────────────────────────────────────────────────────────────
-
 def _progress(pct: int) -> None:
     print(f'>>>{min(100, max(0, pct))}', flush=True)
-
-
-# ── Catalog / installed state ──────────────────────────────────────────────────
 
 def _load_catalog() -> dict:
     url = DEFAULT_CATALOG_URL
@@ -72,7 +56,6 @@ def _load_catalog() -> dict:
         print(f'Warning: could not fetch catalog: {exc}', file=sys.stderr)
         return {'packages': []}
 
-
 def _load_installed() -> dict[str, str]:
     if INSTALLED_FILE.exists():
         try:
@@ -81,20 +64,15 @@ def _load_installed() -> dict[str, str]:
             pass
     return {}
 
-
 def _save_installed(installed: dict[str, str]) -> None:
     INSTALLED_FILE.parent.mkdir(parents=True, exist_ok=True)
     INSTALLED_FILE.write_text(json.dumps(installed, indent=2, sort_keys=True), encoding='utf-8')
-
 
 def _find_pkg(catalog: dict, pkg_id: str) -> Optional[dict]:
     for pkg in catalog.get('packages', []):
         if pkg.get('id') == pkg_id:
             return pkg
     return None
-
-
-# ── Network ────────────────────────────────────────────────────────────────────
 
 def _download(url: str, dest: Path, expected_size: int = 0) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -117,7 +95,6 @@ def _download(url: str, dest: Path, expected_size: int = 0) -> None:
     except urllib.error.URLError as exc:
         raise RuntimeError(f'Download failed: {exc}') from exc
 
-
 def _sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open('rb') as fh:
@@ -125,16 +102,7 @@ def _sha256(path: Path) -> str:
             h.update(chunk)
     return h.hexdigest()
 
-
-# ── Extraction ─────────────────────────────────────────────────────────────────
-
 def _extract(archive: Path, dest: Path, strip: int = 0, source_subdir: str = '') -> None:
-    """Extract archive into dest.
-
-    strip:         number of leading path components to remove from each member.
-    source_subdir: if set, only extract members under this subdir (after strip),
-                   and strip the subdir prefix too.
-    """
     dest.mkdir(parents=True, exist_ok=True)
     subdir_prefix = (source_subdir.strip('/') + '/') if source_subdir else ''
 
@@ -161,16 +129,12 @@ def _extract(archive: Path, dest: Path, strip: int = 0, source_subdir: str = '')
             except Exception:
                 tf.extract(member, dest)
 
-
-# ── APT helpers ───────────────────────────────────────────────────────────────
-
 def _apt(action: str, packages: list[str]) -> int:
     cmd = ['apt-get', action, '-y', '--no-install-recommends'] + packages
     if os.getuid() != 0:
         cmd = ['sudo'] + cmd
     print(f'Running: {" ".join(cmd)}')
     return subprocess.run(cmd).returncode
-
 
 def _create_port_launcher(pkg: dict) -> Path:
     name    = pkg.get('name', pkg['id'])
@@ -181,9 +145,6 @@ def _create_port_launcher(pkg: dict) -> Path:
     script = PORTS_DIR / f"{pkg['id']}.sh"
     write_launcher(script, name, command)
     return script
-
-
-# ── Commands ───────────────────────────────────────────────────────────────────
 
 def cmd_list(args: list[str]) -> int:
     catalog   = _load_catalog()
@@ -201,7 +162,6 @@ def cmd_list(args: list[str]) -> int:
         print(f"{pkg['id']:<40}  {pkg.get('category',''):<8}  {mb:>5} MB  {pkg.get('name','')}{status}")
     return 0
 
-
 def cmd_installed(_args: list[str]) -> int:
     installed = _load_installed()
     if not installed:
@@ -210,7 +170,6 @@ def cmd_installed(_args: list[str]) -> int:
     for pkg_id, version in sorted(installed.items()):
         print(f'{pkg_id}  (v{version})')
     return 0
-
 
 def cmd_info(args: list[str]) -> int:
     if not args:
@@ -232,7 +191,6 @@ def cmd_info(args: list[str]) -> int:
     print(f"  installed:   {'yes (v' + installed[pkg['id']] + ')' if pkg['id'] in installed else 'no'}")
     return 0
 
-
 def cmd_install(args: list[str]) -> int:
     if not args:
         print('Usage: hippos-content install <id>', file=sys.stderr)
@@ -246,13 +204,11 @@ def cmd_install(args: list[str]) -> int:
 
     pkg_type = pkg.get('type', 'tarball')
 
-    # ── apt-installed port ────────────────────────────────────────────────────
     if pkg_type == 'apt':
         apt_packages = pkg.get('apt_packages', [])
         if not apt_packages:
             print(f'No apt_packages defined for {pkg_id}', file=sys.stderr)
             return 1
-        # Claimed before apt runs, so its hook doesn't add a second launcher.
         set_claimed(apt_packages, True)
         print(f"Installing {pkg.get('name', pkg_id)} via apt...")
         ret = _apt('install', apt_packages)
@@ -268,7 +224,6 @@ def cmd_install(args: list[str]) -> int:
         print(f'Installed: {pkg_id}')
         return 0
 
-    # ── tarball download ──────────────────────────────────────────────────────
     url = pkg.get('url', '')
     if not url:
         print(f'No download URL for {pkg_id}', file=sys.stderr)
@@ -312,7 +267,6 @@ def cmd_install(args: list[str]) -> int:
     print(f'Installed: {pkg_id}')
     return 0
 
-
 def cmd_remove(args: list[str]) -> int:
     if not args:
         print('Usage: hippos-content remove <id>', file=sys.stderr)
@@ -350,9 +304,6 @@ def cmd_remove(args: list[str]) -> int:
     print(f'Uninstalled: {pkg_id}')
     return 0
 
-
-# ── Entry point ────────────────────────────────────────────────────────────────
-
 def main() -> int:
     args = sys.argv[1:]
     if not args:
@@ -372,7 +323,6 @@ def main() -> int:
         print(_USAGE, file=sys.stderr)
         return 1
     return fn(rest)
-
 
 if __name__ == '__main__':
     sys.exit(main())

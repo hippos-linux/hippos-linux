@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-# HippOS Bluetooth Agent — D-Bus BlueZ agent for controller/audio pairing.
-# Ported from Batocera's batocera-bluetooth-agent; adapted for Python 3,
-# systemd, and PipeWire.
 
 import dbus
 import dbus.service
@@ -25,7 +22,6 @@ BT_LISTING_FILE = '/run/hippos-bt/bt_listing'
 BT_DEVICE_FILE  = '/run/hippos-bt/bt_device'
 BT_STATUS_FILE  = '/run/hippos-bt/bt_status'
 LOG_FILE        = '/run/hippos-bt/agent.log'
-# UID of the hippos user — for pactl PipeWire socket
 HIPPOS_UID      = 1000
 
 logging.basicConfig(
@@ -41,9 +37,6 @@ gdevices     = {}
 glisting_mode = False
 glisting_devs = {}
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
 def prop2str(p):
     if isinstance(p, dbus.String):
         return str(p)
@@ -51,14 +44,12 @@ def prop2str(p):
         return p.decode('utf-8', errors='replace')
     return str(p) if not isinstance(p, str) else p
 
-
 def logging_status(msg):
     try:
         with open(BT_STATUS_FILE, 'w') as f:
             f.write(msg + '\n')
     except Exception:
         pass
-
 
 def get_dev_name(props):
     name = prop2str(props.get('Name', ''))
@@ -70,19 +61,16 @@ def get_dev_name(props):
         return f'{name} ({addr})'
     return name or addr or icon or 'unknown'
 
-
 def get_short_name(props):
     return prop2str(
         props.get('Name') or props.get('Address') or props.get('Icon') or 'unknown'
     )
-
 
 def get_addr_name_type(props):
     addr = prop2str(props['Address']) if 'Address' in props else None
     name = prop2str(props['Name'])    if 'Name'    in props else None
     icon = prop2str(props['Icon'])    if 'Icon'    in props else None
     return addr, name, icon
-
 
 def icon2type(icon):
     if not icon:
@@ -93,12 +81,10 @@ def icon2type(icon):
         return 'audio'
     return icon
 
-
 def merge(d1, d2):
     res = d1.copy()
     res.update(d2)
     return res
-
 
 def get_wanted_addr():
     try:
@@ -107,9 +93,6 @@ def get_wanted_addr():
             return addr or None
     except FileNotFoundError:
         return None
-
-
-# ── Pairing / connection ──────────────────────────────────────────────────────
 
 def do_pair(address, dev_name, short_name):
     logging_status(f'Pairing {short_name}...')
@@ -120,7 +103,6 @@ def do_pair(address, dev_name, short_name):
     except Exception as e:
         logging.info(f'Pairing failed ({dev_name}): {e}')
         logging_status(f'Pairing failed ({short_name})')
-
 
 def do_connect(address, dev_name, short_name):
     global gadapter, gdiscovering
@@ -152,7 +134,6 @@ def do_connect(address, dev_name, short_name):
                 gadapter.StartDiscovery()
             except Exception:
                 pass
-
 
 def connect_device(path, address, props, force_connect, wanted):
     global gdiscovering
@@ -198,9 +179,6 @@ def connect_device(path, address, props, force_connect, wanted):
     if not connected or force_connect:
         do_connect(address, dev_name, short_name)
 
-
-# ── Live listing IPC ──────────────────────────────────────────────────────────
-
 def listing_dev_event(path, props, adding):
     global glisting_devs
 
@@ -223,9 +201,6 @@ def listing_dev_event(path, props, adding):
     except Exception:
         pass
 
-
-# ── D-Bus signal handlers ─────────────────────────────────────────────────────
-
 def interfaces_added(path, interfaces):
     global gdevices, glisting_mode
     if 'org.bluez.Device1' not in interfaces or not interfaces['org.bluez.Device1']:
@@ -238,13 +213,11 @@ def interfaces_added(path, interfaces):
     if 'Address' in gdevices[path]:
         connect_device(path, prop2str(props['Address']), gdevices[path], False, get_wanted_addr())
 
-
 def interfaces_removed(path, interfaces):
     global gdevices
     if 'org.bluez.Device1' in interfaces and path in gdevices:
         listing_dev_event(path, gdevices[path], False)
         del gdevices[path]
-
 
 def properties_changed(interface, changed, invalidated, path):
     global gdevices, glisting_mode
@@ -271,14 +244,10 @@ def properties_changed(interface, changed, invalidated, path):
     if 'Address' in gdevices[path]:
         connect_device(path, prop2str(gdevices[path]['Address']), gdevices[path], False, get_wanted_addr())
 
-
-# ── Audio refresh (PipeWire via PulseAudio protocol) ─────────────────────────
-
 def _pactl_env():
     env = os.environ.copy()
     env['XDG_RUNTIME_DIR'] = f'/run/user/{HIPPOS_UID}'
     return env
-
 
 def refresh_audio_on_connect(props):
     if 'Icon' not in props or not prop2str(props['Icon']).startswith('audio-'):
@@ -298,7 +267,6 @@ def refresh_audio_on_connect(props):
         time.sleep(0.1)
     logging.warning('BT audio: no bluez sink within timeout')
 
-
 def refresh_audio_on_disconnect():
     env = _pactl_env()
     try:
@@ -309,9 +277,6 @@ def refresh_audio_on_disconnect():
             logging.info(f'BT audio: default sink restored → {sinks[0]}')
     except Exception as e:
         logging.warning(f'BT audio disconnect refresh failed: {e}')
-
-
-# ── Signal handlers (SIGUSR1/2 from hippos-bluetooth live_devices) ────────────
 
 def signal_start_discovery(signum, frame):
     global gdiscovering, gadapter, glisting_mode, glisting_devs
@@ -329,7 +294,6 @@ def signal_start_discovery(signum, frame):
         except Exception as e:
             logging.warning(f'StartDiscovery failed: {e}')
 
-
 def signal_stop_discovery(signum, frame):
     global gdiscovering, gadapter, glisting_mode
     glisting_mode = False
@@ -340,9 +304,6 @@ def signal_stop_discovery(signum, frame):
             logging.info('Discovery stopped (SIGUSR2)')
         except Exception as e:
             logging.warning(f'StopDiscovery failed: {e}')
-
-
-# ── BlueZ Agent D-Bus object ──────────────────────────────────────────────────
 
 class Agent(dbus.service.Object):
     @dbus.service.method(AGENT_INTERFACE, in_signature='', out_signature='')
@@ -383,9 +344,6 @@ class Agent(dbus.service.Object):
     def Cancel(self):
         logging.info('agent: Cancel')
 
-
-# ── Main ──────────────────────────────────────────────────────────────────────
-
 if __name__ == '__main__':
     option_list = [make_option('-i', '--device', action='store', type='string', dest='dev_id')]
     parser = OptionParser(option_list=option_list)
@@ -394,7 +352,6 @@ if __name__ == '__main__':
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SystemBus()
 
-    # Register D-Bus signal receivers
     bus.add_signal_receiver(
         interfaces_added,
         dbus_interface='org.freedesktop.DBus.ObjectManager',
@@ -413,19 +370,6 @@ if __name__ == '__main__':
         path_keyword='path',
     )
 
-    # bluetooth.service reaching "active" only means its own process started —
-    # bluetoothd claiming the org.bluez bus name is a separate, slightly later
-    # step. bus.get_object()/RegisterAgent() below eagerly trigger D-Bus
-    # activation of a missing name and block for dbus-daemon's own 25s
-    # service_start_timeout before raising, uncaught — with
-    # Restart=on-failure/RestartSec=5 that became a crash-restart loop every
-    # ~30s forever (25s block dominates the cycle, so it never falls inside
-    # systemd's own 10s StartLimitIntervalSec window and never trips the
-    # default burst limit either). The systemd unit's own ExecCondition skips
-    # this whole script when there's no Bluetooth hardware at all, but poll
-    # name_has_owner (a local, non-activating query) here too for the
-    # narrower race where hardware exists but bluetoothd hasn't claimed the
-    # name yet (real hardware report, 2026-08-23).
     for _ in range(15):
         if bus.name_has_owner('org.bluez'):
             break
@@ -434,7 +378,6 @@ if __name__ == '__main__':
         logging.error('org.bluez never appeared on the bus — bluetoothd not running, giving up')
         sys.exit(1)
 
-    # Register BlueZ agent
     obj     = bus.get_object('org.bluez', '/org/bluez')
     manager = dbus.Interface(obj, 'org.bluez.AgentManager1')
     manager.RegisterAgent(AGENT_PATH, 'NoInputNoOutput')
@@ -442,11 +385,9 @@ if __name__ == '__main__':
     Agent(bus, AGENT_PATH)
     logging.info('HippOS Bluetooth agent registered')
 
-    # Unix signal handlers for live_devices IPC
     signal.signal(signal.SIGUSR1, signal_start_discovery)
     signal.signal(signal.SIGUSR2, signal_stop_discovery)
 
-    # Find adapter and power it on so ES can see it without a desktop BT manager
     try:
         gadapter = bluezutils.find_adapter(options.dev_id)
     except Exception:

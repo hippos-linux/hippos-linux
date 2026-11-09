@@ -1,31 +1,16 @@
 #!/usr/bin/env bash
-# Apply saved display settings (output, resolution) via xrandr.
-# Called from session-es and session-desktop after DISPLAY is set.
 
 export DISPLAY="${DISPLAY:-:0}"
 
 _CRT_ENABLED="$(hippos-settings get crt.enabled 2>/dev/null || true)"
 _CRT_ACTIVE="$(test -f /etc/X11/xorg.conf.d/90-crt-gpu.conf && echo true || echo false)"
 
-# CRT activation is explicit-only — crt.enabled=true is the only thing that
-# ever turns it on. There is no "auto" mode: a VGA/DVI-I connection or EDID
-# heuristic must never decide this by itself, so unset/false/anything else
-# just tears down a stale CRT config if one was previously active (e.g. the
-# user just flipped crt.enabled back to false). Old crt.enabled=auto configs
-# are migrated to false by hippos-migrate; this treats a leftover "auto" the
-# same way as a defensive fallback.
 if [[ "${_CRT_ENABLED}" == "true" ]]; then
     sudo /usr/lib/hippos/hippos-crt-setup 2>&1 || true
 elif [[ "${_CRT_ACTIVE}" == "true" ]]; then
     sudo /usr/lib/hippos/hippos-crt-teardown 2>&1 || true
 fi
 
-# After CRT setup, apply the boot resolution via switchres before ES starts.
-# Without this, ES inherits the kernel KMS modeline from the video= boot param
-# which may be slightly off (e.g. 62Hz instead of 60Hz), preventing CRT sync.
-# hippos-resolution minTomaxResolution in CRT mode calls switchres with the
-# configured crt.boot_resolution (e.g. 640x480i → switchres 640 480 60),
-# generating a standard NTSC 480i modeline at the correct field rate.
 if [[ -f /etc/switchres.ini ]] && command -v switchres >/dev/null 2>&1; then
     hippos-resolution minTomaxResolution 2>/dev/null || true
     echo "[hippos-display-setup] CRT boot mode applied via switchres"
@@ -35,7 +20,6 @@ OUTPUT=$(hippos-settings get display.output 2>/dev/null || true)
 RES=$(hippos-settings get display.resolution 2>/dev/null || true)
 ROTATE=$(hippos-settings get display.rotate 2>/dev/null || true)
 
-# Map rotate value to xrandr rotation name (accepts degrees or 1/2/3)
 case "${ROTATE}" in
     90|1)  ROTATION="right"    ;;
     180|2) ROTATION="inverted" ;;
@@ -46,16 +30,10 @@ esac
 _OUTPUT_CONFIGURED="$OUTPUT"
 OUTPUT="${OUTPUT:-$(xrandr 2>/dev/null | awk '/ connected/ {print $1; exit}')}"
 
-# Skip xrandr resolution/rotation when CRT is enabled — the kernel sets the
-# framebuffer mode via the GRUB video= param and X uses the CRT X11 config.
-# Calling --preferred or --auto here would override 15kHz back to 31kHz.
 if [[ "${_CRT_ENABLED}" != "true" && "${_CRT_ACTIVE}" != "true" ]]; then
-    # Strip max- prefix saved by hippos-resolution setMode (e.g. "max-1920x1080")
     [[ "$RES" == max-* ]] && RES="${RES#max-}"
 
     if [[ -z "$RES" || "$RES" == "preferred" ]]; then
-        # Prefer 1920x1080@60 when unconfigured — many TVs advertise a 4K@30
-        # EDID preferred mode that --preferred would otherwise pick.
         if hippos-resolution --screen "$OUTPUT" listModes 2>/dev/null | grep -q '^1920x1080\.60:'; then
             RES="1920x1080"
             echo "[hippos-display-setup] $OUTPUT defaulting to 1920x1080 (safe default)"
@@ -67,7 +45,6 @@ if [[ "${_CRT_ENABLED}" != "true" && "${_CRT_ACTIVE}" != "true" ]]; then
             && echo "[hippos-display-setup] $OUTPUT preferred rotate=$ROTATION" \
             || echo "[hippos-display-setup] xrandr failed for $OUTPUT" >&2
     elif [[ "$RES" == *"."* ]]; then
-        # mode.rate format saved by hippos-resolution (e.g. "1920x1080.60")
         RATE="${RES##*.}"; RES="${RES%.*}"
         xrandr --output "$OUTPUT" --mode "$RES" --rate "$RATE" --rotate "$ROTATION" 2>/dev/null \
             && echo "[hippos-display-setup] $OUTPUT ${RES}@${RATE}Hz rotate=$ROTATION" \
@@ -79,7 +56,6 @@ if [[ "${_CRT_ENABLED}" != "true" && "${_CRT_ACTIVE}" != "true" ]]; then
     fi
 fi
 
-# Bind touchscreen to the configured output and apply rotation matrix
 case "$ROTATION" in
     right)    TOUCH_MATRIX="0 1 0 -1 0 1 0 0 1"  ;;
     left)     TOUCH_MATRIX="0 -1 1 1 0 0 0 0 1"  ;;
@@ -98,7 +74,6 @@ while IFS= read -r dev; do
     fi
 done < <(xinput list --name-only 2>/dev/null)
 
-# Apply saved overscan (xrandr underscan) if configured
 _OVERSCAN_ON="$(hippos-settings get display.overscan.enabled 2>/dev/null || true)"
 if [[ "${_OVERSCAN_ON}" == "true" ]]; then
     _os_left=$(hippos-settings get display.overscan.left   2>/dev/null || echo 0)
@@ -114,5 +89,4 @@ if [[ "${_OVERSCAN_ON}" == "true" ]]; then
         || echo "[hippos-display-setup] overscan not supported on ${OUTPUT}" >&2
 fi
 
-# Apply saved brightness after display is configured
 /usr/lib/hippos/hippos-brightness boot 2>/dev/null || true

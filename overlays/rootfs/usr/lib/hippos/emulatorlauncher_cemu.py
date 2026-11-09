@@ -14,11 +14,9 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import SAVES, USERDATA
 
-
 CEMU_CONFIG_DIR          = USERDATA / '.config' / 'cemu'
 CEMU_SETTINGS_XML        = CEMU_CONFIG_DIR / 'settings.xml'
 CEMU_CONTROLLER_PROFILES = CEMU_CONFIG_DIR / 'controllerProfiles'
-
 
 _CEMU_GAMEPAD_BUTTONS = {
     "1": "1", "2": "0", "3": "3", "4": "2",
@@ -39,9 +37,7 @@ _CEMU_PRO_BUTTONS = {
     "22": "47", "23": "41", "24": "46", "25": "40",
 }
 
-
 def _write_cemu_config(conf: dict[str, str]) -> None:
-    """Write Cemu settings.xml from hippos.conf values using xml.etree.ElementTree."""
     CEMU_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     (SAVES / 'wiiu').mkdir(parents=True, exist_ok=True)
 
@@ -64,7 +60,6 @@ def _write_cemu_config(conf: dict[str, str]) -> None:
     else:
         root = ET.Element('content')
 
-    # Root-level settings
     _set_text(root, 'mlc_path',           str(SAVES / 'wiiu'))
     _set_text(root, 'check_update',       'false')
     _set_text(root, 'gp_download',        'true')
@@ -75,7 +70,6 @@ def _write_cemu_config(conf: dict[str, str]) -> None:
     _set_text(root, 'vk_warning',         'false')
     _set_text(root, 'fullscreen',         'true')
 
-    # Language
     lang_val = _conf_value(conf, 'global.cemu_console_language', 'ui')
     if lang_val == 'ui':
         import os as _os
@@ -87,7 +81,6 @@ def _write_cemu_config(conf: dict[str, str]) -> None:
                 'ru_RU': 10, 'zh_TW': 11}
     _set_text(root, 'console_language', str(lang_map.get(lang, 1)))
 
-    # Graphic section
     graphic = _get_or_create(root, 'Graphic')
     api_val = _conf_value(conf, 'global.cemu_gfxbackend', '1')
     _set_text(graphic, 'api',           api_val)
@@ -98,13 +91,11 @@ def _write_cemu_config(conf: dict[str, str]) -> None:
     _set_text(graphic, 'DownscaleFilter', _conf_value(conf, 'global.cemu_downscale', '0'))
     _set_text(graphic, 'FullscreenScaling', _conf_value(conf, 'global.cemu_aspect', '0'))
 
-    # Audio section
     audio = _get_or_create(root, 'Audio')
-    _set_text(audio, 'api',         '3')  # cubeb
+    _set_text(audio, 'api',         '3')
     _set_text(audio, 'TVChannels',  _conf_value(conf, 'global.cemu_audio_channels', '1'))
     _set_text(audio, 'TVVolume',    '100')
 
-    # GamePaths
     game_paths = _get_or_create(root, 'GamePaths')
     _set_text(game_paths, 'Entry', str(USERDATA / 'roms' / 'wiiu'))
 
@@ -114,12 +105,9 @@ def _write_cemu_config(conf: dict[str, str]) -> None:
         tree.write(fh, encoding='utf-8', xml_declaration=True)
     _log.info("Wrote Cemu config: %s", CEMU_SETTINGS_XML)
 
-
 def _write_cemu_controller_profiles(ctx: LaunchContext) -> None:
-    """Write per-controller XML profiles for Cemu."""
     CEMU_CONTROLLER_PROFILES.mkdir(parents=True, exist_ok=True)
 
-    # Remove stale profiles
     for old in CEMU_CONTROLLER_PROFILES.glob('controller*.xml'):
         old.unlink(missing_ok=True)
 
@@ -148,7 +136,6 @@ def _write_cemu_controller_profiles(ctx: LaunchContext) -> None:
             tree.write(fh, encoding='utf-8', xml_declaration=True)
 
     _log.info("Wrote %d Cemu controller profiles", len(ctx.controllers[:5]))
-
 
 def launch_cemu(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('cemu')

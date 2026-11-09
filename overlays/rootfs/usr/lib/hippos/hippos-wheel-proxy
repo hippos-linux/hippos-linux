@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-"""HippOS wheel proxy.
-
-This helper reads the existing ES controller config, grabs a physical wheel
-device, and exposes a calibrated virtual wheel/gamepad device to the emulator.
-It is intentionally narrow: one physical device in, one virtual device out.
-"""
 
 from __future__ import annotations
 
@@ -21,20 +15,16 @@ from typing import Optional
 import evdev
 from evdev import AbsInfo, UInput, ecodes
 
-
 ES_INPUT_FILES = (
     Path('/userdata/system/configs/emulationstation/es_input.cfg'),
     Path('/usr/share/emulationstation/es_input.cfg'),
 )
 
-
 def log(message: str) -> None:
     print(f'[hippos-wheel-proxy] {message}', file=sys.stderr, flush=True)
 
-
 def normalize(value: str) -> str:
     return ''.join(ch for ch in value.strip().casefold() if ch.isalnum())
-
 
 def env_int(value: str | None, default: int) -> int:
     if value is None:
@@ -47,13 +37,11 @@ def env_int(value: str | None, default: int) -> int:
     except ValueError:
         return default
 
-
 def resolve_abs_code(name: str, fallback: int) -> int:
     code = getattr(ecodes, name, None)
     if code is None:
         return fallback
     return code
-
 
 def button_code_for(logical_name: str) -> Optional[int]:
     logical_name = logical_name.lower()
@@ -78,7 +66,6 @@ def button_code_for(logical_name: str) -> Optional[int]:
     }
     return mapping.get(logical_name)
 
-
 def virtual_abs_name(logical_name: str) -> Optional[str]:
     logical_name = logical_name.lower()
     mapping = {
@@ -90,7 +77,6 @@ def virtual_abs_name(logical_name: str) -> Optional[str]:
     }
     return mapping.get(logical_name)
 
-
 @dataclass(frozen=True)
 class Binding:
     name: str
@@ -98,13 +84,11 @@ class Binding:
     code: int
     value: int
 
-
 @dataclass
 class ControllerConfig:
     device_name: str
     device_guid: str
     inputs: dict[str, Binding]
-
 
 def load_es_input_configs() -> list[ControllerConfig]:
     for path in ES_INPUT_FILES:
@@ -147,7 +131,6 @@ def load_es_input_configs() -> list[ControllerConfig]:
         )
     return configs
 
-
 def pick_controller_config(
     configs: list[ControllerConfig],
     device_name: str,
@@ -167,10 +150,8 @@ def pick_controller_config(
             return config
     return configs[0] if configs else None
 
-
 def clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
-
 
 class WheelProxy:
     def __init__(
@@ -439,7 +420,6 @@ class WheelProxy:
     def _stop(self, *_: object) -> None:
         self.stop = True
 
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='HippOS wheel proxy')
     parser.add_argument('--device-path', required=True)
@@ -457,7 +437,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--deadzone', required=False, default='')
     parser.add_argument('--midzone', required=False, default='')
     return parser
-
 
 def main() -> int:
     args = build_parser().parse_args()
@@ -477,7 +456,6 @@ def main() -> int:
         wanted_midzone=env_int(args.midzone, 0),
     )
     return proxy.run()
-
 
 if __name__ == '__main__':
     raise SystemExit(main())

@@ -8,18 +8,11 @@ MEDIA=/media
 
 log() { printf '[hippos-saves-pool] %s\n' "$*"; }
 
-# All discovered branches are writable, not just the internal one — an
-# external drive being used as a save location should be a valid write
-# target too, not just merged in read-only.
 add_branch() {
     local branch="$1"
     [[ -d "${branch}" ]] || return 0
     [[ "${branch}" == "${RW}" || "${branch}" == "${POOL}" ]] && return 0
     [[ ":${branches}:" == *":${branch}=RW:"* ]] && return 0
-    # Claim just the branch root for uid 1000, and only if it isn't already
-    # — new top-level entries need it writable, but nothing below it is
-    # touched, and drives already set up correctly (FAT mounted with
-    # uid=1000, or already-1000-owned) get left alone entirely.
     if [[ "$(stat -c '%u' "${branch}" 2>/dev/null)" != "1000" ]]; then
         chown 1000:1000 "${branch}" 2>/dev/null || true
     fi
@@ -31,7 +24,6 @@ if findmnt "${POOL}" >/dev/null 2>&1; then
     exit 0
 fi
 
-# Migrate existing saves content into the RW branch on first run.
 mkdir -p "${RW}"
 chown 1000:1000 "${RW}"
 if [[ -d "${POOL}" && -n "$(ls -A "${POOL}" 2>/dev/null)" && -z "$(ls -A "${RW}" 2>/dev/null)" ]]; then
@@ -48,8 +40,6 @@ for dir in "${MEDIA}"/*/; do
     add_branch "${dir%/}/saves"
     add_branch "${dir%/}/userdata/saves"
 
-    # Bounded discovery for nested layouts such as /media/USB/userdata/saves.
-    # See mount-bios-pool for why this is maxdepth 2, not 4.
     while IFS= read -r -d '' saves_dir; do
         add_branch "${saves_dir}"
     done < <(find "${dir%/}" -mindepth 1 -maxdepth 2 -type d -iname saves -print0 2>/dev/null)

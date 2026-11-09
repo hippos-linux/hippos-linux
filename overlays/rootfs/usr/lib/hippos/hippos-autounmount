@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# hippos-autounmount <devname>
-# Unmounts a device mounted by hippos-automount and drops the live ROM pool
-# first so mergerfs does not keep the device branch busy.
-
 MEDIA="/media"
 POOL="/userdata/roms"
 
@@ -22,8 +18,6 @@ mount_for_device() {
 MOUNT_POINT="$(mount_for_device || true)"
 
 if [[ -z "${MOUNT_POINT}" ]]; then
-    # udev remove can arrive after the block node disappeared. Fall back to a
-    # direct /proc/mounts lookup while the stale mount is still visible.
     MOUNT_POINT="$(awk -v dev="${DEVICE}" '$1 == dev { print $2; exit }' /proc/mounts 2>/dev/null || true)"
 fi
 

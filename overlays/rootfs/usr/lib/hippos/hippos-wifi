@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# ES API: wifi list/scanlist/enable/disable
 set -euo pipefail
 
 case "${1:-}" in

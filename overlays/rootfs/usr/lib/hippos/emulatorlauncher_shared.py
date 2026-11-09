@@ -32,7 +32,6 @@ from HipposPaths import (
 
 STANDALONE_BINARIES: dict[str, tuple[str, ...]] = {
     'amiberry': ('amiberry',),
-    # The artifact builds the SDL frontend (sa2), not QApple.
     'applewin': ('sa2', 'qapple', 'applen', 'applewin', 'AppleWin'),
     'dosbox-staging': ('dosbox',),
     'supermodel-es': ('supermodel',),
@@ -103,32 +102,23 @@ ARTIFACT_PACKAGE_ALIASES: dict[str, tuple[str, ...]] = {
     'solarus': ('solarus-engine',),
 }
 
-
 DEFAULTS_FILE      = EMULATORLAUNCHER_DEFAULTS
-
 
 HIPPOS_DEFAULTS    = HIPPOS_SHARE_DIR / 'hippos-defaults.conf'
 
-
 HIPPOS_HW_DEFAULTS = Path('/run/hippos/hardware-defaults.conf')
-
 
 HOTKEY_CONTEXT_DIR  = HIPPOS_SHARE_DIR / 'hotkeys' / 'contexts'
 
-
 WHEEL_PROXY_BIN     = Path('/usr/lib/hippos/hippos-wheel-proxy')
-
 
 ES_INPUT_FILES = (
     USER_ES_DIR / 'es_input.cfg',
     Path('/usr/share/emulationstation/es_input.cfg'),
 )
-# Written by ES at every launch: the input configs it resolved for each player.
 ES_PLAYERS_INPUT = Path('/tmp/es_input_players.cfg')
 
-
 _log = logging.getLogger('emulatorlauncher')
-
 
 @dataclass
 class ControllerInfo:
@@ -142,7 +132,6 @@ class ControllerInfo:
     nb_buttons:  int  = 0
     nb_hats:     int  = 0
     nb_axes:     int  = 0
-
 
 @dataclass
 class LaunchContext:
@@ -158,10 +147,9 @@ class LaunchContext:
     game_gun:      dict[str, str] = field(default_factory=dict)
     resolution:    Optional[tuple[int, int]] = None
     bezel:         Optional[Path] = None
-    netplay_mode:  str = ''   # 'host' | 'client' | 'spectator' | ''
+    netplay_mode:  str = ''
     netplay_ip:    str = ''
     netplay_port:  str = ''
-
 
 @dataclass(frozen=True)
 class ESBinding:
@@ -170,7 +158,6 @@ class ESBinding:
     code: int
     value: int
 
-
 @dataclass
 class ESControllerProfile:
     device_name: str
@@ -178,10 +165,8 @@ class ESControllerProfile:
     device_path: str
     inputs: dict[str, ESBinding]
 
-
 def _load_hippos_conf() -> dict[str, str]:
     return _read_conf_file(HIPPOS_CONF)
-
 
 def _read_conf_file(path: Path) -> dict[str, str]:
     result: dict[str, str] = {}
@@ -199,13 +184,11 @@ def _read_conf_file(path: Path) -> dict[str, str]:
         _log.warning("Could not read %s: %s", path, exc)
     return result
 
-
 def _load_effective_hippos_conf() -> dict[str, str]:
     result: dict[str, str] = {}
     for path in (HIPPOS_DEFAULTS, HIPPOS_HW_DEFAULTS, HIPPOS_CONF):
         result.update(_read_conf_file(path))
     return result
-
 
 def _load_yaml_defaults() -> dict:
     if not _HAS_YAML or not DEFAULTS_FILE.exists():
@@ -217,23 +200,17 @@ def _load_yaml_defaults() -> dict:
         _log.warning("Could not load %s: %s", DEFAULTS_FILE, exc)
         return {}
 
-
 def _get_yaml_system_options(system: str) -> dict:
-    """Return the options block from the emulator defaults for a system."""
     entry = _load_yaml_defaults().get(system)
     if not entry:
         return {}
     return entry.get('options') or {}
 
-
 def _hud_supported(system: str) -> bool:
-    """False if YAML marks this system as hud_support: false."""
     return _get_yaml_system_options(system).get('hud_support', True) is not False
-
 
 def configure_emulator(rom: Path) -> bool:
     return str(rom) == 'config'
-
 
 def generate_sdl_game_controller_config(controllers: list[ControllerInfo], ignore_buttons: Optional[list[str]] = None) -> str:
     ignored = {name.strip().lower() for name in (ignore_buttons or [])}
@@ -261,7 +238,6 @@ def generate_sdl_game_controller_config(controllers: list[ControllerInfo], ignor
 
     return '\n'.join(lines)
 
-
 def _sdl_binding_value(binding: ESBinding, positive: Optional[bool] = None) -> Optional[str]:
     if binding.type == 'button':
         return f'b{binding.code}'
@@ -275,7 +251,6 @@ def _sdl_binding_value(binding: ESBinding, positive: Optional[bool] = None) -> O
             prefix = '-'
         return f'{prefix}a{binding.code}'
     return None
-
 
 def _sdl_controller_mapping(
     profile: ESControllerProfile,
@@ -347,15 +322,11 @@ def _sdl_controller_mapping(
 
     return mapping
 
-
 def _normalize(value: str) -> str:
     return ''.join(ch for ch in value.strip().casefold() if ch.isalnum())
 
-
 @cache
 def _parse_es_input_file(path: Path, mtime_ns: int) -> tuple[ESControllerProfile, ...]:
-    """Cached per file version: launchers and the controller monitor each ask
-    for the profiles, and ES may rewrite the files between asks."""
     try:
         root = ET.parse(path).getroot()
     except ET.ParseError as exc:
@@ -390,17 +361,13 @@ def _parse_es_input_file(path: Path, mtime_ns: int) -> tuple[ESControllerProfile
         )
     return tuple(configs)
 
-
 def _load_es_input_configs() -> list[ESControllerProfile]:
-    """ES's per-player resolved configs first, so _pick_es_profile prefers
-    them, then the full es_input.cfg as the fallback."""
     es_input = next((path for path in ES_INPUT_FILES if path.exists()), None)
     profiles: list[ESControllerProfile] = []
     for path in (ES_PLAYERS_INPUT, es_input):
         if path is not None and path.exists():
             profiles.extend(_parse_es_input_file(path, path.stat().st_mtime_ns))
     return profiles
-
 
 def _pick_es_profile(
     profiles: list[ESControllerProfile],
@@ -424,7 +391,6 @@ def _pick_es_profile(
             return profile
     return profiles[0] if profiles else None
 
-
 def _conf_value(conf: dict[str, str], key: str, default: str = '') -> str:
     value = conf.get(key, default)
     if value is None:
@@ -433,7 +399,6 @@ def _conf_value(conf: dict[str, str], key: str, default: str = '') -> str:
     if not value or value.lower() == 'auto':
         return default
     return value
-
 
 def _conf_int(conf: dict[str, str], key: str, default: int = 0) -> int:
     value = _conf_value(conf, key, '')
@@ -444,24 +409,20 @@ def _conf_int(conf: dict[str, str], key: str, default: int = 0) -> int:
     except (TypeError, ValueError):
         return default
 
-
 def _conf_bool(conf: dict[str, str], key: str, default: bool = False) -> bool:
     value = _conf_value(conf, key, '')
     if not value:
         return default
     return value.lower() in ('1', 'true', 'on', 'enabled', 'yes')
 
-
 def _new_ini_parser() -> configparser.ConfigParser:
     parser = configparser.ConfigParser(interpolation=None)
-    parser.optionxform = str  # keep case-sensitive option names
+    parser.optionxform = str
     return parser
-
 
 def _ensure_section(parser: configparser.ConfigParser, section: str) -> None:
     if not parser.has_section(section):
         parser.add_section(section)
-
 
 def _toml_value(value: object) -> str:
     if isinstance(value, bool):
@@ -477,7 +438,6 @@ def _toml_value(value: object) -> str:
     if isinstance(value, (list, tuple)):
         return '[' + ', '.join(_toml_value(item) for item in value) + ']'
     raise TypeError(f'Unsupported TOML value type: {type(value)!r}')
-
 
 def _toml_write_table(fh, table: dict[str, object], prefix: tuple[str, ...] = ()) -> None:
     scalars: list[tuple[str, object]] = []
@@ -499,12 +459,10 @@ def _toml_write_table(fh, table: dict[str, object], prefix: tuple[str, ...] = ()
             fh.write('\n')
         _toml_write_table(fh, value, prefix + (key,))
 
-
 def _write_toml(path: Path, config: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open('w', encoding='utf-8') as fh:
         _toml_write_table(fh, config)
-
 
 def _read_toml(path: Path) -> dict[str, object]:
     if not path.exists():
@@ -516,7 +474,6 @@ def _read_toml(path: Path) -> dict[str, object]:
         _log.warning("Could not read %s: %s", path, exc)
         return {}
 
-
 def _version_tuple(value: str) -> tuple[int, ...]:
     parts = []
     for item in value.split('.'):
@@ -525,7 +482,6 @@ def _version_tuple(value: str) -> tuple[int, ...]:
         except ValueError:
             break
     return tuple(parts)
-
 
 def _probe_vulkan_version() -> Optional[tuple[int, ...]]:
     vulkaninfo = which('vulkaninfo')
@@ -545,7 +501,6 @@ def _probe_vulkan_version() -> Optional[tuple[int, ...]]:
         if match:
             return _version_tuple(match.group(1))
     return None
-
 
 def _find_executable(root: Path) -> Optional[Path]:
     if not root.exists():
@@ -575,7 +530,6 @@ def _find_executable(root: Path) -> Optional[Path]:
                 return candidate
     return None
 
-
 def _display_resolution_from_conf(conf: dict[str, str]) -> Optional[tuple[int, int]]:
     value = _conf_value(conf, 'display.resolution', '')
     if not value or value == 'preferred':
@@ -585,9 +539,7 @@ def _display_resolution_from_conf(conf: dict[str, str]) -> Optional[tuple[int, i
         return None
     return int(match.group('w')), int(match.group('h'))
 
-
 def _find_emulator_bin(*names: str) -> Optional[Path]:
-    """Find an installed standalone emulator binary."""
     for name in names:
         packages = (name,) + ARTIFACT_PACKAGE_ALIASES.get(name, ())
         binaries = STANDALONE_BINARIES.get(name, (name,))
@@ -606,9 +558,7 @@ def _find_emulator_bin(*names: str) -> Optional[Path]:
                     return candidate
     return None
 
-
 def _find_emulator_bin_in_package(package: str, *binary_names: str) -> Optional[Path]:
-    """Find a binary inside a specific emulator package directory."""
     package_dir = EMULATORS_ROOT / package
     for binary in binary_names:
         for candidate in (package_dir / binary, package_dir / 'bin' / binary):
@@ -624,16 +574,12 @@ def _find_emulator_bin_in_package(package: str, *binary_names: str) -> Optional[
                 return candidate
     return None
 
-
 HOTKEYS_BIN = Path('/usr/lib/hippos/hippos-hotkeys')
-
 
 @contextmanager
 def hotkey_context(name: str):
     source = HOTKEY_CONTEXT_DIR / f'{name}.json'
     if not source.exists():
-        # The daemon would otherwise stay on ES's context, whose Esc doesn't close
-        # most emulators.
         source = HOTKEY_CONTEXT_DIR / 'game-default.json'
     try:
         if source.exists():
@@ -653,10 +599,6 @@ def hotkey_context(name: str):
             cmd = [str(HOTKEYS_BIN), '--new-context', name, json.dumps(keys)]
             if exit_hotkey_only:
                 cmd.append('--disable-common')
-            # capture_output was previously discarded — --new-context failing
-            # (bad json, daemon not running, stale pid) left no trace anywhere,
-            # so a stuck-on-previous-context bug looked identical to a working
-            # switch from the logs alone.
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
                 _log.warning("hotkey context '%s' request failed (rc=%s): %s",
@@ -684,7 +626,6 @@ def hotkey_context(name: str):
         except Exception as exc:
             _log.warning("Could not reset hotkey context: %s", exc)
 
-
 def _wheel_proxy_command(ctrl: ControllerInfo, ctx: LaunchContext, env: dict[str, str]) -> list[str]:
     wheel_meta = ctx.game_wheel or {}
     return [
@@ -704,7 +645,6 @@ def _wheel_proxy_command(ctrl: ControllerInfo, ctx: LaunchContext, env: dict[str
         '--deadzone', env.get('HIPPOS_WHEEL_DEADZONE', ''),
         '--midzone', env.get('HIPPOS_WHEEL_MIDZONE', ''),
     ]
-
 
 @contextmanager
 def wheel_proxy_context(ctx: LaunchContext, env: dict[str, str]):
@@ -727,11 +667,6 @@ def wheel_proxy_context(ctx: LaunchContext, env: dict[str, str]):
             proc = subprocess.Popen(cmd, env=env, text=True)
             time.sleep(0.15)
             if proc.poll() is not None:
-                # hippos-wheel-proxy creates its own uinput device.
-                # /dev/uinput is root:root; hippos reaches it through the
-                # seat session's uaccess ACL, which logind withdraws while
-                # the session isn't the active one. Retry once under sudo
-                # before giving up; hippos has NOPASSWD sudo for everything.
                 _log.warning(
                     "wheel proxy exited early for %s (code=%s) — retrying under sudo",
                     ctrl.device_path, proc.returncode,
@@ -757,7 +692,6 @@ def wheel_proxy_context(ctx: LaunchContext, env: dict[str, str]):
                     proc.kill()
                 except Exception:
                     pass
-
 
 def _gamescope_wrap(cmd: list[str], conf: dict[str, str]) -> list[str]:
     if not _conf_bool(conf, 'global.gamescope'):
@@ -806,19 +740,7 @@ def _gamescope_wrap(cmd: list[str], conf: dict[str, str]) -> list[str]:
     _log.info("gamescope wrap: %s", ' '.join(gs))
     return gs + cmd
 
-
 def _restore_crt_resolution() -> None:
-    """Restore the CRT session's boot resolution after an emulator exits.
-
-    RetroArch/MAME switchres leaves whatever game-specific modeline it last
-    set active — without this, ES comes back on a black screen (game
-    resolution the CRT hasn't synced to, or one it can't display at all).
-    Only does anything when CRT is actually enabled (/etc/switchres.ini is
-    only ever written by hippos-crt-setup under crt.enabled=true); a no-op
-    for every non-CRT user. Reuses hippos-resolution's existing
-    minTomaxResolution/_crt_restore path rather than reimplementing the
-    switchres call here.
-    """
     if not Path('/etc/switchres.ini').exists():
         return
     try:
@@ -826,7 +748,6 @@ def _restore_crt_resolution() -> None:
                         timeout=10, check=False)
     except Exception as exc:
         _log.warning("CRT resolution restore failed: %s", exc)
-
 
 def _run_game_command(
     ctx: LaunchContext,
@@ -845,31 +766,16 @@ def _run_game_command(
                 profiles = _load_es_input_configs()
                 with evmapy_context(ctx.system, ctx.emulator, ctx.rom, ctx.controllers, profiles):
                     result = subprocess.run(cmd, env=env, text=True, cwd=str(cwd) if cwd is not None else None)
-                    # The exit hotkey can end a game by terminating it, which ES
-                    # would otherwise report as an error.
                     if result.returncode == -signal.SIGTERM:
                         result.returncode = 0
                     return result
     finally:
-        # Runs on normal exit, non-zero exit, and process crash alike
-        # (subprocess.run itself doesn't raise for any of those) — the one
-        # gap is cmd never actually starting (e.g. FileNotFoundError), which
-        # also never touched the display, so nothing to restore either way.
         _restore_crt_resolution()
 
-
-# Emulators packaged as Windows apps don't use .NET or a web view, and Wine's offer
-# to install those at first run is a dialog a controller can't dismiss.
 WINE_NO_INSTALLER_PROMPTS = 'mscoree=d;mshtml=d'
-
 
 def _build_game_env(conf: dict[str, str], ctx: Optional[LaunchContext] = None) -> dict[str, str]:
     env = dict(os.environ)
-    # hippos-gpu-init's own /dev/nvidia0 wait is bounded and can still lose
-    # the race on some hardware (see that script) — this doesn't retry or
-    # block the launch, just records whether the device was actually there
-    # the moment a PRIME-offload game started, so a graphics-init failure
-    # reported later can be checked against this instead of guessed at.
     if Path('/var/tmp/hippos-nvidia.prime').exists() and not Path('/dev/nvidia0').exists():
         _log.warning("NVIDIA PRIME is configured but /dev/nvidia0 is missing at launch time")
     prime_env = Path('/run/hippos/prime.env')
@@ -912,11 +818,7 @@ def _build_game_env(conf: dict[str, str], ctx: Optional[LaunchContext] = None) -
             env[f'{prefix}NBAXES'] = str(ctrl.nb_axes)
     if ctx is not None and ctx.controllers:
         env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
-    # Enable SDL2 HIDAPI Steam Controller support (works natively without steamd)
     env.setdefault('SDL_JOYSTICK_HIDAPI_STEAM', '1')
-    # Force Xbox controllers to use the kernel xpad driver, not SDL2 HIDAPI.
-    # xpad claims the USB device so HIDAPI has no hidraw node to open; SDL2 then
-    # tries /dev/bus/usb which hippos cannot write to, silently drops the pad.
     env.setdefault('SDL_JOYSTICK_HIDAPI_XBOX_360', '0')
     env.setdefault('SDL_JOYSTICK_HIDAPI_XBOX_ONE', '0')
     env.setdefault('SDL_JOYSTICK_HIDAPI_XBOX', '0')
@@ -928,19 +830,14 @@ def _build_game_env(conf: dict[str, str], ctx: Optional[LaunchContext] = None) -
         env['ENABLE_VKBASALT'] = '1'
     return env
 
-
 _HUD_CONFIG_PATH = Path('/var/run/hippos/hud.config')
-
 
 _HUD_NEEDS_WRAPPER: frozenset[str] = frozenset({'wine', 'sh', 'flatpak'})
 
-
 def _hud_config_path() -> Optional[Path]:
-    """Return path to hud.config if HUD is active, else None."""
     conf = _load_hippos_conf()
     mode = conf.get('global.hud', 'none').strip()
     return _HUD_CONFIG_PATH if mode and mode != 'none' else None
-
 
 def _write_unix_settings_file(path: Path, items: list[tuple[str, object]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -948,13 +845,9 @@ def _write_unix_settings_file(path: Path, items: list[tuple[str, object]]) -> No
         for key, value in items:
             fh.write(f'{key}={value}\n')
 
-
 def _sync_tree(source: Path, destination: Path) -> None:
     if not source.exists():
         return
-    # Guard: destination must not be inside source — syncing a dir into its own
-    # subtree causes current/ to appear in source on the next run, then recurse
-    # infinitely, eventually hitting PATH_MAX ("File name too long").
     try:
         destination.resolve().relative_to(source.resolve())
         __import__('logging').getLogger('hippos.emulatorlauncher').error(
@@ -977,7 +870,6 @@ def _sync_tree(source: Path, destination: Path) -> None:
     for name in cmp.common_dirs:
         _sync_tree(source / name, destination / name)
 
-
 _RA_BTN_MAP: list[tuple[str, str]] = [
     ('a',        'a'),
     ('b',        'b'),
@@ -985,20 +877,17 @@ _RA_BTN_MAP: list[tuple[str, str]] = [
     ('y',        'y'),
     ('start',    'start'),
     ('select',   'select'),
-    ('pageup',   'l'),        # L1 / LB
-    ('pagedown', 'r'),        # R1 / RB
-    ('l2',       'l2'),       # L2 / LT — may be axis or button
-    ('r2',       'r2'),       # R2 / RT
-    ('l3',       'l3'),       # Left stick click
-    ('r3',       'r3'),       # Right stick click
+    ('pageup',   'l'),
+    ('pagedown', 'r'),
+    ('l2',       'l2'),
+    ('r2',       'r2'),
+    ('l3',       'l3'),
+    ('r3',       'r3'),
 ]
-
 
 _HAT_DIR: dict[int, str] = {1: 'up', 2: 'right', 4: 'down', 8: 'left'}
 
-
 def _ra_binding_value(binding: 'ESBinding') -> str:
-    """Return RetroArch config value string for a binding (no quotes)."""
     if binding.type == 'button':
         return str(binding.code)
     if binding.type == 'axis':
@@ -1009,15 +898,12 @@ def _ra_binding_value(binding: 'ESBinding') -> str:
         return f'h{binding.code}{direction}'
     return str(binding.code)
 
-
 def _ra_type_suffix(binding: 'ESBinding') -> str:
     if binding.type == 'hat':
         return 'btn'
     return {'button': 'btn', 'axis': 'axis', 'key': 'key'}.get(binding.type, 'btn')
 
-
 def _ra_analog_dpad_mode(profile: 'ESControllerProfile', system: str) -> str:
-    """Return RetroArch analog_dpad_mode: '1' if dpad is buttons/hats (non-analog), else '0'."""
     if system in ('n64', 'n64dd', 'dreamcast', 'atomiswave', 'naomi', 'naomi2', '3ds'):
         return '0'
     for es_name in ('up', 'down', 'left', 'right'):
@@ -1026,31 +912,25 @@ def _ra_analog_dpad_mode(profile: 'ESControllerProfile', system: str) -> str:
             return '1'
     return '0'
 
-
 def _ra_btn_map_for_ctx(profile: 'ESControllerProfile', system: str, core: str, altlayout: str) -> dict[str, str]:
-    """Return ES→RA button name map with all system/core-specific overrides applied."""
     btn_map = {es: ra for es, ra in _RA_BTN_MAP}
 
-    # Fightstick layout: swap shoulder/trigger assignments
     if altlayout == 'fightstick':
         btn_map['pageup']   = 'l2'
         btn_map['pagedown'] = 'l'
         btn_map['l2']       = 'r2'
         btn_map['r2']       = 'r'
 
-    # N64: if controller has no r2, promote pageup→l2 and l2→l (Z button fix)
     if system in ('n64', 'n64dd') and 'r2' not in profile.inputs:
         btn_map['pageup'] = 'l2'
         btn_map['l2']     = 'l'
 
-    # Dreamcast/flycast: same r2-missing fix, plus r1/r2 swap
     if system == 'dreamcast' and core == 'flycast' and 'r2' not in profile.inputs:
         btn_map['pageup']   = 'l2'
         btn_map['l2']       = 'l'
         btn_map['pagedown'] = 'r2'
         btn_map['r2']       = 'r'
 
-    # Yabasanshiro: reversed shoulders
     if core == 'yabasanshiro':
         btn_map['pageup']   = 'r'
         btn_map['pagedown'] = 'l'

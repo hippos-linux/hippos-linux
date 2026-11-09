@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 HIPPOS_SHARE_DIR: Final = Path('/usr/share/hippos')
 DATAINIT_DIR: Final = HIPPOS_SHARE_DIR / 'datainit'
 USERDATA: Final = Path('/userdata')
-# Bind mount of /userdata/emulators: bundled and updated emulator packages.
 EMULATORS_ROOT: Final = Path('/opt/emulators')
 
 HOME_INIT: Final = DATAINIT_DIR / 'system'
@@ -22,7 +21,6 @@ HOME: Final = USERDATA / 'system'
 CONFIGS: Final = HOME / 'configs'
 EVMAPY: Final = CONFIGS / 'evmapy'
 SAVES: Final = USERDATA / 'saves'
-# Internal branch of the SAVES mergerfs pool (mount-saves-pool).
 SAVES_RW: Final = USERDATA / '.saves-rw'
 SCREENSHOTS: Final = USERDATA / 'screenshots'
 RECORDINGS: Final = USERDATA / 'recordings'
@@ -38,8 +36,6 @@ USER_ES_DIR: Final = CONFIGS / 'emulationstation'
 HIPPOS_ES_DIR: Final = Path('/usr/share/emulationstation')
 EMULATORLAUNCHER_SHARE_DIR: Final = HIPPOS_SHARE_DIR / 'emulatorlauncher'
 EMULATORLAUNCHER_DATA_DIR: Final = EMULATORLAUNCHER_SHARE_DIR / 'data'
-# Per-system emulator, core and options; generated at build time from
-# packages/frontend/systems.yml's _emulator_defaults, which ES also shows.
 EMULATORLAUNCHER_DEFAULTS: Final = EMULATORLAUNCHER_SHARE_DIR / 'defaults.yml'
 
 _ES_RESOURCES_DIR: Final = HIPPOS_ES_DIR / 'resources'
@@ -57,15 +53,12 @@ SYSTEM_DECORATIONS: Final = DATAINIT_DIR / 'decorations'
 
 USER_SCRIPTS: Final = HOME / 'scripts'
 
-
 def configure_emulator(rom: Path, /) -> bool:
     return str(rom) == 'config'
-
 
 def mkdir_if_not_exists(dir: Path, /) -> None:
     if not dir.exists():
         dir.mkdir(parents=True)
-
 
 @overload
 @contextmanager

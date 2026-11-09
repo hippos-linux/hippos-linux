@@ -20,7 +20,6 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import CACHE, CONFIGS, HOME, SAVES, USERDATA
 
-
 def _shadps4_base_config(display_resolution: Optional[tuple[int, int]]) -> dict[str, object]:
     width, height = display_resolution if display_resolution is not None else (1280, 720)
     return {
@@ -113,7 +112,6 @@ def _shadps4_base_config(display_resolution: Optional[tuple[int, int]]) -> dict[
         },
     }
 
-
 def write_shadps4_config(ctx: LaunchContext) -> None:
     conf = _load_effective_hippos_conf()
     display_resolution = _display_resolution_from_conf(conf)
@@ -167,15 +165,12 @@ def write_shadps4_config(ctx: LaunchContext) -> None:
     SHADPS4_ROM_DIR.mkdir(parents=True, exist_ok=True)
     _write_toml(SHADPS4_TOML, config)
 
-
 def launch_shadps4(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('shadps4')
     if bin_path is None:
         return 1
 
     write_shadps4_config(ctx)
-    # shadPS4 opens a save migration dialog whenever its user folder is missing,
-    # even with nothing to migrate.
     for user_dir in ('savedata', 'trophy', 'inputs'):
         (SHADPS4_RUNTIME_DIR / 'shadPS4' / 'home' / '1000' / user_dir).mkdir(parents=True, exist_ok=True)
     runtime_exe = _find_executable(SHADPS4_RUNTIME_DIR) or bin_path
@@ -204,7 +199,6 @@ def launch_shadps4(ctx: LaunchContext) -> int:
     env['XDG_CACHE_HOME'] = str(CACHE / 'shadps4')
     result = _run_game_command(ctx, 'shadps4', cmd, env, cwd=SHADPS4_RUNTIME_DIR)
     return result.returncode
-
 
 SHADPS4_CONFIG_DIR = CONFIGS / 'shadps4'
 SHADPS4_USER_CONFIG_DIR = SHADPS4_CONFIG_DIR / 'user'

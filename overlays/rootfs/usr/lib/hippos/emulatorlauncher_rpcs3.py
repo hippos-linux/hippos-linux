@@ -24,23 +24,18 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import CACHE, CONFIGS, SAVES
 
-
 RPCS3_CONFIG_DIR   = CONFIGS / 'rpcs3'
 RPCS3_CONFIG_YML   = RPCS3_CONFIG_DIR / 'config.yml'
-
 
 _RPCS3_INPUT_DIR = RPCS3_CONFIG_DIR / 'input_configs' / 'global'
 
 _RPCS3_SONY_GUIDS: frozenset[str] = frozenset({
-    # DS3
     '030000004c0500006802000011010000', '030000004c0500006802000011810000',
     '050000004c0500006802000000800000', '050000004c0500006802000000000000',
-    # DS4
     '030000004c050000c405000011810000', '050000004c050000c405000000810000',
     '030000004c050000cc09000011010000', '050000004c050000cc09000000010000',
     '030000004c050000cc09000011810000', '050000004c050000cc09000000810000',
     '030000004c050000a00b000011010000', '030000004c050000a00b000011810000',
-    # DS5
     '030000004c050000e60c000011810000', '050000004c050000e60c000000810000',
 })
 _RPCS3_EVDEV_MAP = [
@@ -60,13 +55,7 @@ _RPCS3_EVDEV_MAP = [
     ('joystick2left','Right Stick Left',None,           'ABS_RX',    'RX-'),
 ]
 
-
 def _write_rpcs3_config(conf: dict[str, str]) -> None:
-    """Write RPCS3 config.yml from hippos.conf values.
-
-    RPCS3 uses YAML format. We use the yaml module if available,
-    otherwise write raw YAML text.
-    """
     RPCS3_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
     existing: dict = {}
@@ -76,12 +65,10 @@ def _write_rpcs3_config(conf: dict[str, str]) -> None:
         except Exception:
             existing = {}
 
-    # Ensure top-level keys exist
     for key in ('Core', 'Video', 'Audio', 'Input/Output', 'Miscellaneous'):
         if key not in existing:
             existing[key] = {}
 
-    # Core
     existing['Core']['PPU Decoder']           = _conf_value(conf, 'global.rpcs3_ppudecoder', 'Recompiler (LLVM)')
     existing['Core']['SPU Decoder']           = _conf_value(conf, 'global.rpcs3_spudecoder', 'Recompiler (LLVM)')
     existing['Core']['XFloat Accuracy']       = _conf_value(conf, 'global.rpcs3_spuxfloataccuracy', 'Approximate')
@@ -91,7 +78,6 @@ def _write_rpcs3_config(conf: dict[str, str]) -> None:
     existing['Core']['SPU Block Size']        = _conf_value(conf, 'global.rpcs3_spublocksize', 'Safe')
     existing['Core']['Sleep Timers Accuracy'] = _conf_value(conf, 'global.rpcs3_sleep_timers_accuracy', 'As Host')
 
-    # Video
     gfxbackend = _conf_value(conf, 'global.rpcs3_gfxbackend', '')
     existing['Video']['Renderer']          = 'OpenGL' if gfxbackend == 'OpenGL' else 'Vulkan'
     ratio = _conf_value(conf, 'global.rpcs3_ratio', '')
@@ -125,7 +111,6 @@ def _write_rpcs3_config(conf: dict[str, str]) -> None:
         except ValueError:
             existing['Video']['Second Frame Limit'] = 0
 
-    # Audio
     existing['Audio']['Renderer']          = 'Cubeb'
     existing['Audio']['Master Volume']     = 100
     existing['Audio']['Enable Buffering']  = _conf_bool(conf, 'global.rpcs3_audiobuffer', True)
@@ -136,7 +121,6 @@ def _write_rpcs3_config(conf: dict[str, str]) -> None:
     else:
         existing['Audio']['Enable Time Stretching'] = False
 
-    # Miscellaneous
     existing['Miscellaneous']['Exit RPCS3 when process finishes']  = True
     existing['Miscellaneous']['Start games in fullscreen mode']    = True
     existing['Miscellaneous']['Show shader compilation hint']      = False
@@ -146,7 +130,6 @@ def _write_rpcs3_config(conf: dict[str, str]) -> None:
     if _HAS_YAML:
         RPCS3_CONFIG_YML.write_text(yaml.dump(existing, default_flow_style=False, allow_unicode=True))
     else:
-        # Fallback: write minimal YAML without lists
         lines = ['---']
         for section, items in existing.items():
             lines.append(f'{section}:')
@@ -160,9 +143,7 @@ def _write_rpcs3_config(conf: dict[str, str]) -> None:
 
     _log.info("Wrote RPCS3 config: %s", RPCS3_CONFIG_YML)
 
-
 def _write_rpcs3_controller_config(ctx: LaunchContext) -> None:
-    """Write RPCS3 Default.yml input config."""
     _RPCS3_INPUT_DIR.mkdir(parents=True, exist_ok=True)
     conf      = _load_hippos_conf()
     profiles  = _load_es_input_configs()
@@ -176,7 +157,6 @@ def _write_rpcs3_controller_config(ctx: LaunchContext) -> None:
             rumble    = 'false' if not _conf_bool(conf, f'rpcs3_rumble{nplayer}', True) else 'true'
 
             if guid in _RPCS3_SONY_GUIDS and ctrl_type == 'Sony':
-                # Sony native handler
                 ds3_guids = list(_RPCS3_SONY_GUIDS)[:4]
                 ds4_guids = list(_RPCS3_SONY_GUIDS)[4:12]
                 if guid in ds3_guids:
@@ -219,7 +199,6 @@ def _write_rpcs3_controller_config(ctx: LaunchContext) -> None:
                 f.write('  Buddy Device: ""\n')
 
             else:
-                # Evdev handler — maps ES inputs to evdev event names
                 profile = _pick_es_profile(profiles, ctrl)
                 f.write(f'Player {nplayer} Input:\n')
                 f.write('  Handler: Evdev\n')
@@ -247,7 +226,6 @@ def _write_rpcs3_controller_config(ctx: LaunchContext) -> None:
 
     _log.info("Wrote RPCS3 controller config: %s", config_path)
 
-
 def launch_rpcs3(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('rpcs3')
     if bin_path is None:
@@ -257,10 +235,8 @@ def launch_rpcs3(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     _write_rpcs3_config(conf)
     _write_rpcs3_controller_config(ctx)
-    # Determine ROM path
     rom = ctx.rom
     if rom.suffix.lower() == '.ink':
-        # .ink shortcut: text file containing path to PS3 game directory
         try:
             target = Path(rom.read_text().strip())
             if target.is_dir():

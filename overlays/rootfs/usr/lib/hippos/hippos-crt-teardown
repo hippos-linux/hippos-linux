@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# hippos-crt-teardown — remove CRT X11 config, switchres.ini, videomodes.conf,
-# and GRUB dropin written by hippos-crt-setup.
-# Called from hippos-display-setup when crt.enabled is no longer true.
-# Idempotent — safe to run when files are already absent.
 
 set -euo pipefail
 
@@ -20,20 +16,15 @@ _remove() {
     fi
 }
 
-# ── X11 config fragments ──────────────────────────────────────────────────────
 _remove "${XORG_CONF_D}/90-crt-gpu.conf"
 _remove "${XORG_CONF_D}/10-crt-ignore.conf"
 
-# ── switchres.ini ─────────────────────────────────────────────────────────────
 _remove "/etc/switchres.ini"
 
-# ── videomodes.conf ───────────────────────────────────────────────────────────
 _remove "/userdata/system/videomodes.conf"
 
-# ── EDID firmware ─────────────────────────────────────────────────────────────
 _remove "/lib/firmware/edid/crt.bin"
 
-# ── GRUB dropin ───────────────────────────────────────────────────────────────
 if [[ -f "${GRUB_CRT_CONF}" ]]; then
     rm -f "${GRUB_CRT_CONF}"
     log "removed ${GRUB_CRT_CONF}"

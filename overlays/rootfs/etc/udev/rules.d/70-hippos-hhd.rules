@@ -1,8 +1,2 @@
-# HippOS: built-in i8042 keyboard on handhelds (0001:0001)
-# Handhelds wire their extra buttons to this keyboard, and HHD's device plugins
-# grab it exclusively to turn them into controller buttons. If hippos-hotkeys
-# grabs it first, HHD fails with EBUSY and retries every 3 s, hiding and
-# unhiding the built-in gamepad each time. hippos-hotkeys listens to it without
-# grabbing; HHD re-emits the keys through its own virtual devices.
 
 SUBSYSTEM=="input", KERNEL=="event*", ATTRS{id/bustype}=="0011", ATTRS{id/vendor}=="0001", ATTRS{id/product}=="0001", ENV{HIPPOS_HOTKEYS_NOGRAB}="1"

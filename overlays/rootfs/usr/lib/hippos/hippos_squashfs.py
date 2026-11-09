@@ -1,4 +1,3 @@
-"""Squashfs mount helpers for emulatorlauncher."""
 
 from __future__ import annotations
 
@@ -11,18 +10,10 @@ _log = logging.getLogger(__name__)
 
 _SQUASHFS_ROOT = Path('/var/run/hippos/squashfs')
 
-# emulatorlauncher runs as hippos; loop mounts need root.
 _SUDO = ['sudo', '-n']
-
 
 @contextmanager
 def mount_squashfs(rom: Path):
-    """Mount a .squashfs ROM and yield the mount path.
-
-    If the squashfs contains a single file with the same stem as the archive,
-    yields a path to that file (so the generator sees a plain ROM file).
-    Otherwise yields the mount directory.
-    """
     mount_point = _SQUASHFS_ROOT / rom.stem
     mount_point.mkdir(parents=True, exist_ok=True)
 
@@ -33,7 +24,6 @@ def mount_squashfs(rom: Path):
     _log.info("squashfs: mounted %s → %s", rom, mount_point)
 
     try:
-        # If squashfs contains exactly one file matching the rom stem, unwrap it.
         contents = list(mount_point.iterdir())
         if len(contents) == 1 and contents[0].is_file() and contents[0].stem == rom.stem:
             yield contents[0]

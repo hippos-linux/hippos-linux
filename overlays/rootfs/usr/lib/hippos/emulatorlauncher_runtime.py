@@ -34,7 +34,6 @@ from emulatorlauncher_shared import (
 from emulatorlauncher_generic import _RA_AXIS_MAP, _RA_DPAD_MAP
 from HipposPaths import BIOS, CONFIGS, LOGS, SAVES, SCREENSHOTS, USERDATA
 
-
 def _amiberry_floppies_from_rom(rom: Path) -> list[Path]:
     floppies: list[Path] = []
     index_disk = rom.name.rfind('(Disk 1')
@@ -59,9 +58,7 @@ def _amiberry_floppies_from_rom(rom: Path) -> list[Path]:
         return [rom]
     return floppies
 
-
 def _write_amiberry_retroarch_config(ctx: LaunchContext) -> None:
-    """Write retroarch overlay.cfg + per-pad .cfg files for Amiberry."""
     AMIBERRY_RETROARCH_DIR.mkdir(parents=True, exist_ok=True)
     AMIBERRY_INPUTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -107,7 +104,6 @@ def _write_amiberry_retroarch_config(ctx: LaunchContext) -> None:
     overlay_text = '\n'.join(lines) + '\n'
     AMIBERRY_OVERLAY_CFG.write_text(overlay_text, encoding='utf-8')
 
-    # Write per-pad cfg file (with player prefix stripped) for Amiberry's controller path
     for ctrl in ctx.controllers:
         padfilename = ctrl.name.replace('/', '')
         per_pad_cfg = AMIBERRY_INPUTS_DIR / f'{padfilename}.cfg'
@@ -119,7 +115,6 @@ def _write_amiberry_retroarch_config(ctx: LaunchContext) -> None:
         ]
         per_pad_cfg.write_text('\n'.join(pad_lines) + '\n', encoding='utf-8')
 
-
 def launch_amiberry(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('amiberry')
     if bin_path is None:
@@ -129,8 +124,6 @@ def launch_amiberry(ctx: LaunchContext) -> int:
 
     for path in (AMIBERRY_CONFIG_DIR, AMIBERRY_RETROARCH_DIR, AMIBERRY_INPUTS_DIR):
         path.mkdir(parents=True, exist_ok=True)
-    # whdboot_path must be writable (WHDLoad keeps per-game saves in it), so
-    # it's a user copy of the bundled boot-data.zip and game database.
     _sync_tree(bin_path.parent.parent / 'share' / 'amiberry' / 'whdboot', AMIBERRY_WHDBOOT_DIR)
     AMIBERRY_SAVES_DIR.mkdir(parents=True, exist_ok=True)
     AMIBERRY_BIOS_DIR.mkdir(parents=True, exist_ok=True)
@@ -155,10 +148,8 @@ def launch_amiberry(ctx: LaunchContext) -> int:
         ('default_fullscreen_mode', '2'),
         ('write_logfile', 'yes'),
     ])
-    # Write retroarch controller config + per-pad input files
     _write_amiberry_retroarch_config(ctx)
 
-    # SDL controller DB for Amiberry's retroarch input path
     db_path = AMIBERRY_INPUTS_DIR / 'gamecontrollerdb.txt'
     db_path.write_text(generate_sdl_game_controller_config(ctx.controllers))
 
@@ -220,9 +211,7 @@ def launch_amiberry(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'amiberry', commandArray, env)
     return result.returncode
 
-
 def _solarus_key_val(binding, reverse: bool = False) -> str:
-    """Convert ES binding to Solarus pads.ini value string."""
     if binding.type == 'button':
         return f'button {binding.code}'
     if binding.type == 'hat':
@@ -234,7 +223,6 @@ def _solarus_key_val(binding, reverse: bool = False) -> str:
         return f'axis {binding.code} -'
     return ''
 
-
 def launch_solarus(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('solarus-run', 'solarus')
     if bin_path is None:
@@ -243,7 +231,6 @@ def launch_solarus(ctx: LaunchContext) -> int:
     config_dir = CONFIGS / 'solarus'
     config_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build pads.ini with full key mappings for P1
     keymapping = {
         'action': 'a',    'attack': 'b',    'item1': 'y',  'item2': 'x',
         'pause':  'start',
@@ -283,7 +270,6 @@ def launch_solarus(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'solarus', cmd, env)
     return result.returncode
 
-
 def launch_steam(ctx: LaunchContext) -> int:
     game_id = ''
     big_picture = ctx.rom.name == 'Steam.steam'
@@ -313,7 +299,6 @@ def launch_steam(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'steam', cmd, env)
     return result.returncode
 
-
 def launch_wine(ctx: LaunchContext) -> int:
     wrapper = Path('/usr/lib/hippos/hippos-wine')
     if not wrapper.exists():
@@ -339,7 +324,6 @@ def launch_wine(ctx: LaunchContext) -> int:
     __import__('logging').getLogger('hippos.emulatorlauncher').info("Launching Wine: %s", ' '.join(cmd))
     result = _run_game_command(ctx, 'wine', cmd, env)
     return result.returncode
-
 
 def launch_lindbergh_loader(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('lindbergh-loader')
@@ -536,7 +520,6 @@ def launch_lindbergh_loader(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'lindbergh-loader', cmd, env, cwd=LINDBERGH_RUNTIME_DIR)
     return result.returncode
 
-
 AMIBERRY_CONFIG_DIR = CONFIGS / 'amiberry'
 AMIBERRY_CONF = AMIBERRY_CONFIG_DIR / 'amiberry.conf'
 AMIBERRY_RETROARCH_DIR = AMIBERRY_CONFIG_DIR / 'retroarch'
@@ -548,9 +531,7 @@ AMIBERRY_SCREENSHOTS_DIR = SCREENSHOTS
 AMIBERRY_BIOS_DIR = BIOS / 'amiga'
 AMIBERRY_LOG_FILE = LOGS / 'amiberry.log'
 
-
 LINDBERGH_RUNTIME_DIR = CONFIGS / 'lindbergh-loader'
-
 
 LINDBERGH_TEMPLATE_DIR = Path('/usr/share/hippos/lindbergh')
 LINDBERGH_TEMPLATE_INI = LINDBERGH_TEMPLATE_DIR / 'lindbergh.ini'
@@ -617,10 +598,8 @@ LINDBERGH_GUN_MAPPING: dict[str, str] = {
     'l3': 'BUTTON_SERVICE',
 }
 
-
 def _lindbergh_short_rom_name(rom: Path) -> str:
     return rom.stem.lower()
-
 
 def _lindbergh_game_section(short_rom: str) -> str:
     if short_rom.startswith(('outr', 'hummer', 'hdkotr', 'harley', 'rtuned', 'initiad', 'segartv')):
@@ -632,7 +611,6 @@ def _lindbergh_game_section(short_rom: str) -> str:
     if short_rom.startswith(('mj4', 'axa')):
         return 'Mahjong'
     return 'Digital'
-
 
 def _lindbergh_mapping_for_device(short_rom: str, device_type: str, is_real_wheel: bool) -> dict[str, str]:
     if device_type == 'gun':
@@ -734,7 +712,6 @@ def _lindbergh_mapping_for_device(short_rom: str, device_type: str, is_real_whee
         mapping.pop('y', None)
     return mapping
 
-
 def _lindbergh_binding_to_value(binding: ESBinding, ctrl: ESControllerProfile, logical_name: str) -> Optional[str]:
     prefix = ctrl.device_path
     if not prefix:
@@ -751,7 +728,6 @@ def _lindbergh_binding_to_value(binding: ESBinding, ctrl: ESControllerProfile, l
         return f'{prefix}:ABS:{axis_base}'
     return None
 
-
 def _lindbergh_write_templates() -> tuple[configparser.ConfigParser, configparser.ConfigParser]:
     ini = _new_ini_parser()
     ini.optionxform = str
@@ -760,7 +736,6 @@ def _lindbergh_write_templates() -> tuple[configparser.ConfigParser, configparse
     controls.optionxform = str
     controls.read(LINDBERGH_TEMPLATE_CONTROLS)
     return ini, controls
-
 
 def _amiberry_rom_type(rom: Path) -> str:
     extension = rom.suffix[1:].lower()

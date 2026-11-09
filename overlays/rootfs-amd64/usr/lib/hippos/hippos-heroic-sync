@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Generate EmulationStation .heroic launchers from installed Heroic games."""
 
 from __future__ import annotations
 
@@ -7,7 +6,6 @@ import json
 from pathlib import Path
 
 from hippos_launcher_sync import sync_launchers
-
 
 USERDATA   = Path('/userdata')
 ROMS_DIR   = USERDATA / 'roms' / 'heroic'
@@ -18,10 +16,8 @@ HEROIC_ROOTS = [
     USERDATA / '.var' / 'app' / 'com.heroicgameslauncher.hgl' / 'config' / 'heroic',
 ]
 
-
 def log(message: str) -> None:
     print(f'[hippos-heroic-sync] {message}', flush=True)
-
 
 def _load_json(path: Path) -> object:
     try:
@@ -29,13 +25,10 @@ def _load_json(path: Path) -> object:
     except (OSError, json.JSONDecodeError):
         return None
 
-
 def installed_apps() -> dict[str, str]:
-    """Return {platform:app_name -> display_name} for all installed Heroic games."""
     apps: dict[str, str] = {}
 
     for root in HEROIC_ROOTS:
-        # Epic (Legendary): installed.json is a dict keyed by app_name
         epic_file = root / 'legendaryConfig' / 'legendary' / 'installed.json'
         data = _load_json(epic_file)
         if isinstance(data, dict):
@@ -47,7 +40,6 @@ def installed_apps() -> dict[str, str]:
                 if app_name:
                     apps[f'epic:{app_name}'] = title or app_name
 
-        # GOG: installed.json is a list
         gog_file = root / 'gog_store' / 'installed.json'
         data = _load_json(gog_file)
         if isinstance(data, list):
@@ -59,7 +51,6 @@ def installed_apps() -> dict[str, str]:
                 if app_name:
                     apps[f'gog:{app_name}'] = title or app_name
 
-        # Amazon (Nile): installed.json is a list
         nile_file = root / 'nile_config' / 'nile' / 'installed.json'
         data = _load_json(nile_file)
         if isinstance(data, list):
@@ -77,13 +68,11 @@ def installed_apps() -> dict[str, str]:
 
     return apps
 
-
 def sync() -> int:
     apps = installed_apps()
     created, updated, removed = sync_launchers(ROMS_DIR, STATE_FILE, '.heroic', apps, 'Heroic Game')
     log(f'found={len(apps)} created={created} updated={updated} removed={removed}')
     return 0
-
 
 if __name__ == '__main__':
     raise SystemExit(sync())

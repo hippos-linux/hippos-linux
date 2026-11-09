@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Run userdata migrations when the HippOS version changes.
-# Each migration block is guarded by version comparison.
 
 VERSION_FILE=/usr/share/hippos/version
 APPLIED_FILE=/userdata/system/.hippos-version
@@ -22,29 +20,13 @@ fi
 
 log "migrating '$APPLIED' -> '$CURRENT'"
 
-# ── version_lt <a> <b>: true if a < b (semver) ───────────────────────────────
 version_lt() {
     [[ "$1" != "$2" ]] && \
     [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" == "$1" ]]
 }
 
-# ── migrations ────────────────────────────────────────────────────────────────
-# Add blocks here as new versions introduce breaking changes. Example:
-#
-# if version_lt "$APPLIED" "0.2.0"; then
-#     log "0.2.0: rename foo to bar in hippos.conf"
-#     sed -i 's/^foo=/bar=/' /userdata/system/hippos.conf 2>/dev/null || true
-# fi
-
 if version_lt "$APPLIED" "0.6.1"; then
     log "0.6.1: CRT activation is now manual-only — migrate crt.enabled=auto"
-    # Auto-detection used to decide FOR the user whether to turn CRT mode on
-    # (VGA/DVI-I presence + an EDID-absence heuristic). That's gone — an old
-    # "auto" can't be safely translated into an explicit crt.output selection
-    # (we don't know the hardware/cabling is still the same), so this lands
-    # on disabled rather than guessing a connector and applying CRT timings
-    # to what might now be a normal LCD/TV. The user re-enables explicitly
-    # via System Settings → CRT if they still want it.
     if [[ "$(hippos-settings get crt.enabled 2>/dev/null)" == "auto" ]]; then
         hippos-settings set crt.enabled false
     fi
@@ -55,8 +37,6 @@ fi
 
 if version_lt "$APPLIED" "0.6.5"; then
     log "0.6.5: disable picom damage tracking (stale black regions in desktop mode)"
-    # The userdata overlay only seeds fresh images, so existing installs need
-    # the setting added to their copy. Left alone if the user already set it.
     PICOM_CONF=/userdata/system/.config/picom/picom.conf
     if [[ -f "${PICOM_CONF}" ]] && ! grep -qE '^\s*use-damage\s*=' "${PICOM_CONF}"; then
         printf '\nuse-damage = false;\n' >> "${PICOM_CONF}"
@@ -65,9 +45,6 @@ fi
 
 if [[ -n "$APPLIED" ]] && version_lt "$APPLIED" "0.6.6"; then
     log "0.6.6: TDP settings are now a percentage of the detected CPU maximum"
-    # Skipped on fresh installs: their hippos.conf only holds the new
-    # percentage hardware defaults. Existing ones may hold watts, either set
-    # by the user or synced from the old hardware defaults.
     TDP_MAX="$(/usr/lib/hippos/hippos-tdp detect-max)"
     hippos-settings dump | grep -E '(^|\.)tdp=[0-9]+(\.[0-9]+)?$' | grep -v '^system\.' | while IFS='=' read -r key watts; do
         if [[ -z "${TDP_MAX}" ]]; then
@@ -85,8 +62,6 @@ fi
 
 if version_lt "$APPLIED" "0.6.7"; then
     log "0.6.7: es-theme-hippos replaces es-theme-hippos-minimal as the default theme"
-    # The userdata overlay only seeds fresh images. Anyone on another theme chose
-    # it, so only the old default moves.
     ES_SETTINGS=/userdata/system/configs/emulationstation/es_settings.cfg
     if [[ -f "${ES_SETTINGS}" ]]; then
         sed -i 's/name="ThemeSet" value="es-theme-hippos-minimal"/name="ThemeSet" value="es-theme-hippos"/' "${ES_SETTINGS}"
@@ -95,17 +70,10 @@ fi
 
 if version_lt "$APPLIED" "0.6.8"; then
     log "0.6.8: default language is now en_GB; repair hippos.conf owner and touchegg.conf root"
-    # Choosing a language in ES writes this key, so an unset key means no choice
-    # was made. ES reads only this file, not hippos-defaults.conf.
     if ! grep -q '^system.language=' /userdata/system/hippos.conf 2>/dev/null; then
         hippos-settings set system.language en_GB
     fi
-    # Older hippos-settings runs as root could leave this root-owned, which stops
-    # ES saving its settings.
     chown hippos:users /userdata/system/hippos.conf
-    # Touché can't open a config without the accented root, and shows no window.
-    # Model 2 used to sync its package into a folder inside itself, nesting deeper
-    # on every launch. Its runtime lives under configs now.
     rm -rf /userdata/emulators/model2emu/current
     TOUCHEGG_CONF=/userdata/.config/touchegg/touchegg.conf
     if [[ -f "${TOUCHEGG_CONF}" ]]; then
@@ -113,8 +81,6 @@ if version_lt "$APPLIED" "0.6.8"; then
     fi
 fi
 
-# Storage manager state files are intentionally plain text and safe to create
-# before any external media has been mounted.
 HIPPOS_CONFIG=/userdata/system/configs/hippos
 mkdir -p "${HIPPOS_CONFIG}"
 for name in external-roms.conf roms-sources.conf ignored-storage-devices.txt current-storage.conf; do
@@ -128,10 +94,8 @@ touch "${HIPPOS_CONFIG}/ignored-storage-devices.txt"
 if [[ ! -s "${HIPPOS_CONFIG}/current-storage.conf" ]]; then
     printf 'INTERNAL\n' > "${HIPPOS_CONFIG}/current-storage.conf"
 fi
-# hippos-storage-manager edits these as the user from ES.
 chown -R hippos:users "${HIPPOS_CONFIG}"
 
-# ── record applied version ────────────────────────────────────────────────────
 mkdir -p /userdata/system
 printf '%s\n' "$CURRENT" > "$APPLIED_FILE"
 log "done ($CURRENT)"

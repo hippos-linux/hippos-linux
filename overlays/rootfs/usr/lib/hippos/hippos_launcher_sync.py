@@ -1,10 +1,3 @@
-"""Keep a ROM folder of one-line launcher files in step with a game library.
-
-Used by the Steam, Heroic, Lutris, Flatpak and Quiver syncs. Each launcher file
-holds the key its launcher needs (Steam appid, Heroic platform:app_name, Lutris
-game id, Flatpak app id, Quiver folder name); a state file maps keys to file paths
-so renamed or removed games can be tracked without touching user-made files.
-"""
 from __future__ import annotations
 
 import json
@@ -16,13 +9,9 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
-# hippos:users, so the user can manage the generated files.
 _OWNER_UID, _OWNER_GID = 1000, 100
 _ES_RELOAD = 'http://127.0.0.1:1234/reloadgames'
-# Launcher file content meaning "open the app itself" rather than one of its
-# games. Not a valid game key, so it can't collide with one.
 CLIENT_ENTRY = '@launcher'
-
 
 @dataclass(frozen=True)
 class GameMetadata:
@@ -31,19 +20,16 @@ class GameMetadata:
     developer: str | None = None
     image: Path | None = None
 
-
 def safe_filename(name: str, fallback: str) -> str:
     cleaned = re.sub(r'[\\/:*?"<>|]+', ' ', name)
     cleaned = re.sub(r'\s+', ' ', cleaned).strip(' .')
     return cleaned or fallback
-
 
 def _read_key(path: Path) -> str | None:
     try:
         return path.read_text(encoding='utf-8', errors='replace').strip()
     except OSError:
         return None
-
 
 def _read_state(state_file: Path) -> dict[str, str]:
     try:
@@ -52,13 +38,11 @@ def _read_state(state_file: Path) -> dict[str, str]:
         return {}
     return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
 
-
 def _write_state(state_file: Path, state: dict[str, str]) -> None:
     state_file.parent.mkdir(parents=True, exist_ok=True)
     tmp = state_file.with_suffix('.json.tmp')
     tmp.write_text(json.dumps(state, indent=2, sort_keys=True) + '\n', encoding='utf-8')
     tmp.replace(state_file)
-
 
 def sync_launchers(
     roms_dir: Path,
@@ -68,10 +52,6 @@ def sync_launchers(
     fallback_name: str,
     reserved_stems: tuple[str, ...] = (),
 ) -> tuple[int, int, int]:
-    """games: key -> display name. Returns (created, updated, removed).
-
-    A name that's taken by another game's file, or is one of reserved_stems,
-    gets " (key)" appended."""
     roms_dir.mkdir(parents=True, exist_ok=True)
     old_state = _read_state(state_file)
     new_state: dict[str, str] = {}
@@ -114,20 +94,17 @@ def sync_launchers(
         try:
             os.chown(path, _OWNER_UID, _OWNER_GID)
         except OSError:
-            pass  # not root (e.g. run by hand as the user): already owned right
+            pass
     return created, updated, removed
-
 
 def _chown_to_owner(*paths: Path) -> None:
     for path in paths:
         try:
             os.chown(path, _OWNER_UID, _OWNER_GID)
         except OSError:
-            pass  # not root (e.g. run by hand as the user): already owned right
-
+            pass
 
 def _fill_if_empty(game: ET.Element, tag: str, value: str | None) -> bool:
-    """Scraped or hand-edited details are the user's, so only blanks are filled."""
     if not value:
         return False
     element = game.find(tag)
@@ -138,22 +115,15 @@ def _fill_if_empty(game: ET.Element, tag: str, value: str | None) -> bool:
     element.text = value
     return True
 
-
 def _remove_generated_image(roms_dir: Path, game: ET.Element, stem: str) -> None:
     image = Path(game.findtext('image') or '')
     if image.parent == Path('images') and image.stem == stem:
         (roms_dir / image).unlink(missing_ok=True)
 
-
 def known_keys(state_file: Path) -> set[str]:
-    """Keys that already have a launcher, for work that's only done when creating one."""
     return set(_read_state(state_file))
 
-
 def sync_gamelist(roms_dir: Path, state_file: Path, extension: str, games: dict[str, GameMetadata]) -> bool:
-    """Bring gamelist.xml in step with sync_launchers' result. games: key -> details.
-    Entries for launchers that no longer exist are dropped. Returns whether anything
-    changed; a gamelist that can't be parsed is left alone rather than replaced."""
     gamelist = roms_dir / 'gamelist.xml'
     try:
         tree = ET.parse(gamelist)
@@ -201,9 +171,8 @@ def sync_gamelist(roms_dir: Path, state_file: Path, extension: str, games: dict[
         temporary.replace(gamelist)
     return changed
 
-
 def reload_es() -> None:
     try:
         urllib.request.urlopen(_ES_RELOAD, timeout=2).close()
     except OSError:
-        pass  # ES isn't running; it reads the folder when it starts
+        pass

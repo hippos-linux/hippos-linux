@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""HippOS emulator launcher — routes ES game launches to the right emulator."""
 
 from __future__ import annotations
 
@@ -24,14 +23,7 @@ from hippos_overlayfs import mount_overlayfs
 from hippos_bezels import prepare_bezel
 from hippos_controller_monitor import start_controller_monitor
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
-
-from HipposPaths import HOME, SAVES_RW  # noqa: E402
-
-# ── Shared launcher core (constants, LaunchContext, conf/env helpers) ──────────
-# Imported — not defined here — so per-emulator modules never import this file
-# just to reach shared symbols. Only this module's own dispatch (GENERATORS,
-# main) and any not-yet-split per-emulator code should live below.
+from HipposPaths import HOME, SAVES_RW
 
 from emulatorlauncher_shared import (
     ControllerInfo,
@@ -47,16 +39,7 @@ from emulatorlauncher_shared import (
 )
 from emulatorlauncher_power import game_power_settings
 
-
 LINDBERGH_BUNDLE_DIR = Path('/opt/emulators/lindbergh-loader')
-
-
-# Core search order: user-updated → bundled artifacts → Debian apt packages.
-# find_core() also checks /opt/emulators/*/cores so package-specific libretro
-# builds, such as flycast and snes9x, can be used without copying artifacts.
-
-
-# ── Logging ────────────────────────────────────────────────────────────────────
 
 logging.basicConfig(
     level=logging.INFO,
@@ -65,7 +48,6 @@ logging.basicConfig(
 )
 
 def _apply_yaml_options(conf: dict[str, str], system: str) -> None:
-    """Inject YAML system options into conf as {system}.KEY (user conf wins)."""
     for key, value in _get_yaml_system_options(system).items():
         if key == 'forceNoBezel':
             conf_key = f'{system}.bezel'
@@ -78,7 +60,6 @@ def _apply_yaml_options(conf: dict[str, str], system: str) -> None:
             conf_val = str(value)
         if conf_key not in conf:
             conf[conf_key] = conf_val
-
 
 def _load_game_wheel_metadata(gameinfoxml: Optional[Path]) -> dict[str, str]:
     if gameinfoxml is None or not gameinfoxml.exists():
@@ -95,7 +76,6 @@ def _load_game_wheel_metadata(gameinfoxml: Optional[Path]) -> dict[str, str]:
     if 'wheel' not in data:
         data['wheel'] = 'joystick1left'
     return data
-
 
 def _load_game_gun_metadata(gameinfoxml: Optional[Path]) -> dict[str, str]:
     if gameinfoxml is None or not gameinfoxml.exists():
@@ -114,15 +94,7 @@ def _load_game_gun_metadata(gameinfoxml: Optional[Path]) -> dict[str, str]:
         data['type'] = data['gun_type']
     return data
 
-
 def _resolve_mergerfs_path(path: Path) -> Path:
-    """Resolve a path that sits under a mergerfs mount to its real branch path.
-
-    mergerfs presents a unified view across multiple branches. Some emulators
-    need the actual physical path (e.g. to resolve symlinks or use inotify).
-    Reads /proc/mounts, finds the matching fuse.mergerfs entry, then walks the
-    colon-separated branch list until it finds one where the path exists.
-    """
     try:
         path_str = str(path)
         with open('/proc/mounts') as fh:
@@ -147,7 +119,6 @@ def _resolve_mergerfs_path(path: Path) -> Path:
     except Exception as exc:
         _log.debug("mergerfs path resolution failed: %s", exc)
     return path
-
 
 def resolve_emulator_core(
     system: str,
@@ -175,7 +146,6 @@ def resolve_emulator_core(
     defaults = _load_yaml_defaults()
     sys_def  = defaults.get(system) or {}
 
-    # Resolution order: CLI > game > folder > system > global > defaults
     chosen_em = forced_emulator or game_em or folder_em or user_em or global_em
     emulator = chosen_em or sys_def.get('emulator') or 'libretro'
     core     = forced_core or game_co or folder_co or user_co or global_co or sys_def.get('core') or ''
@@ -183,12 +153,7 @@ def resolve_emulator_core(
         emulator, core = _compatible_default(sys_def, emulator, core, rom)
     return emulator, core
 
-
 def _compatible_default(sys_def: dict, emulator: str, core: str, rom: Path) -> tuple[str, str]:
-    """When the default emulator can't take this file type (its emulator yml
-    exclude_extensions, e.g. DOSBox Staging and .zip), the first of the
-    system's candidates (in ES's order) that can. A choice the user made is
-    never overridden."""
     ext = rom.suffix.lower()
     candidates = sys_def.get('candidates') or []
     if not any(c['emulator'] == emulator and ext in c.get('exclude_extensions', ()) for c in candidates):
@@ -199,50 +164,7 @@ def _compatible_default(sys_def: dict, emulator: str, core: str, rom: Path) -> t
             return candidate['emulator'], candidate['core']
     return emulator, core
 
-
-# ── Emulator binary lookup ─────────────────────────────────────────────────────
-
-
-# ── Libretro device types ─────────────────────────────────────────────────────
-
-# Maps libretro core name → device ID for P1 (default joypad = 1)
-# Maps system name → device ID (fallback when core has no entry)
-# Systems with complex per-player config — handled inline
-
-
-# ── Netplay ────────────────────────────────────────────────────────────────────
-
-
-# ── Per-system input remapping ─────────────────────────────────────────────────
-
-
-# Systems incompatible with rewind (too slow or causes crashes)
-
-# Systems incompatible with run-ahead (too demanding or causes issues)
-
-# Cores that require .slang shaders (Vulkan-only pipeline)
-
-# ── RetroArch controller binding tables ────────────────────────────────────────
-
-# ES input name → RetroArch button/trigger suffix
-
-
-# ES joystick axis name → RetroArch axis base name
-# The ES name represents the negative/primary direction; we derive both ± from it.
-
-# SDL hat bitmask → RetroArch direction string
-
-
-# ES button names for lightgun mapping
-
-
-# ── RetroArch config generator ─────────────────────────────────────────────────
-
-
-# ── Video mode helpers ─────────────────────────────────────────────────────────
-
 def _switch_video_mode(conf: dict[str, str], system: str) -> str:
-    """Switch to per-game video mode. Returns previous mode string for restore."""
     original = subprocess.run(
         ['hippos-resolution', 'currentMode'],
         capture_output=True, text=True, check=False,
@@ -251,7 +173,6 @@ def _switch_video_mode(conf: dict[str, str], system: str) -> str:
     videomode = conf.get(f'{system}.videomode') or conf.get('crt.videomode', '') or conf.get('global.videomode', '')
 
     if _HAS_SWITCHRES and _switchres.is_available():
-        # CRT active — use libswitchres.so directly to avoid XranR stale-mode accumulation.
         if videomode and videomode != 'default':
             parsed = _switchres.parse_videomode(videomode)
             if parsed:
@@ -260,7 +181,6 @@ def _switch_video_mode(conf: dict[str, str], system: str) -> str:
                     return original
                 _log.warning("videomode: ctypes failed, falling back to subprocess")
         else:
-            # No per-system mode — restore to boot resolution (already there on session start).
             boot_res = conf.get('crt.boot_resolution', '640x480i')
             parsed = _switchres.parse_videomode(boot_res)
             if parsed:
@@ -274,7 +194,6 @@ def _switch_video_mode(conf: dict[str, str], system: str) -> str:
             check=False, stderr=subprocess.DEVNULL,
         )
     else:
-        # Reduce 4K → ≤1080p; no-op if already within range.
         subprocess.run(
             ['hippos-resolution', 'minTomaxResolution'],
             check=False, stderr=subprocess.DEVNULL,
@@ -282,9 +201,7 @@ def _switch_video_mode(conf: dict[str, str], system: str) -> str:
 
     return original
 
-
 def _prepare_ctx_bezel(ctx: LaunchContext, conf: dict[str, str]) -> None:
-    """Resolve, resize, and stage bezel for this launch. Sets ctx.bezel."""
     from hippos_bezels import generate_gun_help, gun_border_color
     if ctx.resolution is None:
         return
@@ -322,7 +239,6 @@ def _prepare_ctx_bezel(ctx: LaunchContext, conf: dict[str, str]) -> None:
     )
     generate_gun_help(ctx.system, ctx.rom, ctx.lightgun, ctx.game_gun, ctx.resolution)
 
-
 def _restore_video_mode(original_mode: str, conf: dict[str, str] | None = None) -> None:
     if not original_mode:
         return
@@ -338,19 +254,9 @@ def _restore_video_mode(original_mode: str, conf: dict[str, str] | None = None) 
         check=False, stderr=subprocess.DEVNULL,
     )
 
-
-# ── Game environment builder ───────────────────────────────────────────────────
-
-
-# ── MangoHUD config generator ─────────────────────────────────────────────────
-
 _USER_HUD_CONFIG = HOME / 'hud.config'
 
-# Emulators that cannot use DLSYM injection — need `mangohud` prepended to cmd.
-
-
 def _build_hud_config(conf: dict[str, str], ctx: LaunchContext) -> Optional[Path]:
-    """Generate /var/run/hippos/hud.config. Returns path or None if HUD disabled."""
     mode = conf.get('global.hud', 'none').strip()
     if not mode or mode == 'none':
         return None
@@ -359,7 +265,6 @@ def _build_hud_config(conf: dict[str, str], ctx: LaunchContext) -> Optional[Path
 
     lines: list[str] = []
 
-    # Bezel background — must come first
     if ctx.bezel is not None:
         lines.append(f'background_image={ctx.bezel}')
         lines.append('legacy_layout=false')
@@ -377,7 +282,6 @@ def _build_hud_config(conf: dict[str, str], ctx: LaunchContext) -> Optional[Path
         ]
     elif mode == 'game':
         game_name = ctx.rom.stem
-        # Try to read a nicer name from gameinfoxml
         if ctx.gameinfoxml and ctx.gameinfoxml.exists():
             try:
                 root = ET.parse(ctx.gameinfoxml).getroot()
@@ -392,7 +296,6 @@ def _build_hud_config(conf: dict[str, str], ctx: LaunchContext) -> Optional[Path
             f'custom_text={ctx.system}',
             f'custom_text={ctx.emulator}/{ctx.core}' if ctx.core else f'custom_text={ctx.emulator}',
         ]
-        # Thumbnail: check ES scraped image path convention
         thumb = ctx.rom.with_suffix('.png')
         if not thumb.exists():
             thumb = ctx.rom.parent / 'images' / f'{ctx.rom.stem}.png'
@@ -412,10 +315,6 @@ def _build_hud_config(conf: dict[str, str], ctx: LaunchContext) -> Optional[Path
     _HUD_CONFIG_PATH.write_text('\n'.join(lines) + '\n')
     _log.info("hud: config written (%s mode, %s)", mode, position)
     return _HUD_CONFIG_PATH
-
-
-# ── Generators ─────────────────────────────────────────────────────────────────
-
 
 from emulatorlauncher_generic import (
     launch_libretro as _launch_libretro,
@@ -445,7 +344,6 @@ from emulatorlauncher_core import (
     launch_flycast as _launch_flycast,
     launch_mame as _launch_mame,
 )
-
 
 from emulatorlauncher_gsplus import launch_gsplus as _launch_gsplus
 from emulatorlauncher_misc import (
@@ -516,9 +414,6 @@ from emulatorlauncher_extras import (
     launch_sugarbox,
 )
 
-
-# Emulators that write saves inside the ROM directory (squashfs ports etc.).
-# These get an overlayfs layer so writes persist to /userdata/saves.
 WRITES_TO_ROM: frozenset[str] = frozenset({
     'sh',
     'solarus',
@@ -527,9 +422,6 @@ WRITES_TO_ROM: frozenset[str] = frozenset({
     'thextech',
 })
 
-# Maps emulator name → generator function.
-# libretro is handled specially; everything else goes through _launch_standalone
-# until it gets its own generator.
 GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'libretro':    _launch_libretro,
     'retroarch':   _launch_libretro,
@@ -541,8 +433,6 @@ GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'dosbox':         launch_dosbox_staging,
     'dosbox-x':       launch_dosbox_x,
     'dosbox_staging': launch_dosbox_staging,
-    # ES names emulators after their package (packages/emulators/<name>), so
-    # the per-system emulator option sends these names.
     'dosbox-staging': launch_dosbox_staging,
     'python-pygame2': _launch_pygame,
     'python-pyxel':   _launch_pyxel,
@@ -668,9 +558,6 @@ GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'uqm':         _launch_uqm,
 }
 
-
-# ── Entry point ────────────────────────────────────────────────────────────────
-
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description='HippOS emulator launcher')
 
@@ -701,7 +588,6 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument('-wheel',        action='store_true')
     return p
 
-
 def _build_controllers(args: argparse.Namespace) -> list[ControllerInfo]:
     controllers = []
     for n in range(1, 9):
@@ -721,7 +607,6 @@ def _build_controllers(args: argparse.Namespace) -> list[ControllerInfo]:
             nb_axes=getattr(args, f'p{n}nbaxes',     None) or 0,
         ))
     return controllers
-
 
 def main() -> int:
     args = _build_parser().parse_args()
@@ -800,16 +685,12 @@ def main() -> int:
             check=False, capture_output=True,
         )
 
-
 def _run_with_squashfs(ctx: LaunchContext, generator: Callable[[LaunchContext], int]) -> int:
-    """Mount squashfs ROM if needed, apply overlayfs for saves, run generator."""
     if ctx.rom.suffix != '.squashfs':
         return generator(ctx)
 
     with mount_squashfs(ctx.rom) as squash_root:
         if ctx.emulator in WRITES_TO_ROM:
-            # overlayfs can't use a FUSE upper dir, so the overlay writes to the
-            # saves pool's internal branch; the files still show in /userdata/saves.
             saves_root = SAVES_RW / ctx.system / ctx.rom.stem
             with mount_overlayfs(squash_root, saves_root) as overlay:
                 ctx.rom = overlay
@@ -817,7 +698,6 @@ def _run_with_squashfs(ctx: LaunchContext, generator: Callable[[LaunchContext], 
         else:
             ctx.rom = squash_root
             return generator(ctx)
-
 
 if __name__ == '__main__':
     sys.exit(main())

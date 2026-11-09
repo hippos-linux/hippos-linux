@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
-# hippos-steam — launch Steam with HippOS settings applied.
 set -euo pipefail
 
 get() { hippos-settings get "$1" 2>/dev/null || true; }
 
-# Left by --shutdown, the exit hotkey's path, so the launch that's waiting
-# for Steam knows it was closed on purpose rather than restarting itself.
 SHUTDOWN_MARKER=/run/hippos/steam-shutdown
 
 if [[ "${1:-}" == "--shutdown" ]]; then
@@ -16,15 +13,12 @@ rm -f "${SHUTDOWN_MARKER}"
 
 mkdir -p /userdata/system/logs
 
-# Deck / GamepadUI mode
 declare -a STEAM_FLAGS=()
 BIG_PICTURE=false
 if [[ "${1:-}" == "--big-picture" ]]; then
     BIG_PICTURE=true
     shift
 fi
-# Steam bootstrap hasn't run yet if steam.sh is absent — gamepadui blocks the
-# setup wizard and update download on first launch, so fall back to desktop mode.
 STEAM_BOOTSTRAPPED=false
 [[ -f "/userdata/.local/share/Steam/steam.sh" ]] && STEAM_BOOTSTRAPPED=true
 if [[ "$(get steam.deckmode)" == "true" || "${BIG_PICTURE}" == "true" ]]; then
@@ -67,7 +61,6 @@ PYEOF
     fi
 fi
 
-# Overlay injection
 declare -a ENV_PREFIX=()
 [[ "$(get global.mangohud)" == "true" ]] && ENV_PREFIX+=(MANGOHUD=1)
 [[ "$(get global.vkbasalt)" == "true" ]] && ENV_PREFIX+=(ENABLE_VKBASALT=1)
@@ -77,9 +70,6 @@ steam_running() {
 }
 
 set +e
-# SDL_JOYSTICK_HIDAPI=0: prevent double-detection of controllers via HIDAPI+evdev,
-# which causes Steam Input's desktop config to intercept mouse clicks on UI elements.
-# XDG_SESSION_TYPE=x11: ensures Steam uses X11 input handling, not Wayland fallback.
 ENV_PREFIX+=(
     SDL_JOYSTICK_HIDAPI=0
     XDG_SESSION_TYPE=x11
@@ -88,26 +78,13 @@ env "${ENV_PREFIX[@]}" steam "${STEAM_FLAGS[@]}" "$@"
 status=$?
 set -e
 
-# The steam command can return while the client is still starting or
-# restarting after an update; give it time to show up, unless the exit hotkey
-# closed Steam.
 for _ in {1..30}; do
     steam_running && break
     [[ -e "${SHUTDOWN_MARKER}" ]] && break
     sleep 1
 done
 
-# steamwebhelper is designed to outlive the main window closing (background
-# updates, friends list, overlay) — this can't use a short timeout without
-# risking cutting off a game that's still genuinely being played. The real
-# exit path is the controller hotkey (contexts/steam.json runs `hippos-steam
-# --shutdown`, i.e. `steam -shutdown`, since Alt+F4 only closes Steam's window rather than
-# quitting the client — confirmed real-world: tangocat, antaeusdk hit a
-# black screen with no way back to ES after Alt+F4 alone). This loop is
-# only the fallback once that's actually been used; the bound below exists
-# purely so a genuinely stuck/orphaned helper can never wedge the display
-# forever requiring a hard reboot, not as a way to end a real session.
-STEAM_WAIT_LIMIT=$((12 * 60 * 60))  # 12h
+STEAM_WAIT_LIMIT=$((12 * 60 * 60))
 elapsed=0
 while steam_running; do
     sleep 5

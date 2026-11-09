@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
-# hippos-format — list and format external disks from ES.
-# Usage: hippos-format listDisks | listFstypes | format <disk> <fstype> [label]
 
-# ES runs this as hippos; umount and mkfs on a block device need root.
 [[ "${1:-}" == "format" && "${EUID}" -ne 0 ]] && exec sudo -n "$0" "$@"
 
-# Disks that must never be offered for formatting
 _system_disks() {
     grep -E '^[^ ]+ (/|/userdata) ' /proc/mounts 2>/dev/null \
         | awk '{print $1}' \
@@ -44,12 +40,10 @@ cmd_format() {
     local dev="/dev/${disk}"
     [[ ! -b "${dev}" ]] && { echo "Device not found: ${dev}" >&2; exit 1; }
 
-    # Safety: refuse to format system disks
     for sys in $(_system_disks); do
         [[ "${disk}" == "${sys}" ]] && { echo "Refusing to format system disk: ${disk}" >&2; exit 1; }
     done
 
-    # Unmount any partitions on this disk
     lsblk -n -o NAME "${dev}" 2>/dev/null | while read -r part; do
         umount "/dev/${part}" 2>/dev/null || true
     done

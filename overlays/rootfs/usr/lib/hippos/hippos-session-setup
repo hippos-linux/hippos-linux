@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# hippos-session-setup — root preparation before greetd starts hippos-session.
 set -uo pipefail
 
-# Wait for a DRM device to be probed before X starts; without one Xorg fails
-# with "failed to create screen resources".
 for _ in $(seq 1 40); do
     compgen -G '/dev/dri/card*' >/dev/null && break
     sleep 0.25
@@ -11,16 +8,11 @@ done
 
 /usr/lib/hippos/hippos-xorg-setup
 
-# system.autologin (on by default) has greetd's initial_session log hippos
-# straight in. greetd runs that once per boot, so the setting applies from the
-# next boot, and the login screen otherwise only appears after a logout.
 SESSION_CMD="systemd-cat -t hippos-session /usr/lib/hippos/hippos-session"
 {
     printf '[terminal]\nvt = 7\n\n'
     if [[ "$(hippos-settings get system.autologin 2>/dev/null)" != false ]]; then
         printf '[initial_session]\nuser = "hippos"\ncommand = "%s"\n\n' "${SESSION_CMD}"
     fi
-    # The greeter's output goes to the journal: written to tty7, it shows for a
-    # moment between the login screen and the session.
     printf '[default_session]\nuser = "_greetd"\ncommand = "systemd-cat -t hippos-greeter /usr/lib/hippos/hippos-greeter %s"\n' "${SESSION_CMD}"
 } > /etc/greetd/config.toml

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# hippos-heroic — launch a Heroic game from a .heroic launcher file.
 set -euo pipefail
 
 ROM="${1:-}"

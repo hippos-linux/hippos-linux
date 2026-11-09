@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# hippos-automount <devname>
-# Mounts any supported removable filesystem at /media/<label>.
-# Refuses to touch system mountpoints (/, /boot, /userdata).
-
 MEDIA="/media"
 SUPPORTED_FS="vfat exfat ntfs ext2 ext3 ext4 btrfs hfsplus f2fs"
 
@@ -16,8 +12,6 @@ DEVNAME="${1:?Usage: hippos-automount <devname>}"
 DEVICE="/dev/${DEVNAME}"
 
 [[ -b "${DEVICE}" ]] || die "${DEVICE} is not a block device"
-
-# ── Filesystem check ───────────────────────────────────────────────────────
 
 FS_TYPE="$(blkid -o value -s TYPE "${DEVICE}" 2>/dev/null || true)"
 [[ -n "${FS_TYPE}" ]] || { info "${DEVICE} has no detectable filesystem — skipping"; exit 0; }
@@ -31,22 +25,16 @@ if [[ "${found}" -eq 0 ]]; then
     exit 0
 fi
 
-# ── Safety: refuse system devices ─────────────────────────────────────────
-
 for system_mp in / /boot /boot/efi /userdata; do
     src="$(findmnt -n -o SOURCE "${system_mp}" 2>/dev/null || true)"
     [[ "${src}" == "${DEVICE}" ]] && die "refusing to remount system device ${DEVICE} (${system_mp})"
 done
-
-# ── Already mounted? ───────────────────────────────────────────────────────
 
 existing="$(findmnt -S "${DEVICE}" -o TARGET -n 2>/dev/null || true)"
 if [[ -n "${existing}" ]]; then
     info "${DEVICE} already mounted at ${existing} — skipping"
     exit 0
 fi
-
-# ── Determine mountpoint ───────────────────────────────────────────────────
 
 LABEL="$(blkid -o value -s LABEL "${DEVICE}" 2>/dev/null || true)"
 if [[ -z "${LABEL}" ]]; then
@@ -69,19 +57,10 @@ fi
 
 mkdir -p "${MOUNT_POINT}"
 
-# ── Mount ──────────────────────────────────────────────────────────────────
-
 case "${FS_TYPE}" in
     ntfs)
-        # uid/gid/umask are fabricated permissions on ntfs/vfat/exfat (the
-        # filesystem has no real Unix owner bits) — udev runs this as root, so
-        # leaving these unset (or uid=0 as this used to) makes the mount
-        # root-owned and unwritable by the hippos user for every normal,
-        # non-sudo desktop/ES operation. HippOS is single-user; hand
-        # ownership straight to that user (1000) rather than root.
         MOUNT_OPTS="noatime,uid=1000,gid=1000,umask=022"
         MOUNT_TYPE="ntfs3"
-        # Fall back to ntfs-3g if kernel ntfs3 unavailable
         if ! mount -t ntfs3 -o "${MOUNT_OPTS}" "${DEVICE}" "${MOUNT_POINT}" 2>/dev/null; then
             mount -t ntfs-3g -o "${MOUNT_OPTS}" "${DEVICE}" "${MOUNT_POINT}"
         fi
@@ -90,17 +69,12 @@ case "${FS_TYPE}" in
         mount -t vfat -o noatime,uid=1000,gid=1000,umask=022,iocharset=utf8,flush "${DEVICE}" "${MOUNT_POINT}"
         ;;
     exfat)
-        # exfat.ko supports uid/gid/umask like vfat/ntfs above, but not "flush"
-        # (that option is FAT-specific).
         mount -t exfat -o noatime,uid=1000,gid=1000,umask=022,iocharset=utf8 "${DEVICE}" "${MOUNT_POINT}"
         ;;
     btrfs)
         mount -t btrfs -o subvolid=5,noatime "${DEVICE}" "${MOUNT_POINT}"
         ;;
     *)
-        # ext2/3/4, f2fs (real Unix permission bits — uid/gid/umask don't
-        # apply) and hfsplus (fake permissions like vfat/exfat, but no
-        # reported case for it yet — left alone rather than guessing).
         mount -t "${FS_TYPE}" -o noatime "${DEVICE}" "${MOUNT_POINT}"
         ;;
 esac

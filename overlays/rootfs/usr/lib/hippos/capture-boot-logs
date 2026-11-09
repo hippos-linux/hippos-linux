@@ -5,17 +5,9 @@ LOG_DIR=/userdata/system/logs/boot
 BOOT_ID="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || date +%s)"
 OUT_DIR="${LOG_DIR}/${BOOT_ID}"
 
-# One directory per boot, forever, with nothing to bound it otherwise
-# (filesystem-layout.md: "Logs must be rotated or bounded"). boot_id is a
-# random UUID, not chronological, so pruning has to sort by mtime rather
-# than by name.
 LOG_RETENTION_COUNT=20
 
 mkdir -p "${OUT_DIR}"
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 capture() {
     local name="$1"
@@ -78,34 +70,11 @@ prune_old_boot_logs() {
     local i=0
     for dir in "${dirs[@]}"; do
         i=$((i + 1))
-        # Not "[[ ... ]] && rm -rf ..." — bash's set -e exempts a false
-        # left-hand side of && from killing the script *at that point*, but
-        # this function's own return status is still whatever its last
-        # command returned (1, from the false test). prune_old_boot_logs is
-        # called bare (no if/&&/|| around it) at the very end of the script,
-        # so set -e fires THERE instead, on that plain function-call
-        # statement. Below the retention count (the common case — most
-        # systems never accumulate LOG_RETENTION_COUNT boots), every
-        # iteration hits this, so the function always returned 1 and the
-        # script always died on its last line — after every real capture
-        # step had already finished (real hardware report, 2026-08-23: this
-        # service showed Main process exited, status=1/FAILURE despite a
-        # complete, correct diagnostic bundle already on disk). Confirmed by
-        # reproducing both the failure and the fix in isolation.
         if [[ ${i} -gt ${LOG_RETENTION_COUNT} ]]; then
             rm -rf "${dir}"
         fi
     done
 }
-
-# ---------------------------------------------------------------------------
-# Wait for frontend / desktop session
-#
-# greetd starts hippos-session, which starts ES or a desktop; wait for one of
-# them, or for greetd to fail.
-#
-# Maximum: 180 seconds.
-# ---------------------------------------------------------------------------
 
 SESSION_STATE="timeout"
 
@@ -131,16 +100,6 @@ done
 
 SESSION_SETTLED_AT="$(date --iso-8601=seconds)"
 
-# ---------------------------------------------------------------------------
-# Wait for the overall boot transaction to settle.
-#
-# ES can become active while graphical.target and other boot jobs are still
-# pending. Waiting here makes systemd-analyze useful and prevents the capture
-# from being merely a mid-boot snapshot.
-#
-# Maximum additional wait: 120 seconds.
-# ---------------------------------------------------------------------------
-
 BOOT_STATE="timeout"
 
 for _ in $(seq 1 240); do
@@ -149,9 +108,6 @@ for _ in $(seq 1 240); do
         break
     fi
 
-    # graphical.target is ordered after this unit, through multi-user.target, so
-    # it can't finish while this loop runs. Boot has settled once no other job
-    # is running: anything still queued is waiting on this unit.
     if ! systemctl list-jobs --no-legend 2>/dev/null |
             grep -vE 'hippos-capture-boot-logs\.service[[:space:]]' |
             grep -q ' running'; then
@@ -164,7 +120,6 @@ done
 
 BOOT_SETTLED_AT="$(date --iso-8601=seconds)"
 
-# Give services a final moment to flush startup messages.
 sleep 3
 
 {
@@ -177,17 +132,12 @@ sleep 3
     echo "uptime=$(cat /proc/uptime 2>/dev/null || true)"
 } > "${OUT_DIR}/capture-info.txt"
 
-# ===========================================================================
-# Core logs
-# ===========================================================================
-
 journalctl -b --no-pager \
     > "${OUT_DIR}/journal.log" 2>&1 || true
 
 journalctl -b -p warning..alert --no-pager \
     > "${OUT_DIR}/warnings.log" 2>&1 || true
 
-# Matches joined by '+' are OR'ed; hippos-session logs under an identifier.
 journalctl -b \
     _SYSTEMD_UNIT=greetd.service + \
     _SYSTEMD_UNIT=hippos-session-setup.service + \
@@ -198,14 +148,10 @@ journalctl -b \
 
 dmesg -T > "${OUT_DIR}/dmesg.log" 2>&1 || true
 
-# hippos-upload-logs reads this directory as the hippos user, so copies are made
-# world-readable: Xorg creates its log 0640, which made uploads need sudo.
 if [[ -f /tmp/Xorg.0.log ]]; then
     install -m 0644 /tmp/Xorg.0.log "${OUT_DIR}/Xorg.0.log" || true
 fi
 
-# ES sends a launch's stdout and stderr to these files, not the journal, and
-# each launch overwrites them, so they hold the most recent launch only.
 for launch_log in es_launch_stdout.log es_launch_stderr.log retroarch.log; do
     if [[ -f "/userdata/system/logs/${launch_log}" ]]; then
         install -m 0644 "/userdata/system/logs/${launch_log}" "${OUT_DIR}/${launch_log}" || true
@@ -218,17 +164,6 @@ capture_shell "emulator-packages.txt" \
 capture_shell "roms-ownership.txt" \
     'ls -la /userdata/.roms-rw; echo; find /userdata/.roms-rw -mindepth 2 -maxdepth 2 -name gamelist.xml -exec ls -la {} +'
 
-# ===========================================================================
-# Previous boot
-#
-# A hang/panic/hard-reset happens before this boot's own capture ever runs —
-# this boot's journal.log is silent on the crash. journald.conf.d already
-# sets Storage=persistent, so the crashed boot's own journal survives to this
-# one as long as it makes it back up at all; capture it here rather than
-# leaving it to only ever be found by someone manually running
-# `journalctl -b -1` after the fact.
-# ===========================================================================
-
 capture "boot-history.txt" \
     journalctl --list-boots --no-pager
 
@@ -237,10 +172,6 @@ journalctl -b -1 --no-pager \
 
 journalctl -k -b -1 --no-pager \
     > "${OUT_DIR}/previous-boot-dmesg.log" 2>&1 || true
-
-# ===========================================================================
-# HippOS / OS information
-# ===========================================================================
 
 capture_shell "version.txt" \
     'cat /etc/hippos-version 2>/dev/null || true;
@@ -258,17 +189,11 @@ capture "default-target.txt" \
 capture_shell "hippos-services.txt" \
     'systemctl list-units --all --no-pager --full | grep -i hippos || true'
 
-# Confirms the atomic-write fix in practice: this should never be truncated
-# or empty while hippos-hotkeys.service is running.
 capture_shell "hotkeys-context.txt" \
     'echo "===== /run/hippos/hotkeys.context =====";
      ls -la /run/hippos/hotkeys.context 2>/dev/null || echo "(absent)";
      echo;
      cat /run/hippos/hotkeys.context 2>/dev/null || true'
-
-# ===========================================================================
-# systemd boot analysis
-# ===========================================================================
 
 capture "failed-services.txt" \
     systemctl --failed --no-pager --full
@@ -285,15 +210,6 @@ capture "systemd-blame.txt" \
 capture "systemd-critical-chain.txt" \
     systemd-analyze critical-chain
 
-# The system-level blame/critical-chain above only accounts for PID 1's own
-# units — plasma-polkit-agent.service, gvfs-daemon.service, and everything
-# else started via `systemctl --user` runs under hippos's own systemd
-# instance (user@1000.service) and never appears there. A 0.6.1 beta boot
-# capture showed graphical.target reaching active ~2.5 minutes after boot
-# with nothing in the system-level critical chain accounting for most of
-# that gap — the user-manager's own timing is the missing half needed to
-# tell a real startup delay in a --user unit apart from ordinary session
-# activity (an app opening a file dialog, etc.) that happens to land late.
 capture_shell "systemd-user-blame.txt" \
     'XDG_RUNTIME_DIR=/run/user/1000 runuser -u hippos -- \
         systemd-analyze --user blame 2>&1 || true'
@@ -311,10 +227,6 @@ capture_shell "systemd-manager-timeouts.txt" \
 
 capture_shell "systemd-config.txt" \
     'systemd-analyze cat-config systemd/system.conf 2>&1 || true'
-
-# ===========================================================================
-# Failed unit details
-# ===========================================================================
 
 {
     echo "===== FAILED UNIT DETAILS ====="
@@ -355,16 +267,6 @@ capture_shell "systemd-config.txt" \
 
 } > "${OUT_DIR}/failed-unit-details.log" 2>&1 || true
 
-# ===========================================================================
-# Coredumps
-#
-# A crashed process (e.g. Xorg segfaulting mid driver-init) otherwise only
-# shows up as grep'd log text elsewhere ("Segmentation fault", "Caught signal
-# 11") — this is the actual backtrace, straight from systemd-coredump.
-# ===========================================================================
-
-# coredumpctl has no --boot flag (it errors with "unrecognized option") —
-# scope to this boot the same way journalctl matches do, via _BOOT_ID=.
 capture "coredumps.txt" \
     coredumpctl list --no-pager "_BOOT_ID=${BOOT_ID}"
 
@@ -377,10 +279,6 @@ capture_shell "coredumps-detail.txt" \
         echo "================================================================";
         coredumpctl info "$pid" --no-pager 2>&1 || true;
      done'
-
-# ===========================================================================
-# Critical services
-# ===========================================================================
 
 capture "critical-services.txt" \
     systemctl status \
@@ -409,16 +307,6 @@ capture "critical-services-journal.txt" \
         -u nvidia-persistenced.service \
         --no-pager
 
-# ===========================================================================
-# HippOS boot-time initialisation
-#
-# hippos-hardware-init -> hippos-system-init -> hippos-migrate -> ES/desktop,
-# plus hippos-grow-userdata (WantedBy=local-fs-pre.target, runs before
-# local-fs.target — a first-boot btrfs partition resize). hippos-migrate in
-# particular runs userdata version migration before ES/desktop ever starts —
-# a silent failure here is a data-integrity risk, not just a slow boot.
-# ===========================================================================
-
 capture "hippos-init-status.txt" \
     systemctl status \
         hippos-hardware-init.service \
@@ -434,13 +322,6 @@ capture "hippos-init-journal.txt" \
         -u hippos-migrate.service \
         -u hippos-grow-userdata.service \
         --no-pager
-
-# ===========================================================================
-# ROM / BIOS / Saves storage
-#
-# greetd is ordered after the pool services — a hang/failure here is a
-# direct contributor to ES startup delay, not a side issue.
-# ===========================================================================
 
 capture "hippos-storage-status.txt" \
     systemctl status \
@@ -464,27 +345,11 @@ capture "hippos-storage-journal.txt" \
         -u hippos-network-roms-discover.service \
         --no-pager
 
-# ===========================================================================
-# First-boot Flatpak install
-#
-# Network-dependent (see hippos-firstboot-flatpak.service) — a plausible
-# slow-boot contributor in its own right, independent of storage speed.
-# ===========================================================================
-
 capture "hippos-firstboot-flatpak.txt" \
     systemctl status hippos-firstboot-flatpak.service --no-pager -l
 
 capture_shell "hippos-firstboot-flatpak-journal.txt" \
     'journalctl -b -u hippos-firstboot-flatpak.service --no-pager'
-
-# ===========================================================================
-# LXC / Waydroid
-#
-# lxc-net.service/lxc.service/waydroid-container.service are deferred to
-# After=graphical.target (see configure-rootfs.sh) — this is the direct way
-# to see their actual start time/order/failures instead of digging them out
-# of the full journal.log dump.
-# ===========================================================================
 
 capture "lxc-waydroid-status.txt" \
     systemctl status \
@@ -503,10 +368,6 @@ capture "lxc-waydroid-journal.txt" \
         -u waydroid-container.service \
         -u hippos-waydroid-init.service \
         --no-pager
-
-# ===========================================================================
-# Plymouth
-# ===========================================================================
 
 capture "plymouth-status.txt" \
     systemctl status \
@@ -539,17 +400,9 @@ capture_shell "plymouth-initramfs.txt" \
         lsinitramfs "$initrd" 2>&1 | grep -i plymouth || true;
      done'
 
-# plymouthd only traces its own internal state (DRM calls, the quit/quit-wait
-# handshake, theme rendering) here, and only because Debug=yes is set in
-# plymouthd.conf (see configure-rootfs.sh, DISC-001) — the only way to tell
-# whether a splash that "started" per systemd ever actually reached the screen.
 if [[ -f /var/log/plymouth-debug.log ]]; then
     install -m 0644 /var/log/plymouth-debug.log "${OUT_DIR}/plymouth-debug.log" || true
 fi
-
-# ===========================================================================
-# Boot / GRUB / fstab
-# ===========================================================================
 
 capture_shell "fstab.txt" \
     'cat /etc/fstab 2>&1'
@@ -566,9 +419,6 @@ capture_shell "grub-config.txt" \
      # matching any of the previous keywords, same class of blind spot.
      cat /boot/efi/grub/grub.cfg 2>/dev/null || true'
 
-# hippos-select-kernel syncs GRUB_DEFAULT to the system.kernel setting every
-# boot; hippos-update-grub is the first-boot regen. Both write the file
-# above — this is whether/why that write happened, not just its result.
 capture "grub-services.txt" \
     systemctl status \
         hippos-select-kernel.service \
@@ -580,10 +430,6 @@ capture_shell "grub-services-journal.txt" \
         -u hippos-select-kernel.service \
         -u hippos-update-grub.service \
         --no-pager'
-
-# ===========================================================================
-# Storage / partition / mount state
-# ===========================================================================
 
 capture "lsblk.txt" \
     lsblk -o \
@@ -610,10 +456,6 @@ capture "mount-units.txt" \
 capture "device-units.txt" \
     systemctl list-units --type=device --all --no-pager --full
 
-# ===========================================================================
-# UDisks / desktop mounting
-# ===========================================================================
-
 capture "udisks-service.txt" \
     systemctl status udisks2.service --no-pager -l
 
@@ -629,13 +471,6 @@ capture "udisks-dump.txt" \
 capture_shell "polkit-journal.txt" \
     'journalctl -b --no-pager |
      grep -iE "polkit|authorization|not authorized|permission denied" || true'
-
-# ===========================================================================
-# Btrfs
-#
-# HippOS uses an overlay root, so "/" itself is not the Btrfs mount.
-# /userdata is the persistent Btrfs-backed filesystem.
-# ===========================================================================
 
 capture "btrfs-filesystems.txt" \
     btrfs filesystem show
@@ -653,13 +488,6 @@ capture_shell "btrfs-userdata-properties.txt" \
     'btrfs subvolume show /userdata 2>&1 || true;
      echo;
      btrfs property get /userdata 2>&1 || true'
-
-# ===========================================================================
-# Runtime/user filesystem state
-#
-# Captures ownership, mount options and writability of the runtime directory.
-# This is useful for PulseAudio/PipeWire/FluidSynth/session failures.
-# ===========================================================================
 
 capture_shell "runtime-user-1000.txt" \
     'echo "===== FINDMNT =====";
@@ -680,10 +508,6 @@ capture_shell "audio-session-errors.txt" \
     'journalctl -b --no-pager |
      grep -iE "pipewire|wireplumber|pulse|pulseaudio|fluidsynth|audio|alsa" || true'
 
-# PipeWire/WirePlumber are hippos user-level units, not system units — this
-# script runs as root, so query the hippos user's own systemd instance
-# directly rather than relying on the journal grep above to have caught
-# everything.
 capture_shell "pipewire-status.txt" \
     'XDG_RUNTIME_DIR=/run/user/1000 runuser -u hippos -- \
         systemctl --user status pipewire.service wireplumber.service \
@@ -699,10 +523,6 @@ capture_shell "pipewire-sinks.txt" \
          [ -e "${eld}" ] || continue
          echo; echo "== ${eld}"; cat "${eld}"
      done'
-
-# ===========================================================================
-# Hardware
-# ===========================================================================
 
 capture "lspci.txt" \
     lspci -nnk
@@ -724,15 +544,6 @@ capture_shell "memory.txt" \
      echo;
      cat /proc/meminfo'
 
-# ===========================================================================
-# Controller / Input
-#
-# 70-hippos-controllers.rules is what actually grants gamepad hidraw/input
-# permissions — nothing else captures whether it fired or what devices
-# evdev/hidraw actually see, and "controller-first" is a stated core product
-# principle, not a side feature.
-# ===========================================================================
-
 capture_shell "input-devices.txt" \
     'echo "===== /proc/bus/input/devices =====";
      cat /proc/bus/input/devices 2>/dev/null || true;
@@ -746,21 +557,10 @@ capture_shell "input-devices.txt" \
 capture_shell "controller-udev-rules.txt" \
     'cat /etc/udev/rules.d/70-hippos-controllers.rules 2>/dev/null || true'
 
-# ===========================================================================
-# Graphics / NVIDIA / DRM
-# ===========================================================================
-
-# hippos-gpu-init's own log: driver mode chosen (open/legacy tier/nouveau),
-# the PCI-ID -> legacybranch lookup against supported-gpus.json, and why —
-# the only way to tell "no NVIDIA GPU detected" from "detected but the tier
-# lookup/switch silently fell through to nvidia-open" from the outside.
 if [[ -f /var/log/hippos-gpu.log ]]; then
     install -m 0644 /var/log/hippos-gpu.log "${OUT_DIR}/hippos-gpu.log" || true
 fi
 
-# What HippOS actually wrote under /etc/modprobe.d (nvidia_use_proprietary/
-# nvidia_switch_tier's two files, plus anything else hippos-prefixed) rather
-# than inferring it from hippos-gpu.log's prose.
 capture_shell "hippos-modprobe-conf.txt" \
     'for f in /etc/modprobe.d/hippos-*.conf; do
         [[ -f "$f" ]] || continue;
@@ -811,17 +611,11 @@ capture_shell "edid.txt" \
 capture_shell "xrandr.txt" \
     'DISPLAY=:0 xrandr 2>&1 || echo "xrandr not available"'
 
-# With prime.env sourced, as the desktop session does, so this is the
-# renderer hippos-picom bases its backend choice on.
 capture_shell "glxinfo.txt" \
     '[[ -f /run/hippos/prime.env ]] && . /run/hippos/prime.env; DISPLAY=:0 glxinfo -B 2>&1 || echo "glxinfo not available"'
 
 capture_shell "prime-sentinels.txt" \
     'ls -la /var/tmp/hippos-*.prime 2>/dev/null || echo "none"'
-
-# ===========================================================================
-# Network
-# ===========================================================================
 
 capture "ip-addresses.txt" \
     ip addr
@@ -840,10 +634,6 @@ capture_shell "resolv.conf.txt" \
      echo;
      cat /etc/resolv.conf 2>&1'
 
-# ===========================================================================
-# Sessions / user state
-# ===========================================================================
-
 capture "loginctl.txt" \
     loginctl
 
@@ -860,17 +650,11 @@ capture_shell "user-1000.txt" \
      echo;
      id hippos 2>&1 || true'
 
-# ===========================================================================
-# Targeted error extraction
-# ===========================================================================
-
 capture_shell "timeout-errors.txt" \
     'journalctl -b --no-pager |
      grep -iE "timed out|timeout|dependency failed|ordering cycle|job .*failed" ||
      true'
 
-# Deliberately target kernel/block-layer errors rather than generic words such
-# as "disconnected", which otherwise produce false positives from networking.
 capture_shell "storage-errors.txt" \
     'journalctl -k -b --no-pager |
      grep -iE "I/O error|Buffer I/O|blk_update_request|critical medium|medium error|end_request|device offline|rejecting I/O|reset (high-speed|SuperSpeed|full-speed|low-speed) USB device|USB disconnect|uas_eh_abort_handler|FAILED Result: hostbyte|Sense Key.*(Medium Error|Hardware Error)" ||
@@ -895,17 +679,6 @@ capture_shell "graphics-errors.txt" \
     'journalctl -b --no-pager |
      grep -iE "nvidia|nouveau|drm|Xorg|X11|GPU|VGA|EDID|modeset" ||
      true'
-
-# ===========================================================================
-# Emulator ELF dependency audit
-#
-# HippOS emulator payloads:
-#
-#     /userdata/emulators/<emulator>/bin/
-#
-# Every executable ELF beneath an emulator bin directory is checked.
-# ldd runs once per ELF and feeds both reports.
-# ===========================================================================
 
 EMULATOR_ROOT="/userdata/emulators"
 LDD_LOG="${OUT_DIR}/emulator-ldd.log"
@@ -1006,16 +779,8 @@ fi
     fi
 } >> "${MISSING_LOG}"
 
-# ===========================================================================
-# Process snapshot
-# ===========================================================================
-
 capture "processes.txt" \
     ps auxww
-
-# ===========================================================================
-# Final human-readable summary
-# ===========================================================================
 
 {
     echo "===== HippOS BOOT CAPTURE SUMMARY ====="
@@ -1049,14 +814,6 @@ capture "processes.txt" \
 
 } > "${OUT_DIR}/summary.txt" 2>&1
 
-# ===========================================================================
-# latest -> this boot
-# ===========================================================================
-
 ln -sfn "${OUT_DIR}" "${LOG_DIR}/latest"
-
-# ===========================================================================
-# Retention
-# ===========================================================================
 
 prune_old_boot_logs

@@ -25,7 +25,6 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import BIOS, CHEATS, CONFIGS, EMULATORS_ROOT, SAVES, SCREENSHOTS, USERDATA, USER_DECORATIONS, USER_SHADERS
 
-
 def launch_libretro(ctx: LaunchContext) -> int:
     if not ctx.core:
         _log.error("No core configured for system '%s'", ctx.system)
@@ -66,11 +65,7 @@ def launch_libretro(ctx: LaunchContext) -> int:
             ra_game_cfg.unlink(missing_ok=True)
     return result.returncode
 
-
-# Emulators that accept a CLI fullscreen flag before the ROM argument.
-# Quake-engine ports use Quake console syntax (+set), others use standard flags.
 _FULLSCREEN_FLAGS: dict[str, list[str]] = {
-    # Quake-engine ports
     'vkquake':        ['-fullscreen'],
     'vkquake2':       ['-fullscreen'],
     'vkquake3':       ['-fullscreen'],
@@ -81,7 +76,6 @@ _FULLSCREEN_FLAGS: dict[str, list[str]] = {
     'openmohaa':      ['+set', 'r_fullscreen', '1'],
     'dhewm3':         ['+set', 'r_fullscreen', '1'],
     'etlegacy':       ['+set', 'r_fullscreen', '1'],
-    # Other ports still on _launch_standalone
     'devilutionx':    ['--fullscreen'],
     'raze':           ['-fullscreen'],
     'ecwolf':         ['--fullscreen'],
@@ -96,9 +90,7 @@ _FULLSCREEN_FLAGS: dict[str, list[str]] = {
     'mugen':          ['-f'],
 }
 
-
 def launch_standalone(ctx: LaunchContext) -> int:
-    """Generic launcher for standalone emulators under /opt/emulators or user path."""
     bin_path = _find_emulator_bin(ctx.emulator)
     if bin_path is None:
         _log.error(
@@ -118,20 +110,17 @@ def launch_standalone(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, ctx.emulator, cmd, env)
     return result.returncode
 
-
 RA_CONFIG_DIR = CONFIGS / 'retroarch'
 RA_CUSTOM_CFG = RA_CONFIG_DIR / 'retroarchcustom.cfg'
 RA_CORES_CFG  = RA_CONFIG_DIR / 'cores' / 'retroarch-core-options.cfg'
 
 RETROARCH_BIN = Path('/usr/bin/retroarch')
 
-
 LIBRETRO_RATIO_INDEXES: tuple[str, ...] = (
     '4/3', '16/9', '16/10', '16/15', '21/9', '1/1', '2/1', '3/2', '3/4',
     '4/1', '9/16', '5/4', '6/5', '7/9', '8/3', '8/7', '19/12', '19/14',
     '30/17', '32/9', 'config', 'squarepixel', 'core', 'custom', 'full',
 )
-
 
 CORE_SEARCH_PATHS = [
     EMULATORS_ROOT / 'retroarch' / 'cores',
@@ -152,13 +141,11 @@ LIBRETRO_CORE_ALIASES: dict[str, tuple[str, ...]] = {
     'vba-m': ('vbam',),
 }
 
-
 def _ratio_index(conf: dict[str, str]) -> int:
     ratio = _conf_value(conf, 'global.ratio', 'core')
     if ratio in LIBRETRO_RATIO_INDEXES:
         return LIBRETRO_RATIO_INDEXES.index(ratio)
     return LIBRETRO_RATIO_INDEXES.index('core')
-
 
 def _core_search_paths() -> list[Path]:
     paths = list(CORE_SEARCH_PATHS[:1])
@@ -169,7 +156,6 @@ def _core_search_paths() -> list[Path]:
     )
     paths.extend(CORE_SEARCH_PATHS[1:])
     return paths
-
 
 def find_core(core_name: str) -> Optional[Path]:
     for candidate_core in (core_name, *LIBRETRO_CORE_ALIASES.get(core_name, ())):
@@ -182,21 +168,19 @@ def find_core(core_name: str) -> Optional[Path]:
                 return candidate
     return None
 
-
 _CORE_P1_DEVICE: dict[str, str] = {
     'atari800': '513', 'cap32': '513', '81': '259', 'fuse': '769',
     'mupen64plus_next': '1', 'parallel_n64': '1',
-    'beetle_pce': '769', 'beetle_pce_fast': '769',  # PCE 6-button
-    'genesisplusgx': '513', 'picodrive': '513',      # MD 6-button
+    'beetle_pce': '769', 'beetle_pce_fast': '769',
+    'genesisplusgx': '513', 'picodrive': '513',
     'genesis_plus_gx': '513',
-    'prosystem': '1',   # 7800 pad
+    'prosystem': '1',
 }
 _CORE_P2_DEVICE: dict[str, str] = {
     'atari800': '513', 'fuse': '513',
     'genesisplusgx': '513', 'picodrive': '513',
     'genesis_plus_gx': '513',
 }
-
 
 _SYSTEM_P1_DEVICE: dict[str, str] = {
     'msx': '1', 'msx1': '1', 'msx2': '1', 'msx2+': '1', 'msxturbor': '1',
@@ -207,24 +191,20 @@ _SYSTEM_P2_DEVICE: dict[str, str] = {
     'colecovision': '1',
 }
 
-
 _COMPLEX_DEVICE_SYSTEMS: frozenset[str] = frozenset({
     'snes', 'nes', 'psx', 'megadrive', 'mastersystem', 'saturn', 'pce',
     'pcenginecd', 'supergrafx', 'wii', 'gamecube',
 })
-
 
 def _set_libretro_device_types(
     cfg: _KVConfig,
     ctx: LaunchContext,
     conf: dict[str, str],
 ) -> None:
-    """Write input_libretro_device_pN keys to retroarch cfg."""
     core    = ctx.core
     system  = ctx.system
     nplayers = max((c.player for c in ctx.controllers), default=2)
 
-    # Default: RETRO_DEVICE_JOYPAD = 1 for all ports
     for i in range(1, nplayers + 1):
         cfg.set(f'input_libretro_device_p{i}', '"1"')
 
@@ -232,7 +212,6 @@ def _set_libretro_device_types(
         _set_complex_device_types(cfg, ctx, conf, nplayers)
         return
 
-    # Core-level override
     if core in _CORE_P1_DEVICE:
         cfg.set('input_libretro_device_p1', f'"{_CORE_P1_DEVICE[core]}"')
     elif system in _SYSTEM_P1_DEVICE:
@@ -242,7 +221,6 @@ def _set_libretro_device_types(
         cfg.set('input_libretro_device_p2', f'"{_CORE_P2_DEVICE[core]}"')
     elif system in _SYSTEM_P2_DEVICE:
         cfg.set('input_libretro_device_p2', f'"{_SYSTEM_P2_DEVICE[system]}"')
-
 
 def _set_complex_device_types(
     cfg: _KVConfig,
@@ -265,7 +243,6 @@ def _set_complex_device_types(
         cfg.set('input_libretro_device_p2', f'"{conf.get("controller2_nes", "1")}"')
 
     elif system == 'psx':
-        # DualShock = 517, DigitalController = 1, AnalogJoystick = 513
         for ctrl in ctx.controllers:
             val = conf.get(f'controller{ctrl.player}_psx', '517')
             cfg.set(f'input_libretro_device_p{ctrl.player}', f'"{val}"')
@@ -288,9 +265,7 @@ def _set_complex_device_types(
     elif system in ('wii', 'gamecube'):
         cfg.set('input_libretro_device_p1', f'"{conf.get("controller1_wii", "1")}"')
 
-
 _NETPLAY_MODES: frozenset[str] = frozenset({'host', 'client', 'spectator'})
-
 
 def _write_retroarch_netplay(cfg: _KVConfig, ctx: LaunchContext) -> None:
     if ctx.netplay_mode not in _NETPLAY_MODES:
@@ -305,9 +280,7 @@ def _write_retroarch_netplay(cfg: _KVConfig, ctx: LaunchContext) -> None:
         cfg.set('netplay_ip_address', f'"{ctx.netplay_ip}"')
     _log.info("netplay: mode=%s ip=%s port=%s", ctx.netplay_mode, ctx.netplay_ip, ctx.netplay_port)
 
-
 _REMAPS_DIR = RA_CONFIG_DIR / 'remaps'
-
 
 def _write_retroarch_remapping(cfg: _KVConfig, ctx: LaunchContext) -> None:
     remap_dir = _REMAPS_DIR / ctx.system
@@ -318,21 +291,17 @@ def _write_retroarch_remapping(cfg: _KVConfig, ctx: LaunchContext) -> None:
     cfg.set('input_remapping_path',      f'"{remap_file}"')
     _log.info("remapping: using %s", remap_file)
 
-
 _SYSTEMS_NO_REWIND: frozenset[str] = frozenset({
     'sega32x', 'psx', 'zxspectrum', 'n64', 'n64dd',
     'dreamcast', 'atomiswave', 'naomi', 'naomi2', 'saturn',
 })
-
 
 _SYSTEMS_NO_RUNAHEAD: frozenset[str] = frozenset({
     'sega32x', 'n64', 'n64dd', 'dreamcast', 'atomiswave',
     'naomi', 'naomi2', 'saturn',
 })
 
-
 _CORES_FORCE_SLANG: frozenset[str] = frozenset({'mupen64plus_next'})
-
 
 _RA_DPAD_MAP: list[tuple[str, str]] = [
     ('up',    'up'),
@@ -341,14 +310,12 @@ _RA_DPAD_MAP: list[tuple[str, str]] = [
     ('right', 'right'),
 ]
 
-
 _RA_AXIS_MAP: list[tuple[str, str]] = [
     ('joystick1left', 'l_x'),
     ('joystick1up',   'l_y'),
     ('joystick2left', 'r_x'),
     ('joystick2up',   'r_y'),
 ]
-
 
 _RA_GUN_BTN_MAP: dict[str, str] = {
     'a':        'aux_a',
@@ -360,14 +327,12 @@ _RA_GUN_BTN_MAP: dict[str, str] = {
     'select':   'select',
 }
 
-
 def _write_retroarch_controller_bindings(
     cfg: '_KVConfig',
     controllers: list['ControllerInfo'],
     profiles: list['ESControllerProfile'],
     ctx: Optional['LaunchContext'] = None,
 ) -> None:
-    """Write per-player button/axis/hat bindings derived from ES input profiles."""
     system   = ctx.system if ctx else ''
     core     = ctx.core   if ctx else ''
     lightgun = ctx.lightgun if ctx else False
@@ -384,7 +349,6 @@ def _write_retroarch_controller_bindings(
 
         btn_map = _ra_btn_map_for_ctx(profile, system, core, altlayout)
 
-        # Buttons and triggers
         for es_name, ra_name in btn_map.items():
             binding = profile.inputs.get(es_name)
             if binding is None:
@@ -392,7 +356,6 @@ def _write_retroarch_controller_bindings(
             suffix = _ra_type_suffix(binding)
             cfg.set(f'input_player{n}_{ra_name}_{suffix}', f'"{_ra_binding_value(binding)}"')
 
-        # D-pad — also write gun_dpad_* variants for lightgun systems
         for es_name, ra_name in _RA_DPAD_MAP:
             binding = profile.inputs.get(es_name)
             if binding is None:
@@ -403,7 +366,6 @@ def _write_retroarch_controller_bindings(
             if lightgun:
                 cfg.set(f'input_player{n}_gun_dpad_{ra_name}_{suffix}', val)
 
-        # Lightgun gun button mapping
         if lightgun:
             for es_name, gun_name in _RA_GUN_BTN_MAP.items():
                 binding = profile.inputs.get(es_name)
@@ -412,7 +374,6 @@ def _write_retroarch_controller_bindings(
                 suffix = _ra_type_suffix(binding)
                 cfg.set(f'input_player{n}_gun_{gun_name}_{suffix}', f'"{_ra_binding_value(binding)}"')
 
-        # Analog sticks: write both ± directions from the single ES directional binding
         for es_name, ra_base in _RA_AXIS_MAP:
             binding = profile.inputs.get(es_name)
             if binding is None:
@@ -424,12 +385,9 @@ def _write_retroarch_controller_bindings(
             cfg.set(f'input_player{n}_{ra_base}_minus_axis', f'"{primary_sign}{binding.code}"')
             cfg.set(f'input_player{n}_{ra_base}_plus_axis',  f'"{opposite_sign}{binding.code}"')
 
-        # analog_dpad_mode: '1' when dpad is buttons/hats so it also drives the analog stick
         cfg.set(f'input_player{n}_analog_dpad_mode', f'"{_ra_analog_dpad_mode(profile, system)}"')
 
-
 class _KVConfig:
-    """Simple key = value config file (retroarch format)."""
 
     def __init__(self, path: Path, separator: str = ' ') -> None:
         self.path = path
@@ -442,7 +400,7 @@ class _KVConfig:
             return
         try:
             parser = configparser.RawConfigParser()
-            parser.optionxform = str  # preserve case
+            parser.optionxform = str
             parser.read_string('[DEFAULT]\n' + self.path.read_text(encoding='latin1'))
             self._data = dict(parser.items('DEFAULT'))
         except Exception as exc:
@@ -461,12 +419,10 @@ class _KVConfig:
             for key, value in self._data.items():
                 fh.write(f'{key}{self.sep}={self.sep}{value}\n')
 
-
 def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[LaunchContext] = None) -> Path:
     conf = _load_hippos_conf()
     cfg = _KVConfig(RA_CUSTOM_CFG, separator=' ')
 
-    # Paths
     cfg.set('savefile_directory',       f'"{SAVES}"')
     cfg.set('savestate_directory',      f'"{SAVES}"')
     cfg.set('screenshot_directory',     f'"{SCREENSHOTS}"')
@@ -477,7 +433,6 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
     cfg.set('cheat_database_path',      f'"{CHEATS}"')
     cfg.set('overlay_directory',        f'"{USER_DECORATIONS}"')
 
-    # Video
     cfg.set('video_fullscreen',         '"true"')
     cfg.set('video_threaded',           '"true"' if _conf_bool(conf, 'global.video_threaded') else '"false"')
     cfg.set('video_gpu_screenshot',     '"true"')
@@ -524,8 +479,6 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
     else:
         cfg.set('video_shader_enable', '"false"')
 
-    # CRT mode — when switchres.ini is present, enable the switchres resolution
-    # switching backend (mode 4) and tune the menu for low-resolution display.
     if Path('/etc/switchres.ini').exists():
         cfg.set('crt_switch_resolution',          '"4"')
         cfg.set('crt_switch_resolution_super',    '"0"')
@@ -534,32 +487,19 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
         cfg.set('notification_show_refresh_rate', '"false"')
         cfg.set('video_font_size',                '"10"')
 
-    # Input
-    # Autodetect disabled: we write complete explicit per-player bindings from ES
-    # profiles. Enabling autodetect causes RetroArch to load its own autoconfig
-    # profiles after the config is applied, which overrides our bindings.
     cfg.set('input_autodetect_enable',  '"false"')
-    # udev driver reads /dev/input/event* directly — more reliable than sdl2
-    # on Debian where SDL2 HIDAPI conflicts with xpad claiming the USB device.
-    # Button indices match ES's only because session-es turns off SDL's HIDAPI
-    # drivers, so both enumerate evdev BTN_* codes in order.
     cfg.set('input_joypad_driver',      '"udev"')
     cfg.set('input_enable_hotkey',      '"shift"')
     cfg.set('input_exit_emulator',      '"escape"')
-    # RetroArch otherwise only shows "Press again to quit" on the exit hotkey.
     cfg.set('quit_press_twice',         '"false"')
-    # HippOS sets the CPU power mode itself, and polkit denies gamemode's helper.
     cfg.set('gamemode_enable',          '"false"')
     cfg.set('input_menu_toggle',        '"f1"')
     cfg.set('input_pause_toggle',       '"p"')
     cfg.set('input_save_state',         '"f3"')
     cfg.set('input_load_state',         '"f4"')
     cfg.set('input_screenshot',         '"nul"')
-    # Load ES input profiles once — used for hotkey detection and button bindings
     _profiles = _load_es_input_configs()
 
-    # Write the hotkey modifier button index so RetroArch uses the controller button
-    # the user configured in ES rather than requiring Shift on keyboard.
     p1 = next((c for c in controllers if c.player == 1), None)
     if p1:
         _profile = _pick_es_profile(_profiles, p1)
@@ -568,23 +508,18 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
             if _hk and _hk.type == 'button':
                 cfg.set('input_enable_hotkey_btn', f'"{_hk.code}"')
 
-    # Clear stale controller keys from any previous launch before rewriting
     cfg.clear_prefix('input_player')
 
-    # Controller port assignments from ES detection
     for ctrl in controllers:
         cfg.set(f'input_player{ctrl.player}_joypad_index', f'"{ctrl.index}"')
 
-    # Per-player button/axis/hat bindings from ES profiles (with system/core-specific remaps)
     _write_retroarch_controller_bindings(cfg, controllers, _profiles, ctx)
 
-    # Libretro device types per core/system
     if ctx is not None:
         _set_libretro_device_types(cfg, ctx, conf)
         _write_retroarch_netplay(cfg, ctx)
         _write_retroarch_remapping(cfg, ctx)
 
-    # Menu / UI
     cfg.set('notification_show_remap_load', '"false"')
     cfg.set('rgui_show_start_screen',   '"false"')
     cfg.set('content_show_favorites',   '"false"')
@@ -597,7 +532,6 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
     cfg.set('menu_show_online_updater', '"false"')
     cfg.set('menu_show_core_updater',   '"false"')
 
-    # Save behaviour
     cfg.set('config_save_on_exit',      '"false"')
     cfg.set('log_to_file',              '"true"')
     cfg.set('log_dir',                  f'"{USERDATA / "system" / "logs"}"')
@@ -605,7 +539,6 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
     cfg.set('savestate_auto_save',      '"true"' if _conf_bool(conf, 'global.autosave') else '"false"')
     cfg.set('savestate_auto_load',      '"true"' if _conf_bool(conf, 'global.autosave') else '"false"')
 
-    # RetroAchievements
     cheevos = _conf_bool(conf, 'global.retroachievements')
     cfg.set('cheevos_enable', '"true"' if cheevos else '"false"')
     if cheevos:
@@ -637,9 +570,7 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
     _log.info("Wrote retroarch config: %s", RA_CUSTOM_CFG)
     return RA_CUSTOM_CFG
 
-
 def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> None:
-    """Write per-core settings to retroarch-core-options.cfg."""
     RA_CORES_CFG.parent.mkdir(parents=True, exist_ok=True)
     opts: dict[str, str] = {}
 
@@ -728,7 +659,6 @@ def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> N
     if not opts:
         return
 
-    # Read existing options and merge (preserve user overrides)
     existing: dict[str, str] = {}
     if RA_CORES_CFG.exists():
         try:
@@ -740,7 +670,6 @@ def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> N
         except OSError:
             pass
 
-    # Only write defaults — don't overwrite user-set values
     for k, v in opts.items():
         if k not in existing:
             existing[k] = v
@@ -748,7 +677,6 @@ def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> N
     lines = [f'{k} = "{v}"' for k, v in sorted(existing.items())]
     RA_CORES_CFG.write_text('\n'.join(lines) + '\n')
     _log.info("core options: wrote %d entries for core '%s'", len(opts), core)
-
 
 def _write_retroarch_game_overrides(ctx: LaunchContext) -> Optional[Path]:
     if not ctx.lightgun and not ctx.wheel:

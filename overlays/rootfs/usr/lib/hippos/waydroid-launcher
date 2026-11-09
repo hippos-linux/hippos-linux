@@ -26,12 +26,10 @@ trap cleanup EXIT
 mkdir -p "${CACHE_DIR}"
 touch "${PKG_CACHE}"
 
-# Ensure bind mount is active
 if ! systemctl is-active --quiet var-lib-waydroid.mount; then
     systemctl start var-lib-waydroid.mount || die "Could not mount /var/lib/waydroid"
 fi
 
-# Ensure waydroid is initialised
 if [[ ! -f /var/lib/waydroid/waydroid.cfg ]]; then
     svc_active="$(systemctl is-active hippos-waydroid-init.service 2>/dev/null || true)"
     svc_result="$(systemctl show -P Result hippos-waydroid-init.service 2>/dev/null || true)"
@@ -64,10 +62,6 @@ try_weston() {
     for i in $(seq 1 "$((WESTON_TIMEOUT * 2))"); do
         [[ -S "${runtime_dir}/${WAYLAND_SOCKET}" ]] && {
             export WAYLAND_DISPLAY="${WAYLAND_SOCKET}"
-            # --new-context takes the bindings alone, not the whole context file.
-            # Its exit ends Weston, which this script waits on: ES runs this
-            # directly rather than through emulatorlauncher, which is what
-            # hippos-close-game looks for.
             "${HOTKEYS_BIN}" --new-context waydroid "$(python3 -c 'import json, sys; print(json.dumps(json.load(open(sys.argv[1]))["keys"]))' /usr/share/hippos/hotkeys/contexts/waydroid.json)" 2>/dev/null || true
             return 0
         }
@@ -79,10 +73,6 @@ try_weston() {
     return 1
 }
 
-# Weston must be running before session start (session needs a Wayland socket).
-# Try hardware-accelerated GL first; some AMD iGPU setups reject the render
-# context (amdgpu_cs_ctx_create2 -13) — fall back to software rendering
-# (--use-pixman) rather than failing the launch outright.
 start_weston() {
     log "Starting Weston (X11 nested, hardware GL)..."
     try_weston "" && { log "Weston ready"; return 0; }
@@ -93,10 +83,6 @@ start_weston() {
 
 start_weston
 
-# Start session if not running
-# Runs as the user: Waydroid refuses a session without XDG_RUNTIME_DIR, which
-# sudo clears. The root waydroid-container service sets up the container and
-# its network (waydroid-net.sh) when the session asks it to over D-Bus.
 if ! waydroid status 2>/dev/null | grep -q "Session.*RUNNING"; then
     log "Starting Waydroid session..."
     nohup waydroid session start &>/dev/null &
@@ -108,7 +94,6 @@ if ! waydroid status 2>/dev/null | grep -q "Session.*RUNNING"; then
     log "Session ready"
 fi
 
-# .waydroid launcher file — read command from file contents
 if [[ "${ROM}" == *.waydroid ]]; then
     CMD="$(tr -d '[:space:]' < "${ROM}")"
     case "${CMD}" in
@@ -124,7 +109,6 @@ if [[ "${ROM}" == *.waydroid ]]; then
     exit 0
 fi
 
-# APK path — resolve package name from cache or aapt
 ROM_KEY="$(realpath "${ROM}")"
 PKG_NAME="$(awk -F'\t' -v k="${ROM_KEY}" '$1==k {print $2}' "${PKG_CACHE}")"
 
@@ -139,7 +123,6 @@ if [[ -z "${PKG_NAME}" ]]; then
     log "Package: ${PKG_NAME}"
 fi
 
-# Install if not already present
 if ! waydroid app list 2>/dev/null | grep -q "^${PKG_NAME}$"; then
     log "Installing ${PKG_NAME}..."
     waydroid app install "${ROM}" || die "Install failed"

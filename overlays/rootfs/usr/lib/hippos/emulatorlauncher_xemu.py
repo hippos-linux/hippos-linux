@@ -19,13 +19,11 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import CONFIGS, SAVES
 
-
 def _xemu_find_data_dir() -> Optional[Path]:
     for data_dir in XEMU_DATA_DIRS:
         if (data_dir / 'xbox_hdd.qcow2').exists():
             return data_dir
     return None
-
 
 def _xemu_vulkan_device_name() -> Optional[str]:
     from shutil import which
@@ -45,7 +43,6 @@ def _xemu_vulkan_device_name() -> Optional[str]:
     if match:
         return match.group(1).strip().strip('"')
     return None
-
 
 def write_xemu_config(ctx: LaunchContext) -> None:
     conf = _load_hippos_conf()
@@ -123,7 +120,6 @@ def write_xemu_config(ctx: LaunchContext) -> None:
     with XEMU_CONFIG_FILE.open('w', encoding='utf-8') as fh:
         parser.write(fh)
 
-
 def launch_xemu(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('xemu')
     if bin_path is None:
@@ -137,7 +133,6 @@ def launch_xemu(ctx: LaunchContext) -> int:
     env['LC_NUMERIC'] = 'C'
     result = _run_game_command(ctx, 'xemu', cmd, env)
     return result.returncode
-
 
 XEMU_CONFIG_DIR = CONFIGS / 'xemu'
 XEMU_CONFIG_FILE = XEMU_CONFIG_DIR / 'xemu.toml'

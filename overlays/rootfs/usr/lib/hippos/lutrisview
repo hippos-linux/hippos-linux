@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-# LutrisView — controller-friendly Lutris frontend. Apache2/MIT.
 import os
 import sys
 import ctypes
@@ -14,28 +13,20 @@ from typing import Optional, List, Dict
 
 from hippos_theme import Theme, mix
 
-# Lutris's own folders; it follows the XDG base directories.
 LUTRIS_DATA  = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "lutris")
 LUTRIS_CACHE = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "lutris")
 PGA_DB       = os.path.join(LUTRIS_DATA, "pga.db")
 
-# ── Look ──────────────────────────────────────────────────────────────────────
-# LUTRISVIEW_THEME names an EmulationStation theme folder; its colours, fonts
-# and Lutris world art replace the Lutris look, so the view matches the
-# frontend it opens from.
 _THEME = Theme(os.environ.get("LUTRISVIEW_THEME", ""))
 
-
 def text_on(color: tuple) -> tuple:
-    """Dark text on light fills, light text on dark ones."""
     r, g, b = color
     return BG if 0.299 * r + 0.587 * g + 0.114 * b > 140 else TEXT
-
 
 BG           = _THEME.color("ink",         ( 28,  28,  28))
 TEXT         = _THEME.color("textPrimary", (240, 240, 240))
 TEXT_DIM     = _THEME.color("textMuted",   (130, 130, 130))
-ACCENT       = _THEME.color("brandPurple", (255, 140,   0))   # Lutris orange
+ACCENT       = _THEME.color("brandPurple", (255, 140,   0))
 STORE_ACCENT = _THEME.color("brandBlue",   ( 74, 158, 255))
 BG_CARD      = mix(BG, TEXT, 0.09)
 BG_STRIP     = mix(BG, TEXT, 0.05)
@@ -45,25 +36,16 @@ FONT_STRONG  = _THEME.font("fontStrong")
 FONT_REGULAR = _THEME.font("fontRegular")
 BACKGROUND   = _THEME.art("worlds", "lutris.jpg")
 
-# Opacity of the bars and panels laid over the background art.
 PANEL_ALPHA = 215
-# Multiplier that keeps the background art behind the rows and text.
 BACKGROUND_DARKEN = (110, 110, 110)
 
-
-# SDL joystick index of Y on evdev pads (BTN_Y is the fourth face button code).
-# Guide stays free: it is the system hotkey.
 BTN_Y = 3
 
-# Right stick axes on evdev pads (ABS_RX, ABS_RY follow ABS_X, ABS_Y, ABS_Z).
 AXIS_RX, AXIS_RY = 3, 4
 STICK_DEADZONE   = 0.2
-POINTER_MAX_STEP = 18    # pixels per frame at full tilt
-
+POINTER_MAX_STEP = 18
 
 class XPointer:
-    """Drives the X pointer with XTest, so the pad can work Lutris's
-    installer, which only takes a mouse."""
 
     def __init__(self):
         self._x11  = ctypes.CDLL("libX11.so.6")
@@ -95,14 +77,8 @@ class XPointer:
     def close(self):
         self._x11.XCloseDisplay(self._dpy)
 
-
-# X pointer buttons
 MOUSE_LEFT, WHEEL_UP, WHEEL_DOWN = 1, 4, 5
 
-
-# Lutris's art folders, box art first: a wide banner only fills a tile
-# letterboxed. Lutris names its own art by game slug and a store's art by the
-# store's slug or app ID.
 ART_DIRS = [os.path.join(root, d) for root, dirs in (
     (LUTRIS_DATA,  ["coverart"]),
     (LUTRIS_CACHE, ["coverart", "steam/covers", "egs/game_box_tall",
@@ -114,13 +90,9 @@ ART_DIRS = [os.path.join(root, d) for root, dirs in (
 ) for d in dirs]
 ART_EXTS = (".jpg", ".png")
 
-# Art within this fraction of a tile's aspect ratio is cropped to fill it.
 CROP_TOLERANCE = 0.2
-# Downscale factor that blurs letterbox and backdrop fills.
 BLUR_FACTOR = 24
-# Multiplier that darkens blurred fills so the art and text on them stand out.
 BLUR_DARKEN = (90, 90, 90)
-
 
 def scale_to_fill(image: pygame.Surface, w: int, h: int) -> pygame.Surface:
     iw, ih = image.get_size()
@@ -129,14 +101,12 @@ def scale_to_fill(image: pygame.Surface, w: int, h: int) -> pygame.Surface:
     scaled = pygame.transform.smoothscale(image, (sw, sh))
     return scaled.subsurface(((sw - w) // 2, (sh - h) // 2, w, h)).copy()
 
-
 def blurred_fill(image: pygame.Surface, w: int, h: int) -> pygame.Surface:
     small = pygame.transform.smoothscale(
         scale_to_fill(image, w, h), (max(1, w // BLUR_FACTOR), max(1, h // BLUR_FACTOR)))
     surf = pygame.transform.smoothscale(small, (w, h))
     surf.fill(BLUR_DARKEN, special_flags=pygame.BLEND_MULT)
     return surf
-
 
 def fit_art(image: pygame.Surface, w: int, h: int) -> pygame.Surface:
     iw, ih = image.get_size()
@@ -148,20 +118,16 @@ def fit_art(image: pygame.Surface, w: int, h: int) -> pygame.Surface:
     tile.blit(pygame.transform.smoothscale(image, (fw, fh)), ((w - fw) // 2, (h - fh) // 2))
     return tile
 
-
 class SortMode(Enum):
     LASTPLAYED = "Recently Played"
     PLAYTIME   = "Most Played"
     NAME       = "By Name"
 
-
 class ViewMode(Enum):
     LIBRARY = "Library"
     STORE   = "Store"
 
-
 STORE_NAMES: Dict[str, str] = {
-    # Lutris service keys
     "steam":            "Steam",
     "steamwindows":     "Steam (Windows)",
     "gog":              "GOG",
@@ -173,17 +139,14 @@ STORE_NAMES: Dict[str, str] = {
     "humblebundle":     "Humble Bundle",
     "flathub":          "Flathub",
     "battlenet":        "Battle.net",
-    # Runner key fallbacks (for installed games without a service)
     "steam_legacy":     "Steam",
     "epic-games-store": "Epic Games",
     "humble-bundle":    "Humble Bundle",
     "uplay":            "Ubisoft Connect",
     "origin":           "EA App",
-    # Catch-all
     "other":            "Other",
 }
 
-# Runners whose names don't title-case cleanly.
 RUNNER_NAMES: Dict[str, str] = {
     "dosbox":    "DOSBox",
     "mame":      "MAME",
@@ -198,16 +161,12 @@ RUNNER_NAMES: Dict[str, str] = {
     "easyrpg":   "EasyRPG",
 }
 
-
 def runner_label(runner: str) -> str:
     return RUNNER_NAMES.get(runner, runner.title())
-
 
 def store_label(key: str) -> str:
     return STORE_NAMES.get(key, key.title() if key else "Other")
 
-
-# Name fragments (lowercase) → service key, for launcher entries without a service field
 _NAME_HINTS: List[tuple] = [
     ("epic games",   "egs"),
     ("battle.net",   "battlenet"),
@@ -222,9 +181,6 @@ _NAME_HINTS: List[tuple] = [
     ("itch.io",      "itchio"),
 ]
 
-
-# ── Data ─────────────────────────────────────────────────────────────────────
-
 class LutrisGame:
     def __init__(self, data: dict):
         self.id         = data["id"]
@@ -232,7 +188,6 @@ class LutrisGame:
         self.install_slug = data.get("install_slug") or ""
         self.name       = data["name"]
         self.playtime   = data.get("playtime") or 0.0
-        # Lutris's playtime text reads "1 day, 16:12:00" past a day.
         self.playtime_secs: Optional[float] = data.get("playtimeSeconds")
         self.lastplayed = data.get("lastplayed") or ""
         self.runner     = data.get("runner") or ""
@@ -241,13 +196,11 @@ class LutrisGame:
         self.service    = data.get("service") or ""
         self.appid      = str(data.get("appid") or "")
         self.installed  = bool(data.get("installed", True))
-        # CLI provides coverPath directly; avoid re-scanning for installed games
         cover = data.get("coverPath") or None
         self._cover: Optional[str] = cover if (cover and os.path.exists(cover)) else None
 
     @property
     def cover_key(self) -> str:
-        """Unique key for the covers cache — namespaced to avoid games/service_games ID collision."""
         if self.installed:
             return f"g{self.id}"
         return f"s{self.service}:{self.appid or self.id}"
@@ -284,14 +237,12 @@ class LutrisGame:
             return 0.0
 
         if isinstance(self.playtime, (int, float)):
-            # Older Lutris JSON can expose playtime as hours.
             return float(self.playtime) * 3600.0
 
         value = str(self.playtime).strip()
         if not value:
             return 0.0
 
-        # Newer Lutris can expose playtime as H:MM:SS.microseconds.
         try:
             parts = value.split(":")
             if len(parts) == 3:
@@ -326,9 +277,7 @@ class LutrisGame:
     def install_uri(self) -> str:
         return f"lutris:{self.install_slug}" if self.install_slug else ""
 
-
 def _infer_service(name: str, runner: str) -> str:
-    """Guess store service from game name and runner when the DB has no service set."""
     if runner == "steam":
         return "steam"
     low = name.lower()
@@ -337,21 +286,16 @@ def _infer_service(name: str, runner: str) -> str:
             return service
     return ""
 
-
 def _enrich_service(games: List[LutrisGame]) -> None:
-    """Backfill service field for installed games (not exposed by CLI).
-    Strategy: DB service field → slug match in service_games → name heuristic."""
     import sqlite3 as _sqlite3
     db = PGA_DB
     if not os.path.exists(db):
         return
     try:
         conn = _sqlite3.connect(db)
-        # 1. service from games table, keyed by game ID
-        by_id = {row[0]: (row[1] or "", row[2] or "")   # id → (service, slug)
+        by_id = {row[0]: (row[1] or "", row[2] or "")
                  for row in conn.execute(
                      "SELECT id, service, slug FROM games WHERE installed = 1")}
-        # 2. service_games slug → service (covers community-script-installed games)
         slug_to_service: Dict[str, str] = {}
         for row in conn.execute(
                 "SELECT slug, lutris_slug, service FROM service_games "
@@ -368,20 +312,16 @@ def _enrich_service(games: List[LutrisGame]) -> None:
             if service:
                 g.service = service
                 continue
-            # Try slug cross-reference
             if slug and slug in slug_to_service:
                 g.service = slug_to_service[slug]
                 continue
-            # Name/runner heuristic
             inferred = _infer_service(g.name, g.runner)
             if inferred:
                 g.service = inferred
     except Exception as e:
         logging.error("_enrich_service failed: %s", e)
 
-
 def fetch_games() -> List[LutrisGame]:
-    """Fetch installed games via Lutris CLI, enriched with service info from DB."""
     try:
         r = subprocess.run(
             ["lutris", "--list-games", "--installed", "-j"],
@@ -401,12 +341,9 @@ def fetch_games() -> List[LutrisGame]:
         logging.error("fetch_games failed: %s", e)
     return []
 
-
 _EXCLUDED_SERVICES = {"xdg"}
 
-
 def fetch_store_games() -> Dict[str, List[LutrisGame]]:
-    """Query service_games for all store-available games, excluding already-installed ones."""
     import sqlite3 as _sqlite3
     db = PGA_DB
     if not os.path.exists(db):
@@ -430,9 +367,6 @@ def fetch_store_games() -> Dict[str, List[LutrisGame]]:
             if service in _EXCLUDED_SERVICES:
                 continue
 
-            # Controller-only install mode needs a concrete Lutris installer slug.
-            # Rows without lutris_slug are only "known store library" entries and would
-            # force the user into Lutris' mouse/keyboard installer picker.
             installer_slug = row["lutris_slug"] or ""
             if not installer_slug:
                 continue
@@ -456,54 +390,42 @@ def fetch_store_games() -> Dict[str, List[LutrisGame]]:
         logging.error("fetch_store_games failed: %s", e)
         return {}
 
-
-# ── View ──────────────────────────────────────────────────────────────────────
-
 class LutrisView:
 
     def __init__(self):
         self.games_all: List[LutrisGame] = []
-        self.games:     List[LutrisGame] = []   # games in active section
+        self.games:     List[LutrisGame] = []
         self.covers:    Dict[tuple, Optional[pygame.Surface]] = {}
         self.sort_mode  = SortMode.LASTPLAYED
-        self.selected   = 0    # game index within active section
+        self.selected   = 0
         self.loading    = True
         self.error      = ""
-        # Lutris process handling a store install, and the game's name
         self.installer: Optional[subprocess.Popen] = None
         self.installing_name = ""
         self.pointer: Optional[XPointer] = None
-        self._pointer_rest = [0.0, 0.0]   # sub-pixel motion carried between frames
+        self._pointer_rest = [0.0, 0.0]
 
-        # Library section state (installed games grouped by store)
         self.lib_sections:     Dict[str, List[LutrisGame]] = {}
         self.lib_section_keys: List[str]                   = []
         self.lib_section_idx   = 0
 
-        # Store view state (available / uninstalled games)
         self.view_mode:      ViewMode                    = ViewMode.LIBRARY
         self.available:      Dict[str, List[LutrisGame]] = {}
         self.store_sources:  List[str]                   = []
         self.store_idx       = 0
         self.store_sel       = 0
 
-        # Input repeat state
         self._held_dir    = 0
         self._repeat_at   = 0
-        self._held_y      = 0    # library up/down section
+        self._held_y      = 0
         self._repeat_y    = 0
-        self._store_held  = 0    # store left/right
+        self._store_held  = 0
         self._store_rep   = 0
-        self._store_held_y = 0   # store up/down section
+        self._store_held_y = 0
         self._store_rep_y  = 0
 
-    # ── Startup ──────────────────────────────────────────────────────────────
-
     def run(self):
-        # SDL minimises a fullscreen window that loses focus; the Lutris
-        # installer opens on top, and we must still be there when it closes.
         os.environ.setdefault("SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS", "0")
-        # The pad drives the pointer while the installer has focus.
         os.environ.setdefault("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1")
         pygame.init()
         self._open_display()
@@ -529,11 +451,9 @@ class LutrisView:
         self.W, self.H = self.screen.get_size()
 
     def _init_layout(self):
-        """Compute layout constants relative to screen size."""
         self.TAB_H  = max(44, int(self.H * 0.065))
         self.HINT_H = max(36, int(self.H * 0.05))
 
-        # ── Hero panel + section rows ─────────────────────────────────────────
         self.HERO_H          = int(self.H * 0.26)
         self.HERO_Y          = self.TAB_H + 10
         self.SECTION_Y       = self.TAB_H + self.HERO_H
@@ -543,7 +463,6 @@ class LutrisView:
         self.ROW_PAD         = 16
         self.THUMB_GAP       = max(10, int(self.W * 0.012))
 
-        # Hero cover dimensions (fit within HERO_H)
         hero_h = self.HERO_H - 20
         hero_w = int(hero_h * (264 / 352))
         self.HERO     = (hero_w, hero_h)
@@ -551,8 +470,6 @@ class LutrisView:
         self.DETAIL_X = self.HERO_X + hero_w + max(32, int(self.W * 0.04))
 
     def _thumb_size(self, n_sections: int) -> tuple:
-        """The open row takes the height the closed rows leave, keeping room
-        for three closed rows, capped so a lone row doesn't dwarf the hero."""
         closed = min(n_sections - 1, 3) * self.COMPACT_ROW_H
         budget = self.SECTION_AREA_H - closed - self.SECTION_LABEL_H - self.ROW_PAD
         h = max(80, min(int(self.H * 0.34), budget))
@@ -589,21 +506,16 @@ class LutrisView:
             self.joysticks[j.get_instance_id()] = j
         pygame.mouse.set_visible(not self.joysticks)
 
-    # ── Background load ───────────────────────────────────────────────────────
-
     def _bg_load(self, focus: Optional[int]):
-        # Background thread: fetch game list only — NO pygame calls (not thread-safe)
         installed = fetch_games()
         if not installed:
             self.error = "No games found — add games in Lutris first"
         self.games_all = installed
         self._apply_sort(focus)
 
-        # Query DB directly for uninstalled store games (CLI doesn't expose installed field)
         self.available = fetch_store_games()
         self.store_sources = sorted(self.available.keys())
 
-        # Pre-resolve cover paths in background (file I/O only, no pygame)
         for g in self.games:
             g.cover_path()
         self.loading = False
@@ -615,10 +527,6 @@ class LutrisView:
         return self.lib_sections.get(self.lib_section_keys[self.lib_section_idx], [])
 
     def _apply_sort(self, focus: Optional[int] = None):
-        """Group installed games by store, then order games and stores alike
-        by the sort mode: a store ranks by its first game, so the most recent
-        or most played game in the library opens selected. Selects the game
-        with ID `focus`, or the first game of the first store."""
         sections: Dict[str, List[LutrisGame]] = {}
         for g in self.games_all:
             sections.setdefault(g.service or "other", []).append(g)
@@ -645,8 +553,6 @@ class LutrisView:
         self.games = self._cur_section_games
 
     def _art(self, g: LutrisGame, size: tuple, backdrop: bool = False) -> Optional[pygame.Surface]:
-        """The game's art fitted to a tile of `size`, or as a blurred
-        backdrop filling it; a backdrop is None for a game without art."""
         key = (g.cover_key, size, backdrop)
         if key not in self.covers:
             self.covers[key] = self._render_art(g, size, backdrop)
@@ -667,7 +573,6 @@ class LutrisView:
     def _placeholder(self, g: LutrisGame, w: int, h: int) -> pygame.Surface:
         surf = pygame.Surface((w, h))
         surf.fill(BG_CARD)
-        # Subtle gradient-ish border
         pygame.draw.rect(surf, BG_STRIP, (0, 0, w, h), 1)
         name = (g.name or "").strip()
         letter = name[0].upper() if name else "?"
@@ -688,8 +593,6 @@ class LutrisView:
             return 0
         return max(0, min(self.store_sel, len(games) - 1))
 
-    # ── Main loop ─────────────────────────────────────────────────────────────
-
     def _loop(self):
         while True:
             now = pygame.time.get_ticks()
@@ -703,7 +606,6 @@ class LutrisView:
             if self.installer:
                 self._drive_pointer()
 
-            # Held-direction repeat scroll
             if self._held_dir and now >= self._repeat_at:
                 self._move(self._held_dir)
                 self._repeat_at = now + 110
@@ -724,8 +626,6 @@ class LutrisView:
     def _quit(self):
         pygame.quit()
         sys.exit(0)
-
-    # ── Input ─────────────────────────────────────────────────────────────────
 
     def _handle(self, event, now: int):
         if self.installer:
@@ -754,7 +654,7 @@ class LutrisView:
                     self._store_section_move(-1);self._store_held_y =-1; self._store_rep_y = now + 380
                 elif k in (pygame.K_RETURN, pygame.K_SPACE):
                     self._install()
-            else:  # library
+            else:
                 if k == pygame.K_RIGHT:
                     self._move(1);              self._held_dir = 1;  self._repeat_at = now + 380
                 elif k == pygame.K_LEFT:
@@ -890,9 +790,6 @@ class LutrisView:
             self._run_lutris(self.games[self._safe_selected()].launch_uri())
 
     def _run_lutris(self, uri: str):
-        """Run a game through Lutris, then come back with a fresh library.
-        The window closes so the game owns the screen; Lutris exits by
-        itself when a game it was asked to run stops."""
         pygame.display.quit()
         try:
             subprocess.run(["lutris", uri])
@@ -901,19 +798,15 @@ class LutrisView:
         pygame.display.init()
         self._open_display()
         pygame.mouse.set_visible(not self.joysticks)
-        # Presses made in the game must not act on LutrisView.
         pygame.event.clear()
         self._reload()
 
     def _reload(self):
         self._held_dir = self._held_y = self._store_held = self._store_held_y = 0
-        # Playtime, installs and covers may all have changed.
         self.covers.clear()
         self._start_load()
 
     def _finish_install(self):
-        """Lutris keeps running, hidden, after its installer window closes,
-        so the user tells us when they are done."""
         if self.installer.poll() is None:
             self.installer.terminate()
             try:
@@ -929,8 +822,6 @@ class LutrisView:
         self._reload()
 
     def _drive_pointer(self):
-        """Right stick moves the pointer, with a squared response so small
-        tilts give fine control."""
         if not self.pointer or pygame.key.get_focused():
             return
         for j in self.joysticks.values():
@@ -949,7 +840,6 @@ class LutrisView:
 
     def _handle_installing(self, event):
         if pygame.key.get_focused():
-            # The installer has closed and we are back on top.
             if (event.type == pygame.JOYBUTTONDOWN and event.button == 1) or \
                (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 self._finish_install()
@@ -989,7 +879,6 @@ class LutrisView:
         if not uri:
             return
         try:
-            # LutrisView stays open underneath: the installer window opens on top.
             self.installer = subprocess.Popen(["lutris", uri])
             self.installing_name = game.name
         except OSError as e:
@@ -999,8 +888,6 @@ class LutrisView:
             self.pointer = XPointer()
         except OSError as e:
             logging.error("no pad pointer, the installer needs a mouse: %s", e)
-
-    # ── Drawing ───────────────────────────────────────────────────────────────
 
     def _draw(self):
         if self.background:
@@ -1017,9 +904,6 @@ class LutrisView:
             self._draw_library()
 
     def _draw_centred(self, lines: List[tuple], extra_w: int = 0, extra_h: int = 0) -> int:
-        """Centred lines of text on a panel, so they stay readable over the
-        background art; returns the y below the text, where further content
-        `extra_w` wide and `extra_h` high fits on the panel."""
         surfs = [font.render(text, True, color) for font, text, color in lines]
         gap, pad = 12, 32
         text_h = sum(s.get_height() + gap for s in surfs) - gap
@@ -1055,7 +939,6 @@ class LutrisView:
     def _draw_message(self, msg: str):
         self._draw_centred([(self.f_title, msg, TEXT_DIM)])
 
-    # Tab bar (generic)
     def _draw_tab_bar(self, labels: List[str], active_idx: int,
                       right_label: str = "LutrisView", accent_color: tuple = ACCENT):
         self._draw_panel((0, 0, self.W, self.TAB_H))
@@ -1085,7 +968,6 @@ class LutrisView:
         modes = list(SortMode)
         self._draw_tab_bar([m.value for m in modes], modes.index(self.sort_mode))
         if not self.games:
-            # A new user may only have store games, so point at the store.
             self._draw_message(self.error or "No installed games")
             self._draw_hint_bar([("B", "Exit"), ("Y", "Store")], ACCENT)
             return
@@ -1094,7 +976,6 @@ class LutrisView:
         dy = self._draw_hero(game, ACCENT)
         facts = [("PLAYTIME", game.playtime_str()), ("LAST PLAYED", game.lastplayed_str()),
                  ("PLATFORM", game.platform), ("YEAR", game.year)]
-        # The store pill already names the runner when there is no store.
         if game.service:
             facts.append(("RUNNER", runner_label(game.runner)))
         self._draw_facts(dy, [f for f in facts if f[1]], ACCENT)
@@ -1105,8 +986,6 @@ class LutrisView:
                              ("LB/RB", "Sort"), ("Y", "Store")], ACCENT)
 
     def _draw_facts(self, y: int, facts: List[tuple], accent: tuple):
-        """Label-over-value columns on one line, the hero has no room for a
-        second; a long value is shortened and facts past the edge are left out."""
         right = self.W - 24
         x = self.DETAIL_X
         for label_text, value_text in facts:
@@ -1137,8 +1016,6 @@ class LutrisView:
         self._draw_hint_bar([("A", "Install"), ("B/Y", "Library"), ("Up/Down", "Section")], STORE_ACCENT)
 
     def _draw_hero(self, game: LutrisGame, accent: tuple) -> int:
-        """Draws the selected game's backdrop, cover, title and store, and
-        returns the height where its details go."""
         backdrop = self._art(game, (self.W, self.HERO_H), backdrop=True)
         if backdrop:
             self.screen.blit(backdrop, (0, self.TAB_H))
@@ -1181,8 +1058,6 @@ class LutrisView:
 
     def _draw_sections(self, keys: List[str], groups: Dict[str, List[LutrisGame]],
                        active: int, selected: int, accent: tuple):
-        """One row per store: the active one open, as many closed rows
-        around it as fit."""
         if not keys:
             return
         size = self._thumb_size(len(keys))
@@ -1213,8 +1088,6 @@ class LutrisView:
 
     def _draw_shelf(self, y: int, games: List[LutrisGame], selected: int,
                     size: tuple, accent: tuple):
-        """Covers start at the left edge and scroll once the selection
-        passes the first third of the row."""
         tw, th = size
         step = tw + self.THUMB_GAP
         per_row = max(1, (self.W - self.HERO_X) // step)
@@ -1246,8 +1119,6 @@ class LutrisView:
             self.screen.blit(l_surf, (x + pill_w + 8, top + (self.HINT_H - l_surf.get_height()) // 2))
             x += pill_w + 8 + l_surf.get_width() + 28
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
-
     @staticmethod
     def _ellipsize(text: str, font: pygame.font.Font, max_w: int) -> str:
         if font.size(text)[0] <= max_w:
@@ -1272,7 +1143,6 @@ class LutrisView:
         if cur:
             lines.append(cur)
         return lines
-
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.WARNING)

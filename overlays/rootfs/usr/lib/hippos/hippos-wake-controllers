@@ -1,18 +1,12 @@
 #!/usr/bin/env bash
-# Enable USB wakeup for HID game controllers and their parent root hubs.
-# Allows pressing a button on a USB or USB-dongle controller to wake from S3 suspend.
-# Controlled by system.wake_on_controller in hippos-settings.
 
 ENABLED="$(hippos-settings get system.wake_on_controller 2>/dev/null || true)"
 [[ "$ENABLED" != "true" ]] && exit 0
 
-# Root hubs must be wakeup-capable for any USB device to signal a resume.
 for hub_wakeup in /sys/bus/usb/devices/usb*/power/wakeup; do
     [[ -f "$hub_wakeup" ]] && echo enabled > "$hub_wakeup" 2>/dev/null || true
 done
 
-# Enable wakeup on USB devices that have at least one HID interface (class 03).
-# This covers wired controllers, wireless dongles, and arcade sticks.
 enabled_count=0
 for sysdev in /sys/bus/usb/devices/*/; do
     [[ -d "$sysdev" ]] || continue

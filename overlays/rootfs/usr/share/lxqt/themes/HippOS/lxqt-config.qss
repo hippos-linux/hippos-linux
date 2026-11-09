@@ -1,5 +1,3 @@
-/* Configuration Center
-Theming by the base Qt widget style and palette */
 
 QToolTip {
     border: 1px solid palette(text);

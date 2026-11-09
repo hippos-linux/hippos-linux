@@ -11,7 +11,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-
 SYSTEM = Path("/userdata/system")
 HIPPOS_CONFIG = SYSTEM / "configs" / "hippos"
 DISCOVERED = HIPPOS_CONFIG / "roms-discovered.conf"
@@ -25,7 +24,6 @@ LIKELY_NAMES = {
     "share",
     "userdata",
 }
-
 
 @dataclass(frozen=True)
 class Candidate:
@@ -43,7 +41,6 @@ class Candidate:
         parts = re.split(r"[/_. -]+", self.name.lower())
         return any(part in LIKELY_NAMES for part in parts)
 
-
 def run(args: list[str], timeout: int = 8) -> str:
     if not shutil.which(args[0]):
         return ""
@@ -60,23 +57,18 @@ def run(args: list[str], timeout: int = 8) -> str:
         return ""
     return result.stdout
 
-
 def setting(key: str, default: str = "") -> str:
     output = run([SETTINGS_GET, "get", key], timeout=2).strip()
     return output if output else default
 
-
 def is_true(value: str) -> bool:
     return value.lower() in {"1", "true", "yes", "on"}
-
 
 def safe_name(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_") or value
 
-
 def cifs_uri(host: str, share: str) -> str:
     return f"cifs://{safe_name(host)}/{safe_name(share)}"
-
 
 def parse_smbclient_list(host: str, output: str, source: str) -> list[Candidate]:
     candidates: list[Candidate] = []
@@ -99,13 +91,11 @@ def parse_smbclient_list(host: str, output: str, source: str) -> list[Candidate]
                 candidates.append(Candidate(cifs_uri(host, share), share, source, comment.strip()))
     return candidates
 
-
 def enumerate_smb_host(host: str, source: str) -> list[Candidate]:
     output = run(["smbclient", "-L", f"//{host}", "-N", "-g", "-m", "SMB3", "-t", "3"])
     if not output:
         output = run(["smbclient", "-L", f"//{host}", "-N", "-t", "3"])
     return parse_smbclient_list(host, output, source)
-
 
 def discover_smbtree() -> list[Candidate]:
     output = run(["smbtree", "-N", "-b"], timeout=12)
@@ -126,7 +116,6 @@ def discover_smbtree() -> list[Candidate]:
         candidates.extend(enumerate_smb_host(host, "smbtree"))
     return candidates
 
-
 def local_addresses() -> set[str]:
     addrs: set[str] = {"127.0.0.1", "::1"}
     try:
@@ -136,7 +125,6 @@ def local_addresses() -> set[str]:
     except OSError:
         pass
     return addrs
-
 
 def discover_avahi_smb() -> list[Candidate]:
     output = run(["avahi-browse", "-rtp", "_smb._tcp"], timeout=8)
@@ -165,7 +153,6 @@ def discover_avahi_smb() -> list[Candidate]:
         candidates.extend(enumerate_smb_host(host, "avahi"))
     return candidates
 
-
 def unique(candidates: list[Candidate]) -> list[Candidate]:
     seen: set[str] = set()
     result: list[Candidate] = []
@@ -176,7 +163,6 @@ def unique(candidates: list[Candidate]) -> list[Candidate]:
         result.append(candidate)
     result.sort(key=lambda c: (not c.likely, c.uri))
     return result
-
 
 def write_candidates(candidates: list[Candidate]) -> None:
     HIPPOS_CONFIG.mkdir(parents=True, exist_ok=True)
@@ -201,7 +187,6 @@ def write_candidates(candidates: list[Candidate]) -> None:
     tmp.write_text("".join(lines), encoding="utf-8")
     tmp.replace(DISCOVERED)
 
-
 def read_candidates() -> list[Candidate]:
     candidates: list[Candidate] = []
     if not DISCOVERED.exists():
@@ -215,7 +200,6 @@ def read_candidates() -> list[Candidate]:
         _, _, uri, name, source, *comment = parts
         candidates.append(Candidate(uri, name, source, "\t".join(comment)))
     return candidates
-
 
 def cmd_discover() -> int:
     if not is_true(setting("network.roms.discovery.enabled", "true")):
@@ -241,7 +225,6 @@ def cmd_discover() -> int:
         )
     return 0
 
-
 def append_source(uri: str) -> None:
     HIPPOS_CONFIG.mkdir(parents=True, exist_ok=True)
     existing = SOURCES.read_text(encoding="utf-8").splitlines() if SOURCES.exists() else []
@@ -251,7 +234,6 @@ def append_source(uri: str) -> None:
         if existing and existing[-1].strip():
             handle.write("\n")
         handle.write(f"{uri}\n")
-
 
 def cmd_mount(selector: str) -> int:
     if not is_true(setting("network.roms.enabled", "true")):
@@ -270,14 +252,12 @@ def cmd_mount(selector: str) -> int:
     print(match.uri)
     return 0
 
-
 def usage() -> int:
     print(
         "Usage: hippos-network-roms-discover discover | list | mount <id-or-cifs-uri>",
         file=sys.stderr,
     )
     return 1
-
 
 def main() -> int:
     args = sys.argv[1:]
@@ -302,7 +282,6 @@ def main() -> int:
     if args[0] == "mount" and len(args) == 2:
         return cmd_mount(args[1])
     return usage()
-
 
 if __name__ == "__main__":
     sys.exit(main())

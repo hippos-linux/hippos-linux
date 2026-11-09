@@ -1,27 +1,17 @@
 #!/usr/bin/env bash
-# hippos-xorg-setup — Xorg configuration for hippos-session.
-#   hippos-xorg-setup        as root, before X starts (hippos-session-setup):
-#                            write xorg.conf.d snippets
-#   hippos-xorg-setup post   in the session, once X is up: settings applied
-#                            over the running server
-# NVIDIA Xorg driver assignment is handled by the nvidia package's own
-# /usr/share/X11/xorg.conf.d/nvidia-drm-outputclass.conf (OutputClass approach).
 
 XORG_CONF_D=/etc/X11/xorg.conf.d
 
 log() { printf '[hippos-xorg-setup] %s\n' "$*"; }
 
-# display.vrr (ES: System Settings > Variable Refresh Rate), on unless set to 0.
 vrr_enabled() { [[ "$(hippos-settings get display.vrr 2>/dev/null)" != 0 ]]; }
 
 write_conf() {
-    # Clean up any conf written by older versions of this script.
     rm -f "${XORG_CONF_D}/91-gpu-setup.conf" \
           "${XORG_CONF_D}/90-hippos-prime.conf"
 
     local vrr=false
     vrr_enabled && vrr=true
-    # MatchDriver is the kernel driver; Intel and nouveau run the modesetting DDX.
     cat > "${XORG_CONF_D}/21-hippos-vrr.conf" <<EOF
 # Written by hippos-xorg-setup from display.vrr
 Section "OutputClass"
@@ -33,7 +23,6 @@ EOF
     log "VariableRefresh=${vrr}"
 }
 
-# The NVIDIA driver ignores VariableRefresh; G-SYNC is an X screen attribute.
 apply_nvidia_vrr() {
     command -v nvidia-settings >/dev/null || return 0
     DISPLAY=:0 nvidia-settings -t -q AllowVRR >/dev/null 2>&1 || return 0

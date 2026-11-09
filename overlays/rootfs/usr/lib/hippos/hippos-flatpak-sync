@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Generate EmulationStation .flatpak launchers and details from installed Flatpak apps."""
 
 from __future__ import annotations
 
@@ -10,17 +9,13 @@ import hippos_quiver
 from hippos_flatpak_metadata import read_app_details
 from hippos_launcher_sync import GameMetadata, reload_es, sync_gamelist, sync_launchers
 
-
 USERDATA   = Path('/userdata')
 ROMS_DIR   = USERDATA / 'roms' / 'flatpak'
 STATE_FILE = USERDATA / 'system' / 'flatpak-launchers.json'
-# Quiver's trademark terms limit its icon to running Quiver itself.
 NO_ICON_APPS = frozenset({hippos_quiver.APP_ID})
-
 
 def log(message: str) -> None:
     print(f'[hippos-flatpak-sync] {message}', flush=True)
-
 
 def installed_apps() -> dict[str, str]:
     try:
@@ -40,12 +35,10 @@ def installed_apps() -> dict[str, str]:
         log(f'flatpak list failed: {exc}')
         return {}
 
-
 def metadata_for(app_id: str, name: str) -> GameMetadata:
     details = read_app_details(app_id)
     icon = None if app_id in NO_ICON_APPS else details.icon
     return GameMetadata(name, details.description, details.developer, icon)
-
 
 def sync() -> int:
     apps = installed_apps()
@@ -56,7 +49,6 @@ def sync() -> int:
     if created or updated or removed or details_changed:
         reload_es()
     return 0
-
 
 if __name__ == '__main__':
     raise SystemExit(sync())

@@ -18,7 +18,6 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import CACHE, CONFIGS, SAVES
 
-
 def _play_device_id(profile: Optional[object], ctrl: object) -> str:
     if profile is not None and getattr(profile, 'device_guid', None):
         return profile.device_guid
@@ -27,7 +26,6 @@ def _play_device_id(profile: Optional[object], ctrl: object) -> str:
     if getattr(ctrl, 'device_path', None):
         return ctrl.device_path
     return f'player{ctrl.player}'
-
 
 def write_play_config(ctx: LaunchContext) -> None:
     conf = _load_effective_hippos_conf()
@@ -169,7 +167,6 @@ def write_play_config(ctx: LaunchContext) -> None:
     ET.ElementTree(root).write(PLAY_CONFIG_FILE, encoding='utf-8')
     ET.ElementTree(input_config).write(PLAY_INPUT_FILE, encoding='utf-8')
 
-
 def launch_play(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('play')
     if bin_path is None:
@@ -191,7 +188,6 @@ def launch_play(ctx: LaunchContext) -> int:
     env['QT_QPA_PLATFORM'] = 'xcb'
     result = _run_game_command(ctx, 'play', cmd, env)
     return result.returncode
-
 
 PLAY_CONFIG_DIR = CONFIGS / 'play'
 PLAY_DATA_DIR = PLAY_CONFIG_DIR / 'Play Data Files'

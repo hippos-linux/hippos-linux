@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# hippos-model — print normalised device model string from DMI or device tree.
-# Output: alphanumeric + underscores only, empty on failure.
 
 _norm() { tr -d '\0' < "$1" 2>/dev/null | sed 's/[^A-Za-z0-9]/_/g'; }
 

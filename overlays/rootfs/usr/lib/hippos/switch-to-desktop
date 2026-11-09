@@ -24,5 +24,4 @@ fi
 hippos-settings set system.desktop "$DESKTOP"
 hippos-settings set system.session desktop
 
-# hippos-session ends the current mode and starts this desktop.
 kill -USR1 "$(cat /run/hippos/session-loop)"

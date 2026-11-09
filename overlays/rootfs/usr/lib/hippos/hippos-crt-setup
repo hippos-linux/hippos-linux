@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# hippos-crt-setup — configure X11, switchres, and videomodes for CRT output.
-# Runs as root before X starts, called from hippos-display-setup when crt.enabled=true.
-# Idempotent — safe to call on every session start.
 
 set -euo pipefail
 
@@ -21,10 +18,7 @@ GRUB_CRT_CONF="/etc/default/grub.d/50-crt.cfg"
 
 get() { hippos-settings get "$1" 2>/dev/null || true; }
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
-
 _connected_outputs() {
-    # List X11 output names (e.g. VGA-1, DVI-I-1) for all connected DRM outputs.
     local p status name
     for p in /sys/class/drm/card[0-9]*-*; do
         [[ -f "${p}/status" ]] || continue
@@ -37,7 +31,6 @@ _connected_outputs() {
 }
 
 _detect_gpu_driver() {
-    # Return kernel DRM driver name for the primary card.
     local card drv
     for card in /sys/class/drm/card[0-9]; do
         drv="$(readlink "${card}/device/driver" 2>/dev/null \
@@ -50,9 +43,6 @@ _detect_gpu_driver() {
 }
 
 _detect_dcn() {
-    # Return "dcn" if the AMD GPU uses a DCN (Display Core Next) display engine,
-    # "dce" otherwise. DCN engines (Raven/Renoir/Navi and newer APUs/dGPUs) need
-    # interlace_force_even=1 in switchres.ini for correct interlaced output.
     local f
     for f in /sys/kernel/debug/dri/*/amdgpu_ip_info; do
         [[ -f "${f}" ]] || continue
@@ -63,8 +53,6 @@ _detect_dcn() {
 }
 
 _connector_type() {
-    # Return the connector family for a given output name.
-    # Understands native connector names from the DRM subsystem.
     local output="${1}"
     case "${output}" in
         VGA-*)              echo "vga"     ;;
@@ -78,24 +66,15 @@ _connector_type() {
 }
 
 _detect_r9_380() {
-    # Return 0 (true) if an AMD R9 380 / Tonga GPU is present.
-    # PCI device IDs 0x6938 (R9 380X) and 0x6939 (R9 380), vendor 0x1002.
     lspci -n 2>/dev/null | grep -qi "1002:6938\|1002:6939"
 }
 
 _detect_sea_islands() {
-    # Return 0 (true) if a Sea Islands (GCN 2.x / CIK) AMD GPU is present.
-    # Bonaire dGPU: 6640-665F  Hawaii dGPU: 67A0-67BF
-    # Kaveri APU:   1304-131F  Kabini/Mullins APU: 9830-984F
-    # On amdgpu these GPUs have unreliable interlaced mode support.
     lspci -n 2>/dev/null | grep -qiE \
         "1002:66[45][0-9a-f]|1002:67[ab][0-9a-f]|1002:13[01][0-9a-f]|1002:98[34][0-9a-f]"
 }
 
 _drm_to_x11_name() {
-    # Map a DRM sysfs connector name (e.g. DVI-I-1) to the X11 DDX output name
-    # (e.g. DVI-I-0). On amdgpu the DDX uses 0-based per-type indexing while DRM
-    # uses 1-based. If DISPLAY is not set, returns the DRM name unchanged.
     local drm_name="$1"
     [[ -n "${DISPLAY:-}" ]] || { echo "${drm_name}"; return; }
     local base_type="${drm_name%-*}"
@@ -124,8 +103,6 @@ _x11_connected_outputs() {
     fi
 }
 
-# ── Read settings ─────────────────────────────────────────────────────────────
-
 MONITOR_PROFILE="$(get crt.monitor_profile)"; MONITOR_PROFILE="${MONITOR_PROFILE:-generic_15}"
 CRT_OUTPUT="$(get crt.output)"
 INTERLACE="$(get crt.interlace)";           INTERLACE="${INTERLACE:-true}"
@@ -133,24 +110,11 @@ SUPER_WIDTH="$(get crt.super_width)";       SUPER_WIDTH="${SUPER_WIDTH:-auto}"
 DOTCLOCK_MIN="$(get crt.dotclock_min)";     DOTCLOCK_MIN="${DOTCLOCK_MIN:-auto}"
 BOOT_RES="$(get crt.boot_resolution)";      BOOT_RES="${BOOT_RES:-640x480i}"
 
-# ── Resolve output (manual only) ─────────────────────────────────────────────
-# CRT activation is explicit-only: crt.output must be a connector the user
-# actually picked (System Settings → CRT). A VGA/DVI-I connection or an
-# EDID-absence heuristic must never decide this on its own — connector
-# discovery (_connected_outputs, hippos-config lsoutputs) exists to populate
-# that picker's choices, not to activate CRT mode by itself. "auto" is
-# treated the same as unset rather than re-detecting, as a safety net for
-# any config that predates this (see hippos-migrate's crt.enabled=auto
-# migration, which is the normal path for that).
-
 if [[ -z "${CRT_OUTPUT}" || "${CRT_OUTPUT}" == "auto" ]]; then
     warn "crt.output is not set — select CRT VIDEO OUTPUT in System Settings → CRT"
     exit 1
 fi
 
-# Derive X11 DDX name for xorg.conf and switchres.ini.
-# On amdgpu the DDX uses 0-based per-type indexing (DVI-I-0) while DRM sysfs
-# uses 1-based (DVI-I-1). GRUB/kernel params use DRM names; X11 needs DDX names.
 CRT_OUTPUT_X11="$(_drm_to_x11_name "${CRT_OUTPUT}")"
 if [[ "${CRT_OUTPUT_X11}" != "${CRT_OUTPUT}" ]]; then
     log "X11 output name resolved: ${CRT_OUTPUT} (DRM) → ${CRT_OUTPUT_X11} (X11)"
@@ -158,15 +122,9 @@ fi
 
 log "profile=${MONITOR_PROFILE} output=${CRT_OUTPUT} x11=${CRT_OUTPUT_X11}"
 
-# ── GPU driver ────────────────────────────────────────────────────────────────
-
 GPU_DRIVER="$(_detect_gpu_driver)"
 log "GPU driver: ${GPU_DRIVER}"
 
-# Sea Islands (GCN 2.x) warning: Bonaire/Hawaii/Kaveri/Kabini on amdgpu have
-# unreliable interlaced mode support. Users hitting blank-screen issues should
-# switch to the radeon driver (add radeon.si_support=1 amdgpu.si_support=0 to
-# GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub).
 if [[ "${GPU_DRIVER}" == "amdgpu" ]] && _detect_sea_islands; then
     warn "Sea Islands GPU (GCN 2.x) detected with amdgpu driver — interlaced modes may not work."
     warn "If you get a blank screen at 240i/480i, add 'radeon.si_support=1 amdgpu.si_support=0' to GRUB kernel params."
@@ -175,8 +133,6 @@ fi
 CONNECTOR_TYPE="$(_connector_type "${CRT_OUTPUT}")"
 log "connector type: ${CONNECTOR_TYPE}"
 
-# Resolve "auto" dotclock_min and super_width based on GPU and connector type.
-# Values are derived from Batocera analysis and match hardware constraints per driver.
 if [[ "${DOTCLOCK_MIN}" == "auto" || "${SUPER_WIDTH}" == "auto" ]]; then
     case "${GPU_DRIVER}" in
         amdgpu|radeon)
@@ -207,17 +163,10 @@ if [[ "${DOTCLOCK_MIN}" == "auto" || "${SUPER_WIDTH}" == "auto" ]]; then
     log "resolved auto: dotclock_min=${DOTCLOCK_MIN} super_width=${SUPER_WIDTH} (gpu=${GPU_DRIVER} connector=${CONNECTOR_TYPE})"
 fi
 
-# amdgpu/radeon/nvidia-proprietary → full Switchres modeline set (75+ entries)
-# i915/nouveau/modesetting → limited VESA-style set (16 entries)
 case "${GPU_DRIVER}" in
     amdgpu|radeon|nvidia) VIDEOMODES_DIR="${VIDEOMODES_BASE}/amd"   ;;
     *)                    VIDEOMODES_DIR="${VIDEOMODES_BASE}/intel"  ;;
 esac
-
-# ── X11: disable TearFree / VariableRefresh for CRT ──────────────────────────
-# Priority 90 overrides the stock 20-amdgpu.conf / 20-radeon.conf (TearFree=true).
-# TearFree adds a shadow framebuffer blit path that kills direct KMS pageflips,
-# causing tearing on CRT and preventing correct modeline switching.
 
 mkdir -p "${XORG_CONF_D}"
 
@@ -235,10 +184,6 @@ else
     warn "GPU X11 template not found: ${_gpu_conf}"
 fi
 
-# ── X11: ignore all non-CRT outputs ──────────────────────────────────────────
-# Each connected output other than the CRT gets a Monitor section with
-# Ignore=true. Prevents X from driving LCD panels at CRT timings on boot.
-
 {
     printf '# CRT mode — managed by hippos-crt-setup. Do not edit manually.\n'
     while read -r output; do
@@ -250,12 +195,6 @@ fi
     done < <(_x11_connected_outputs)
 } > "${XORG_CONF_D}/10-crt-ignore.conf"
 log "wrote ${XORG_CONF_D}/10-crt-ignore.conf"
-
-# ── X11: Monitor sync-range hint for the CRT output ──────────────────────────
-# Tells X the broad HorizSync/VertRefresh ranges so it accepts custom Switchres
-# modelines without rejecting them as out-of-range. DPMS and DefaultModes are
-# disabled — the CRT doesn't negotiate these and they can interfere with
-# low-dotclock mode switching.
 
 {
     printf '# CRT mode — managed by hippos-crt-setup. Do not edit manually.\n'
@@ -269,16 +208,12 @@ log "wrote ${XORG_CONF_D}/10-crt-ignore.conf"
 } > "${XORG_CONF_D}/15-crt-monitor.conf"
 log "wrote ${XORG_CONF_D}/15-crt-monitor.conf"
 
-# ── /etc/switchres.ini ────────────────────────────────────────────────────────
-
 if [[ ! -f "${SWITCHRES_TEMPLATE}" ]]; then
     warn "switchres.ini template missing: ${SWITCHRES_TEMPLATE}"
 else
     INTERLACE_VAL=1
     [[ "${INTERLACE}" == "false" || "${INTERLACE}" == "0" ]] && INTERLACE_VAL=0
 
-    # interlace_force_even: AMD DCN engines (Raven/Renoir/Navi+) need IFE=1 for
-    # correct interlaced line parity. DCE (Polaris/Vega/older) and non-AMD = 0.
     IFE=0
     if [[ "${GPU_DRIVER}" == "amdgpu" ]]; then
         [[ "$(_detect_dcn)" == "dcn" ]] && IFE=1
@@ -296,8 +231,6 @@ else
     log "wrote ${SWITCHRES_INI}"
 fi
 
-# ── videomodes.conf ───────────────────────────────────────────────────────────
-
 VIDEOMODES_SRC="${VIDEOMODES_DIR}/videomodes.conf_${MONITOR_PROFILE}"
 if [[ -f "${VIDEOMODES_SRC}" ]]; then
     mkdir -p "$(dirname "${VIDEOMODES_DEST}")"
@@ -308,26 +241,14 @@ else
     warn "no videomodes.conf for profile '${MONITOR_PROFILE}' (${VIDEOMODES_SRC} not found)"
 fi
 
-# ── EDID firmware ─────────────────────────────────────────────────────────────
-# Generated at runtime via switchres -e so the EDID contains modelines tuned
-# to the chosen monitor profile rather than a generic fixed binary.
-#
-# W+1 offset: the EDID width is boot_width+1 for all GPU types so the boot
-# framebuffer and the ES session resolution differ by one pixel, preventing a
-# geometry tool clash on session start.
-
 EDID_INSTALLED=0
 
-# Parse boot resolution: strip @freq suffix and interlace marker for numbers.
 _boot_w="${BOOT_RES%%x*}"
 _boot_rest="${BOOT_RES#*x}"
 _boot_h="${_boot_rest%%[i@]*}"          # strip trailing i or @freq
 _boot_hz="${BOOT_RES##*@}"; _boot_hz="${_boot_hz%%[^0-9]*}"
 [[ -z "${_boot_hz}" || "${_boot_hz}" == "${BOOT_RES}" ]] && _boot_hz=60
 
-# Apply W+1 before EDID generation for all GPU types.
-# This offsets the EDID width by one pixel so the boot framebuffer and the
-# ES session resolution differ, preventing a geometry tool clash on startup.
 _edid_w=$(( _boot_w + 1 ))
 
 if command -v switchres >/dev/null 2>&1 && [[ -f "${SWITCHRES_INI}" ]]; then
@@ -349,41 +270,18 @@ else
     warn "switchres not found or switchres.ini missing — skipping EDID generation"
 fi
 
-# ── GRUB kernel params ────────────────────────────────────────────────────────
-# video=<output>:<res>e  — sets KMS framebuffer to CRT boot resolution
-# drm.edid_firmware=...  — only added when EDID binary was installed above
-# update-grub is expensive; only run it when the dropin content changes.
-
-# Strip @freq suffix; keep interlace marker (e.g. 640x480i stays 640x480i).
-# Append eS — 'e' activates the output, 'S' selects the D0023R low-dotclock
-# patched mode set. Without S the kernel ignores the param entirely.
 BOOT_RES_KRN="${BOOT_RES%%@*}"
 
-# CRT kernel params:
-# - video=...: sets KMS framebuffer mode at boot
-# - console=tty3: redirects kernel messages off the CRT display
-# - loglevel=0: suppress kernel log output during boot
-# - vt.global_cursor_default=0: hide the blinking cursor on the framebuffer
-# - mitigations=off: disables CPU vulnerability mitigations for emulation perf
 GRUB_CMDLINE="video=${CRT_OUTPUT}:${BOOT_RES_KRN}eS"
 GRUB_CMDLINE+=" console=tty3 loglevel=0 vt.global_cursor_default=0 mitigations=off"
 if [[ "${EDID_INSTALLED}" -eq 1 ]]; then
     GRUB_CMDLINE+=" drm.edid_firmware=${CRT_OUTPUT}:edid/crt.bin"
 fi
 
-# R9 380 (Tonga) requires amdgpu.dc=0 — its DCN hardware reports present but
-# the display core driver is buggy with CRT modelines. Appending dc=0 forces
-# the legacy DCE path which works correctly at 15kHz.
 if [[ "${GPU_DRIVER}" == "amdgpu" ]] && _detect_r9_380; then
     warn "R9 380 (Tonga) detected — appending amdgpu.dc=0 to GRUB kernel params"
     GRUB_CMDLINE+=" amdgpu.dc=0"
 fi
-
-# ── Write GRUB dropin ─────────────────────────────────────────────────────────
-# The D0023R 15kHz patches ship in every kernel variant now (see
-# kb/guidance/crt-support-plan.md), so CRT mode no longer needs to repoint
-# GRUB_DEFAULT at a separate kernel — just the CRT display boot params on top
-# of whichever kernel is already selected.
 
 mkdir -p "$(dirname "${GRUB_CRT_CONF}")"
 _new_grub_conf="$(printf '# CRT mode — managed by hippos-crt-setup. Do not edit manually.\nGRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT %s"\n' "${GRUB_CMDLINE}")"

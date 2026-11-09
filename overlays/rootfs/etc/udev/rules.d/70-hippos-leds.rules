@@ -1,6 +1,2 @@
-# ES (user hippos, group video) sets handheld RGB LED colour and brightness
-# by writing these sysfs attributes directly; the kernel creates them root-only.
-# Names match what ApiSystem::getLED looks for: multicolor class LEDs, joystick
-# rings (Legion Go, Ally), rgb:l*/rgb:r* groups and per-channel l:r1-style LEDs.
 SUBSYSTEM=="leds", ACTION=="add", KERNEL=="*multicolor*|*:rgb:*|rgb:[lr][0-9]*|[lr]:[rgb][0-9]*", \
   RUN+="/bin/sh -c 'for a in brightness multi_intensity; do f=/sys%p/$$a; [ -e $$f ] && chgrp video $$f && chmod g+w $$f; done; exit 0'"

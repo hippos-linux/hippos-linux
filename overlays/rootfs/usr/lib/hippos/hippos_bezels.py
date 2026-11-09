@@ -1,4 +1,3 @@
-"""Bezel / decoration helpers for emulatorlauncher."""
 
 from __future__ import annotations
 
@@ -11,8 +10,6 @@ from typing import Optional, TypedDict
 
 _log = logging.getLogger(__name__)
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
-
 USER_DECORATIONS   = Path('/userdata/decorations')
 SYSTEM_DECORATIONS = Path('/usr/share/hippos/decorations')
 CONTROLLER_OVERLAYS = Path('/usr/share/hippos/controller-overlays')
@@ -21,16 +18,12 @@ RUNTIME_BEZEL       = Path('/var/run/hippos/bezel.png')
 SHADER_BEZEL_DIR    = Path('/var/run/hippos/shader_bezels')
 SHADER_BEZEL        = SHADER_BEZEL_DIR / 'bezel.png'
 
-
 class BezelInfos(TypedDict):
     png:              Path
     info:             Path
     layout:           Path
     mamezip:          Path
     specific_to_game: bool
-
-
-# ── PNG header read (no PIL required) ─────────────────────────────────────────
 
 def fast_image_size(path: Path) -> tuple[int, int]:
     try:
@@ -42,20 +35,14 @@ def fast_image_size(path: Path) -> tuple[int, int]:
     except OSError:
         return -1, -1
 
-
-# ── Bezel search ──────────────────────────────────────────────────────────────
-
 def get_bezel_infos(
     rom: Path,
     bezel: str,
     system: str,
     emulator: str,
 ) -> Optional[BezelInfos]:
-    """Search for bezel PNG in priority order. Returns None if none found."""
     rom_base = rom.stem
 
-    # Build candidate list in priority order:
-    # per-game (user) → per-game (system) → per-system (user) → per-system (system) → default
     candidates: list[tuple[Path, bool]] = [
         (USER_DECORATIONS   / bezel / 'games' / system / f'{rom_base}.png', True),
         (SYSTEM_DECORATIONS / bezel / 'games' / system / f'{rom_base}.png', True),
@@ -80,9 +67,6 @@ def get_bezel_infos(
 
     return None
 
-
-# ── Image operations ───────────────────────────────────────────────────────────
-
 def resize_image(src: Path, dst: Path, width: int, height: int, stretch: bool = False) -> None:
     from PIL import Image, ImageOps
     img = Image.open(src)
@@ -94,10 +78,8 @@ def resize_image(src: Path, dst: Path, width: int, height: int, stretch: bool = 
         img = img.resize((width, height), Image.Resampling.BICUBIC)
     img.save(dst, format='PNG')
 
-
 def tattoo_image(src: Path, dst: Path, system: str, tattoo_type: str,
                  tattoo_file: Optional[str], corner: str, resize: bool) -> None:
-    """Composite a controller overlay onto the bezel."""
     from PIL import Image
 
     if tattoo_type == 'system':
@@ -140,14 +122,11 @@ def tattoo_image(src: Path, dst: Path, system: str, tattoo_type: str,
         canvas.paste(tattoo, (w - tw, h - th - margin))
     elif c == 'SW':
         canvas.paste(tattoo, (0, h - th - margin))
-    else:  # NW default
+    else:
         canvas.paste(tattoo, (0, margin))
 
     result = Image.alpha_composite(back, canvas)
     result.save(dst, format='PNG')
-
-
-# ── Gun border ────────────────────────────────────────────────────────────────
 
 GUN_OVERLAYS = Path('/usr/share/hippos/guns-overlays')
 GUN_HELP_PNG = Path('/var/run/hippos/gun_help.png')
@@ -159,7 +138,6 @@ _BORDER_SIZES: dict[str, tuple[int, int]] = {
     'big':    (2, 1),
 }
 
-
 def gun_border_image(
     src: Path,
     dst: Path,
@@ -169,12 +147,10 @@ def gun_border_image(
     inner_color: str = '#ffffff',
     outer_color: str = '#000000',
 ) -> int:
-    """Draw inner+outer gun border rectangles onto bezel. Returns total border px."""
     from PIL import Image, ImageDraw
 
     w, h = fast_image_size(src)
 
-    # Centre a 4:3 area if widescreen and 4:3 forced
     if abs(w / h - 4 / 3) < 0.01 or aspect_ratio != '4:3':
         new_w = w
     else:
@@ -208,13 +184,9 @@ def gun_border_image(
     img.save(dst, format='PNG')
     return outer + inner
 
-
 def gun_border_color(conf: dict[str, str]) -> str:
     mapping = {'red': '#ff0000', 'green': '#00ff00', 'blue': '#0000ff', 'white': '#ffffff'}
     return mapping.get(conf.get('controllers.guns.borderscolor', ''), '#ffffff')
-
-
-# ── Gun help overlay ───────────────────────────────────────────────────────────
 
 _DEFAULT_REPLACEMENTS = {
     '<TRIGGER>': 'TRIGGER', '<ACTION>': 'ACTION',
@@ -223,7 +195,6 @@ _DEFAULT_REPLACEMENTS = {
     '<UP>': 'UP',           '<DOWN>': 'DOWN',
     '<LEFT>': 'LEFT',       '<RIGHT>': 'RIGHT',
 }
-
 
 def _png_with_texts(src: Path, dst: Path, data: dict, height: int) -> None:
     from PIL import Image, ImageDraw, ImageFont
@@ -251,13 +222,11 @@ def _png_with_texts(src: Path, dst: Path, data: dict, height: int) -> None:
         val = text.get('value', '')
         if not val:
             continue
-        # draw connecting lines
         if 'line' in text:
             pts_raw = text['line']
             pts = [(pts_raw[i] * iw, pts_raw[i + 1] * ih)
                    for i in range(0, len(pts_raw) - 1, 2)]
             draw.line(pts, fill=text.get('line_color', 'black'), width=2)
-        # draw text
         if 'x' in text and 'y' in text:
             fs = int(text.get('font_size_per_height', data.get('font_size_per_height', 0.04)) * ih)
             font = get_font(fs)
@@ -271,7 +240,6 @@ def _png_with_texts(src: Path, dst: Path, data: dict, height: int) -> None:
 
     img.save(dst, 'PNG')
 
-
 def generate_gun_help(
     system: str,
     rom: Path,
@@ -279,7 +247,6 @@ def generate_gun_help(
     game_gun: dict[str, str],
     resolution: tuple[int, int],
 ) -> None:
-    """Generate gun help overlay at GUN_HELP_PNG. No-op if no gun active."""
     if not lightgun or not game_gun:
         if GUN_HELP_PNG.exists():
             GUN_HELP_PNG.unlink()
@@ -293,7 +260,6 @@ def generate_gun_help(
         _log.info("gun help: overlay not found for gun '%s'", gun_name)
         return
 
-    # Use cached version if available and no customisation needed
     if _GUN_HELP_CACHE.exists():
         shutil.copy2(_GUN_HELP_CACHE, GUN_HELP_PNG)
         _log.info("gun help: using cache")
@@ -306,7 +272,6 @@ def generate_gun_help(
         except Exception as exc:
             _log.warning("gun help: could not parse %s: %s", gun_info, exc)
 
-    # Apply button label replacements
     replacements = dict(_DEFAULT_REPLACEMENTS)
     for text in data.get('texts', []):
         for key in list(replacements):
@@ -321,11 +286,7 @@ def generate_gun_help(
     except Exception as exc:
         _log.error("gun help: generation failed: %s", exc)
 
-
-# ── QR code overlay ────────────────────────────────────────────────────────────
-
 def add_qr_code(src: Path, dst: Path, ra_game_id: str, corner: str = 'NE') -> None:
-    """Composite a RetroAchievements QR code onto the bezel."""
     try:
         import qrcode
     except ImportError:
@@ -353,14 +314,11 @@ def add_qr_code(src: Path, dst: Path, ra_game_id: str, corner: str = 'NE') -> No
         bezel.paste(qrimg, (w - x, h - x, w, h))
     elif c == 'SW':
         bezel.paste(qrimg, (0, h - x, x, h))
-    else:  # NE default
+    else:
         bezel.paste(qrimg, (w - x, 0, w, x))
 
     bezel.save(dst, format='PNG')
     _log.info("qr code: composited RA game %s onto bezel (%s corner)", ra_game_id, corner)
-
-
-# ── Main entry point ───────────────────────────────────────────────────────────
 
 def prepare_bezel(
     rom: Path,
@@ -379,7 +337,6 @@ def prepare_bezel(
     ra_game_id: Optional[str] = None,
     qr_corner: str = 'NE',
 ) -> Optional[Path]:
-    """Find, resize, composite and stage bezel PNG. Returns path or None."""
     infos = get_bezel_infos(rom, bezel_name, system, emulator)
     if infos is None:
         _log.debug("bezel: no bezel found for %s/%s (set=%s)", system, rom.name, bezel_name)
@@ -422,7 +379,6 @@ def prepare_bezel(
     tmp.replace(RUNTIME_BEZEL)
     _log.info("bezel: staged %s → %s (%dx%d)", src, RUNTIME_BEZEL, w, h)
 
-    # Symlink for shader-based bezel path
     SHADER_BEZEL_DIR.mkdir(parents=True, exist_ok=True)
     if SHADER_BEZEL.is_symlink() or SHADER_BEZEL.exists():
         SHADER_BEZEL.unlink()

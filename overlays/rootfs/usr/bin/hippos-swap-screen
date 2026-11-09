@@ -3,7 +3,6 @@ set -euo pipefail
 
 export DISPLAY="${DISPLAY:-:0}"
 
-# Get all connected outputs
 mapfile -t OUTPUTS < <(xrandr --query | awk '/ connected/ {print $1}')
 
 if [[ ${#OUTPUTS[@]} -lt 2 ]]; then
@@ -11,11 +10,9 @@ if [[ ${#OUTPUTS[@]} -lt 2 ]]; then
     exit 0
 fi
 
-# Get current primary
 CURRENT=$(xrandr --query | awk '/ connected primary/ {print $1; exit}')
 [[ -z "$CURRENT" ]] && CURRENT="${OUTPUTS[0]}"
 
-# Pick the next output in the list
 NEXT=""
 for i in "${!OUTPUTS[@]}"; do
     if [[ "${OUTPUTS[$i]}" == "$CURRENT" ]]; then

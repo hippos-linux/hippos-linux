@@ -31,7 +31,6 @@ class KeyboardController:
                 raise Exception("invalid type " + target_device["type"])
 
             if target_device["type"] == "hotkeys":
-                # hide this one, hotkeys will be found by hotgenkey
                 rules += "SUBSYSTEM==\"input\", KERNEL==\"event*\", ACTION==\"add\", ATTRS{{name}}==\"{}\", ".format(target_device["name"])
                 rules += "ENV{ID_INPUT_JOYSTICK}=\"0\", ENV{ID_INPUT_KEYBOARD}=\"0\", ENV{ID_INPUT_KEY}=\"0\"\n"
             elif target_device["type"] == "joystick":
@@ -40,9 +39,7 @@ class KeyboardController:
         return rules
 
     def getConfigFancyName(self, file):
-        # remove the vip/pid, extension and replace _ by spaces
         x = re.sub(r'\.v[^\.]*\.p[^\.]*\.yml', '', file.replace("_", " "))
-        # replace multiple spaces by single ones
         x = re.sub('[ ]+', ' ', x)
         return x.strip()
 
@@ -58,7 +55,6 @@ class KeyboardController:
         if userconfig.exists():
             configFile = userconfig
 
-        # fill if possible
         if configFile is not None and configFile.exists():
             with open(configFile, 'r') as file:
                 config = yaml.safe_load(file)
@@ -109,7 +105,6 @@ class KeyboardController:
             if target_device["type"] not in ["joystick", "hotkeys"]:
                 raise Exception("invalid type " + target_device["type"])
 
-            # check mappings and values
             for mapping, value in target_device["mapping"].items():
                 mappingParts = mapping.split(':')
                 valueParts   = value.split(':')
@@ -122,13 +117,12 @@ class KeyboardController:
                 if valueParts[0] not in ["key", "abs", "btn"]:
                     raise Exception("invalid key type "+value)
 
-            # add mappings
             for mapping, value in target_device["mapping"].items():
                 mappingParts = mapping.split(':')
                 mappingtypename = mappingParts[0] + ":" + mappingParts[1]
                 valueParts = value.split(':')
                 valuetypename = valueParts[0] + ":" + valueParts[1]
-                cmd.extend(["--block", "{}:2".format(mappingtypename)]) # block the repeat keys
+                cmd.extend(["--block", "{}:2".format(mappingtypename)])
 
                 if len(mappingParts) == 2 and len(valueParts) == 2:
                     cmd.extend(["--map", "yield", mapping, value])
@@ -139,10 +133,8 @@ class KeyboardController:
                     cmd.extend(["--map", "yield", mapping, "{}:1".format(value)])
                     cmd.extend(["--map", "yield", "{}:0".format(mappingtypename), "{}:0".format(value)])
 
-            # output device
             cmd.extend(["--output", "name={}".format(target_device["name"]), "device-id=ba10:ce8a"])
 
-            # output filter (remove doubles)
             keyslist = {}
             for mapping, value in target_device["mapping"].items():
                 valueParts = value.split(':')
@@ -152,7 +144,6 @@ class KeyboardController:
                 cmd.append(mapping)
         return cmd
 
-    # the search function has more sens in pad2keyLauncher, but nicer to write in python
     def search(self):
         udev_context = pyudev.Context()
         if not sys.stdout.isatty():
@@ -195,7 +186,6 @@ class KeyboardController:
         if device_type is None:
             raise Exception("device type not set")
 
-        # truncate the number of devices
         if device_keep is not None:
             new_target_devices = []
             for k,d in enumerate(config["target_devices"]):
@@ -205,7 +195,6 @@ class KeyboardController:
         else:
             if device_number is None:
                 raise Exception("device number not set")
-            # add the device if needed
             ndevices = 0
             for d in config["target_devices"]:
                 if d["type"] == device_type:
@@ -213,7 +202,6 @@ class KeyboardController:
             for i in range(device_number-ndevices+1):
                 config["target_devices"].append({"name": "", "type": device_type, "mapping": []})
 
-            # assign values
             ndevices = 0
             for k,d in enumerate(config["target_devices"]):
                 if d["type"] == device_type:
@@ -230,7 +218,6 @@ class KeyboardController:
                                 new_mapping[vals[1]] = vals[0]
                             config["target_devices"][k]["mapping"] = new_mapping
                     ndevices += 1
-        # save !
         self.save_config(config_name, config)
 
 if __name__ == "__main__":
@@ -242,7 +229,6 @@ if __name__ == "__main__":
     parser.add_argument("--rules",  action="store_true")
     parser.add_argument("--get-config",    action="store_true")
 
-    # set keys
     parser.add_argument("--set", action="store_true", help="edit configuration from command line")
     parser.add_argument("--device-number", type=int)
     parser.add_argument("--device-name",   type=str)

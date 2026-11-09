@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# ES API: info --full — system info for ES about screen
 case "${1:-}" in
     --full)
         _cpu_cores="$(grep -m1 'cpu cores' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs)"

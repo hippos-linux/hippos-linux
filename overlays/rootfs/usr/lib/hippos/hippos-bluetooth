@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# ES API: bluetooth enable/disable/list/trust/connect/disconnect/remove/live_devices
-# list and live_devices output XML compatible with Batocera EmulationStation
 
 _btctl() { bluetoothctl "$@" 2>&1; }
 
@@ -46,13 +44,11 @@ case "${1:-}" in
         _btctl power on >/dev/null 2>&1
         AGENT_PID=$(pgrep -f hippos-bluetooth-agent 2>/dev/null | head -1)
         if [ -n "${AGENT_PID}" ]; then
-            # Agent running: use file-based listing so the agent drives discovery
             rm -f /run/hippos-bt/bt_listing
             touch /run/hippos-bt/bt_listing
             kill -USR1 "${AGENT_PID}"
             tail -n +0 -f /run/hippos-bt/bt_listing 2>/dev/null
         else
-            # Fallback: direct bluetoothctl scan (no agent)
             { echo "scan on"; sleep infinity; } | bluetoothctl 2>/dev/null | \
             while IFS= read -r line; do
                 if echo "$line" | grep -qE '^\[NEW\] Device'; then

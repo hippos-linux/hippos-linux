@@ -18,10 +18,8 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import CONFIGS, SAVES, SCREENSHOTS
 
-
 AZAHAR_CONFIG_DIR  = CONFIGS / 'azahar-emu'
 AZAHAR_INI         = AZAHAR_CONFIG_DIR / 'qt-config.ini'
-
 
 _AZAHAR_BUTTONS: dict[str, str] = {
     'button_a':      'a',      'button_b':     'b',
@@ -35,9 +33,7 @@ _AZAHAR_BUTTONS: dict[str, str] = {
 }
 _AZAHAR_HAT_DIR: dict[int, str] = {1: 'up', 2: 'right', 4: 'down', 8: 'left'}
 
-
 def _write_azahar_config(conf: dict[str, str]) -> None:
-    """Write Azahar qt-config.ini from hippos.conf values."""
     AZAHAR_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
     parser = _new_ini_parser()
@@ -47,7 +43,6 @@ def _write_azahar_config(conf: dict[str, str]) -> None:
     for section in ('Layout', 'System', 'UI', 'Miscellaneous', 'Renderer', 'WebService', 'Utility'):
         _ensure_section(parser, section)
 
-    # Layout
     screen_layout_raw = _conf_value(conf, 'global.azahar_screen_layout', '0-false')
     parts = screen_layout_raw.split('-', 1)
     layout_option = parts[0] if len(parts) > 0 else '0'
@@ -61,12 +56,10 @@ def _write_azahar_config(conf: dict[str, str]) -> None:
     parser.set('Layout', 'large_screen_proportion', _conf_value(conf, 'global.azahar_large_screen_proportion', '4'))
     parser.set('Layout', r'large_screen_proportion\default', 'false')
 
-    # System
     is_new3ds = _conf_value(conf, 'global.azahar_is_new_3ds', '0')
     parser.set('System', 'is_new_3ds', 'true' if is_new3ds == '1' else 'false')
     parser.set('System', r'is_new_3ds\default', 'false')
 
-    # UI
     parser.set('UI', 'fullscreen',    'true')
     parser.set('UI', r'fullscreen\default', 'false')
     parser.set('UI', 'displayTitleBars', 'false')
@@ -84,11 +77,9 @@ def _write_azahar_config(conf: dict[str, str]) -> None:
     parser.set('UI', r'Paths\screenshotPath', str(SCREENSHOTS))
     parser.set('UI', r'Paths\screenshotPath\default', 'false')
 
-    # Miscellaneous
     parser.set('Miscellaneous', 'check_for_update_on_start', 'false')
     parser.set('Miscellaneous', r'check_for_update_on_start\default', 'false')
 
-    # Renderer
     graphics_api = _conf_value(conf, 'global.azahar_graphics_api', '1')
     parser.set('Renderer', 'graphics_api', graphics_api)
     parser.set('Renderer', r'graphics_api\default', 'true')
@@ -114,19 +105,16 @@ def _write_azahar_config(conf: dict[str, str]) -> None:
     parser.set('Renderer', 'resolution_factor', res_factor)
     parser.set('Renderer', r'resolution_factor\default', 'false')
 
-    # Utility
     disk_cache = _conf_value(conf, 'global.azahar_use_disk_shader_cache', '0')
     parser.set('Utility', 'use_disk_shader_cache', 'true' if disk_cache == '1' else 'false')
     parser.set('Utility', r'use_disk_shader_cache\default', 'false')
 
-    # WebService
     parser.set('WebService', 'enable_telemetry', 'false')
     parser.set('WebService', r'enable_telemetry\default', 'false')
 
     with AZAHAR_INI.open('w', encoding='utf-8') as fh:
         parser.write(fh)
     _log.info("Wrote Azahar config: %s", AZAHAR_INI)
-
 
 def _azahar_button_str(es_name: str, guid: str, inputs: dict) -> Optional[str]:
     binding = inputs.get(es_name)
@@ -141,9 +129,7 @@ def _azahar_button_str(es_name: str, guid: str, inputs: dict) -> Optional[str]:
         return f'engine:sdl,guid:{guid},axis:{binding.code},direction:+,threshold:0.5'
     return None
 
-
 def _write_azahar_controller_config(ctx: LaunchContext) -> None:
-    """Write Azahar Controls INI section from ES controller profile."""
     profiles = _load_es_input_configs()
     p1 = next((c for c in ctx.controllers if c.player == 1), None)
     if p1 is None:
@@ -159,7 +145,6 @@ def _write_azahar_controller_config(ctx: LaunchContext) -> None:
 
     _ensure_section(parser, 'Controls')
 
-    # Profile boilerplate
     if not parser.has_option('Controls', r'profiles\size'):
         parser.set('Controls', 'profile',                    '0')
         parser.set('Controls', r'profile\default',           'false')
@@ -175,7 +160,6 @@ def _write_azahar_controller_config(ctx: LaunchContext) -> None:
             parser.set('Controls', rf'profiles\1\{ini_key}',           f'"{val}"')
             parser.set('Controls', rf'profiles\1\{ini_key}\default',   'false')
 
-    # Analog sticks
     for ini_key, js_prefix in (('circle_pad', 'joystick1'), ('c_stick', 'joystick2')):
         bx = profile.inputs.get(f'{js_prefix}left')
         by = profile.inputs.get(f'{js_prefix}up')
@@ -187,7 +171,6 @@ def _write_azahar_controller_config(ctx: LaunchContext) -> None:
     with cfg_path.open('w', encoding='utf-8') as fh:
         parser.write(fh)
     _log.info("Wrote Azahar controller config: %s", cfg_path)
-
 
 def launch_azahar(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('azahar')

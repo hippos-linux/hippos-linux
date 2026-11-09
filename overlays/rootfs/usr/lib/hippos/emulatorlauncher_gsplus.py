@@ -13,7 +13,6 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import BIOS, CONFIGS
 
-
 def write_gsplus_config(ctx: LaunchContext) -> None:
     conf = _load_hippos_conf()
     GSPLUS_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -100,7 +99,6 @@ def write_gsplus_config(ctx: LaunchContext) -> None:
     items.append(('g_cfg_rom_path', BIOS / _conf_value(conf, 'gsplus_bios_filename', 'ROM.03')))
     _write_unix_settings_file(GSPLUS_CONFIG_FILE, items)
 
-
 def launch_gsplus(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('GSplus', 'gsplus')
     if bin_path is None:
@@ -113,7 +111,6 @@ def launch_gsplus(ctx: LaunchContext) -> int:
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
     result = _run_game_command(ctx, 'gsplus', cmd, env)
     return result.returncode
-
 
 GSPLUS_CONFIG_DIR = CONFIGS / 'GSplus'
 GSPLUS_CONFIG_FILE = GSPLUS_CONFIG_DIR / 'config.txt'

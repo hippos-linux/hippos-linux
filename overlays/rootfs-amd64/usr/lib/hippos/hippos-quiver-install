@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Install Quiver Launcher's official Flatpak as the hippos user. It lands in
-# /userdata, so it survives OS updates, and the service stops running once it's
-# there. Quiver isn't on Flathub, and this bundle doesn't update itself: moving
-# to a newer version means changing this URL and checksum.
 set -euo pipefail
 
 BUNDLE_URL="https://github.com/tgeorgiadis/quiver-launcher/releases/download/v3.5.1/QuiverLauncher.flatpak"
@@ -30,7 +26,6 @@ log "Installing ${APP_ID}"
 runuser -l hippos -c "flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo"
 runuser -l hippos -c "flatpak install --user --noninteractive --assumeyes --bundle '${BUNDLE}'"
 
-# Windows apps use HippOS's Wine, unless the user has already chosen a command.
 runuser -l hippos -c "python3 - '${SETTINGS}'" <<'PYEOF'
 import json
 import sys

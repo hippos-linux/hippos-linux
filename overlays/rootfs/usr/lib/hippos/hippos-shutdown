@@ -1,13 +1,4 @@
 #!/usr/bin/env bash
-# hippos-shutdown — shutdown, reboot, or suspend the system.
-# Respects system.suspendmode when called with no argument.
-# Usage:
-#   hippos-shutdown              act according to system.suspendmode
-#   hippos-shutdown shutdown     power off
-#   hippos-shutdown reboot       reboot
-#   hippos-shutdown suspend      suspend (RAM)
-#   hippos-shutdown hibernate    hibernate (disk)
-#   hippos-shutdown hybrid       hybrid sleep
 
 [[ "${EUID}" -ne 0 ]] && exec sudo "$0" "$@"
 

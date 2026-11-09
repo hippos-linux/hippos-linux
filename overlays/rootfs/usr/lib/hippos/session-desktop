@@ -17,9 +17,6 @@ if [[ ! -x "$SESSION_CMD" ]]; then
 fi
 
 export HOME=/userdata
-# systemd's manager PATH doesn't include /usr/games — Lutris' shortcut/menu
-# launch and gamemoderun (both installed there by their Debian packages) fail
-# silently without this, since desktop app launchers exec by bare name.
 export PATH="${PATH}:/usr/local/games:/usr/games"
 export XDG_RUNTIME_DIR=/run/user/1000
 export XDG_SESSION_TYPE=x11
@@ -29,10 +26,6 @@ export XDG_CONFIG_HOME=/userdata/system/.config
 export DISPLAY=:0
 export QT_QPA_PLATFORM=xcb
 
-# C.UTF-8 was previously hardcoded here regardless of system.language — see
-# session-es for the same fix and why LC_ALL/LANG matter beyond ES's own
-# gettext lookup (date/number formatting, sorting, and here also whatever
-# the desktop environment itself localizes from the shell environment).
 hippos_lang="$(hippos-settings get system.language 2>/dev/null)"
 if [[ -n "${hippos_lang}" ]]; then
     export LC_ALL="${hippos_lang}.UTF-8"
@@ -43,33 +36,21 @@ else
 fi
 unset XAUTHORITY
 
-# shellcheck disable=SC1091
 [[ -f /run/hippos/prime.env ]] && source /run/hippos/prime.env
 
-# XDG_SESSION_ID for systemd --user units, plasma-polkit-agent among them; see
-# session-es.
 dbus-update-activation-environment --systemd DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS XDG_CONFIG_HOME HOME XDG_SESSION_ID 2>/dev/null || true
 
-# Ensure wifi radio is on when entering desktop (NM may have saved a disabled state at boot)
 if [[ "$(/usr/lib/hippos/hippos-planemode status 2>/dev/null)" != "on" ]]; then
     nmcli radio wifi on 2>/dev/null || true
 fi
 
-# Display first: hippos-audio-setup only waits for an HDMI sink when the
-# codec's ELD reports a monitor, and that needs the output to be lit.
 /usr/lib/hippos/hippos-display-setup
 /usr/lib/hippos/hippos-audio-setup
 
-# hippos-hotkeys otherwise keeps the emulationstation context into the desktop:
-# F1 is swallowed (re-running switch-to-desktop) and gamepad combos type Esc and
-# Space into whatever window has focus. Bind nothing so keys pass through;
-# common keys (volume, brightness) still apply. session-es restores the default.
 /usr/lib/hippos/hippos-hotkeys --new-context desktop '{}' || true
 
 xset -dpms 2>/dev/null || true
 xset s off 2>/dev/null || true
 
-# A desktop's own Log Out returns to ES rather than ending the login session.
-# A crash still exits non-zero, so hippos-session captures diagnostics.
 "$SESSION_CMD" || exit
 hippos-settings set system.session es

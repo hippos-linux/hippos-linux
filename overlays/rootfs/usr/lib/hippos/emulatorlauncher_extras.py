@@ -1,4 +1,3 @@
-"""Remaining emulator generators — all previously on _launch_standalone."""
 
 from __future__ import annotations
 
@@ -24,11 +23,6 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import BIOS, CACHE, CONFIGS, SAVES, SCREENSHOTS
 
-
-# ── xenia-edge (native Linux build) ──────────────────────────────────────────
-# xenia and xenia-canary run via Wine. xenia-edge is a native Linux binary —
-# no Wine prefix, no z: path mangling, direct exec.
-
 from emulatorlauncher_shared import (
     _conf_bool,
     _conf_int,
@@ -38,7 +32,6 @@ from emulatorlauncher_shared import (
     _write_toml,
 )
 from emulatorlauncher_xenia import XENIA_CACHE_DIR, XENIA_SAVES_DIR, _xenia_base_config
-
 
 def launch_xenia_edge(ctx: LaunchContext) -> int:
     conf = _load_effective_hippos_conf()
@@ -51,7 +44,6 @@ def launch_xenia_edge(ctx: LaunchContext) -> int:
     toml_file = cfg_dir / 'xenia-edge.config.toml'
     config = _read_toml(toml_file) or _xenia_base_config(None)
 
-    # GPU — prefer Vulkan on Linux native
     gpu = config.setdefault('GPU', {})
     gpu['gpu'] = _conf_value(conf, 'xenia_api', 'vulkan').lower()
     gpu['vsync'] = _conf_bool(conf, 'xenia_vsync', True)
@@ -93,9 +85,6 @@ def launch_xenia_edge(ctx: LaunchContext) -> int:
 
     return _run_game_command(ctx, 'xenia-edge', cmd, env, cwd=cfg_dir).returncode
 
-
-# ── Switch emulators (citron-neo, eden) ────────────────────────────────────────
-
 def _write_switch_qt_config(cfg_dir: Path, emu_name: str) -> None:
     cfg_file = cfg_dir / 'qt-config.ini'
     cfg = configparser.RawConfigParser()
@@ -114,9 +103,6 @@ def _write_switch_qt_config(cfg_dir: Path, emu_name: str) -> None:
     cfg.set('UI', 'enable_discord_presence', 'false')
     cfg.set('UI', r'enable_discord_presence\default', 'false')
 
-    # Bind Hotkey+Start (Home+Plus) to exit; clear fullscreen from that combo.
-    # Set both the emu-specific name and the upstream yuzu name so forks that
-    # haven't renamed the action still get the right binding.
     for action in (emu_name, 'yuzu'):
         exit_key = rf'Shortcuts\Main%20Window\Exit%20{action.replace("-", "%20")}\Controller_KeySeq'
         cfg.set('UI', exit_key, 'Home+Plus')
@@ -125,7 +111,6 @@ def _write_switch_qt_config(cfg_dir: Path, emu_name: str) -> None:
     cfg_file.parent.mkdir(parents=True, exist_ok=True)
     with cfg_file.open('w') as fh:
         cfg.write(fh)
-
 
 def _launch_switch(ctx: LaunchContext, emu_name: str) -> int:
     conf = _load_hippos_conf()
@@ -151,16 +136,11 @@ def _launch_switch(ctx: LaunchContext, emu_name: str) -> int:
     env['QT_QPA_PLATFORM'] = 'xcb'
     return _run_game_command(ctx, emu_name, cmd, env).returncode
 
-
 def launch_citron_neo(ctx: LaunchContext) -> int:
     return _launch_switch(ctx, 'citron-neo')
 
-
 def launch_eden(ctx: LaunchContext) -> int:
     return _launch_switch(ctx, 'eden')
-
-
-# ── Ymir (Saturn) ──────────────────────────────────────────────────────────────
 
 def launch_ymir(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -174,7 +154,6 @@ def launch_ymir(ctx: LaunchContext) -> int:
         _log.error("ymir: binary not found")
         return 1
 
-    # Ymir fills in everything else when it saves the profile's config.
     cfg_file = cfg_dir / 'Ymir.toml'
     if not cfg_file.exists():
         cfg_file.write_text(
@@ -189,15 +168,11 @@ def launch_ymir(ctx: LaunchContext) -> int:
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
     return _run_game_command(ctx, 'ymir', cmd, env).returncode
 
-
-# ── XRoar (CoCo / Dragon) ──────────────────────────────────────────────────────
-
 _XROAR_MACHINES = {
     'coco':     'coco2bus',
     'dragon64': 'dragon64',
     'mc10':     'mc10',
 }
-
 
 def launch_xroar(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -226,9 +201,6 @@ def launch_xroar(ctx: LaunchContext) -> int:
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
     return _run_game_command(ctx, 'xroar', cmd, env).returncode
 
-
-# ── EasyRPG ────────────────────────────────────────────────────────────────────
-
 def launch_easyrpg(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     rom = ctx.rom
@@ -253,9 +225,6 @@ def launch_easyrpg(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     return _run_game_command(ctx, 'easyrpg', cmd, env).returncode
 
-
-# ── TheXTech ───────────────────────────────────────────────────────────────────
-
 def launch_thextech(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     saves_dir = SAVES / 'thextech'
@@ -270,13 +239,9 @@ def launch_thextech(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     return _run_game_command(ctx, 'thextech', cmd, env).returncode
 
-
-# ── Hypseus-Singe (Daphne/Singe laserdisc) ────────────────────────────────────
-
 _HYPSEUS_SHARE_DIR = Path('/usr/share/hypseus-singe')
 _DAPHNE_ROM_DIR    = BIOS / 'daphne'
 _SINGE_ROM_DIR     = BIOS / 'singe'
-
 
 def launch_hypseus_singe(ctx: LaunchContext) -> int:
     import shutil as _shutil
@@ -291,7 +256,6 @@ def launch_hypseus_singe(ctx: LaunchContext) -> int:
         _log.error("hypseus-singe: binary not found")
         return 1
 
-    # Copy gamepad input config template if not already present
     gamepad_ini = _HYPSEUS_SHARE_DIR / 'hypinput_gamepad.ini'
     target_ini  = cfg_dir / 'hypinput.ini'
     if gamepad_ini.exists() and not target_ini.exists():
@@ -333,9 +297,6 @@ def launch_hypseus_singe(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     return _run_game_command(ctx, 'hypseus-singe', cmd, env, cwd=cfg_dir).returncode
 
-
-# ── TIC-80 ─────────────────────────────────────────────────────────────────────
-
 def launch_tic80(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     saves_dir = SAVES / ctx.system
@@ -350,16 +311,12 @@ def launch_tic80(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     return _run_game_command(ctx, 'tic80', cmd, env).returncode
 
-
-# ── Ikemen GO (M.U.G.E.N engine) ──────────────────────────────────────────────
-
 _IKEMEN_KEYMAPPING = [
     {'Joystick': -1, 'Buttons': ['UP','DOWN','LEFT','RIGHT','a','s','d','z','x','c','RETURN','f','v','q']},
     {'Joystick': -1, 'Buttons': ['KP_8','KP_5','KP_4','KP_6','p','LBRACKET','RBRACKET','SEMICOLON','QUOTE','BACKSLASH','SLASH','o','l','PERIOD']},
     {'Joystick': -1, 'Buttons': ['Not used']*14},
     {'Joystick': -1, 'Buttons': ['Not used']*14},
 ]
-
 
 def launch_ikemen(ctx: LaunchContext) -> int:
     import json as _json
@@ -372,7 +329,6 @@ def launch_ikemen(ctx: LaunchContext) -> int:
         _log.error("ikemen: binary not found")
         return 1
 
-    # Write config.json with Fullscreen + input config
     cfg_path = game_dir / 'save' / 'config.json'
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -380,12 +336,10 @@ def launch_ikemen(ctx: LaunchContext) -> int:
     except Exception:
         cfg = {}
 
-    # Build joystick mapping from connected controllers
     joymapping = [
         {'Joystick': ctrl.index, 'Buttons': ['Not used'] * 14}
         for ctrl in ctx.controllers[:4]
     ]
-    # Pad to 4 slots
     while len(joymapping) < 4:
         joymapping.append({'Joystick': len(joymapping), 'Buttons': ['Not used'] * 14})
 
@@ -399,10 +353,6 @@ def launch_ikemen(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     return _run_game_command(ctx, 'ikemen', cmd, env, cwd=game_dir).returncode
 
-
-# ── BigPEmu (Atari Jaguar) ────────────────────────────────────────────────────
-
-# BigPEmu P1 binding sequence (es_name → bigpemu_action)
 _BIGPEMU_P1_BTNS: list[tuple[str, str]] = [
     ('y', 'C'), ('b', 'B'), ('a', 'A'), ('select', 'Pause'), ('start', 'Option'),
     ('up', 'Pad-Up'), ('down', 'Pad-Down'), ('left', 'Pad-Left'), ('right', 'Pad-Right'),
@@ -415,10 +365,8 @@ _BIGPEMU_AXIS_IDS: dict[str, int] = {
     'joystick1left': 128, 'joystick1up': 129, 'joystick2left': 131, 'joystick2up': 132,
 }
 
-
 def _bigpemu_binding(guid: str, input_id: int, input_type: str, value: float = 0.0) -> dict:
     return {'DeviceGuid': guid, 'InputID': input_id, 'InputType': input_type, 'Value': value}
-
 
 def launch_bigpemu(ctx: LaunchContext) -> int:
     import json as _json
@@ -436,7 +384,6 @@ def launch_bigpemu(ctx: LaunchContext) -> int:
 
     cfg_file = cfg_dir / 'BigPEmuConfig.bigpcfg'
 
-    # Preserve BIOS paths that BigPEmu writes itself
     preserved: dict = {}
     if cfg_file.exists():
         try:
@@ -505,18 +452,12 @@ def launch_bigpemu(ctx: LaunchContext) -> int:
     env['SDL_JOYSTICK_HIDAPI'] = '0'
     return _run_game_command(ctx, 'bigpemu', cmd, env).returncode
 
-
-# ── Snes9x standalone (Qt frontend) ───────────────────────────────────────────
-
 def launch_snes9x(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('snes9x')
     if bin_path is None:
         _log.error("snes9x: binary not found")
         return 1
 
-    # snes9x-qt has no fullscreen flag; it reads FullscreenOnOpen from
-    # $XDG_CONFIG_HOME/snes9x/snes9x-qt.conf, a QSettings ini where the
-    # "General" group is written as [%General].
     cfg_file = CONFIGS / 'snes9x' / 'snes9x-qt.conf'
     cfg_file.parent.mkdir(parents=True, exist_ok=True)
     parser = _new_ini_parser()
@@ -532,14 +473,7 @@ def launch_snes9x(ctx: LaunchContext) -> int:
     env['QT_QPA_PLATFORM'] = 'xcb'
     return _run_game_command(ctx, 'snes9x', [str(bin_path), str(ctx.rom)], env).returncode
 
-
-# ── EKA2L1 (Nokia N-Gage) ─────────────────────────────────────────────────────
-
 def launch_eka2l1(ctx: LaunchContext) -> int:
-    """Game-card dumps (folder or zip with a System folder at its root) are
-    mounted as drive E and the N-Gage game on it is run; .sis/.sisx packages
-    are installed and EKA2L1 opens on its app list. The N-Gage firmware has
-    to be installed once through EKA2L1 itself (desktop menu)."""
     bin_path = _find_emulator_bin('eka2l1')
     if bin_path is None:
         _log.error("eka2l1: binary not found")
@@ -553,14 +487,9 @@ def launch_eka2l1(ctx: LaunchContext) -> int:
 
     conf = _load_effective_hippos_conf()
     env = _build_game_env(conf, ctx)
-    # Data (firmware, drives, saves) lands in $XDG_DATA_HOME/EKA2L1; the
-    # desktop launcher uses the same folder.
     env['XDG_DATA_HOME'] = str(CONFIGS)
     env['QT_QPA_PLATFORM'] = 'xcb'
     return _run_game_command(ctx, 'eka2l1', cmd, env).returncode
-
-
-# ── AppleWin (Apple II) ────────────────────────────────────────────────────────
 
 def launch_applewin(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -585,15 +514,11 @@ def launch_applewin(ctx: LaunchContext) -> int:
     env['XDG_CONFIG_HOME'] = str(cfg_dir)
     return _run_game_command(ctx, 'applewin', cmd, env).returncode
 
-
-# ── Demul (Windows arcade emulator) ───────────────────────────────────────────
-
 _DEMUL_SYSTEMS = {
     'hikaru':  'hikaru',
     'gaelco':  'gaelco',
     'cave3rd': 'cavesh3',
 }
-
 
 def launch_demul(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -619,9 +544,6 @@ def launch_demul(ctx: LaunchContext) -> int:
     env['WINEDLLOVERRIDES'] = WINE_NO_INSTALLER_PROMPTS
     return _run_game_command(ctx, 'demul', cmd, env).returncode
 
-
-# ── Sugarbox (ZX Spectrum) ────────────────────────────────────────────────────
-
 def launch_sugarbox(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     saves_dir = SAVES / ctx.system
@@ -634,8 +556,6 @@ def launch_sugarbox(ctx: LaunchContext) -> int:
         _log.error("sugarbox: binary not found")
         return 1
 
-    # Sugarbox (Amstrad CPC/GX4000) loads a game only through --cart (.cpr)
-    # or a CSL script; it ignores a bare file argument.
     if ctx.rom.suffix.lower() != '.cpr':
         _log.error("sugarbox: only .cpr cartridges can be started directly: %s", ctx.rom)
         return 1

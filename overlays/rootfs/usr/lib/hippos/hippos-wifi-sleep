@@ -1,13 +1,4 @@
 #!/usr/bin/env bash
-# hippos-wifi-sleep pre|post — keep Intel Wi-Fi alive across suspend.
-#
-# Some Intel cards (AX200 on an AYANEO 2021, 2026-11-08) can't leave D3hot
-# after S3: "Unable to change power state from D3hot to D0, device
-# inaccessible", and Wi-Fi stays dead until the card is removed from the PCI
-# bus and rescanned. The PCI core never moves a device that has no driver into
-# a low-power state, so iwlwifi is unbound before sleep and bound again after.
-# If the card still fails to probe, it gets the remove and rescan that brought
-# it back by hand.
 
 set -u
 
