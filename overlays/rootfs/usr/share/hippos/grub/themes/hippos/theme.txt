@@ -1,0 +1,65 @@
+# HippOS GRUB theme: the ES theme's splash, with the boot menu on a panel
+# over the planet, matching the login screen. Positions are in percent
+# because grub.cfg uses gfxmode=auto.
+
+title-text: ""
+desktop-image: "background.jpg"
+desktop-color: "#07060F"
+terminal-font: "Terminus Regular 14"
+terminal-left: "0"
+terminal-top: "0"
+terminal-width: "100%"
+terminal-height: "100%"
+terminal-border: "0"
+
++ label {
+  left = 52%
+  top = 22%
+  width = 42%
+  align = "center"
+  text = "Choose how to start"
+  color = "#F4F1FF"
+  font = "Sora Regular 20"
+}
+
++ boot_menu {
+  left = 52%
+  top = 28%
+  width = 42%
+  height = 30%
+  menu_pixmap_style = "menu_*.png"
+  item_font = "Sora Regular 24"
+  item_color = "#C8C2E0"
+  selected_item_font = "Sora SemiBold Regular 24"
+  selected_item_color = "#FFFFFF"
+  selected_item_pixmap_style = "select_*.png"
+  item_height = 46
+  item_padding = 16
+  item_spacing = 8
+  icon_width = 0
+  icon_height = 0
+  item_icon_space = 0
+  scrollbar = false
+}
+
++ label {
+  left = 52%
+  top = 64%
+  width = 42%
+  align = "center"
+  id = "__timeout__"
+  text = "Starting in %d s"
+  color = "#8F88AE"
+  font = "Sora Regular 20"
+}
+
+# Under the logo, where the background stays dark; the planet fills the right.
++ label {
+  left = 4%
+  top = 100%-48
+  width = 44%
+  align = "center"
+  text = "Enter to start    E to edit    C for a command line"
+  color = "#C8C2E0"
+  font = "Sora Regular 16"
+}

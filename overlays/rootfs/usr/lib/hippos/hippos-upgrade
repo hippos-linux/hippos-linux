@@ -314,6 +314,14 @@ def default_kernel_variant():
 
 
 EFI_GRUB_CFG = "/boot/efi/grub/grub.cfg"
+EFI_GRUBENV = "/boot/efi/grub/grubenv"
+# The GRUB theme ships in each deployment and is copied onto the ESP, where
+# GRUB reads it (the ESP is GRUB's root).
+DEPLOYMENT_GRUB_THEME = "usr/share/hippos/grub/themes/hippos"
+GRUB_THEME = "/grub/themes/hippos"
+EFI_GRUB_THEME = "/boot/efi/grub/themes/hippos"
+# Failed boots of a new deployment before GRUB falls back to the previous one.
+BOOT_ATTEMPTS = 3
 GRUB_DEFAULT_CFG = "/etc/default/grub"
 GRUB_DEFAULT_CFG_DIR = "/etc/default/grub.d"
 
@@ -494,6 +502,26 @@ def _grub_menuentry(label, subvol, kernel, initrd, uuid, cmdline, entry_id=None)
     ]
 
 
+def arm_boot_counter():
+    """Makes GRUB fall back to the previous deployment after BOOT_ATTEMPTS
+    failed boots."""
+    subprocess.run(["grub-editenv", EFI_GRUBENV, "create"], check=False)
+    subprocess.run(["grub-editenv", EFI_GRUBENV, "set", f"boot_counter={BOOT_ATTEMPTS}"], check=True)
+    log(f"Boot counter armed ({BOOT_ATTEMPTS} attempts before rollback)")
+
+
+def install_grub_theme(deployment_path):
+    """Puts the deployment's GRUB theme on the ESP, replacing the last one.
+    The ESP is vfat, so files are copied without their ownership or modes."""
+    source = os.path.join(deployment_path, DEPLOYMENT_GRUB_THEME)
+    if not os.path.isdir(source):
+        return
+    shutil.rmtree(EFI_GRUB_THEME, ignore_errors=True)
+    os.makedirs(EFI_GRUB_THEME)
+    for name in os.listdir(source):
+        shutil.copyfile(os.path.join(source, name), os.path.join(EFI_GRUB_THEME, name))
+
+
 def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
     """Regenerate grub.cfg on the EFI partition.
 
@@ -532,6 +560,7 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
 
     default_subvol_path = os.path.join(BTRFS_MNT, default_subvol)
     default_kernel, default_initrd = kernel_for(default_subvol_path, default_variant, required=True)
+    install_grub_theme(default_subvol_path)
 
     # Fallback target for the boot-counter (below), in the priority order a
     # user would want: the other kernel variant on this same deployment
@@ -555,11 +584,12 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
         (default_subvol, default_variant),
     )
 
-    # Boot-counter logic: grubenv holds boot_counter (set to 3 on each update).
-    # Each failed boot decrements it; when it hits 0 the fallback entry is
-    # selected by id (see fallback_id above) instead of a positional index,
-    # so it keeps pointing at the right entry regardless of submenu nesting.
-    # A successful boot clears it via hippos-boot-success.service.
+    # Boot-counter logic: grubenv holds boot_counter (BOOT_ATTEMPTS after each
+    # update). Each failed boot decrements it; when it hits 0 the fallback
+    # entry is selected by id (see fallback_id above) instead of a positional
+    # index, so it keeps pointing at the right entry regardless of submenu
+    # nesting. A successful boot clears it via hippos-boot-success.service.
+    # GRUB's script has no arithmetic, so the decrement is one branch per value.
     lines = [
         "insmod all_video",
         "insmod gfxterm",
@@ -571,8 +601,11 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
         # and boot long before that doc's kernel/DRM-level EDID logic runs.
         "set gfxmode=auto",
         "terminal_output gfxterm",
-        "if [ -f /grub/themes/hippos/theme.txt ] ; then",
-        "    set theme=/grub/themes/hippos/theme.txt",
+        f"if [ -f {GRUB_THEME}/theme.txt ] ; then",
+        f"    set theme={GRUB_THEME}/theme.txt",
+        # A theme can only use fonts GRUB has loaded.
+        *(f"    loadfont {GRUB_THEME}/{os.path.basename(font)}"
+          for font in sorted(glob.glob(os.path.join(EFI_GRUB_THEME, "*.pf2")))),
         "fi",
         "",
         "load_env",
@@ -587,9 +620,11 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
         "        set timeout_style=menu",
         "        set boot_counter=",
         "        save_env boot_counter",
-        "    else",
-        "        set boot_counter=$((boot_counter - 1))",
-        "        save_env boot_counter",
+        *(line for count in range(BOOT_ATTEMPTS, 0, -1) for line in (
+            f"    elif [ \"${{boot_counter}}\" = \"{count}\" ] ; then",
+            f"        set boot_counter={count - 1}",
+            "        save_env boot_counter",
+        )),
         "    fi",
         "fi",
         "",
@@ -659,12 +694,12 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
             )
 
     lines += [
-        'submenu "Advanced options for HippOS" {',
+        'submenu "Advanced options" {',
         *(f"    {l}" if l else "" for l in advanced),
         '}',
         '',
         'if fwsetup --is-supported ; then',
-        '    menuentry "UEFI Firmware Settings" {',
+        '    menuentry "Firmware settings" {',
         '        fwsetup',
         '    }',
         'fi',
@@ -967,11 +1002,7 @@ def cmd_apply():
         write_grub_cfg(plan.new_subvol, plan.final_deployments, uuid, partuuid)
         log(f"GRUB updated — default: {plan.new_subvol}")
 
-        # Arm the boot counter so rollback is offered after 3 failed boot attempts.
-        grubenv = "/boot/efi/grub/grubenv"
-        subprocess.run(["grub-editenv", grubenv, "create"], check=False)
-        subprocess.run(["grub-editenv", grubenv, "set", "boot_counter=3"], check=True)
-        log("Boot counter armed (3 attempts before rollback)")
+        arm_boot_counter()
     finally:
         umount_toplevel()
 
@@ -1106,10 +1137,7 @@ def cmd_update_kernel():
         write_grub_cfg(running, deployments, uuid, partuuid)
         log("GRUB updated")
 
-        grubenv = "/boot/efi/grub/grubenv"
-        subprocess.run(["grub-editenv", grubenv, "create"], check=False)
-        subprocess.run(["grub-editenv", grubenv, "set", "boot_counter=3"], check=True)
-        log("Boot counter armed (3 attempts before rollback)")
+        arm_boot_counter()
 
         # Prune old kernel snapshots — keep only the one we just made
         keep = {snap_name} if installed else set()
