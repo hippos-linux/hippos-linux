@@ -11,7 +11,8 @@ TimeoutStartSec=180
 TimeoutStopSec=5
 ExecStart=/usr/lib/hippos/mount-saves-pool
 ExecStop=umount -l /userdata/saves
-ExecStop=pkill -f "mergerfs.*userdata/saves" || true
+# The lazy unmount usually ends mergerfs first; "-" accepts finding nothing.
+ExecStop=-pkill -f "mergerfs.*userdata/saves"
 
 [Install]
 WantedBy=multi-user.target

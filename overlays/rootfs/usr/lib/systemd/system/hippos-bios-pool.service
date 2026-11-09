@@ -11,7 +11,8 @@ TimeoutStartSec=180
 TimeoutStopSec=5
 ExecStart=/usr/lib/hippos/mount-bios-pool
 ExecStop=umount -l /userdata/bios
-ExecStop=pkill -f "mergerfs.*userdata/bios" || true
+# The lazy unmount usually ends mergerfs first; "-" accepts finding nothing.
+ExecStop=-pkill -f "mergerfs.*userdata/bios"
 
 [Install]
 WantedBy=multi-user.target

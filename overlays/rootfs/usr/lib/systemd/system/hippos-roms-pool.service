@@ -11,7 +11,8 @@ TimeoutStopSec=5
 ExecStart=/usr/lib/hippos/mount-roms-pool
 ExecStartPost=/usr/lib/hippos/generate-system-info
 ExecStop=umount -l /userdata/roms
-ExecStop=pkill -f "mergerfs.*userdata/roms" || true
+# The lazy unmount usually ends mergerfs first; "-" accepts finding nothing.
+ExecStop=-pkill -f "mergerfs.*userdata/roms"
 
 [Install]
 WantedBy=multi-user.target
