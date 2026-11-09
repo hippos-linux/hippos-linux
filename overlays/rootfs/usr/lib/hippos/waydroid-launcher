@@ -64,7 +64,11 @@ try_weston() {
     for i in $(seq 1 "$((WESTON_TIMEOUT * 2))"); do
         [[ -S "${runtime_dir}/${WAYLAND_SOCKET}" ]] && {
             export WAYLAND_DISPLAY="${WAYLAND_SOCKET}"
-            "${HOTKEYS_BIN}" --new-context waydroid "$(cat /usr/share/hippos/hotkeys/contexts/waydroid.json)" 2>/dev/null || true
+            # --new-context takes the bindings alone, not the whole context file.
+            # Its exit ends Weston, which this script waits on: ES runs this
+            # directly rather than through emulatorlauncher, which is what
+            # hippos-close-game looks for.
+            "${HOTKEYS_BIN}" --new-context waydroid "$(python3 -c 'import json, sys; print(json.dumps(json.load(open(sys.argv[1]))["keys"]))' /usr/share/hippos/hotkeys/contexts/waydroid.json)" 2>/dev/null || true
             return 0
         }
         sleep 0.5
@@ -90,14 +94,12 @@ start_weston() {
 start_weston
 
 # Start session if not running
-# Needs root: waydroid's own network setup (waydroid-net.sh — creates the
-# waydroid0 bridge, runs dnsmasq/iptables) is shelled out to as the invoking
-# user, not escalated internally, even though `session start` itself isn't
-# root-gated. Without sudo here it fails silently and lxc-start later hard
-# crashes referencing a waydroid0 bridge that was never created.
+# Runs as the user: Waydroid refuses a session without XDG_RUNTIME_DIR, which
+# sudo clears. The root waydroid-container service sets up the container and
+# its network (waydroid-net.sh) when the session asks it to over D-Bus.
 if ! waydroid status 2>/dev/null | grep -q "Session.*RUNNING"; then
     log "Starting Waydroid session..."
-    nohup sudo -n waydroid session start &>/dev/null &
+    nohup waydroid session start &>/dev/null &
     for i in $(seq 1 "${SESSION_TIMEOUT}"); do
         waydroid status 2>/dev/null | grep -q "Session.*RUNNING" && break
         [[ "${i}" -eq "${SESSION_TIMEOUT}" ]] && die "Session did not start within ${SESSION_TIMEOUT}s"

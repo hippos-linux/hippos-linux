@@ -1,7 +1,7 @@
 {
   "name": "waydroid",
   "keys": {
-    "exit": "/usr/lib/hippos/hippos-close-game",
+    "exit": "pkill -u hippos -x weston",
     "screenshot": "KEY_SYSRQ"
   }
 }
