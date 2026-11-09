@@ -20,6 +20,7 @@ USERDATA        = Path('/userdata')
 CONTENT_CACHE   = USERDATA / 'system' / 'content-cache'
 INSTALLED_FILE  = CONTENT_CACHE / 'installed.json'
 HIPPOS_SETTINGS = Path('/usr/lib/hippos/hippos-settings')
+INSTALLERS_DIR  = Path('/usr/lib/hippos/content-installers')
 
 DEFAULT_CATALOG_URL = 'http://hippos-linux.org/store/content-catalog.json'
 
@@ -136,6 +137,27 @@ def _apt(action: str, packages: list[str]) -> int:
     print(f'Running: {" ".join(cmd)}')
     return subprocess.run(cmd).returncode
 
+def _current_arch() -> str:
+    try:
+        return subprocess.run(['dpkg', '--print-architecture'],
+                              capture_output=True, text=True, check=False).stdout.strip()
+    except FileNotFoundError:
+        return ''
+
+def _arch_ok(pkg: dict) -> bool:
+    want = pkg.get('arch', '')
+    return not want or want == _current_arch()
+
+def _run_installer(name: str, action: str) -> int:
+    if not name or '/' in name or name.startswith('.'):
+        print(f'Invalid installer name: {name}', file=sys.stderr)
+        return 1
+    script = INSTALLERS_DIR / name
+    if not script.is_file() or not os.access(script, os.X_OK):
+        print(f'Installer not found: {script}', file=sys.stderr)
+        return 1
+    return subprocess.run([str(script), action]).returncode
+
 def _create_port_launcher(pkg: dict) -> Path:
     name    = pkg.get('name', pkg['id'])
     command = pkg.get('launcher_command', '')
@@ -150,7 +172,7 @@ def cmd_list(args: list[str]) -> int:
     catalog   = _load_catalog()
     installed = _load_installed()
     category  = args[0].lower() if args else None
-    pkgs      = catalog.get('packages', [])
+    pkgs      = [p for p in catalog.get('packages', []) if _arch_ok(p)]
     if category:
         pkgs = [p for p in pkgs if p.get('category', '').lower() == category]
     if not pkgs:
@@ -201,6 +223,9 @@ def cmd_install(args: list[str]) -> int:
     if not pkg:
         print(f'Package not found: {pkg_id}', file=sys.stderr)
         return 1
+    if not _arch_ok(pkg):
+        print(f"{pkg_id} is not available for this architecture", file=sys.stderr)
+        return 1
 
     pkg_type = pkg.get('type', 'tarball')
 
@@ -218,6 +243,22 @@ def cmd_install(args: list[str]) -> int:
             return ret
         script = _create_port_launcher(pkg)
         print(f'Created launcher: {script}')
+        installed         = _load_installed()
+        installed[pkg_id] = pkg.get('version', 'latest')
+        _save_installed(installed)
+        print(f'Installed: {pkg_id}')
+        return 0
+
+    if pkg_type == 'installer':
+        installer = pkg.get('installer', '')
+        print(f"Installing {pkg.get('name', pkg_id)}...")
+        ret = _run_installer(installer, 'install')
+        if ret != 0:
+            print(f'Install failed (exit {ret})', file=sys.stderr)
+            return ret
+        if pkg.get('launcher_command'):
+            script = _create_port_launcher(pkg)
+            print(f'Created launcher: {script}')
         installed         = _load_installed()
         installed[pkg_id] = pkg.get('version', 'latest')
         _save_installed(installed)
@@ -286,6 +327,12 @@ def cmd_remove(args: list[str]) -> int:
             if apt_packages:
                 _apt('remove', apt_packages)
                 set_claimed(apt_packages, False)
+            launcher = INSTALL_ROOTS['ports'] / f'{pkg_id}.sh'
+            if launcher.exists():
+                launcher.unlink()
+                print(f'Removed launcher: {launcher}')
+        elif pkg_type == 'installer':
+            _run_installer(pkg.get('installer', ''), 'remove')
             launcher = INSTALL_ROOTS['ports'] / f'{pkg_id}.sh'
             if launcher.exists():
                 launcher.unlink()
