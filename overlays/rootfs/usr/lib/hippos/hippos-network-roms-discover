@@ -8,6 +8,8 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +18,8 @@ HIPPOS_CONFIG = SYSTEM / "configs" / "hippos"
 DISCOVERED = HIPPOS_CONFIG / "roms-discovered.conf"
 SOURCES = HIPPOS_CONFIG / "roms-sources.conf"
 SETTINGS_GET = "/usr/lib/hippos/hippos-settings"
+SMB_PORT = 445
+NFS_PORT = 2049
 LIKELY_NAMES = {
     "games",
     "hippos",
@@ -35,6 +39,10 @@ class Candidate:
     @property
     def ident(self) -> str:
         return hashlib.sha1(self.uri.encode("utf-8")).hexdigest()[:12]
+
+    @property
+    def needs_signin(self) -> bool:
+        return self.uri.startswith("cifs://") and "/" not in self.uri.removeprefix("cifs://")
 
     @property
     def likely(self) -> bool:
@@ -70,6 +78,9 @@ def safe_name(value: str) -> str:
 def cifs_uri(host: str, share: str) -> str:
     return f"cifs://{safe_name(host)}/{safe_name(share)}"
 
+def nfs_uri(host: str, export: str) -> str:
+    return f"nfs:{host}:{export}"
+
 def parse_smbclient_list(host: str, output: str, source: str) -> list[Candidate]:
     candidates: list[Candidate] = []
     in_table = False
@@ -97,60 +108,80 @@ def enumerate_smb_host(host: str, source: str) -> list[Candidate]:
         output = run(["smbclient", "-L", f"//{host}", "-N", "-t", "3"])
     return parse_smbclient_list(host, output, source)
 
-def discover_smbtree() -> list[Candidate]:
-    output = run(["smbtree", "-N", "-b"], timeout=12)
-    candidates: list[Candidate] = []
+def smbtree_hosts() -> set[str]:
     hosts: set[str] = set()
-    for raw in output.splitlines():
-        line = raw.strip()
-        match = re.match(r"^\\\\([^\\\s]+)\\([^ \t]+)\s*(.*)$", line)
+    for raw in run(["smbtree", "-N", "-b"], timeout=12).splitlines():
+        match = re.match(r"^\\\\([^\\\s]+)", raw.strip())
         if match:
-            host, share, comment = match.groups()
-            candidates.append(Candidate(cifs_uri(host, share), share, "smbtree", comment.strip()))
-            continue
-        host_match = re.match(r"^\\\\([^\\\s]+)\s*$", line)
-        if host_match:
-            hosts.add(host_match.group(1))
-
-    for host in sorted(hosts):
-        candidates.extend(enumerate_smb_host(host, "smbtree"))
-    return candidates
+            hosts.add(match.group(1))
+    return hosts
 
 def local_addresses() -> set[str]:
     addrs: set[str] = {"127.0.0.1", "::1"}
-    try:
-        hostname = socket.gethostname()
-        for info in socket.getaddrinfo(hostname, None):
-            addrs.add(info[4][0])
-    except OSError:
-        pass
+    for raw in run(["ip", "-o", "addr", "show"], timeout=3).splitlines():
+        parts = raw.split()
+        if len(parts) >= 4 and parts[2] in {"inet", "inet6"}:
+            addrs.add(parts[3].split("/", 1)[0])
     return addrs
 
-def discover_avahi_smb() -> list[Candidate]:
-    output = run(["avahi-browse", "-rtp", "_smb._tcp"], timeout=8)
-    candidates: list[Candidate] = []
-    hosts: set[str] = set()
-    self_addrs = local_addresses()
-    for raw in output.splitlines():
-        if not raw.startswith("="):
-            continue
-        parts = raw.split(";")
-        if len(parts) < 8:
-            continue
-        host = parts[7] or parts[6].rstrip(".")
-        if host:
-            hosts.add(host)
+def lan_host(host: str, self_addrs: set[str]) -> bool:
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return True
+    return addr.version == 4 and str(addr) not in self_addrs
 
-    for host in sorted(hosts):
-        try:
-            addr = ipaddress.ip_address(host)
-            if addr.version == 6:
-                continue
-            if str(addr) in self_addrs:
-                continue
-        except ValueError:
-            pass
-        candidates.extend(enumerate_smb_host(host, "avahi"))
+def avahi_hosts(service: str) -> set[str]:
+    hosts: set[str] = set()
+    for raw in run(["avahi-browse", "-rtp", service], timeout=8).splitlines():
+        parts = raw.split(";")
+        if raw.startswith("=") and len(parts) >= 8:
+            host = parts[7] or parts[6].rstrip(".")
+            if host:
+                hosts.add(host)
+    return hosts
+
+def neighbour_hosts() -> set[str]:
+    hosts: set[str] = set()
+    for raw in run(["ip", "-4", "neigh", "show"], timeout=3).splitlines():
+        parts = raw.split()
+        if parts and parts[-1] in {"REACHABLE", "STALE", "DELAY", "PROBE"}:
+            hosts.add(parts[0])
+    return hosts
+
+def port_open(host: str, port: int) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+def hosts_with_port(hosts: set[str], port: int) -> list[str]:
+    ordered = sorted(hosts)
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        found = pool.map(lambda host: port_open(host, port), ordered)
+    return [host for host, is_open in zip(ordered, found) if is_open]
+
+def discover_smb(hosts: set[str]) -> list[Candidate]:
+    candidates: list[Candidate] = []
+    for host in hosts_with_port(hosts, SMB_PORT):
+        shares = enumerate_smb_host(host, "scan")
+        candidates.extend(shares or [Candidate(f"cifs://{safe_name(host)}", host, "scan")])
+    return candidates
+
+def enumerate_nfs_host(host: str) -> list[Candidate]:
+    candidates: list[Candidate] = []
+    for raw in run(["showmount", "-e", "--no-headers", host], timeout=5).splitlines():
+        export = raw.split()[0] if raw.strip() else ""
+        if export.startswith("/"):
+            name = export.rstrip("/").rsplit("/", 1)[-1] or export
+            candidates.append(Candidate(nfs_uri(host, export), name, "scan"))
+    return candidates
+
+def discover_nfs(hosts: set[str]) -> list[Candidate]:
+    candidates: list[Candidate] = []
+    for host in hosts_with_port(hosts, NFS_PORT):
+        candidates.extend(enumerate_nfs_host(host))
     return candidates
 
 def unique(candidates: list[Candidate]) -> list[Candidate]:
@@ -204,11 +235,14 @@ def read_candidates() -> list[Candidate]:
 def cmd_discover() -> int:
     if not is_true(setting("network.roms.discovery.enabled", "true")):
         return 0
-    candidates = unique(discover_avahi_smb() + discover_smbtree())
+    self_addrs = local_addresses()
+    hosts = {h for h in avahi_hosts("_smb._tcp") | avahi_hosts("_nfs._tcp") | neighbour_hosts() | smbtree_hosts()
+             if lan_host(h, self_addrs)}
+    candidates = unique(discover_smb(hosts) + discover_nfs(hosts))
     write_candidates(candidates)
     if is_true(setting("network.roms.discovery.auto_mount", "false")):
         for candidate in candidates:
-            if candidate.likely:
+            if candidate.likely and not candidate.needs_signin:
                 append_source(candidate.uri)
         subprocess.run(["systemctl", "start", "--no-block", "hippos-network-roms.service"], check=False)
     for candidate in candidates:
@@ -216,7 +250,7 @@ def cmd_discover() -> int:
             "\t".join(
                 [
                     candidate.ident,
-                    "likely" if candidate.likely else "other",
+                    candidate_kind(candidate),
                     candidate.uri,
                     candidate.name,
                     candidate.source,
@@ -224,6 +258,22 @@ def cmd_discover() -> int:
             )
         )
     return 0
+
+def candidate_kind(candidate: Candidate) -> str:
+    if candidate.needs_signin:
+        return "signin"
+    return "likely" if candidate.likely else "other"
+
+def cmd_shares(host: str) -> int:
+    username, _, password = sys.stdin.read().partition("\n")
+    with tempfile.NamedTemporaryFile("w", prefix="hippos-smb-", suffix=".auth") as auth:
+        auth.write(f"username={username.strip()}\npassword={password.rstrip(chr(10))}\n")
+        auth.flush()
+        output = run(["smbclient", "-L", f"//{host}", "-A", auth.name, "-g", "-t", "5"])
+    shares = parse_smbclient_list(host, output, "signin")
+    for candidate in shares:
+        print("\t".join([candidate.uri, candidate.name]))
+    return 0 if shares else 1
 
 def append_source(uri: str) -> None:
     HIPPOS_CONFIG.mkdir(parents=True, exist_ok=True)
@@ -254,7 +304,8 @@ def cmd_mount(selector: str) -> int:
 
 def usage() -> int:
     print(
-        "Usage: hippos-network-roms-discover discover | list | mount <id-or-cifs-uri>",
+        "Usage: hippos-network-roms-discover discover | list | mount <id-or-cifs-uri> | shares <host>\n"
+        "  shares reads the username and password from stdin, one per line.",
         file=sys.stderr,
     )
     return 1
@@ -271,7 +322,7 @@ def main() -> int:
                 "\t".join(
                     [
                         candidate.ident,
-                        "likely" if candidate.likely else "other",
+                        candidate_kind(candidate),
                         candidate.uri,
                         candidate.name,
                         candidate.source,
@@ -279,6 +330,8 @@ def main() -> int:
                 )
             )
         return 0
+    if args[0] == "shares" and len(args) == 2:
+        return cmd_shares(args[1])
     if args[0] == "mount" and len(args) == 2:
         return cmd_mount(args[1])
     return usage()

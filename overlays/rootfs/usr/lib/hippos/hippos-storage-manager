@@ -7,6 +7,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import shutil
 import sqlite3
 import stat
@@ -28,6 +29,7 @@ REPORT_PATH = CACHE_ROOT / "report.json"
 QUARANTINE_ROOT = CACHE_ROOT / "quarantine"
 EXTERNAL_ROM_CONFIG = HIPPOS_CONFIG / "external-roms.conf"
 NETWORK_ROM_CONFIG = HIPPOS_CONFIG / "roms-sources.conf"
+NETWORK_CREDENTIALS_DIR = HIPPOS_CONFIG / "credentials"
 IGNORED_DEVICES = HIPPOS_CONFIG / "ignored-storage-devices.txt"
 PROMPTED_THIS_BOOT = Path("/run/hippos/storage-merge-prompted")
 MOUNT_COMMANDS = {"mount", "unmount", "eject", "format", "mount_network", "add_network", "remove_network"}
@@ -1218,19 +1220,56 @@ def cmd_list_network() -> int:
         print("|".join((source, str(path or ""), status)))
     return 0
 
-def cmd_add_network(source: str) -> int:
-    if not (source.startswith("nfs:") or source.startswith("cifs://")):
-        log("network source must start with nfs: or cifs://")
+def normalize_network_source(address: str) -> Optional[str]:
+    address = address.strip()
+    if address.startswith(("nfs:", "cifs://")) and not address.startswith("nfs://"):
+        return address
+    smb = re.match(r"^(?:smb://|cifs://|//|\\\\)([^/\\]+)[/\\](.+?)/?$", address)
+    if smb:
+        host, share = smb.groups()
+        return f"cifs://{host}/{share.replace(chr(92), '/')}"
+    nfs = re.match(r"^(?:nfs://([^/]+)(/.*)|([^/:]+):(/(?!/).*))$", address)
+    if nfs:
+        host = nfs.group(1) or nfs.group(3)
+        export = nfs.group(2) or nfs.group(4)
+        return f"nfs:{host}:{export.rstrip('/') or '/'}"
+    return None
+
+def credentials_path(source: str) -> Path:
+    share_path = source.removeprefix("cifs://").split(" ", 1)[0]
+    return NETWORK_CREDENTIALS_DIR / (share_path.replace("/", "_") + ".cred")
+
+def write_credentials(source: str, username: str, password: str) -> Path:
+    NETWORK_CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
+    path = credentials_path(source)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(f"username={username}\npassword={password}\n")
+    os.chown(path, 0, 0)
+    return path
+
+def cmd_add_network(address: str, credentials_stdin: bool) -> int:
+    source = normalize_network_source(address)
+    if source is None:
+        log(f"not a network share address: {address}")
         return 1
-    lines = network_sources()
-    if source not in lines:
-        lines.append(source)
-        write_network_sources(lines)
+    if credentials_stdin:
+        if not source.startswith("cifs://"):
+            log("credentials are only used for SMB shares")
+            return 1
+        username, _, password = sys.stdin.read().partition("\n")
+        source = f"{source} credentials={write_credentials(source, username.strip(), password.rstrip(chr(10)))}"
+    share = source.split(" ", 1)[0]
+    lines = [line for line in network_sources() if line.split(" ", 1)[0] != share]
+    lines.append(source)
+    write_network_sources(lines)
     return cmd_mount_network()
 
 def cmd_remove_network(source: str) -> int:
     lines = [line for line in network_sources() if line != source]
     write_network_sources(lines)
+    if source.startswith("cifs://"):
+        credentials_path(source).unlink(missing_ok=True)
     path = network_mount_path(source)
     if path and path.exists():
         cmd_eject(str(path))
@@ -1319,7 +1358,9 @@ def main() -> int:
     unmount_p.add_argument("target")
     sub.add_parser("mount_network")
     add_network_p = sub.add_parser("add_network")
-    add_network_p.add_argument("source")
+    add_network_p.add_argument("address", help="cifs://host/share, //host/share, smb://host/share, nfs:host:/export, host:/export or nfs://host/export")
+    add_network_p.add_argument("--credentials-stdin", action="store_true",
+                               help="read the SMB username and password from stdin, one per line")
     remove_network_p = sub.add_parser("remove_network")
     remove_network_p.add_argument("source")
     eject_p = sub.add_parser("eject")
@@ -1357,7 +1398,7 @@ def main() -> int:
     if args.command == "mount_network":
         return cmd_mount_network()
     if args.command == "add_network":
-        return cmd_add_network(args.source)
+        return cmd_add_network(args.address, args.credentials_stdin)
     if args.command == "remove_network":
         return cmd_remove_network(args.source)
     if args.command == "eject":

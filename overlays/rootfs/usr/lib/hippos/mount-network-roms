@@ -39,7 +39,7 @@ while IFS= read -r line; do
             log "already mounted: ${share}"
             continue
         fi
-        if mount -t nfs -o ro,noatime,soft,timeo=30 "${share}" "${mnt}"; then
+        if mount -t nfs -o ro,noatime,soft,timeo=30,retry=0 "${share}" "${mnt}"; then
             log "mounted NFS ${share} at ${mnt}"
             changed=1
         else
@@ -61,7 +61,7 @@ while IFS= read -r line; do
         fi
         mount_opts="ro,noatime,soft,vers=3.0"
         [[ -n "${opts}" ]] && mount_opts="${mount_opts},${opts}"
-        [[ "${mount_opts}" != *username=* ]] && mount_opts="${mount_opts},guest"
+        [[ "${mount_opts}" != *username=* && "${mount_opts}" != *credentials=* ]] && mount_opts="${mount_opts},guest"
         if mount -t cifs "//${share_path}" "${mnt}" -o "${mount_opts}"; then
             log "mounted CIFS //${share_path} at ${mnt}"
             changed=1
