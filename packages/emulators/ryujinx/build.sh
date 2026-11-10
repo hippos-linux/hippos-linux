@@ -6,7 +6,11 @@ source "/work/build/common.sh"
 NAME='ryujinx'
 REPO='https://git.ryujinx.app/projects/Ryubing.git'
 VERSION="$(forgejo_latest_tag "${REPO}")"
-DOWNLOAD_URL="https://git.ryujinx.app/projects/Ryubing/releases/download/${VERSION}/ryujinx-${VERSION}-linux_x64.tar.gz"
+case "${ARCH:-amd64}" in
+    arm64) RYUJINX_PLATFORM="linux_arm64" ;;
+    *)     RYUJINX_PLATFORM="linux_x64" ;;
+esac
+DOWNLOAD_URL="https://git.ryujinx.app/projects/Ryubing/releases/download/${VERSION}/ryujinx-${VERSION}-${RYUJINX_PLATFORM}.tar.gz"
 
 REPO_ROOT="${REPO_ROOT:-/work}"
 ARTIFACT_ROOT="${ARTIFACT_ROOT:-/artifacts}"
@@ -20,7 +24,7 @@ mkdir -p "${BUILD}" "${STAGING}/bin"
 
 log "Installing Ryujinx ${VERSION}"
 
-TARBALL="${BUILD}/ryujinx-${VERSION}-linux_x64.tar.gz"
+TARBALL="${BUILD}/ryujinx-${VERSION}-${RYUJINX_PLATFORM}.tar.gz"
 
 if [[ -f "${TARBALL}" ]] && ! gzip -t "${TARBALL}" >/dev/null 2>&1; then
     log "Discarding invalid cached archive"

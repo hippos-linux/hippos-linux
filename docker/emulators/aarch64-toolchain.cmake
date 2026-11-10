@@ -16,8 +16,13 @@ set(CMAKE_STRIP        aarch64-linux-gnu-strip  CACHE FILEPATH "")
 
 # Clang target triple — emulators that explicitly use clang will auto-add
 # --target=aarch64-linux-gnu without any per-script change.
-set(CMAKE_C_COMPILER_TARGET   aarch64-linux-gnu)
-set(CMAKE_CXX_COMPILER_TARGET aarch64-linux-gnu)
+if(CMAKE_C_COMPILER MATCHES "clang")
+    set(CMAKE_C_COMPILER_TARGET   aarch64-linux-gnu)
+    set(CMAKE_ASM_COMPILER_TARGET aarch64-linux-gnu)
+endif()
+if(CMAKE_CXX_COMPILER MATCHES "clang")
+    set(CMAKE_CXX_COMPILER_TARGET aarch64-linux-gnu)
+endif()
 
 # Debian multiarch: cmake resolves find_library() via the library architecture
 # suffix, i.e. /usr/lib/aarch64-linux-gnu.

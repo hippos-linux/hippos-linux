@@ -1,3 +1,4 @@
 requireArtifact: pcsx2x6
+arch: [amd64]
 systems:
   - namco2x6

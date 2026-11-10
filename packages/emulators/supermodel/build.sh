@@ -24,16 +24,14 @@ if [[ ! -f "${SRC}/Makefiles/Makefile.UNIX" ]]; then
 fi
 
 _cross_args=()
-if [[ "${ARCH:-amd64}" == "arm64" ]] && [[ "$(uname -m)" == "x86_64" ]]; then
-    # Makefile.UNIX uses CC/CXX directly and may call sdl2-config (amd64).
-    # Override compiler and inject arm64 SDL2 include path so the multiarch
-    # SDL_config.h is found instead of the amd64 one.
+if [[ "${CROSS_BUILD}" -eq 1 ]]; then
     _cross_args=(
-        CC=aarch64-linux-gnu-gcc
-        CXX=aarch64-linux-gnu-g++
-        AR=aarch64-linux-gnu-ar
-        "CXXFLAGS=-I/usr/include/aarch64-linux-gnu"
-        "CFLAGS=-I/usr/include/aarch64-linux-gnu"
+        CC="${GNU_ARCH}-gcc"
+        CXX="${GNU_ARCH}-g++"
+        LD="${GNU_ARCH}-gcc"
+        AR="${GNU_ARCH}-ar"
+        SDL2_CFLAGS="$("${GNU_ARCH}-pkg-config" --cflags sdl2)"
+        SDL2_LIBS="$("${GNU_ARCH}-pkg-config" --libs sdl2 SDL2_net)"
     )
 fi
 

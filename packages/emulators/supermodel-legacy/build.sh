@@ -24,13 +24,14 @@ clone_source "${REPO}" "${TAG}" "${SRC}"
 mkdir -p "${STAGING}/bin"
 
 _cross_args=()
-if [[ "${ARCH:-amd64}" == "arm64" ]] && [[ "$(uname -m)" == "x86_64" ]]; then
+if [[ "${CROSS_BUILD}" -eq 1 ]]; then
     _cross_args=(
-        CC=aarch64-linux-gnu-gcc
-        CXX=aarch64-linux-gnu-g++
-        AR=aarch64-linux-gnu-ar
-        "CXXFLAGS=-I/usr/include/aarch64-linux-gnu"
-        "CFLAGS=-I/usr/include/aarch64-linux-gnu"
+        CC="${GNU_ARCH}-gcc"
+        CXX="${GNU_ARCH}-g++"
+        LD="${GNU_ARCH}-gcc"
+        AR="${GNU_ARCH}-ar"
+        SDL2_CFLAGS="$("${GNU_ARCH}-pkg-config" --cflags sdl2)"
+        SDL2_LIBS="$("${GNU_ARCH}-pkg-config" --libs sdl2 SDL2_net)"
     )
 fi
 

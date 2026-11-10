@@ -58,33 +58,26 @@ if("${PORT}" STREQUAL "sdl3")
 endif()
 TRIPLET_EOF
 
-# Determine vcpkg target triplet and cmake compiler based on build target arch.
-if [[ "${ARCH:-amd64}" == "arm64" ]] && [[ "$(uname -m)" == "x86_64" ]]; then
+_linker_flags=(
+    -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld"
+    -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld"
+    -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld"
+)
+
+if [[ "${CROSS_BUILD}" -eq 1 ]]; then
     _vcpkg_triplet=arm64-linux
-    _c_compiler=aarch64-linux-gnu-gcc
-    _cxx_compiler=aarch64-linux-gnu-g++
-    _linker_flags=()
+    _chainload_toolchain=(-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=/opt/hippos/aarch64-toolchain.cmake)
     YMIR_AVX2=OFF
-    _ar="$(command -v aarch64-linux-gnu-ar)"
-    _ranlib="$(command -v aarch64-linux-gnu-ranlib)"
 else
     _vcpkg_triplet=x64-linux
-    _c_compiler=clang
-    _cxx_compiler=clang++
-    _linker_flags=(
-        -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld"
-        -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld"
-        -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld"
-    )
+    _chainload_toolchain=()
     YMIR_AVX2=OFF
     if grep -qw avx2 /proc/cpuinfo 2>/dev/null; then
         YMIR_AVX2=ON
     fi
-    LLVM_AR="$(command -v llvm-ar-19 || command -v llvm-ar || true)"
-    LLVM_RANLIB="$(command -v llvm-ranlib-19 || command -v llvm-ranlib || true)"
-    _ar="${LLVM_AR}"
-    _ranlib="${LLVM_RANLIB}"
 fi
+_ar="$(command -v llvm-ar-19 || command -v llvm-ar || true)"
+_ranlib="$(command -v llvm-ranlib-19 || command -v llvm-ranlib || true)"
 
 # If cached SDL3 is missing SDL_IBus_* symbols (broken build), clear vcpkg
 # installed packages so they rebuild with the corrected triplet.
@@ -102,9 +95,10 @@ cmake_flags=(
     -DVCPKG_OVERLAY_TRIPLETS="${TRIPLET_DIR}"
     -DVCPKG_TARGET_TRIPLET="${_vcpkg_triplet}"
     -DVCPKG_HOST_TRIPLET=x64-linux
-    -DCMAKE_C_COMPILER="${_c_compiler}"
-    -DCMAKE_CXX_COMPILER="${_cxx_compiler}"
+    -DCMAKE_C_COMPILER=clang
+    -DCMAKE_CXX_COMPILER=clang++
     "${_linker_flags[@]}"
+    "${_chainload_toolchain[@]+"${_chainload_toolchain[@]}"}"
     -DCMAKE_INSTALL_PREFIX="${STAGING}"
     -DBUILD_SHARED_LIBS=OFF
     -DYMIR_BUILD_SANDBOX=OFF

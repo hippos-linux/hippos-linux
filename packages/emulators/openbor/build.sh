@@ -50,7 +50,11 @@ sed -i \
 mkdir -p "${STAGING}/bin"
 cd "${SRC}/engine"
 bash version.sh
-make -j"$(nproc)" BUILD_LINUX_LE_x86_64=1
+if [[ "${CROSS_BUILD}" -eq 1 ]]; then
+    make -j"$(nproc)" BUILD_LINUX_LE_arm=1 CC="${GNU_ARCH}-gcc" LNXDEV=/usr/bin PREFIX="${GNU_ARCH}-"
+else
+    make -j"$(nproc)" BUILD_LINUX_LE_x86_64=1
+fi
 
 cp "${SRC}/engine/OpenBOR" "${STAGING}/bin/OpenBOR7530" 2>/dev/null || \
     find "${SRC}/engine" -maxdepth 2 -name 'OpenBOR' -type f -perm /111 -exec cp {} "${STAGING}/bin/OpenBOR7530" \;
@@ -61,7 +65,7 @@ ln -sf OpenBOR7530 "${STAGING}/bin/OpenBOR6412"
 ln -sf OpenBOR7530 "${STAGING}/bin/OpenBOR7142"
 
 mkdir -p "${STAGING}/lib"
-cp /usr/lib/x86_64-linux-gnu/libSDL2_gfx-1.0.so.0* "${STAGING}/lib/" 2>/dev/null || true
+cp /usr/lib/${GNU_ARCH}/libSDL2_gfx-1.0.so.0* "${STAGING}/lib/" 2>/dev/null || true
 patchelf --set-rpath '$ORIGIN/../lib' "${STAGING}/bin/OpenBOR7530" 2>/dev/null || true
 
 write_artifact_version "${STAGING}" "${TAG}"

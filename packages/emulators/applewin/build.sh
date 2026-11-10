@@ -38,7 +38,7 @@ cmake --install "${BUILD}"
 cp -r "${SRC}/bin" "${STAGING}/share/applewin/"
 
 mkdir -p "${STAGING}/lib"
-cp /usr/lib/x86_64-linux-gnu/libminizip.so.1* "${STAGING}/lib/" 2>/dev/null || true
+cp /usr/lib/${GNU_ARCH}/libminizip.so.1* "${STAGING}/lib/" 2>/dev/null || true
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"

@@ -33,29 +33,29 @@ for comp in "${COMPONENTS[@]}"; do
     fi
 done
 
-# mupen64plus Makefiles use CC/LD directly; on arm64 cross-compile the host
-# linker (/usr/bin/ld) is x86_64. Pass the cross-toolchain explicitly on the
-# make command line so the Makefile can't fall back to native cc/ld.
-_cross_args=()
-if [[ "${ARCH:-amd64}" == "arm64" ]] && [[ "$(uname -m)" == "x86_64" ]]; then
-    _cross_args=(
-        CC=aarch64-linux-gnu-gcc
-        CXX=aarch64-linux-gnu-g++
-        LD=aarch64-linux-gnu-ld
-        AR=aarch64-linux-gnu-ar
-        CPU=aarch64
+_make_args=(INSTALL_STRIP_FLAG=)
+if [[ "${CROSS_BUILD}" -eq 1 ]]; then
+    _make_args+=(
+        CC="${GNU_ARCH}-gcc"
+        CXX="${GNU_ARCH}-g++"
+        LD="${GNU_ARCH}-ld"
+        AR="${GNU_ARCH}-ar"
+        HOST_CPU=aarch64
         NEW_DYNAREC=1
     )
 fi
 
-# Build core first
+for comp in "${COMPONENTS[@]}"; do
+    make -C "${SRC}/${comp}/projects/unix" clean "${_make_args[@]}" >/dev/null
+done
+
 log "Building mupen64plus-core"
 make -C "${SRC}/mupen64plus-core/projects/unix" \
     -j"$(nproc)" \
     all install \
     DESTDIR="${STAGING}" \
     PREFIX=/ \
-    "${_cross_args[@]}"
+    "${_make_args[@]}"
 
 # Build remaining components
 for comp in mupen64plus-ui-console mupen64plus-audio-sdl mupen64plus-input-sdl mupen64plus-rsp-hle mupen64plus-video-glide64mk2; do
@@ -66,13 +66,13 @@ for comp in mupen64plus-ui-console mupen64plus-audio-sdl mupen64plus-input-sdl m
         DESTDIR="${STAGING}" \
         PREFIX=/ \
         APIDIR="${SRC}/mupen64plus-core/src/api" \
-        "${_cross_args[@]}" 2>/dev/null || \
+        "${_make_args[@]}" 2>/dev/null || \
     make -C "${SRC}/${comp}/projects/unix" \
         -j"$(nproc)" \
         all install \
         DESTDIR="${STAGING}" \
         PREFIX=/ \
-        "${_cross_args[@]}"
+        "${_make_args[@]}"
 done
 
 write_artifact_version "${STAGING}" "$(date +%Y%m%d)"

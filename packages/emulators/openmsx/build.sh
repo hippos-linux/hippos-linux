@@ -21,7 +21,12 @@ clone_source "${REPO}" "${TAG}" "${SRC}"
 # openMSX's configure has no --prefix; install locations are make variables
 # (build/main.mk), and INSTALL_SHARE_DIR is compiled in as the system data dir.
 RUNTIME_PREFIX="${EMULATOR_RUNTIME_ROOT}/${NAME}"
+case "${ARCH:-amd64}" in
+    arm64) OPENMSX_TARGET_CPU="aarch64" ;;
+    *)     OPENMSX_TARGET_CPU="x86_64" ;;
+esac
 INSTALL_VARS=(
+    OPENMSX_TARGET_CPU="${OPENMSX_TARGET_CPU}"
     INSTALL_BINARY_DIR="${RUNTIME_PREFIX}/bin"
     INSTALL_SHARE_DIR="${RUNTIME_PREFIX}/share"
     INSTALL_DOC_DIR="${RUNTIME_PREFIX}/doc"
@@ -33,7 +38,7 @@ rm -rf "${SRC}/derived"
 (
     cd "${SRC}"
     ./configure
-    make -j"$(nproc)" OPENMSX_TARGET_CPU=x86_64 "${INSTALL_VARS[@]}"
+    make -j"$(nproc)" "${INSTALL_VARS[@]}"
     install_staged "${NAME}" "${STAGING}" "${BUILD}/destdir" make install "${INSTALL_VARS[@]}"
 )
 [[ -x "${STAGING}/bin/openmsx" ]] || { log "openmsx binary missing from ${STAGING}/bin after install"; exit 1; }

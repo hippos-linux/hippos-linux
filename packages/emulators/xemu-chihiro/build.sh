@@ -21,9 +21,14 @@ if ! git -C "${SRC}" apply --reverse --check "${OPTIONROM_PATCH}" >/dev/null 2>&
     git -C "${SRC}" apply --3way "${OPTIONROM_PATCH}"
 fi
 
+xemu_configure_args=()
+if [[ "${CROSS_BUILD}" -eq 1 ]]; then
+    xemu_configure_args+=(-a aarch64 --cross-prefix="${GNU_ARCH}-")
+fi
+
 log "Building with upstream build.sh"
 cd "${SRC}"
-./build.sh
+./build.sh "${xemu_configure_args[@]+"${xemu_configure_args[@]}"}"
 
 [[ -x "${SRC}/dist/xemu" ]] || die "xemu dist binary was not produced"
 

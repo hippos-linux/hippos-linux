@@ -16,15 +16,14 @@ STAGING="${ARTIFACT_ROOT}/emulators/${NAME}"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
-if [[ "${ARCH:-amd64}" == "arm64" ]]; then
-    log "SKIP: x16emu Makefile hardcodes /usr/include/x86_64-linux-gnu/SDL2; no arm64 support"
-    exit 0
-fi
-
 clone_source "${REPO}" "${TAG}" "${SRC}"
 
 mkdir -p "${STAGING}/bin"
-make -C "${SRC}" -j"$(nproc)"
+make_args=()
+if [[ "${CROSS_BUILD}" -eq 1 ]]; then
+    make_args=(CC="${GNU_ARCH}-gcc" SDL2CONFIG="${GNU_ARCH}-pkg-config sdl2")
+fi
+make -C "${SRC}" -j"$(nproc)" "${make_args[@]+"${make_args[@]}"}"
 cp "${SRC}/x16emu" "${STAGING}/bin/"
 
 write_artifact_version "${STAGING}" "${TAG}"

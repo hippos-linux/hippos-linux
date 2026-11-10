@@ -30,7 +30,11 @@ fi
 
 mkdir -p "${STAGING}/bin"
 cd "${SRC}"
-GOEXPERIMENT=arenas "${GO122_DIR}/bin/go" build -o Ikemen_GO ./src/
+go_target_env=()
+if [[ "${CROSS_BUILD}" -eq 1 ]]; then
+    go_target_env=(GOOS=linux GOARCH=arm64 CGO_ENABLED=1 CC="${GNU_ARCH}-gcc" CXX="${GNU_ARCH}-g++")
+fi
+env "${go_target_env[@]+"${go_target_env[@]}"}" GOEXPERIMENT=arenas "${GO122_DIR}/bin/go" build -o Ikemen_GO ./src/
 cp "${SRC}/Ikemen_GO" "${STAGING}/bin/"
 
 write_artifact_version "${STAGING}" "${TAG}"

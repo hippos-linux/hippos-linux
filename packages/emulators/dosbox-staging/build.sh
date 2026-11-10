@@ -43,14 +43,38 @@ pip3 install --quiet --break-system-packages jinja2
 rm -rf "${BUILD}"
 mkdir -p "${STAGING}/bin"
 
+vcpkg_cross_args=()
+configure_env=()
+if [[ "${CROSS_BUILD}" -eq 1 ]]; then
+    TRIPLET_DIR="${WORK_ROOT}/${NAME}/triplets"
+    mkdir -p "${TRIPLET_DIR}"
+    cat > "${TRIPLET_DIR}/arm64-linux.cmake" << 'TRIPLET_EOF'
+set(VCPKG_TARGET_ARCHITECTURE arm64)
+set(VCPKG_CRT_LINKAGE dynamic)
+set(VCPKG_LIBRARY_LINKAGE static)
+set(VCPKG_CMAKE_SYSTEM_NAME Linux)
+if("${PORT}" STREQUAL "dbus")
+    list(APPEND VCPKG_CMAKE_CONFIGURE_OPTIONS "-DDBUS_SESSION_SOCKET_DIR=/tmp")
+endif()
+TRIPLET_EOF
+    vcpkg_cross_args=(
+        -DVCPKG_OVERLAY_TRIPLETS="${TRIPLET_DIR}"
+        -DVCPKG_TARGET_TRIPLET=arm64-linux
+        -DVCPKG_HOST_TRIPLET=x64-linux
+        -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=/opt/hippos/aarch64-toolchain.cmake
+    )
+    configure_env=(-u CC -u CXX -u AR)
+fi
+
 log "Configuring"
-cmake -S "${SRC}" -B "${BUILD}" \
+env "${configure_env[@]+"${configure_env[@]}"}" cmake -S "${SRC}" -B "${BUILD}" \
     -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" \
     -DCMAKE_FIND_PACKAGE_PREFER_CONFIG=ON \
     -DCMAKE_INSTALL_PREFIX="${EMULATOR_RUNTIME_ROOT}/${NAME}" \
-    -DOPT_TESTS=OFF
+    -DOPT_TESTS=OFF \
+    "${vcpkg_cross_args[@]+"${vcpkg_cross_args[@]}"}"
 
 log "Building"
 cmake --build "${BUILD}" -j"$(nproc)"

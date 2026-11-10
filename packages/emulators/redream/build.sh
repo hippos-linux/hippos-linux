@@ -16,7 +16,11 @@ STAGING="${ARTIFACT_ROOT}/emulators/${NAME}"
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 mkdir -p "${BUILD}" "${STAGING}/bin"
-ARCHIVE="${BUILD}/redream.x86_64-linux-gnu.tar.gz"
+case "${ARCH:-amd64}" in
+    arm64) REDREAM_PLATFORM="universal-raspberry-linux" ;;
+    *)     REDREAM_PLATFORM="x86_64-linux" ;;
+esac
+ARCHIVE="${BUILD}/redream.${REDREAM_PLATFORM}.tar.gz"
 
 if [[ -f "${ARCHIVE}" ]] && ! gzip -t "${ARCHIVE}" >/dev/null 2>&1; then
     log "Discarding invalid cached archive"
@@ -26,7 +30,7 @@ fi
 if [[ ! -f "${ARCHIVE}" ]]; then
     log "Resolving redream Linux download URL"
     REDREAM_FILE="$(curl -sfL 'https://redream.io/download' \
-        | grep -o 'redream\.x86_64-linux-v[^"]*\.tar\.gz' | head -1)"
+        | grep -o "redream\\.${REDREAM_PLATFORM}-v[^\"]*\\.tar\\.gz" | head -1)"
     [[ -n "${REDREAM_FILE}" ]] || die "Could not resolve redream Linux download URL"
     log "Downloading ${REDREAM_FILE}"
     curl -fL "https://redream.io/download/${REDREAM_FILE}" \

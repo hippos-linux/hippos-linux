@@ -19,9 +19,16 @@ STAGING="${ARTIFACT_ROOT}/emulators/${NAME}"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
-if [[ "${ARCH:-amd64}" == "arm64" ]]; then
-    log "SKIP: vpinball standalone build uses a linux-x64-only CMakeLists with hardcoded x86 SIMD flags; no arm64 build available"
-    exit 0
+case "${ARCH:-amd64}" in
+    arm64) VPX_ARCH="aarch64" ;;
+    *)     VPX_ARCH="x64" ;;
+esac
+VPX_PLATFORM="linux-${VPX_ARCH}"
+
+if [[ "${CROSS_BUILD}" -eq 1 ]]; then
+    mkdir -p "${WORK_ROOT}/${NAME}"
+    printf 'host_alias=%s\n' "${GNU_ARCH}" > "${WORK_ROOT}/${NAME}/config.site"
+    export CONFIG_SITE="${WORK_ROOT}/${NAME}/config.site"
 fi
 
 if [[ -d "${SRC}/.git" ]]; then
@@ -45,39 +52,52 @@ fi
 
 cd "${SRC}"
 
-log "Preparing external Linux x64 dependencies"
-chmod +x standalone/linux-x64/external.sh
+log "Preparing external ${VPX_PLATFORM} dependencies"
+chmod +x "standalone/${VPX_PLATFORM}/external.sh"
 # bass24-linux.zip puts bass.h at c/bass.h (not root); patch each sub-library external.sh
 # call in the main script so the sub-script is fixed before it runs.
 # Also fix libserum_concentrate repo rename: GitHub now extracts as libserum-SHA/ not
 # libserum_concentrate-SHA/.
-python3 - <<'PYEOF'
+FFMPEG_CROSS_ARGS=""
+if [[ "${CROSS_BUILD}" -eq 1 ]]; then
+    FFMPEG_CROSS_ARGS="--enable-cross-compile --arch=${VPX_ARCH} --target-os=linux --cross-prefix=${GNU_ARCH}-"
+fi
+python3 - "${VPX_ARCH}" "${FFMPEG_CROSS_ARGS}" <<'PYEOF'
 import re
+import sys
 
-with open('standalone/linux-x64/external.sh', 'r') as f:
+arch, ffmpeg_cross_args = sys.argv[1], sys.argv[2]
+script = f'standalone/linux-{arch}/external.sh'
+
+with open(script, 'r') as f:
     content = f.read()
 
 def inject(m):
     indent = re.match(r'^\s*', m.group(0)).group(0)
     fixes = [
-        "sed -i 's|cp bass\\.h |cp c/bass.h |g' platforms/linux/x64/external.sh",
-        "sed -i 's|mv libserum_concentrate-|mv libserum-|g' platforms/linux/x64/external.sh",
+        f"sed -i 's|cp bass\\.h |cp c/bass.h |g' platforms/linux/{arch}/external.sh",
+        f"sed -i 's|mv libserum_concentrate-|mv libserum-|g' platforms/linux/{arch}/external.sh",
     ]
     return '\n'.join(indent + f for f in fixes) + '\n' + m.group(0)
 
-content = re.sub(r'^\s*platforms/linux/x64/external\.sh\b', inject, content, flags=re.MULTILINE)
+content = re.sub(rf'^\s*platforms/linux/{arch}/external\.sh\b', inject, content, flags=re.MULTILINE)
 
-with open('standalone/linux-x64/external.sh', 'w') as f:
+if ffmpeg_cross_args and ffmpeg_cross_args not in content:
+    ffmpeg = content.index('cd FFmpeg-')
+    doc = content.index('--disable-doc', ffmpeg)
+    content = content[:doc] + f'{ffmpeg_cross_args} ' + content[doc:]
+
+with open(script, 'w') as f:
     f.write(content)
 PYEOF
 
 # external.sh uses relative paths — must run from its own directory so SDL2/SDL_image/etc.
-# land at standalone/linux-x64/external/ which is what CMakeLists_gl-linux-x64.txt expects
-cd "${SRC}/standalone/linux-x64"
+# land at standalone/<platform>/external/ which is what CMakeLists_gl-<platform>.txt expects
+cd "${SRC}/standalone/${VPX_PLATFORM}"
 ./external.sh
 cd "${SRC}"
 
-cp standalone/cmake/CMakeLists_gl-linux-x64.txt CMakeLists.txt
+cp "standalone/cmake/CMakeLists_gl-${VPX_PLATFORM}.txt" CMakeLists.txt
 
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
@@ -104,7 +124,7 @@ chmod +x "${STAGING}/bin/vpinball"
 # configure-rootfs.sh and build-emulators.sh).
 
 # Copy external shared libs that POST_BUILD_COPY_EXT_LIBS=OFF skipped
-EXT_LIB="${SRC}/standalone/linux-x64/external/lib"
+EXT_LIB="${SRC}/standalone/${VPX_PLATFORM}/external/lib"
 if [[ -d "${EXT_LIB}" ]]; then
     mkdir -p "${STAGING}/lib"
     find "${EXT_LIB}" -maxdepth 1 \( -name "*.so" -o -name "*.so.*" \) | while read -r f; do
