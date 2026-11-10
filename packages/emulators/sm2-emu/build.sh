@@ -5,7 +5,7 @@ source "/work/build/common.sh"
 
 NAME='sm2-emu'
 REPO='https://github.com/dmanlfc/sm2-emu.git'
-TAG='v0.9.59'
+TAG="${SM2EMU_TAG:-$(github_latest_tag "${REPO}")}"
 
 REPO_ROOT="${REPO_ROOT:-/work}"
 ARTIFACT_ROOT="${ARTIFACT_ROOT:-/artifacts}"

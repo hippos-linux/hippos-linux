@@ -5,7 +5,7 @@ source "/work/build/common.sh"
 
 NAME='nanoboyadvance'
 REPO='https://github.com/nba-emu/NanoBoyAdvance.git'
-TAG='v1.8.3'
+TAG="${NANOBOYADVANCE_TAG:-$(github_latest_tag "${REPO}")}"
 
 REPO_ROOT="${REPO_ROOT:-/work}"
 ARTIFACT_ROOT="${ARTIFACT_ROOT:-/artifacts}"

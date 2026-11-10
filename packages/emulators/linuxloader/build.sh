@@ -7,7 +7,7 @@ source "${REPO_ROOT}/build/common.sh"
 
 NAME='linuxloader'
 REPO='https://github.com/lindbergh-loader/linuxloader.git'
-REF="${LINUXLOADER_REF:-v3.0.12}"
+TAG="${LINUXLOADER_TAG:-$(github_latest_tag "${REPO}")}"
 
 WORK_ROOT="${WORK_ROOT:-${REPO_ROOT}/work/emulators}"
 ARTIFACT_ROOT="${ARTIFACT_ROOT:-${REPO_ROOT}/artifacts}"
@@ -18,7 +18,7 @@ IMAGE_NAME="hippos-${NAME}-builder"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
-clone_source "${REPO}" "${REF}" "${SRC}" --submodules
+clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 sudo chown -R "$(id -u):$(id -g)" "${WORK_ROOT}/${NAME}" "${STAGING}" 2>/dev/null || true
 mkdir -p "${BUILD}" "${STAGING}/bin"
 
@@ -33,7 +33,7 @@ WORKDIR /linuxloader
 COPY . .
 RUN bash scripts/appimage/install-packages.sh
 RUN bash scripts/appimage/build-deps.sh
-RUN make
+RUN make linux
 RUN mkdir -p /output && cp -a build-linux /output/
 EOF
 
@@ -52,5 +52,5 @@ found="$(find "${STAGING}" -maxdepth 3 -name 'linuxloader' -type f -perm /111 -p
 [[ -n "${found}" ]] || die "linuxloader binary was not produced"
 [[ -x "${STAGING}/bin/linuxloader" ]] || cp "${found}" "${STAGING}/bin/linuxloader"
 
-write_artifact_version "${STAGING}" "${REF}"
+write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"
