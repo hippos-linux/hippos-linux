@@ -1,9 +1,11 @@
 ARG QT_VERSION
+ARG QT_XCB_DEV_PACKAGES="libx11-dev libx11-xcb-dev libxcb1-dev libxcb-cursor-dev libxcb-glx0-dev libxcb-icccm4-dev libxcb-image0-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-render-util0-dev libxcb-shape0-dev libxcb-sync-dev libxcb-util-dev libxcb-xfixes0-dev libxcb-xkb-dev libxkbcommon-dev libxkbcommon-x11-dev libxext-dev libxfixes-dev libxi-dev libxrandr-dev libxrender-dev libxss-dev libxtst-dev libxcb-render0-dev libxcb-shm0-dev libxcb-xinerama0-dev libxcb-xinput-dev libxcb-xtest0-dev libxcb-damage0-dev"
 
 # ── Stage 1: amd64 Qt ────────────────────────────────────────────────────────
 FROM debian:trixie AS amd64-qt
 
 ARG QT_VERSION
+ARG QT_XCB_DEV_PACKAGES
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -27,36 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libdbus-1-dev \
         libssl-dev \
         zlib1g-dev \
-        libx11-dev \
-        libx11-xcb-dev \
-        libxcb1-dev \
-        libxcb-cursor-dev \
-        libxcb-glx0-dev \
-        libxcb-icccm4-dev \
-        libxcb-image0-dev \
-        libxcb-keysyms1-dev \
-        libxcb-randr0-dev \
-        libxcb-render-util0-dev \
-        libxcb-shape0-dev \
-        libxcb-sync-dev \
-        libxcb-util-dev \
-        libxcb-xfixes0-dev \
-        libxcb-xkb-dev \
-        libxkbcommon-dev \
-        libxkbcommon-x11-dev \
-        libxext-dev \
-        libxfixes-dev \
-        libxi-dev \
-        libxrandr-dev \
-        libxrender-dev \
-        libxss-dev \
-        libxtst-dev \
-        libxcb-render0-dev \
-        libxcb-shm0-dev \
-        libxcb-xinerama0-dev \
-        libxcb-xinput-dev \
-        libxcb-xtest0-dev \
-        libxcb-damage0-dev \
+        ${QT_XCB_DEV_PACKAGES} \
         libva-dev \
         libvdpau-dev \
         libwayland-dev \
@@ -88,6 +61,7 @@ RUN mkdir qt-build && cd qt-build && \
         -confirm-license \
         -nomake examples \
         -nomake tests \
+        -xcb \
         -submodules qtbase,qttools,qtsvg,qtmultimedia,qtwayland,qtdeclarative \
         -- -G Ninja && \
     cmake --build . -j"$(nproc)" && \
@@ -98,11 +72,16 @@ RUN tar -cJf /qt-hippos-x86_64.tar.xz -C /opt/hippos/qt 6
 CMD ["/bin/bash"]
 
 # ── Stage 2: arm64 Qt (cross-compiled from amd64) ────────────────────────────
-# Uses the arm64 emulator bulk image as base — all cross-compile tools and arm64
-# sysroot packages are already present; no apt installs needed here.
+# Uses the arm64 emulator bulk image as base for its cross-compile tools and arm64
+# sysroot; the X11/xcb dev packages are added as :arm64.
 FROM hippos-emulator-bulk-arm64:latest AS arm64-qt
 
 ARG QT_VERSION
+ARG QT_XCB_DEV_PACKAGES
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends $(printf '%s:arm64 ' ${QT_XCB_DEV_PACKAGES}) && \
+    rm -rf /var/lib/apt/lists/*
 
 # Extract the pre-built amd64 Qt as host tools (moc/rcc/uic/qmake).
 # artifacts/qt/ is excluded from .dockerignore except for this file.
@@ -134,6 +113,7 @@ RUN mkdir qt-build && cd qt-build && \
         -confirm-license \
         -nomake examples \
         -nomake tests \
+        -xcb \
         -qt-host-path /opt/hippos/qt/6-host \
         -submodules qtbase,qtsvg,qtmultimedia,qtwayland,qtdeclarative \
         -- \
