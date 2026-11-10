@@ -9,6 +9,11 @@ import sys
 import zipfile
 import xml.etree.ElementTree as elementTree
 
+from emulatorlauncher_pcsx2 import PCSX2, find_bios_dir
+
+def ps2BiosFound():
+    return find_bios_dir(PCSX2, None) is not None
+
 systems = {
 
     "atari800": { "name": "Atari 800", "biosFiles": [ { "md5": "eb1f32f5d9f382db1bbfb8d7f9cb343a", "file": "bios/ATARIOSA.ROM"},
@@ -127,7 +132,7 @@ systems = {
                                             { "md5": "32736f17079d0b2b7024407c39bd3050", "file": "bios/scph5502.bin"    },
                                             { "md5": "1e68c231d0896b7eadcad1d7d8e76129", "file": "bios/scph7001.bin"    } ] },
 
-    "ps2": { "name": "PS2", "biosFiles": [  { "md5": "21038400dc633070a78ad53090c53017", "file": "bios/ps2/ps2-0230a-20080220.bin" } ] },
+    "ps2": { "name": "PS2", "biosFound": ps2BiosFound, "biosFiles": [  { "md5": "21038400dc633070a78ad53090c53017", "file": "bios/ps2/ps2-0230a-20080220.bin" } ] },
 
     "ps3": { "name": "PS3", "biosFiles": [  { "md5": "05fe32f5dc8c78acbcd84d36ee7fdc5b", "file": "bios/PS3UPDAT.PUP" } ] },
 
@@ -908,6 +913,8 @@ def checkBios(systems, prefix, filterROMs):
     for system in systems.keys():
         if system in systemDict.keys():
             if coreExists(systems[system], emuDict) or filterROMs == False:
+                if "biosFound" in systems[system] and systems[system]["biosFound"]():
+                    continue
                 for file in systems[system]["biosFiles"]:
                     if coreExists(file, emuDict) or filterROMs == False:
                         filepath = prefix + "/" + file["file"]
