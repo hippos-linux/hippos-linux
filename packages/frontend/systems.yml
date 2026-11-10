@@ -223,6 +223,48 @@ _emulator_defaults:
   gx4000:        { emulator: retroarch,          core: cap32            }
   cassettevision: { emulator: retroarch,          core: mame             }
   flatpak:       { emulator: flatpak,            core: flatpak, options: { hud_support: false } }
+  chip8:         { emulator: retroarch,          core: jaxe               }
+  pocketstation: { emulator: retroarch,          core: pokket             }
+  tamagotchi:    { emulator: retroarch,          core: tamalibretro       }
+  hyperscan:     { emulator: retroarch,          core: hyperscanemu       }
+  nuon:          { emulator: retroarch,          core: nuance             }
+  playdia:       { emulator: retroarch,          core: playdiaemu         }
+  dingoo:        { emulator: retroarch,          core: dingooemu          }
+  spmp8000:      { emulator: retroarch,          core: spmp8000emu        }
+  piece:         { emulator: retroarch,          core: piece              }
+  microw8:       { emulator: retroarch,          core: uw8                }
+  vaporspec:     { emulator: retroarch,          core: vaporspec          }
+  gametank:      { emulator: retroarch,          core: gametank           }
+  cbm2:          { emulator: retroarch,          core: vice_xcbm2         }
+  cbm5x0:        { emulator: retroarch,          core: vice_xcbm5x0       }
+  c64scpu:       { emulator: retroarch,          core: vice_xscpu64       }
+  pcxt:          { emulator: retroarch,          core: virtualxt          }
+  p2000t:        { emulator: retroarch,          core: m2000              }
+  galaksija:     { emulator: retroarch,          core: galaksija          }
+  omicron:       { emulator: retroarch,          core: omicron            }
+  native32:      { emulator: retroarch,          core: native32emu        }
+  ti83:          { emulator: retroarch,          core: numero             }
+  palm:          { emulator: retroarch,          core: mu                 }
+  j2me:          { emulator: retroarch,          core: squirreljme        }
+  zmachine:      { emulator: retroarch,          core: mojozork           }
+  bbk:           { emulator: retroarch,          core: bbkemu             }
+  gam4980:       { emulator: retroarch,          core: gam4980            }
+  wenquxing:     { emulator: retroarch,          core: wqxemu             }
+  coolbar:       { emulator: retroarch,          core: coolbaremu         }
+  c713:          { emulator: retroarch,          core: mcsoftserve        }
+  vmu:           { emulator: retroarch,          core: vemulator          }
+  quake2:        { emulator: retroarch,          core: vitaquake2         }
+  quake3:        { emulator: retroarch,          core: vitaquake3         }
+  doom3:         { emulator: retroarch,          core: boom3              }
+  duke3d:        { emulator: retroarch,          core: eduke32            }
+  openlara:      { emulator: retroarch,          core: openlara           }
+  jumpnbump:     { emulator: retroarch,          core: jumpnbump          }
+  dinothawr:     { emulator: retroarch,          core: dinothawr          }
+  '2048':        { emulator: retroarch,          core: 2048               }
+  gong:          { emulator: retroarch,          core: gong               }
+  craft:         { emulator: retroarch,          core: craft              }
+  anarch:        { emulator: retroarch,          core: anarch             }
+  thepowdertoy:  { emulator: retroarch,          core: thepowdertoy       }
 
 # Overrides _emulator_defaults on that architecture only.
 _emulator_defaults_arm64:
@@ -855,6 +897,7 @@ ctvboy:
   release: 1983
 daphne:
   extensions:
+  - zip
   - daphne
   - squashfs
   hardware: arcade
@@ -1582,6 +1625,7 @@ nds:
   release: 2004
 neogeo:
   extensions:
+  - neo
   - 7z
   - zip
   hardware: console
@@ -1812,6 +1856,7 @@ psp:
   release: 2004
 psvita:
   extensions:
+  - vpk
   - zip
   - psvita
   hardware: portable
@@ -2866,3 +2911,408 @@ xrick:
   manufacturer: BigOrno
   name: xrick
   release: 2003
+chip8:
+  extensions:
+  - ch8
+  - sc8
+  - xo8
+  hardware: computer
+  manufacturer: RCA
+  name: CHIP-8
+  release: 1977
+pocketstation:
+  extensions:
+  - bin
+  - gme
+  - mcd
+  - mcr
+  - mcs
+  - pss
+  hardware: portable
+  manufacturer: Sony
+  name: PocketStation
+  release: 1999
+tamagotchi:
+  extensions:
+  - b
+  - bin
+  - rom
+  hardware: portable
+  manufacturer: Bandai
+  name: Tamagotchi
+  release: 1996
+hyperscan:
+  extensions:
+  - bin
+  - cue
+  - zip
+  hardware: console
+  manufacturer: Mattel
+  name: HyperScan
+  release: 2006
+nuon:
+  extensions:
+  - run
+  - cof
+  - nuon
+  - cd
+  - iso
+  - img
+  - chd
+  hardware: console
+  manufacturer: VM Labs
+  name: NUON
+  release: 2000
+playdia:
+  extensions:
+  - cue
+  - iso
+  - bin
+  - zip
+  hardware: console
+  manufacturer: Bandai
+  name: Playdia
+  release: 1994
+dingoo:
+  extensions:
+  - app
+  - cc
+  - c2s
+  - c3s
+  hardware: portable
+  manufacturer: Dingoo Digital
+  name: Dingoo A320
+  release: 2009
+spmp8000:
+  extensions:
+  - bin
+  hardware: portable
+  manufacturer: Sunplus
+  name: SPMP8000
+  release: 2010
+piece:
+  extensions:
+  - pfi
+  hardware: portable
+  manufacturer: Aquaplus
+  name: P/ECE
+  release: 2001
+microw8:
+  extensions:
+  - uw8
+  - wasm
+  hardware: console
+  manufacturer: Fantasy
+  name: MicroW8
+  release: 2021
+vaporspec:
+  extensions:
+  - vaporbin
+  hardware: computer
+  manufacturer: Fantasy
+  name: VaporSpec
+  release: 2023
+gametank:
+  extensions:
+  - gtr
+  hardware: console
+  manufacturer: Clydeware
+  name: GameTank
+  release: 2021
+cbm2:
+  extensions:
+  - d64
+  - d71
+  - d80
+  - d81
+  - d82
+  - g64
+  - g41
+  - x64
+  - t64
+  - tap
+  - prg
+  - p00
+  - crt
+  - bin
+  - zip
+  - gz
+  - cmd
+  - m3u
+  - vsf
+  - nib
+  hardware: computer
+  manufacturer: Commodore
+  name: Commodore CBM-II
+  release: 1982
+cbm5x0:
+  extensions:
+  - d64
+  - d71
+  - d80
+  - d81
+  - d82
+  - g64
+  - g41
+  - x64
+  - t64
+  - tap
+  - prg
+  - p00
+  - crt
+  - bin
+  - zip
+  - gz
+  - cmd
+  - m3u
+  - vsf
+  - nib
+  hardware: computer
+  manufacturer: Commodore
+  name: Commodore CBM 500
+  release: 1982
+c64scpu:
+  extensions:
+  - d64
+  - d71
+  - d80
+  - d81
+  - d82
+  - g64
+  - g41
+  - x64
+  - t64
+  - tap
+  - prg
+  - p00
+  - crt
+  - bin
+  - zip
+  - gz
+  - cmd
+  - m3u
+  - vsf
+  - nib
+  hardware: computer
+  manufacturer: Creative Micro Designs
+  name: Commodore 64 SuperCPU
+  release: 1996
+pcxt:
+  extensions:
+  - img
+  - zip
+  hardware: computer
+  manufacturer: IBM
+  name: IBM PC/XT
+  release: 1983
+p2000t:
+  extensions:
+  - cas
+  hardware: computer
+  manufacturer: Philips
+  name: Philips P2000T
+  release: 1980
+galaksija:
+  extensions:
+  - gal
+  hardware: computer
+  manufacturer: Voja Antonić
+  name: Galaksija
+  release: 1983
+omicron:
+  extensions:
+  - omicron
+  hardware: computer
+  manufacturer: Fantasy
+  name: Omicron
+  release: 2023
+native32:
+  extensions:
+  - smf
+  - sgm
+  - ssl
+  - zip
+  hardware: portable
+  manufacturer: Sunplus
+  name: Native32
+  release: 2008
+ti83:
+  extensions:
+  - 8xp
+  - 8xk
+  - 8xg
+  hardware: portable
+  manufacturer: Texas Instruments
+  name: TI-83
+  release: 1996
+palm:
+  extensions:
+  - prc
+  - pqa
+  - img
+  - pdb
+  - zip
+  hardware: portable
+  manufacturer: Palm
+  name: Palm OS
+  release: 1996
+j2me:
+  extensions:
+  - jar
+  - jad
+  - jam
+  - kjx
+  - sqc
+  hardware: portable
+  manufacturer: Sun Microsystems
+  name: Java ME
+  release: 1999
+zmachine:
+  extensions:
+  - dat
+  - z1
+  - z3
+  hardware: engine
+  manufacturer: Infocom
+  name: Z-Machine
+  release: 1979
+bbk:
+  extensions:
+  - gam
+  hardware: portable
+  manufacturer: BBK Electronics
+  name: BBK Electronic Dictionary
+  release: 2000
+gam4980:
+  extensions:
+  - gam
+  - libretro
+  hardware: portable
+  manufacturer: BBK Electronics
+  name: Longman 4980
+  release: 2003
+wenquxing:
+  extensions:
+  - libretro
+  hardware: portable
+  manufacturer: Golden Global View
+  name: Wenquxing
+  release: 1991
+coolbar:
+  extensions:
+  - cbe
+  hardware: portable
+  manufacturer: Shanghai Coolbar
+  name: Coolbar
+  release: 2005
+c713:
+  extensions:
+  - libretro
+  hardware: portable
+  manufacturer: Taylor
+  name: Taylor C713
+  release: 2005
+vmu:
+  extensions:
+  - vms
+  - dci
+  - bin
+  hardware: portable
+  manufacturer: Sega
+  name: Visual Memory Unit
+  release: 1998
+quake2:
+  extensions:
+  - pak
+  hardware: engine
+  manufacturer: id Software
+  name: Quake II
+  release: 1997
+quake3:
+  extensions:
+  - pk3
+  hardware: engine
+  manufacturer: id Software
+  name: Quake III Arena
+  release: 1999
+doom3:
+  extensions:
+  - pk4
+  hardware: engine
+  manufacturer: id Software
+  name: Doom 3
+  release: 2004
+duke3d:
+  extensions:
+  - grp
+  - pk3
+  - pk4
+  - zip
+  hardware: engine
+  manufacturer: 3D Realms
+  name: Duke Nukem 3D
+  release: 1996
+openlara:
+  extensions:
+  - phd
+  - psx
+  - tr2
+  hardware: engine
+  manufacturer: Core Design
+  name: OpenLara
+  release: 1996
+jumpnbump:
+  extensions:
+  - dat
+  hardware: engine
+  manufacturer: Brainchild Design
+  name: Jump 'n Bump
+  release: 1998
+dinothawr:
+  extensions:
+  - game
+  hardware: engine
+  manufacturer: Agnes Heyer
+  name: Dinothawr
+  release: 2013
+'2048':
+  extensions:
+  - libretro
+  group: ports
+  hardware: port
+  manufacturer: Gabriele Cirulli
+  name: '2048'
+  release: 2014
+gong:
+  extensions:
+  - libretro
+  group: ports
+  hardware: port
+  manufacturer: Dan Zaidan
+  name: Gong
+  release: 2017
+craft:
+  extensions:
+  - libretro
+  group: ports
+  hardware: port
+  manufacturer: Michael Fogleman
+  name: Craft
+  release: 2013
+anarch:
+  extensions:
+  - libretro
+  group: ports
+  hardware: port
+  manufacturer: drummyfish
+  name: Anarch
+  release: 2020
+thepowdertoy:
+  extensions:
+  - cps
+  - libretro
+  group: ports
+  hardware: port
+  manufacturer: The Powder Toy Team
+  name: The Powder Toy
+  release: 2010

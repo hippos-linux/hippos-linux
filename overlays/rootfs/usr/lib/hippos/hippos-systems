@@ -820,6 +820,31 @@ systems = {
                     { "md5": "1e6637f32aa7d1de03510030cac40bcf", "zippedFile": "bk11m_327_basic1.rom", "file": "bios/bk0010.zip", "emulator": "libretro", "core": "mame" },
                     { "md5": "dc52f365d56fa1951f5d35b1101b9e3f", "zippedFile": "bk11m_325_ext.rom",    "file": "bios/bk0010.zip", "emulator": "libretro", "core": "mame" },
                     { "md5": "fe4627d1e3a1535874085050733263e7", "zippedFile": "bk11m_324_bos.rom",    "file": "bios/bk0010.zip", "emulator": "libretro", "core": "mame" }] },
+
+    "ti83": { "name": "TI-83", "biosAnyOf": True, "biosFiles": [
+                    { "md5": "c6ff8204c5c81b7be34614dbbd690c8b", "file": "bios/ti83se.rom" },
+                    { "md5": "8011181f810b5ec4e9d6a03f0e14257a", "file": "bios/ti83plus.rom" },
+                    { "md5": "d4448d09bbfde687c04f9e3310e023ab", "file": "bios/ti83.rom" } ] },
+
+    "palm": { "name": "Palm OS", "biosFiles": [ { "md5": "", "file": "bios/palmos41-en-m515.rom" } ] },
+
+    "j2me": { "name": "Java ME", "biosAnyOf": True, "biosFiles": [
+                    { "md5": "", "file": "bios/squirreljme.jar" },
+                    { "md5": "", "file": "bios/squirreljme-fast.jar" },
+                    { "md5": "", "file": "bios/squirreljme-0.3.0.jar" },
+                    { "md5": "", "file": "bios/squirreljme-0.3.0-fast.jar" } ] },
+
+    "nuon": { "name": "NUON", "biosFiles": [
+                    { "md5": "", "file": "bios/nuance/bios.cof" },
+                    { "md5": "", "file": "bios/nuance/minibios.cof" },
+                    { "md5": "", "file": "bios/nuance/minibiosX.cof" } ] },
+
+    "wenquxing": { "name": "Wenquxing", "biosAnyOf": True, "biosFiles": [
+                    { "md5": "", "file": "bios/WQXEmu/nc1020/obj_lu.bin" },
+                    { "md5": "", "file": "bios/WQXEmu/pc1000/pc1000.rom" },
+                    { "md5": "", "file": "bios/WQXEmu/cc800/obj.bin" },
+                    { "md5": "", "file": "bios/WQXEmu/nc2000/nc2000.nor" },
+                    { "md5": "", "file": "bios/WQXEmu/nc3000/nc3000.nor" } ] },
 }
 
 class BiosStatus:
@@ -914,6 +939,10 @@ def checkBios(systems, prefix, filterROMs):
         if system in systemDict.keys():
             if coreExists(systems[system], emuDict) or filterROMs == False:
                 if "biosFound" in systems[system] and systems[system]["biosFound"]():
+                    continue
+                if systems[system].get("biosAnyOf") and any(
+                        isfile(prefix + "/" + f["file"]) and f["md5"] in ("", md5sum(prefix + "/" + f["file"]))
+                        for f in systems[system]["biosFiles"]):
                     continue
                 for file in systems[system]["biosFiles"]:
                     if coreExists(file, emuDict) or filterROMs == False:

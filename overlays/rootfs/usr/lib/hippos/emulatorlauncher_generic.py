@@ -23,6 +23,8 @@ from emulatorlauncher_shared import (
     _run_game_command,
 )
 
+from libretro_cores import core_file_names
+
 from HipposPaths import BIOS, CHEATS, CONFIGS, EMULATORS_ROOT, SAVES, SCREENSHOTS, USERDATA, USER_DECORATIONS, USER_SHADERS
 
 def launch_libretro(ctx: LaunchContext) -> int:
@@ -54,7 +56,8 @@ def launch_libretro(ctx: LaunchContext) -> int:
     ]
     if ra_game_cfg is not None:
         cmd += ['--appendconfig', str(ra_game_cfg)]
-    cmd.append(str(ctx.rom))
+    if ctx.rom.suffix != LAUNCH_FILE_SUFFIX:
+        cmd.append(str(ctx.rom))
     _log.info("Launching: %s", ' '.join(cmd))
 
     env = _build_game_env(conf, ctx)
@@ -122,24 +125,14 @@ LIBRETRO_RATIO_INDEXES: tuple[str, ...] = (
     '30/17', '32/9', 'config', 'squarepixel', 'core', 'custom', 'full',
 )
 
+LAUNCH_FILE_SUFFIX = '.libretro'
+
 CORE_SEARCH_PATHS = [
     EMULATORS_ROOT / 'retroarch' / 'cores',
     Path('/usr/lib/x86_64-linux-gnu/libretro'),
     Path('/usr/lib/aarch64-linux-gnu/libretro'),
     Path('/usr/lib/libretro'),
 ]
-
-LIBRETRO_CORE_ALIASES: dict[str, tuple[str, ...]] = {
-    'beetle-saturn': ('mednafen_saturn',),
-    'bsnes_hd': ('bsnes_hd_beta',),
-    'genesis_plus_gx-wide': ('genesis_plus_gx_wide',),
-    'mame078plus': ('mame2003_plus',),
-    'pce': ('mednafen_pce',),
-    'pce_fast': ('mednafen_pce_fast',),
-    'pcfx': ('mednafen_pcfx',),
-    'vb': ('mednafen_vb',),
-    'vba-m': ('vbam',),
-}
 
 def _ratio_index(conf: dict[str, str]) -> int:
     ratio = _conf_value(conf, 'global.ratio', 'core')
@@ -158,13 +151,13 @@ def _core_search_paths() -> list[Path]:
     return paths
 
 def find_core(core_name: str) -> Optional[Path]:
-    for candidate_core in (core_name, *LIBRETRO_CORE_ALIASES.get(core_name, ())):
-        filename = f'{candidate_core}_libretro.so'
+    filenames = core_file_names(core_name)
+    for filename in filenames:
         for search_dir in _core_search_paths():
             candidate = search_dir / filename
             if candidate.exists():
-                if candidate_core != core_name:
-                    _log.info("Resolved libretro core alias %s -> %s", core_name, candidate_core)
+                if filename != filenames[0]:
+                    _log.info("Resolved libretro core alias %s -> %s", core_name, filename)
                 return candidate
     return None
 

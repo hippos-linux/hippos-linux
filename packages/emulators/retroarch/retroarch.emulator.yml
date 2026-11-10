@@ -54,8 +54,7 @@ custom_features:
   audio_driver:
     group: ADVANCED OPTIONS
     prompt: AUDIO DRIVER
-    description: Changing driver can improve audio performance and reduce distortion. Alsathread is recommended for 
-      low-end systems.
+    description: Changing driver can improve audio performance and reduce distortion. Alsathread is recommended for low-end systems.
     choices:
       ALSA: alsa
       ALSAThread: alsathread
@@ -92,11 +91,15 @@ systems:
   - name: 3do
     as_core: opera
   - name: arduboy
-    as_core: arduous
+    as_core:
+      - arduous
+      - ardens
   - name: atari2600
     as_core:
       - stella
       - stella2014
+      - stella2023
+      - tia
   - name: atari5200
     as_core:
       - atari800
@@ -108,13 +111,21 @@ systems:
   - name: cassettevision
     as_core: pd777
   - name: cavestory
-    as_core: nxengine
+    as_core:
+      - nxengine
+      - doukutsu_rs
   - name: channelf
     as_core: freechaf
   - name: dos
-    as_core: dosbox_pure
+    as_core:
+      - dosbox_pure
+      - dosbox_core
+      - dosbox_svn
+      - rust_dos
   - name: dreamcast
-    as_core: flycast
+    as_core:
+      - flycast
+      - parallel_dc
   - name: easyrpg
     as_core: easyrpg
   - name: fbneo
@@ -131,25 +142,55 @@ systems:
       - fceumm
       - nestopia
       - mesen
+      - fixnes
+      - mesen2
+      - rustynes
   - name: gb
     as_core:
       - gambatte
       - mgba
       - vba-m
+      - DoubleCherryGB
+      - fixgb
+      - gearboy
+      - irogb
+      - sameboy
+      - skyemu
   - name: gb2players
-    as_core: tgbdual
+    as_core:
+      - tgbdual
+      - DoubleCherryGB
+      - fixgb
+      - gearboy
+      - irogb
+      - sameboy
   - name: gba
     as_core:
       - mgba
       - vba-m
       - gpsp
+      - mednafen_gba
+      - meteor
+      - vba_next
+      - skyemu
   - name: gbc
     as_core:
       - gambatte
       - mgba
       - vba-m
+      - DoubleCherryGB
+      - fixgb
+      - gearboy
+      - irogb
+      - sameboy
   - name: gbc2players
-    as_core: tgbdual
+    as_core:
+      - tgbdual
+      - DoubleCherryGB
+      - fixgb
+      - gearboy
+      - irogb
+      - sameboy
   - name: gamecube
     as_core: dolphin
   - name: gamegear
@@ -167,6 +208,8 @@ systems:
     as_core:
       - handy
       - mednafen_lynx
+      - gearlynx
+      - holani
   - name: mame
     as_core:
       - mame
@@ -175,6 +218,8 @@ systems:
       - mame2003
       - mame2003_midway
       - mame2000
+      - mame2015
+      - mame2016
   - name: mastersystem
     as_core:
       - genesis_plus_gx
@@ -184,30 +229,39 @@ systems:
     as_core:
       - genesis_plus_gx
       - picodrive
+      - clownmdemu
   - name: megadrive
     as_core:
       - genesis_plus_gx
       - picodrive
       - blastem
+      - clownmdemu
   - name: megadrive-msu
     as_core:
       - genesis_plus_gx
       - genesis_plus_gx-wide
+      - clownmdemu
   - name: multivision
     as_core: gearsystem
   - name: n64
     as_core:
       - mupen64plus_next
       - parallel_n64
+      - n64emu
   - name: nds
     as_core:
       - melonds
       - desmume
+      - desmume2015
+      - melondsds
+      - noods
+      - skyemu
   - name: neogeo
     as_core:
       - fbneo
       - fbalpha
       - fbalpha2012_neogeo
+      - geolith
   - name: neogeocd
     as_core: neocd
   - name: nes
@@ -215,16 +269,26 @@ systems:
       - fceumm
       - nestopia
       - mesen
+      - fixnes
+      - mesen2
+      - quicknes
+      - rustynes
   - name: ngp
-    as_core: mednafen_ngp
+    as_core:
+      - mednafen_ngp
+      - race
   - name: ngpc
-    as_core: mednafen_ngp
+    as_core:
+      - mednafen_ngp
+      - race
   - name: odyssey2
     as_core: o2em
   - name: pc88
     as_core: quasi88
   - name: pc98
-    as_core: np2kai
+    as_core:
+      - np2kai
+      - nekop2
   - name: pce
     as_core:
       - pce
@@ -249,40 +313,126 @@ systems:
     as_core:
       - swanstation
       - mednafen_psx_hw
+      - mednafen_psx
+      - pcsx_rearmed
   - name: satellaview
     as_core:
       - snes9x
       - mesen-s
+      - bsnes-jg
+      - bsnes2014_accuracy
+      - bsnes2014_balanced
+      - bsnes2014_performance
+      - bsnes_cplusplus98
+      - bsnes_mercury_accuracy
+      - bsnes_mercury_performance
+      - mednafen_snes
+      - mednafen_supafaust
+      - nside_sfc_balanced
+      - snes9x2002
+      - snes9x2005
+      - snes9x2005_plus
+      - snes9x2010
   - name: saturn
-    as_core: mednafen_saturn
+    as_core:
+      - mednafen_saturn
+      - kronos
+      - yabasanshiro
+      - yabause
+      - ymir
   - name: scv
-    as_core: mame
+    as_core:
+      - mame
+      - emuscv
   - name: sega32x
-    as_core: picodrive
+    as_core:
+      - picodrive
+      - clownmdemu
   - name: sg1000
     as_core: genesis_plus_gx
   - name: sgb
     as_core:
       - mgba
       - mesen-s
+      - bsnes-jg
+      - bsnes2014_accuracy
+      - bsnes2014_balanced
+      - bsnes2014_performance
+      - bsnes_cplusplus98
+      - bsnes_mercury_accuracy
+      - bsnes_mercury_performance
+      - nside_sfc_balanced
   - name: sgb-msu1
     as_core:
       - bsnes
       - bsnes_hd
+      - bsnes-jg
+      - bsnes2014_accuracy
+      - bsnes2014_balanced
+      - bsnes2014_performance
+      - bsnes_cplusplus98
+      - bsnes_mercury_accuracy
+      - bsnes_mercury_performance
+      - nside_sfc_balanced
   - name: snes
     as_core:
       - snes9x
       - bsnes
       - mesen-s
+      - bsnes-jg
+      - bsnes2014_accuracy
+      - bsnes2014_balanced
+      - bsnes2014_performance
+      - bsnes_cplusplus98
+      - bsnes_mercury_accuracy
+      - bsnes_mercury_performance
+      - mednafen_snes
+      - mednafen_supafaust
+      - nside_sfc_balanced
+      - snes9x2002
+      - snes9x2005
+      - snes9x2005_plus
+      - snes9x2010
   - name: snes-msu1
     as_core:
       - bsnes_mercury_balanced
       - bsnes_hd
       - snes9x
+      - bsnes-jg
+      - bsnes2014_accuracy
+      - bsnes2014_balanced
+      - bsnes2014_performance
+      - bsnes_cplusplus98
+      - bsnes_mercury_accuracy
+      - bsnes_mercury_performance
+      - mednafen_snes
+      - mednafen_supafaust
+      - nside_sfc_balanced
+      - snes9x2002
+      - snes9x2005
+      - snes9x2005_plus
+      - snes9x2010
   - name: sufami
-    as_core: snes9x
+    as_core:
+      - snes9x
+      - bsnes-jg
+      - bsnes2014_accuracy
+      - bsnes2014_balanced
+      - bsnes2014_performance
+      - bsnes_cplusplus98
+      - bsnes_mercury_accuracy
+      - bsnes_mercury_performance
+      - mednafen_snes
+      - mednafen_supafaust
+      - nside_sfc_balanced
+      - snes9x2002
+      - snes9x2005
+      - snes9x2005_plus
+      - snes9x2010
   - name: supergrafx
-    as_core: mednafen_supergrafx
+    as_core:
+      - mednafen_supergrafx
+      - geargrafx
   - name: supervision
     as_core: potator
   - name: thomson
@@ -333,8 +483,11 @@ systems:
       - genesis_plus_gx
       - genesis_plus_gx-wide
       - picodrive
+      - clownmdemu
   - name: prboom
-    as_core: prboom
+    as_core:
+      - prboom
+      - uzdoom
   - name: quake
     as_core: tyrquake
   - name: reminiscence
@@ -346,25 +499,48 @@ systems:
   - name: xrick
     as_core: xrick
   - name: amiga500
-    as_core: puae
+    as_core:
+      - puae
+      - amiberry
+      - fsuae
+      - puae2021
   - name: amiga1200
-    as_core: puae
+    as_core:
+      - puae
+      - amiberry
+      - fsuae
+      - puae2021
   - name: amigacd32
-    as_core: puae
+    as_core:
+      - puae
+      - amiberry
+      - puae2021
   - name: amigacdtv
-    as_core: puae
+    as_core:
+      - puae
+      - amiberry
+      - puae2021
   - name: amstradcpc
-    as_core: cap32
+    as_core:
+      - cap32
+      - crocods
   - name: atomiswave
-    as_core: flycast
+    as_core:
+      - flycast
+      - parallel_dc
   - name: bk
     as_core: bk
   - name: c64
     as_core:
       - vice_x64sc
       - vice_x64
+      - frodo
   - name: colecovision
-    as_core: bluemsx
+    as_core:
+      - bluemsx
+      - gearcoleco
+      - jollycv
+      - openmsx
   - name: gameandwatch
     as_core: gw
   - name: jaguar
@@ -378,23 +554,43 @@ systems:
   - name: megaduck
     as_core: sameduck
   - name: msx1
-    as_core: bluemsx
+    as_core:
+      - bluemsx
+      - fmsx
+      - openmsx
   - name: msx2
-    as_core: bluemsx
+    as_core:
+      - bluemsx
+      - fmsx
+      - openmsx
   - name: "msx2+"
-    as_core: bluemsx
+    as_core:
+      - bluemsx
+      - fmsx
+      - openmsx
   - name: msxturbor
-    as_core: bluemsx
+    as_core:
+      - bluemsx
+      - fmsx
+      - openmsx
   - name: naomi
-    as_core: flycast
+    as_core:
+      - flycast
+      - parallel_dc
   - name: naomi2
-    as_core: flycast
+    as_core:
+      - flycast
+      - parallel_dc
   - name: scummvm
     as_core: scummvm
   - name: spectravideo
-    as_core: bluemsx
+    as_core:
+      - bluemsx
+      - openmsx
   - name: systemsp
-    as_core: flycast
+    as_core:
+      - flycast
+      - parallel_dc
   - name: tic80
     as_core: tic80
   - name: uzebox
@@ -403,3 +599,211 @@ systems:
     as_core: vecx
   - name: zxspectrum
     as_core: fuse
+  - name: 3ds
+    as_core:
+      - azahar
+      - citra
+      - citra2018
+      - panda3ds
+  - name: apple2
+    as_core:
+      - applewin
+  - name: arcadia
+    as_core:
+      - amiarcadia
+  - name: atarist
+    as_core:
+      - hatari
+      - hatari2014
+      - hatarib
+  - name: bbcmicro
+    as_core:
+      - b2
+  - name: c128
+    as_core:
+      - vice_x128
+  - name: c20
+    as_core:
+      - vice_xvic
+  - name: cdi
+    as_core:
+      - cdi2015
+      - same_cdi
+  - name: cplus4
+    as_core:
+      - vice_xplus4
+  - name: crvision
+    as_core:
+      - jollycv
+  - name: enterprise
+    as_core:
+      - ep128emu_core
+  - name: fmtowns
+    as_core:
+      - geartowns
+  - name: hikaru
+    as_core:
+      - odin
+  - name: model3
+    as_core:
+      - supermodel
+  - name: pet
+    as_core:
+      - vice_xpet
+  - name: ps2
+    as_core:
+      - armsx2
+      - pcee2
+      - pcsx2
+      - play
+  - name: ps3
+    as_core:
+      - rpcs3
+  - name: vgmplay
+    as_core:
+      - gme
+  - name: wiiu
+    as_core:
+      - cemu
+  - name: xbox
+    as_core:
+      - xemu
+  - name: xbox360
+    as_core:
+      - xenia_edge
+  - name: chip8
+    as_core:
+      - jaxe
+  - name: pocketstation
+    as_core:
+      - pokket
+  - name: tamagotchi
+    as_core:
+      - tamalibretro
+  - name: hyperscan
+    as_core:
+      - hyperscanemu
+  - name: nuon
+    as_core:
+      - nuance
+  - name: playdia
+    as_core:
+      - playdiaemu
+  - name: dingoo
+    as_core:
+      - dingooemu
+  - name: spmp8000
+    as_core:
+      - spmp8000emu
+  - name: piece
+    as_core:
+      - piece
+  - name: microw8
+    as_core:
+      - uw8
+  - name: vaporspec
+    as_core:
+      - vaporspec
+  - name: gametank
+    as_core:
+      - gametank
+  - name: cbm2
+    as_core:
+      - vice_xcbm2
+  - name: cbm5x0
+    as_core:
+      - vice_xcbm5x0
+  - name: c64scpu
+    as_core:
+      - vice_xscpu64
+  - name: pcxt
+    as_core:
+      - virtualxt
+  - name: p2000t
+    as_core:
+      - m2000
+  - name: galaksija
+    as_core:
+      - galaksija
+  - name: omicron
+    as_core:
+      - omicron
+  - name: native32
+    as_core:
+      - native32emu
+  - name: ti83
+    as_core:
+      - numero
+  - name: palm
+    as_core:
+      - mu
+  - name: j2me
+    as_core:
+      - squirreljme
+  - name: zmachine
+    as_core:
+      - mojozork
+  - name: bbk
+    as_core:
+      - bbkemu
+  - name: gam4980
+    as_core:
+      - gam4980
+  - name: wenquxing
+    as_core:
+      - wqxemu
+  - name: coolbar
+    as_core:
+      - coolbaremu
+  - name: c713
+    as_core:
+      - mcsoftserve
+  - name: vmu
+    as_core:
+      - vemulator
+  - name: quake2
+    as_core:
+      - vitaquake2
+      - vitaquake2-rogue
+      - vitaquake2-xatrix
+      - vitaquake2-zaero
+  - name: quake3
+    as_core:
+      - vitaquake3
+  - name: doom3
+    as_core:
+      - boom3
+      - boom3_xp
+  - name: duke3d
+    as_core:
+      - eduke32
+  - name: openlara
+    as_core:
+      - openlara
+  - name: jumpnbump
+    as_core:
+      - jumpnbump
+  - name: dinothawr
+    as_core:
+      - dinothawr
+  - name: '2048'
+    as_core:
+      - '2048'
+  - name: gong
+    as_core:
+      - gong
+  - name: craft
+    as_core:
+      - craft
+  - name: anarch
+    as_core:
+      - anarch
+  - name: thepowdertoy
+    as_core:
+      - thepowdertoy
+  - name: psvita
+    as_core:
+      - vita3k
+  - name: daphne
+    as_core:
+      - hypseushw
