@@ -507,6 +507,8 @@ def _find_executable(root: Path) -> Optional[Path]:
     if not root.exists():
         return None
     preferred_names = (
+        'linuxloader',
+        'linuxloader.exe',
         'lindbergh-loader',
         'lindbergh-loader.exe',
         'shadps4',

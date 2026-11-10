@@ -13,7 +13,7 @@ xserver-xorg-video-intel
 # Intel VA-API (free tier; non-free tier installed by configure-rootfs.sh)
 intel-media-va-driver
 
-# i386 runtime libraries required by lindbergh-loader (lindbergh.so)
+# i386 runtime libraries required by linuxloader (linuxloader.so)
 libsdl3-0:i386
 libsdl3-image0:i386
 libsdl3-ttf0:i386

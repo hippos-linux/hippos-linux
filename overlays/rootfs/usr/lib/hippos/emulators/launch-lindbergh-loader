@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-. /usr/lib/hippos/emulator-env
-exec /opt/emulators/lindbergh-loader/bin/lindbergh-loader "$@"

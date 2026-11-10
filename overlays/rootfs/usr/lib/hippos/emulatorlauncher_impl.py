@@ -39,7 +39,7 @@ from emulatorlauncher_shared import (
 )
 from emulatorlauncher_power import game_power_settings
 
-LINDBERGH_BUNDLE_DIR = Path('/opt/emulators/lindbergh-loader')
+LINDBERGH_BUNDLE_DIR = Path('/opt/emulators/linuxloader')
 
 logging.basicConfig(
     level=logging.INFO,
@@ -333,7 +333,7 @@ from emulatorlauncher_ports import (
 )
 from emulatorlauncher_runtime import (
     launch_amiberry as _launch_amiberry,
-    launch_lindbergh_loader as _launch_lindbergh_loader,
+    launch_linuxloader as _launch_linuxloader,
     launch_solarus as _launch_solarus,
     launch_steam as _launch_steam,
     launch_wine as _launch_wine,
@@ -480,7 +480,7 @@ GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'iortcw':      _launch_standalone,
     'jazz2-native': _launch_standalone,
     'lightspark':  _launch_lightspark,
-    'lindbergh-loader': _launch_lindbergh_loader,
+    'linuxloader':  _launch_linuxloader,
     'model2emu':   _launch_model2emu,
     'moonlight':   _launch_standalone,
     'mugen':       _launch_standalone,

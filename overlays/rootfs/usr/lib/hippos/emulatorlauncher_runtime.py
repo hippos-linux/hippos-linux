@@ -325,10 +325,10 @@ def launch_wine(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'wine', cmd, env)
     return result.returncode
 
-def launch_lindbergh_loader(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('lindbergh-loader')
+def launch_linuxloader(ctx: LaunchContext) -> int:
+    bin_path = _find_emulator_bin('linuxloader')
     if bin_path is None:
-        __import__('logging').getLogger('hippos.emulatorlauncher').error("lindbergh-loader not found")
+        __import__('logging').getLogger('hippos.emulatorlauncher').error("linuxloader not found")
         return 1
 
     payload_root = bin_path.parent.parent if bin_path.parent.name == 'bin' else bin_path.parent
@@ -340,7 +340,7 @@ def launch_lindbergh_loader(ctx: LaunchContext) -> int:
     if runtime_exec is None:
         runtime_exec = bin_path
     if not runtime_exec.exists():
-        __import__('logging').getLogger('hippos.emulatorlauncher').error("lindbergh-loader executable not found")
+        __import__('logging').getLogger('hippos.emulatorlauncher').error("linuxloader executable not found")
         return 1
 
     conf = _load_hippos_conf()
@@ -493,7 +493,7 @@ def launch_lindbergh_loader(ctx: LaunchContext) -> int:
     if _conf_bool(conf, 'lindbergh_test', False):
         cmd.append('-t')
     _log = __import__('logging').getLogger('hippos.emulatorlauncher')
-    _log.info("Launching lindbergh-loader: %s", ' '.join(cmd))
+    _log.info("Launching linuxloader: %s", ' '.join(cmd))
 
     env = _build_game_env(conf, ctx)
     env['HOME'] = str(USERDATA / 'system')
@@ -501,13 +501,8 @@ def launch_lindbergh_loader(ctx: LaunchContext) -> int:
     env['SDL_AUDIODRIVER'] = 'alsa'
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
     lib_dir = LINDBERGH_RUNTIME_DIR / 'lib'
-    env['LD_LIBRARY_PATH'] = f'/lib32:/lib32/extralibs:/lib:/usr/lib:{runtime_exec.parent}:{lib_dir}:{ctx.rom.parent}'
-    preload = next(
-        (p for p in (runtime_exec.parent / 'lindbergh.so', lib_dir / 'lindbergh.so') if p.exists()),
-        None,
-    )
-    if preload is not None:
-        env['LD_PRELOAD'] = str(preload)
+    ll_deps = LINDBERGH_RUNTIME_DIR / 'll-deps'
+    env['LD_LIBRARY_PATH'] = f'/lib32:/lib32/extralibs:/lib:/usr/lib:{runtime_exec.parent}:{lib_dir}:{ll_deps}:{ctx.rom.parent}'
     env['GST_PLUGIN_SYSTEM_PATH_1_0'] = '/lib32/gstreamer-1.0:/usr/lib/gstreamer-1.0'
     env['GST_REGISTRY_1_0'] = f'{USERDATA}/system/.cache/gstreamer-1.0/registry..bin:{USERDATA}/system/.cache/gstreamer-1.0/registry.x86_64.bin'
     env['LIBGL_DRIVERS_PATH'] = '/lib32/dri:/usr/lib/dri'
@@ -517,7 +512,7 @@ def launch_lindbergh_loader(ctx: LaunchContext) -> int:
         env['MESA_LOADER_DRIVER_OVERRIDE'] = 'zink'
         env['VK_LOADER_LAYERS_DISABLE'] = '~all~'
 
-    result = _run_game_command(ctx, 'lindbergh-loader', cmd, env, cwd=LINDBERGH_RUNTIME_DIR)
+    result = _run_game_command(ctx, 'linuxloader', cmd, env, cwd=LINDBERGH_RUNTIME_DIR)
     return result.returncode
 
 AMIBERRY_CONFIG_DIR = CONFIGS / 'amiberry'
@@ -531,7 +526,7 @@ AMIBERRY_SCREENSHOTS_DIR = SCREENSHOTS
 AMIBERRY_BIOS_DIR = BIOS / 'amiga'
 AMIBERRY_LOG_FILE = LOGS / 'amiberry.log'
 
-LINDBERGH_RUNTIME_DIR = CONFIGS / 'lindbergh-loader'
+LINDBERGH_RUNTIME_DIR = CONFIGS / 'linuxloader'
 
 LINDBERGH_TEMPLATE_DIR = Path('/usr/share/hippos/lindbergh')
 LINDBERGH_TEMPLATE_INI = LINDBERGH_TEMPLATE_DIR / 'lindbergh.ini'

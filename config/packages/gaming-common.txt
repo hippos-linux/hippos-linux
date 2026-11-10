@@ -52,8 +52,8 @@ libretro-core-info
 # Emulator runtime libraries
 libserialport0                          # amiberry
 libsdl2-image-2.0-0                     # applewin, gsplus, hypseus-singe, vpinball
-libsdl3-0                               # lindbergh-loader
-libsdl3-image0                          # lindbergh-loader
+libsdl3-0                               # linuxloader
+libsdl3-image0                          # linuxloader
 libqt6multimedia6                       # applewin, azahar, melonds, rpcs3
 libqt6multimediawidgets6                # rpcs3
 libqt6openglwidgets6                    # applewin
