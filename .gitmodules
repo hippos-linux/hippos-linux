@@ -6,3 +6,11 @@
 	path = src/site
 	url = https://github.com/hippos-linux/hippos-site.git
 	branch = main
+[submodule "themes/es-theme-hippos"]
+	path = themes/es-theme-hippos
+	url = https://github.com/hippos-linux/es-theme-hippos.git
+	branch = main
+[submodule "themes/es-theme-hippos-minimal"]
+	path = themes/es-theme-hippos-minimal
+	url = https://github.com/hippos-linux/es-theme-hippos-minimal.git
+	branch = main
