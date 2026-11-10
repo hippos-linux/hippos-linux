@@ -3,5 +3,3 @@
 # Broadcom V3DV (VideoCore VII) + other Mesa Vulkan drivers — Raspberry Pi 5
 mesa-vulkan-drivers
 
-# box64 x86_64 translation layer (light x86 software only)
-box64
