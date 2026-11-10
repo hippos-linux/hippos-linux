@@ -2,7 +2,6 @@
 Description=HippOS Quiver Launcher installer
 After=network.target local-fs.target userdata.mount
 Wants=userdata.mount
-ConditionPathExists=!/userdata/.local/share/flatpak/app/io.github.tgeorgiadis.QuiverLauncher
 
 [Service]
 Type=simple

@@ -274,7 +274,7 @@ def launch_quiver(ctx: LaunchContext) -> int:
         return 1
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
-    cmd = ['/usr/bin/flatpak', 'run', hippos_quiver.APP_ID]
+    cmd = list(hippos_quiver.LAUNCH_COMMAND)
     if target != CLIENT_ENTRY:
         cmd += ['--run', target]
     _log.info("Launching Quiver: %s", target)

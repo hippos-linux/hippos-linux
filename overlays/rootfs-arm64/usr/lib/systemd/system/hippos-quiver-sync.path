@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch for Quiver Launcher app installs/removals
+After=local-fs.target userdata.mount
+
+[Path]
+PathChanged=/userdata/.local/share/QuiverLauncher/Apps
+PathModified=/userdata/.local/share/QuiverLauncher/apps.json
+Unit=hippos-quiver-sync.service
+
+[Install]
+WantedBy=multi-user.target

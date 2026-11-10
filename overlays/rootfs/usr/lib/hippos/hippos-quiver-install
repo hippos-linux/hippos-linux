@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CACHE_DIR="/userdata/system/cache/quiver"
+
+log() { echo "[hippos-quiver-install] $*"; }
+
+quiver() {
+    PYTHONPATH=/usr/lib/hippos python3 -c "import hippos_quiver; print(hippos_quiver.$1)"
+}
+
+APP_ID="$(quiver APP_ID)"
+DOWNLOAD_URL="$(quiver DOWNLOAD_URL)"
+DOWNLOAD_SHA256="$(quiver DOWNLOAD_SHA256)"
+INSTALL_DIR="$(quiver INSTALL_DIR)"
+DATA_DIR="$(quiver DATA_DIR)"
+DOWNLOAD="${CACHE_DIR}/$(basename "${DOWNLOAD_URL}")"
+
+if [[ -d "${INSTALL_DIR}" ]]; then
+    log "Already installed at ${INSTALL_DIR}"
+    exit 0
+fi
+
+log "Waiting for internet connectivity..."
+until curl -s --connect-timeout 5 --max-time 10 -o /dev/null https://github.com; do
+    sleep 30
+done
+
+runuser -l hippos -c "mkdir -p '${CACHE_DIR}'"
+trap 'rm -rf "${DOWNLOAD}" "${CACHE_DIR}/squashfs-root"' EXIT
+
+log "Downloading ${DOWNLOAD_URL}"
+runuser -l hippos -c "curl -fsSL --retry 3 -o '${DOWNLOAD}' '${DOWNLOAD_URL}'"
+echo "${DOWNLOAD_SHA256}  ${DOWNLOAD}" | sha256sum --check --quiet
+
+log "Installing ${APP_ID}"
+case "${DOWNLOAD}" in
+    *.flatpak)
+        runuser -l hippos -c "flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo"
+        runuser -l hippos -c "flatpak install --user --noninteractive --assumeyes --bundle '${DOWNLOAD}'"
+        ;;
+    *.AppImage)
+        runuser -l hippos -c "chmod +x '${DOWNLOAD}' && cd '${CACHE_DIR}' && '${DOWNLOAD}' --appimage-extract >/dev/null"
+        runuser -l hippos -c "mkdir -p '$(dirname "${INSTALL_DIR}")' && mv '${CACHE_DIR}/squashfs-root' '${INSTALL_DIR}'"
+        ;;
+esac
+
+runuser -l hippos -c "python3 - '${DATA_DIR}/settings.json'" <<'PYEOF'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+path.parent.mkdir(parents=True, exist_ok=True)
+try:
+    settings = json.loads(path.read_text(encoding='utf-8-sig'))
+except (OSError, ValueError):
+    settings = {}
+if not settings.get('LinuxWindowsLaunchCommand'):
+    settings['LinuxWindowsLaunchCommand'] = 'hippos-wine windows play {exe}'
+path.write_text(json.dumps(settings, indent=2), encoding='utf-8')
+PYEOF
+
+/usr/lib/hippos/hippos-quiver-sync
+log "Done"

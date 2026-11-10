@@ -1,4 +1,3 @@
-arch: [amd64]
 shared_features:
   - videomode
   - mangohud

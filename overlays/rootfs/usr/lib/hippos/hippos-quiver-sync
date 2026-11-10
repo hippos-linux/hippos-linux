@@ -10,7 +10,7 @@ from pathlib import Path
 from PIL import Image
 
 import hippos_quiver
-from hippos_flatpak_metadata import read_app_details
+from hippos_flatpak_metadata import read_share_details
 from hippos_launcher_sync import CLIENT_ENTRY, GameMetadata, known_keys, reload_es, sync_gamelist, sync_launchers
 
 ROMS_DIR     = hippos_quiver.USERDATA / 'roms' / 'quiver'
@@ -59,7 +59,7 @@ def github_description(repository: str) -> str | None:
         return json.load(response).get('description')
 
 def sync() -> int:
-    if not hippos_quiver.FLATPAK_INSTALL.is_dir():
+    if not hippos_quiver.INSTALL_DIR.is_dir():
         created, updated, removed = sync_launchers(ROMS_DIR, STATE_FILE, '.quiver', {}, 'Quiver App')
         log(f'not installed; removed={removed}')
         return 0
@@ -69,7 +69,7 @@ def sync() -> int:
     entries = {CLIENT_ENTRY: 'Quiver Launcher', **{f: a['name'] for f, a in apps.items()}}
     created, updated, removed = sync_launchers(ROMS_DIR, STATE_FILE, '.quiver', entries, 'Quiver App')
 
-    own = read_app_details(hippos_quiver.APP_ID)
+    own = read_share_details(hippos_quiver.SHARE_DIR, hippos_quiver.APP_ID)
     games = {CLIENT_ENTRY: GameMetadata('Quiver Launcher', own.description, own.developer)}
     network_up = True
     with tempfile.TemporaryDirectory() as scratch:
