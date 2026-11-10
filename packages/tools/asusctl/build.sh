@@ -11,7 +11,7 @@ REPO_ROOT="${REPO_ROOT:-/work}"
 ARTIFACT_ROOT="${ARTIFACT_ROOT:-/artifacts}"
 WORK_ROOT="${WORK_ROOT:-/work/work/tools}"
 SRC="${WORK_ROOT}/${NAME}/source"
-STAGING="${ARTIFACT_ROOT}/tools/${NAME}"
+STAGING="${ARTIFACT_ROOT}/${ARCH}/tools/${NAME}"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 

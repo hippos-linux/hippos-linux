@@ -12,14 +12,14 @@ ARTIFACT_ROOT="${ARTIFACT_ROOT:-/artifacts}"
 WORK_ROOT="${WORK_ROOT:-/work/work/tools}"
 SRC="${WORK_ROOT}/${NAME}/source"
 INSTALL_DEST="${WORK_ROOT}/${NAME}/install"
-STAGING="${ARTIFACT_ROOT}/tools/${NAME}"
+STAGING="${ARTIFACT_ROOT}/${ARCH}/tools/${NAME}"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 log "Installing build deps"
 apt-get update -qq
 apt-get install -y --no-install-recommends \
-    libxrandr-dev libx11-dev libdrm-dev
+    "libxrandr-dev${DEB_TARGET_SUFFIX}" "libx11-dev${DEB_TARGET_SUFFIX}" "libdrm-dev${DEB_TARGET_SUFFIX}"
 
 if [[ ! -d "${SRC}/.git" ]]; then
     log "Cloning ${REPO} at ${TAG}"
@@ -37,14 +37,14 @@ make -C "${SRC}" install DESTDIR="${INSTALL_DEST}" PREFIX=/usr
 log "Staging binary"
 # The makefile install target omits the binary; copy it directly from source.
 install -m 755 "${SRC}/switchres" "${STAGING}/bin/switchres"
-strip "${STAGING}/bin/switchres"
+"${STRIP:-strip}" "${STAGING}/bin/switchres"
 
 log "Staging shared library"
 find "${INSTALL_DEST}/usr/lib" -name 'libswitchres*.so*' | while IFS= read -r f; do
     cp -a "${f}" "${STAGING}/lib/"
 done
 for f in "${STAGING}/lib/"libswitchres*.so*; do
-    [[ -f "${f}" && ! -L "${f}" ]] && strip --strip-debug "${f}" || true
+    [[ -f "${f}" && ! -L "${f}" ]] && "${STRIP:-strip}" --strip-debug "${f}" || true
 done
 
 log "Staging headers"

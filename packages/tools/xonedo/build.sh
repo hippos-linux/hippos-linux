@@ -13,7 +13,7 @@ REPO_ROOT="${REPO_ROOT:-/work}"
 ARTIFACT_ROOT="${ARTIFACT_ROOT:-/artifacts}"
 WORK_ROOT="${WORK_ROOT:-/work/work/tools}"
 SRC="${WORK_ROOT}/${NAME}/source"
-STAGING="${ARTIFACT_ROOT}/tools/${NAME}"
+STAGING="${ARTIFACT_ROOT}/${ARCH}/tools/${NAME}"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
@@ -61,8 +61,9 @@ for variant in standard lts; do
     KVER="${KVER#linux-headers-}"
 
     log "Building xone_* modules against kernel ${KVER} (${variant})"
-    make -C "${KERNEL_SOURCE_DIR}" M="${SRC}" clean
-    make -C "${KERNEL_SOURCE_DIR}" M="${SRC}" modules
+    prepare_kernel_headers "${KERNEL_SOURCE_DIR}"
+    kernel_module_make -C "${KERNEL_SOURCE_DIR}" M="${SRC}" clean
+    kernel_module_make -C "${KERNEL_SOURCE_DIR}" M="${SRC}" modules
 
     mkdir -p "${STAGING}/lib/modules/${KVER}/extra"
     cp "${SRC}"/xone_*.ko "${STAGING}/lib/modules/${KVER}/extra/"

@@ -15,7 +15,7 @@ REPO_ROOT="${REPO_ROOT:-/work}"
 ARTIFACT_ROOT="${ARTIFACT_ROOT:-/artifacts}"
 WORK_ROOT="${WORK_ROOT:-/work/work/tools}"
 SRC="${WORK_ROOT}/${NAME}/source"
-STAGING="${ARTIFACT_ROOT}/tools/${NAME}"
+STAGING="${ARTIFACT_ROOT}/${ARCH}/tools/${NAME}"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
@@ -59,8 +59,9 @@ for variant in standard lts; do
     KVER="${KVER#linux-headers-}"
 
     log "Building hid-xpadneo against kernel ${KVER} (${variant})"
-    make -C "${SRC}/hid-xpadneo" clean >/dev/null 2>&1 || true
-    make -C "${SRC}/hid-xpadneo" KERNEL_SOURCE_DIR="${KERNEL_SOURCE_DIR}" modules
+    prepare_kernel_headers "${KERNEL_SOURCE_DIR}"
+    kernel_module_make -C "${SRC}/hid-xpadneo" clean >/dev/null 2>&1 || true
+    kernel_module_make -C "${SRC}/hid-xpadneo" KERNEL_SOURCE_DIR="${KERNEL_SOURCE_DIR}" modules
 
     mkdir -p "${STAGING}/lib/modules/${KVER}/extra"
     cp "${SRC}/hid-xpadneo/src/hid-xpadneo.ko" "${STAGING}/lib/modules/${KVER}/extra/"

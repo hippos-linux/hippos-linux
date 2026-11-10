@@ -15,7 +15,7 @@ COMMIT="${EVSIEVE_COMMIT:-2b1bcd046829db69617f2a47d8d554f20cd0ec08}"
 WORK_ROOT="${WORK_ROOT:-/work/work/tools}"
 ARTIFACT_ROOT="${ARTIFACT_ROOT:-/artifacts}"
 SRC="${WORK_ROOT}/${NAME}/source"
-STAGING="${ARTIFACT_ROOT}/tools/${NAME}"
+STAGING="${ARTIFACT_ROOT}/${ARCH}/tools/${NAME}"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
@@ -31,8 +31,8 @@ cargo build --release --locked --manifest-path "${SRC}/Cargo.toml"
 
 rm -rf "${STAGING}"
 mkdir -p "${STAGING}/bin"
-install -m755 "${SRC}/target/release/evsieve" "${STAGING}/bin/evsieve"
-strip "${STAGING}/bin/evsieve"
+install -m755 "$(cargo_release_dir "${SRC}")/evsieve" "${STAGING}/bin/evsieve"
+"${STRIP:-strip}" "${STAGING}/bin/evsieve"
 printf '%s\n' "${COMMIT}" > "${STAGING}/version"
 
 log "Done. Artifact at ${STAGING}"

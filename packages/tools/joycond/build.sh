@@ -12,7 +12,7 @@ ARTIFACT_ROOT="${ARTIFACT_ROOT:-/artifacts}"
 WORK_ROOT="${WORK_ROOT:-/work/work/tools}"
 SRC="${WORK_ROOT}/${NAME}/source"
 BUILD="${WORK_ROOT}/${NAME}/build"
-STAGING="${ARTIFACT_ROOT}/tools/${NAME}"
+STAGING="${ARTIFACT_ROOT}/${ARCH}/tools/${NAME}"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
@@ -33,7 +33,7 @@ cmake --build "${BUILD}" -j"$(nproc)"
 
 log "Staging"
 cp "${BUILD}/joycond" "${STAGING}/bin/joycond"
-strip "${STAGING}/bin/joycond"
+"${STRIP:-strip}" "${STAGING}/bin/joycond"
 
 [[ -f "${SRC}/systemd/joycond.service" ]] && cp "${SRC}/systemd/joycond.service" "${STAGING}/lib/systemd/system/joycond.service"
 for rules_file in "${SRC}/udev/"*.rules; do
