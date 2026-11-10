@@ -71,9 +71,7 @@ libwebpdecoder3                         # cemu
 libsoundtouch1                          # duckstation (also bundled as fallback)
 libfluidsynth3                          # dosbox-staging
 # libmt32emu2 not in Trixie; dosbox-staging uses bundled mt32emu fallback
-libluajit-5.1-2                         # gamescope
-libseat1                                # gamescope
-libdisplay-info2                        # gamescope
+gamescope                               # trixie-backports
 
 # Standalone emulators (apt-only — no build artifact exists for these)
 # mame, scummvm, dosbox, hatari, openmsx, mupen64plus, dosbox-x, dolphin-emu,
