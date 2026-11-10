@@ -1,0 +1,4 @@
+requireArtifact: linuxloader
+systems:
+- lindbergh
+features: []
