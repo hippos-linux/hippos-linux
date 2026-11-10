@@ -1,0 +1,12 @@
+{
+  "name": "xemu-chihiro",
+  "keys": {
+    "exit": "/usr/lib/hippos/hippos-close-game",
+    "menu": "KEY_F2",
+    "pause": ["KEY_LEFTCTRL", "KEY_P"],
+    "reset": ["KEY_LEFTCTRL", "KEY_R"],
+    "save_state": ["KEY_LEFTSHIFT", "KEY_F5"],
+    "restore_state": "KEY_F5",
+    "screenshot": "KEY_F12"
+  }
+}

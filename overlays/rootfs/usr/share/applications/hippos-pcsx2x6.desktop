@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=PCSX2x6
+GenericName=Namco System 246/256 Emulator
+Comment=PCSX2x6 Namco System 246/256 arcade emulator
+Exec=/usr/lib/hippos/emulators/launch-pcsx2x6
+Icon=pcsx2
+Terminal=false
+Categories=Game;Emulator;

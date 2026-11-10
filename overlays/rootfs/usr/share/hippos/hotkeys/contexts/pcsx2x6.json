@@ -1,0 +1,11 @@
+{
+  "name": "pcsx2x6",
+  "keys": {
+    "exit": "/usr/lib/hippos/hippos-close-game",
+    "previous_slot": [
+      "KEY_LEFTSHIFT",
+      "KEY_F2"
+    ],
+    "screenshot": "KEY_F8"
+  }
+}

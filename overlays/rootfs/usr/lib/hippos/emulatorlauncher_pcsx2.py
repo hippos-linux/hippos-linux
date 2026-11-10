@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import configparser
+import shutil
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from emulatorlauncher_shared import (
@@ -18,18 +22,54 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import BIOS, CACHE, CONFIGS, SAVES, SCREENSHOTS, USERDATA
 
-PCSX2_CONFIG_DIR   = CONFIGS / 'PCSX2'
-PCSX2_INI          = PCSX2_CONFIG_DIR / 'inis' / 'PCSX2.ini'
+@dataclass(frozen=True)
+class Pcsx2Flavor:
+    name: str
+    config_dir: Path
+    bios_dirs: tuple[Path, ...]
+    memcard_dir: Path
+    cache_dir: Path
 
-def _write_pcsx2_config(conf: dict[str, str], ctx: Optional['LaunchContext'] = None) -> None:
-    PCSX2_INI.parent.mkdir(parents=True, exist_ok=True)
-    (SAVES / 'ps2' / 'pcsx2' / 'sstates').mkdir(parents=True, exist_ok=True)
-    (SAVES / 'ps2' / 'pcsx2').mkdir(parents=True, exist_ok=True)
-    (CACHE / 'ps2').mkdir(parents=True, exist_ok=True)
+    @property
+    def ini(self) -> Path:
+        return self.config_dir / 'inis' / 'PCSX2.ini'
+
+PCSX2 = Pcsx2Flavor(
+    name='pcsx2',
+    config_dir=CONFIGS / 'PCSX2',
+    bios_dirs=(BIOS / 'ps2', BIOS),
+    memcard_dir=SAVES / 'ps2' / 'pcsx2',
+    cache_dir=CACHE / 'ps2',
+)
+
+ARMSX2 = Pcsx2Flavor(
+    name='armsx2',
+    config_dir=CONFIGS / 'ARMSX2',
+    bios_dirs=(BIOS / 'ps2', BIOS),
+    memcard_dir=SAVES / 'ps2' / 'armsx2',
+    cache_dir=CACHE / 'ps2',
+)
+
+PCSX2X6 = Pcsx2Flavor(
+    name='pcsx2x6',
+    config_dir=CONFIGS / 'PCSX2x6',
+    bios_dirs=(BIOS / 'namco2x6',),
+    memcard_dir=SAVES / 'namco2x6' / 'pcsx2x6',
+    cache_dir=CACHE / 'namco2x6',
+)
+
+def _write_pcsx2_config(flavor: Pcsx2Flavor, bios_dir: Path, conf: dict[str, str],
+                        ctx: Optional['LaunchContext'] = None, bios_file: Optional[str] = None) -> None:
+    flavor.ini.parent.mkdir(parents=True, exist_ok=True)
+    (flavor.memcard_dir / 'sstates').mkdir(parents=True, exist_ok=True)
+    flavor.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def opt(key: str, default: str) -> str:
+        return _conf_value(conf, f'global.{flavor.name}_{key}', default)
 
     parser = _new_ini_parser()
-    if PCSX2_INI.exists():
-        parser.read(PCSX2_INI, encoding='utf-8')
+    if flavor.ini.exists():
+        parser.read(flavor.ini, encoding='utf-8')
 
     for section in ('UI', 'Folders', 'EmuCore', 'EmuCore/GS', 'Achievements', 'InputSources', 'Hotkeys'):
         _ensure_section(parser, section)
@@ -49,40 +89,40 @@ def _write_pcsx2_config(conf: dict[str, str], ctx: Optional['LaunchContext'] = N
     parser.set('UI', 'HideMainWindowWhenRunning', 'true')
     parser.set('UI', 'DoubleClickTogglesFullscreen', 'false')
 
-    parser.set('Folders', 'Bios',        str(BIOS / 'ps2'))
+    parser.set('Folders', 'Bios',        str(bios_dir))
     parser.set('Folders', 'Snapshots',   str(SCREENSHOTS))
-    parser.set('Folders', 'Savestates',  str(SAVES / 'ps2' / 'pcsx2' / 'sstates'))
-    parser.set('Folders', 'MemoryCards', str(SAVES / 'ps2' / 'pcsx2'))
+    parser.set('Folders', 'Savestates',  str(flavor.memcard_dir / 'sstates'))
+    parser.set('Folders', 'MemoryCards', str(flavor.memcard_dir))
     parser.set('Folders', 'Logs',        str(USERDATA / 'system' / 'logs'))
-    parser.set('Folders', 'Cache',       str(CACHE / 'ps2'))
-    parser.set('Folders', 'Textures',    str(PCSX2_CONFIG_DIR / 'textures'))
+    parser.set('Folders', 'Cache',       str(flavor.cache_dir))
+    parser.set('Folders', 'Textures',    str(flavor.config_dir / 'textures'))
 
     parser.set('EmuCore', 'EnableDiscordPresence',       'false')
-    fast_boot = _conf_value(conf, 'global.pcsx2_fastboot', '')
+    fast_boot = opt('fastboot', '')
     parser.set('EmuCore', 'EnableFastBoot', 'false' if fast_boot == 'false' else 'true')
-    parser.set('EmuCore', 'EnableCheats',                _conf_value(conf, 'global.pcsx2_cheats', 'false'))
-    parser.set('EmuCore', 'EnableWideScreenPatches',     _conf_value(conf, 'global.pcsx2_EnableWideScreenPatches', 'false'))
-    parser.set('EmuCore', 'EnableNoInterlacingPatches',  _conf_value(conf, 'global.pcsx2_interlacing_patches', 'false'))
+    parser.set('EmuCore', 'EnableCheats',                opt('cheats', 'false'))
+    parser.set('EmuCore', 'EnableWideScreenPatches',     opt('EnableWideScreenPatches', 'false'))
+    parser.set('EmuCore', 'EnableNoInterlacingPatches',  opt('interlacing_patches', 'false'))
     parser.set('EmuCore', 'SaveStateOnShutdown',         'true' if _conf_bool(conf, 'global.autosave') else 'false')
 
-    parser.set('EmuCore/GS', 'Renderer',          _conf_value(conf, 'global.pcsx2_gfxbackend', '-1'))
-    parser.set('EmuCore/GS', 'AspectRatio',        _conf_value(conf, 'global.pcsx2_ratio', 'Auto 4:3/3:2'))
-    parser.set('EmuCore/GS', 'VsyncEnable',        _conf_value(conf, 'global.pcsx2_vsync', '0'))
-    parser.set('EmuCore/GS', 'upscale_multiplier', _conf_value(conf, 'global.pcsx2_resolution', '1'))
-    parser.set('EmuCore/GS', 'fxaa',               _conf_value(conf, 'global.pcsx2_fxaa', 'false'))
-    parser.set('EmuCore/GS', 'FMVAspectRatioSwitch', _conf_value(conf, 'global.pcsx2_fmv_ratio', 'Auto 4:3/3:2'))
-    parser.set('EmuCore/GS', 'mipmap_hw',          _conf_value(conf, 'global.pcsx2_mipmapping', '-1'))
-    parser.set('EmuCore/GS', 'TriFilter',          _conf_value(conf, 'global.pcsx2_trilinear_filtering', '-1'))
-    parser.set('EmuCore/GS', 'MaxAnisotropy',      _conf_value(conf, 'global.pcsx2_anisotropic_filtering', '0'))
-    parser.set('EmuCore/GS', 'dithering_ps2',      _conf_value(conf, 'global.pcsx2_dithering', '2'))
-    parser.set('EmuCore/GS', 'texture_preloading', _conf_value(conf, 'global.pcsx2_texture_loading', '2'))
-    parser.set('EmuCore/GS', 'deinterlace_mode',   _conf_value(conf, 'global.pcsx2_deinterlacing', '0'))
-    parser.set('EmuCore/GS', 'pcrtc_antiblur',     _conf_value(conf, 'global.pcsx2_blur', 'true'))
-    parser.set('EmuCore/GS', 'IntegerScaling',     _conf_value(conf, 'global.pcsx2_scaling', 'false'))
-    parser.set('EmuCore/GS', 'accurate_blending_unit', _conf_value(conf, 'global.pcsx2_blending', '1'))
-    parser.set('EmuCore/GS', 'filter',             _conf_value(conf, 'global.pcsx2_texture_filtering', '2'))
-    parser.set('EmuCore/GS', 'linear_present_mode', _conf_value(conf, 'global.pcsx2_bilinear_filtering', '1'))
-    parser.set('EmuCore/GS', 'OsdShowMessages',    _conf_value(conf, 'global.pcsx2_osd_messages', 'true'))
+    parser.set('EmuCore/GS', 'Renderer',          opt('gfxbackend', '-1'))
+    parser.set('EmuCore/GS', 'AspectRatio',        opt('ratio', 'Auto 4:3/3:2'))
+    parser.set('EmuCore/GS', 'VsyncEnable',        opt('vsync', '0'))
+    parser.set('EmuCore/GS', 'upscale_multiplier', opt('resolution', '1'))
+    parser.set('EmuCore/GS', 'fxaa',               opt('fxaa', 'false'))
+    parser.set('EmuCore/GS', 'FMVAspectRatioSwitch', opt('fmv_ratio', 'Auto 4:3/3:2'))
+    parser.set('EmuCore/GS', 'mipmap_hw',          opt('mipmapping', '-1'))
+    parser.set('EmuCore/GS', 'TriFilter',          opt('trilinear_filtering', '-1'))
+    parser.set('EmuCore/GS', 'MaxAnisotropy',      opt('anisotropic_filtering', '0'))
+    parser.set('EmuCore/GS', 'dithering_ps2',      opt('dithering', '2'))
+    parser.set('EmuCore/GS', 'texture_preloading', opt('texture_loading', '2'))
+    parser.set('EmuCore/GS', 'deinterlace_mode',   opt('deinterlacing', '0'))
+    parser.set('EmuCore/GS', 'pcrtc_antiblur',     opt('blur', 'true'))
+    parser.set('EmuCore/GS', 'IntegerScaling',     opt('scaling', 'false'))
+    parser.set('EmuCore/GS', 'accurate_blending_unit', opt('blending', '1'))
+    parser.set('EmuCore/GS', 'filter',             opt('texture_filtering', '2'))
+    parser.set('EmuCore/GS', 'linear_present_mode', opt('bilinear_filtering', '1'))
+    parser.set('EmuCore/GS', 'OsdShowMessages',    opt('osd_messages', 'true'))
 
     parser.set('Achievements', 'Enabled',           'false')
     parser.set('Achievements', 'TestMode',           'false')
@@ -100,6 +140,10 @@ def _write_pcsx2_config(conf: dict[str, str], ctx: Optional['LaunchContext'] = N
     parser.set('Hotkeys', 'NextSaveStateSlot', 'Keyboard/F2')
     parser.set('Hotkeys', 'OpenPauseMenu',     'Keyboard/Escape')
     parser.set('Hotkeys', 'TogglePause',       'Keyboard/Space')
+
+    if bios_file is not None:
+        _ensure_section(parser, 'Filenames')
+        parser.set('Filenames', 'BIOS', bios_file)
 
     _ensure_section(parser, 'Pad')
     parser.set('Pad', 'MultitapPort1', 'false')
@@ -153,26 +197,83 @@ def _write_pcsx2_config(conf: dict[str, str], ctx: Optional['LaunchContext'] = N
             parser.set(pad, 'LargeMotor', f'{sdl}/LargeMotor')
             parser.set(pad, 'SmallMotor', f'{sdl}/SmallMotor')
 
-    with PCSX2_INI.open('w', encoding='utf-8') as fh:
+    with flavor.ini.open('w', encoding='utf-8') as fh:
         parser.write(fh)
-    _log.info("Wrote PCSX2 config: %s", PCSX2_INI)
+    _log.info("Wrote %s config: %s", flavor.name, flavor.ini)
 
-def launch_pcsx2(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('pcsx2')
+PS2_BIOS_MIN_SIZE = 4 * 1024 * 1024
+PS2_BIOS_MAX_SIZE = 8 * 1024 * 1024
+ROMDIR_SEARCH_BYTES = 512 * 1024
+ROMDIR_ENTRY_SIZE = 16
+
+def _is_ps2_bios(path: Path) -> bool:
+    if not PS2_BIOS_MIN_SIZE <= path.stat().st_size <= PS2_BIOS_MAX_SIZE:
+        return False
+    with path.open('rb') as fh:
+        head = fh.read(ROMDIR_SEARCH_BYTES)
+    return any(head[offset:offset + 6] == b'RESET\0' for offset in range(0, len(head), ROMDIR_ENTRY_SIZE))
+
+def find_bios_dir(flavor: Pcsx2Flavor, bios_file: Optional[str]) -> Optional[Path]:
+    for bios_dir in flavor.bios_dirs:
+        if not bios_dir.is_dir():
+            continue
+        if bios_file is not None:
+            if (bios_dir / bios_file).is_file():
+                return bios_dir
+        elif any(entry.is_file() and _is_ps2_bios(entry) for entry in bios_dir.iterdir()):
+            return bios_dir
+    return None
+
+def _run_pcsx2(flavor: Pcsx2Flavor, ctx: LaunchContext, bios_file: Optional[str] = None) -> int:
+    bin_path = _find_emulator_bin(flavor.name)
     if bin_path is None:
-        _log.error("pcsx2 not found")
+        _log.error("%s not found", flavor.name)
+        return 1
+    bios_dir = find_bios_dir(flavor, bios_file)
+    if bios_dir is None:
+        wanted = bios_file or 'PS2 BIOS'
+        _log.error("%s: %s not found in %s", flavor.name, wanted, ', '.join(str(d) for d in flavor.bios_dirs))
         return 1
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
     conf = _load_hippos_conf()
-    _write_pcsx2_config(conf, ctx)
-    pcsx2_db = PCSX2_INI.parent / 'game_controller_db.txt'
-    pcsx2_db.parent.mkdir(parents=True, exist_ok=True)
-    pcsx2_db.write_text(generate_sdl_game_controller_config(ctx.controllers))
+    _write_pcsx2_config(flavor, bios_dir, conf, ctx, bios_file)
+    controller_db = flavor.ini.parent / 'game_controller_db.txt'
+    controller_db.write_text(generate_sdl_game_controller_config(ctx.controllers))
 
     cmd = [str(bin_path), '-nogui', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
     if ctx.wheel:
         env.pop('SDL_GAMECONTROLLERCONFIG', None)
-    result = _run_game_command(ctx, 'pcsx2', cmd, env, cwd=bin_path.parent)
+    result = _run_game_command(ctx, flavor.name, cmd, env, cwd=bin_path.parent)
     return result.returncode
+
+def launch_pcsx2(ctx: LaunchContext) -> int:
+    return _run_pcsx2(PCSX2, ctx)
+
+def launch_armsx2(ctx: LaunchContext) -> int:
+    return _run_pcsx2(ARMSX2, ctx)
+
+NAMCO246_BIOS = 'r27v1602f.7d'
+NAMCO256_BIOS = 'r27v1602f.8g'
+
+def _read_acgame(rom: Path) -> configparser.ConfigParser:
+    acgame = configparser.ConfigParser(interpolation=None, strict=False)
+    acgame.optionxform = str
+    acgame.read(rom, encoding='utf-8')
+    return acgame
+
+def launch_pcsx2x6(ctx: LaunchContext) -> int:
+    if ctx.rom.suffix.lower() != '.acgame':
+        _log.error("pcsx2x6 needs an .acgame file, got %s", ctx.rom.name)
+        return 1
+    acgame = _read_acgame(ctx.rom)
+    gameid = acgame.get('game', 'gameid', fallback='')
+    platform = acgame.get('game', 'platform', fallback='')
+    data_dir = ctx.rom.parent / acgame.get('data', 'subdir', fallback=gameid)
+    dongle = data_dir / acgame.get('data', 'dongle', fallback=f'{gameid}.ps2')
+    if dongle.is_file():
+        PCSX2X6.memcard_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy(dongle, PCSX2X6.memcard_dir / dongle.name)
+    bios_file = NAMCO246_BIOS if platform == '246' else NAMCO256_BIOS
+    return _run_pcsx2(PCSX2X6, ctx, bios_file)

@@ -43,6 +43,8 @@ STANDALONE_BINARIES: dict[str, tuple[str, ...]] = {
     'melonds': ('melonDS', 'melonds'),
     'openbor': ('OpenBOR', 'OpenBOR7530'),
     'pcsx2': ('pcsx2-qt', 'pcsx2'),
+    'pcsx2x6': ('pcsx2x6-qt',),
+    'armsx2': ('armsx2-qt',),
     'ppsspp': ('PPSSPPSDL', 'ppsspp'),
     'basilisk2': ('BasiliskII', 'basilisk2'),
     'citron-neo': ('citron-neo', 'citron'),
@@ -509,8 +511,6 @@ def _find_executable(root: Path) -> Optional[Path]:
     preferred_names = (
         'linuxloader',
         'linuxloader.exe',
-        'lindbergh-loader',
-        'lindbergh-loader.exe',
         'shadps4',
         'shadps4.exe',
         'model2emu',

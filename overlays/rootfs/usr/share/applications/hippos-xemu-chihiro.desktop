@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=xemu Chihiro
+GenericName=Sega Chihiro Emulator
+Comment=xemu fork for the Sega Chihiro arcade board
+Exec=/usr/lib/hippos/emulators/launch-xemu-chihiro
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;

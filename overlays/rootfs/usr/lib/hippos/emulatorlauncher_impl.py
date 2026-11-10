@@ -375,7 +375,9 @@ from emulatorlauncher_openbor import launch_openbor as _launch_openbor
 from emulatorlauncher_shadps4 import launch_shadps4 as _launch_shadps4
 from emulatorlauncher_supermodel import launch_supermodel as _launch_supermodel
 from emulatorlauncher_vpinball import launch_vpinball as _launch_vpinball
+from emulatorlauncher_drastic import launch_drastic as _launch_drastic
 from emulatorlauncher_xemu import launch_xemu as _launch_xemu
+from emulatorlauncher_xemu import launch_xemu_chihiro as _launch_xemu_chihiro
 from emulatorlauncher_ares import launch_ares as _launch_ares
 from emulatorlauncher_xenia import launch_xenia as _launch_xenia
 from emulatorlauncher_ppsspp import launch_ppsspp as _launch_ppsspp
@@ -383,7 +385,9 @@ from emulatorlauncher_melonds import launch_melonds as _launch_melonds
 from emulatorlauncher_vita3k import launch_vita3k as _launch_vita3k
 from emulatorlauncher_azahar import launch_azahar as _launch_azahar
 from emulatorlauncher_cemu import launch_cemu as _launch_cemu
+from emulatorlauncher_pcsx2 import launch_armsx2 as _launch_armsx2
 from emulatorlauncher_pcsx2 import launch_pcsx2 as _launch_pcsx2
+from emulatorlauncher_pcsx2 import launch_pcsx2x6 as _launch_pcsx2x6
 from emulatorlauncher_rpcs3 import launch_rpcs3 as _launch_rpcs3
 from emulatorlauncher_computers import (
     launch_dosbox_staging,
@@ -429,7 +433,9 @@ GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'retroarch':   _launch_libretro,
     'sh':          _launch_sh,
     'duckstation': _launch_duckstation,
+    'armsx2':      _launch_armsx2,
     'pcsx2':       _launch_pcsx2,
+    'pcsx2x6':     _launch_pcsx2x6,
     'dolphin':     _launch_dolphin,
     'dolphin-emu': _launch_dolphin,
     'dosbox':         launch_dosbox_staging,
@@ -548,7 +554,9 @@ GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'desmume':     _launch_standalone,
     'nestopia':    _launch_standalone,
     'virtualjaguar': _launch_standalone,
+    'drastic':     _launch_drastic,
     'xemu':        _launch_xemu,
+    'xemu-chihiro': _launch_xemu_chihiro,
     'ares':        _launch_ares,
     'xenia':       _launch_xenia,
     'xenia-canary': _launch_xenia,

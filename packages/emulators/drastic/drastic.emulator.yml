@@ -1,0 +1,4 @@
+requireArtifact: drastic
+arch: [arm64]
+systems:
+  - nds

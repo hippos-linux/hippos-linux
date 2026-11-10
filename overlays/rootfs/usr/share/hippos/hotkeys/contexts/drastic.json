@@ -1,0 +1,11 @@
+{
+  "name": "drastic",
+  "keys": {
+    "exit": "/usr/lib/hippos/hippos-close-game",
+    "menu": "KEY_F1",
+    "swap_screen": "KEY_F2",
+    "save_state": "KEY_F5",
+    "restore_state": "KEY_F7",
+    "fastforward": "KEY_TAB"
+  }
+}

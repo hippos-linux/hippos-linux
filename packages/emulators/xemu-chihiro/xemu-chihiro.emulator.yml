@@ -1,0 +1,4 @@
+requireArtifact: xemu-chihiro
+arch: [amd64]
+systems:
+  - chihiro

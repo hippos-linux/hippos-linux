@@ -42,7 +42,7 @@ _emulator_defaults:
   cdi:           { emulator: mame,               core: mame               }
   cgenie:        { emulator: mame,               core: mame               }
   channelf:      { emulator: retroarch,          core: freechaf           }
-  chihiro:       { emulator: xemu,               core: xemu               }
+  chihiro:       { emulator: xemu-chihiro,       core: xemu-chihiro       }
   coco:          { emulator: xroar,              core: xroar              }
   colecovision:  { emulator: openmsx,            core: openmsx            }
   commanderx16:  { emulator: x16emu,             core: x16emu             }
@@ -111,7 +111,7 @@ _emulator_defaults:
   n64:           { emulator: retroarch,          core: mupen64plus_next, options: { videomode: max-1920x1080 } }
   n64dd:         { emulator: mupen64plus,        core: mupen64plus, options: { videomode: max-1920x1080 } }
   namco22:       { emulator: mame,               core: mame               }
-  namco2x6:      { emulator: play,               core: play               }
+  namco2x6:      { emulator: pcsx2x6,            core: pcsx2x6            }
   naomi:         { emulator: flycast,            core: flycast            }
   naomi2:        { emulator: flycast,            core: flycast            }
   nds:           { emulator: melonds,            core: melonds            }
@@ -223,6 +223,11 @@ _emulator_defaults:
   gx4000:        { emulator: retroarch,          core: cap32            }
   cassettevision: { emulator: retroarch,          core: mame             }
   flatpak:       { emulator: flatpak,            core: flatpak, options: { hud_support: false } }
+
+# Overrides _emulator_defaults on that architecture only.
+_emulator_defaults_arm64:
+  nds:           { emulator: drastic,            core: drastic            }
+  ps2:           { emulator: armsx2,             core: armsx2, options: { fullboot: true } }
 
 3ds:
   extensions:
@@ -777,7 +782,7 @@ channelf:
   release: 1976
 chihiro:
   extensions:
-  - iso
+  - bin
   hardware: arcade
   manufacturer: Sega & Microsoft
   name: Sega Chihiro
@@ -1537,6 +1542,7 @@ namco22:
   release: 1992
 namco2x6:
   extensions:
+  - acgame
   - zip
   hardware: arcade
   manufacturer: Sony / Namco
