@@ -120,7 +120,6 @@ def fetch_manifest(channel):
         urls = [f"https://hippos-linux.org/api/update/manifest-{_DEB_ARCH}-dev.json"]
     else:
         urls = MANIFEST_URLS[:]
-        urls.insert(1, f"https://updates.hippos.org/{channel}/manifest.json")
     for url in urls:
         try:
             req = _make_request(url)
@@ -444,10 +443,115 @@ def require_efi_partition():
             "menu can't be changed. If another system's boot loader starts HippOS, "
             "point it at the deployment you want instead.")
 
-def update_boot_menu(default_subvol, deployments, uuid, partuuid):
+RPI_CONFIG_TXT = os.path.join(EFI_MOUNT, "config.txt")
+RPI_TRYBOOT_STATE = os.path.join(EFI_MOUNT, "hippos-tryboot.json")
+SYSTEMD_REBOOT_PARAM = "/run/systemd/reboot-param"
+
+@dataclass(frozen=True)
+class FirmwareBootSet:
+    kernel: str
+    initrd: str
+    cmdline: str
+
+RPI_PRIMARY = FirmwareBootSet(
+    os.path.join(EFI_MOUNT, "kernel8.img"),
+    os.path.join(EFI_MOUNT, "initramfs8"),
+    os.path.join(EFI_MOUNT, "cmdline.txt"),
+)
+RPI_TRYBOOT = FirmwareBootSet(
+    os.path.join(EFI_MOUNT, "kernel8-try.img"),
+    os.path.join(EFI_MOUNT, "initramfs8-try"),
+    os.path.join(EFI_MOUNT, "cmdline-try.txt"),
+)
+
+def firmware_loads_kernel():
+    return os.path.isfile(RPI_CONFIG_TXT)
+
+def _replace_boot_file(dest, write):
+    tmp = dest + ".new"
+    write(tmp)
+    os.replace(tmp, dest)
+
+def _write_text(path, text):
+    with open(path, "w") as fh:
+        fh.write(text)
+
+def write_firmware_boot(subvol, partuuid, boot_set=None):
+    require_efi_partition()
+    boot_set = boot_set or RPI_PRIMARY
+    subvol_path = os.path.join(BTRFS_MNT, subvol)
+    default_variant = default_kernel_variant()
+    variant_order = [default_variant] + [v for v in _KERNEL_VARIANTS if v != default_variant]
+    found = next(
+        (f for f in (find_kernel_files(subvol_path, v) for v in variant_order) if f),
+        None,
+    )
+    if found is None:
+        die(f"No kernel found in {subvol}/boot")
+    kernel, initrd = found
+    boot = os.path.join(subvol_path, "boot")
+
+    _replace_boot_file(boot_set.kernel, lambda tmp: shutil.copyfile(os.path.join(boot, kernel), tmp))
+    _replace_boot_file(boot_set.initrd, lambda tmp: shutil.copyfile(os.path.join(boot, initrd), tmp))
+    cmdline = " ".join([
+        f"root=PARTUUID={partuuid}",
+        "rootfstype=btrfs",
+        f"rootflags=subvol={subvol}",
+        "ro",
+        "quiet",
+        "splash",
+        *read_grub_cmdline_args(),
+    ])
+    _replace_boot_file(boot_set.cmdline, lambda tmp: _write_text(tmp, cmdline + "\n"))
+    return kernel[len("vmlinuz-"):]
+
+def stage_firmware_tryboot(new_subvol, fallback_subvol, partuuid):
+    if fallback_subvol:
+        write_firmware_boot(fallback_subvol, partuuid)
+    kernel_release = write_firmware_boot(new_subvol, partuuid, RPI_TRYBOOT)
+    state = json.dumps({"subvol": new_subvol, "kernel": kernel_release})
+    _replace_boot_file(RPI_TRYBOOT_STATE, lambda tmp: _write_text(tmp, state + "\n"))
+    _write_text(SYSTEMD_REBOOT_PARAM, "0 tryboot\n")
+
+def _remove_tryboot_files():
+    for path in (RPI_TRYBOOT.kernel, RPI_TRYBOOT.initrd, RPI_TRYBOOT.cmdline, RPI_TRYBOOT_STATE):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+
+def confirm_firmware_tryboot(running_subvol, running_kernel):
+    try:
+        state = json.load(open(RPI_TRYBOOT_STATE))
+    except FileNotFoundError:
+        return
+    if state.get("subvol") == running_subvol and state.get("kernel") == running_kernel:
+        for try_file, primary_file in zip(
+            (RPI_TRYBOOT.kernel, RPI_TRYBOOT.initrd, RPI_TRYBOOT.cmdline),
+            (RPI_PRIMARY.kernel, RPI_PRIMARY.initrd, RPI_PRIMARY.cmdline),
+        ):
+            os.replace(try_file, primary_file)
+        log(f"{running_subvol} ({running_kernel}) booted — made it the default")
+    else:
+        log(f"{state.get('subvol')} ({state.get('kernel')}) did not finish booting — "
+            f"still on {running_subvol} ({running_kernel})")
+    _remove_tryboot_files()
+
+def write_boot_config(default_subvol, all_subvols, uuid, partuuid):
+    if firmware_loads_kernel():
+        write_firmware_boot(default_subvol, partuuid)
+    else:
+        write_grub_cfg(default_subvol, all_subvols, uuid, partuuid)
+
+def update_boot_menu(default_subvol, deployments, uuid, partuuid, fallback_subvol=None):
     if not efi_partition_mounted():
         log(f"No HippOS boot partition at {EFI_MOUNT} — boot menu left to the "
             f"system's own boot loader, which must start {BARE_ROOTFS}")
+        return
+    if firmware_loads_kernel():
+        stage_firmware_tryboot(default_subvol, fallback_subvol, partuuid)
+        log(f"Next reboot tries {default_subvol} once; if it doesn't finish booting, "
+            f"the one after starts the current system again")
         return
     write_grub_cfg(default_subvol, deployments, uuid, partuuid)
     log(f"GRUB updated — default: {default_subvol}")
@@ -689,8 +793,8 @@ def cmd_rollback(subvol):
         if not uuid or not partuuid:
             die("Cannot read UUID/PARTUUID from existing grub.cfg")
 
-        write_grub_cfg(subvol, available, uuid, partuuid)
-        log(f"GRUB default set to {subvol}")
+        write_boot_config(subvol, available, uuid, partuuid)
+        log(f"Boot default set to {subvol}")
     finally:
         umount_toplevel()
 
@@ -779,8 +883,8 @@ def cmd_apply():
         if stale:
             subprocess.run(["btrfs", "subvolume", "sync", BTRFS_MNT], check=False)
         if plan.prune and efi_partition_mounted():
-            write_grub_cfg(running, [running], uuid, partuuid)
-            log("GRUB updated after pruning")
+            write_boot_config(running, [running], uuid, partuuid)
+            log("Boot configuration updated after pruning")
 
         shortfall = update_space_shortfall(
             shutil.disk_usage(BTRFS_MNT).free, payload, os.path.exists(archive),
@@ -813,7 +917,8 @@ def cmd_apply():
         open(UPDATE_PENDING, "w").close()
         log(f"{remote} installed as {BARE_ROOTFS}")
 
-        update_boot_menu(BARE_ROOTFS, plan.final_deployments, uuid, partuuid)
+        update_boot_menu(BARE_ROOTFS, plan.final_deployments, uuid, partuuid,
+                         fallback_subvol=plan.retire_running_as or running)
     finally:
         umount_toplevel()
 
@@ -928,22 +1033,16 @@ def cmd_update_kernel():
         if not uuid or not partuuid:
             die("Cannot read UUID/PARTUUID from existing grub.cfg")
 
-        deployments = list_deployments()
-        update_boot_menu(running, deployments, uuid, partuuid)
-
         keep = {snap_name} if installed else set()
-        pruned = False
-        for sv in deployments:
+        for sv in list_deployments():
             if sv.startswith(KERNEL_SNAPSHOT_PREFIX) and sv not in keep:
                 log(f"Pruning old kernel snapshot {sv}...")
                 subprocess.run(
                     ["btrfs", "subvolume", "delete", os.path.join(BTRFS_MNT, sv)],
                     check=False,
                 )
-                pruned = True
-        if pruned and efi_partition_mounted():
-            write_grub_cfg(running, list_deployments(), uuid, partuuid)
-            log("GRUB updated after pruning")
+
+        update_boot_menu(running, list_deployments(), uuid, partuuid)
     finally:
         umount_toplevel()
 
@@ -1204,10 +1303,16 @@ def cmd_update_grub():
             die("Cannot read UUID/PARTUUID from existing grub.cfg")
         running = current_subvol()
         deployments = list_deployments()
-        write_grub_cfg(running, deployments, uuid, partuuid)
-        log(f"grub.cfg rewritten — default: {running}")
+        write_boot_config(running, deployments, uuid, partuuid)
+        log(f"Boot configuration rewritten — default: {running}")
     finally:
         umount_toplevel()
+
+def cmd_boot_success():
+    if os.path.exists(EFI_GRUBENV):
+        subprocess.run(["grub-editenv", EFI_GRUBENV, "unset", "boot_counter"], check=False)
+    if firmware_loads_kernel():
+        confirm_firmware_tryboot(current_subvol(), os.uname().release)
 
 def _require_root():
     if os.geteuid() != 0:
@@ -1259,5 +1364,7 @@ if __name__ == "__main__":
         cmd_apply_patches()
     elif cmd == "update-grub":
         cmd_update_grub()
+    elif cmd == "boot-success":
+        cmd_boot_success()
     else:
         cmd_apply()
