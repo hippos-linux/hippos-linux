@@ -10,6 +10,10 @@
       <action name="ToggleFullscreen"/>
       <action name="Maximize"/>
     </keybind>
+    <!-- Alt+F4: close the game window. -->
+    <keybind key="A-F4">
+      <action name="Close"/>
+    </keybind>
   </keyboard>
   <applications>
     <application class="*">

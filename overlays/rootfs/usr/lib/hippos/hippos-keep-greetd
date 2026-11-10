@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ -f /usr/share/hippos/image-packages.list ]] || exit 0
+
+unit=/etc/systemd/system/display-manager.service
+if [[ "$(readlink "${unit}" 2>/dev/null)" != */greetd.service ]]; then
+    ln -sf /usr/lib/systemd/system/greetd.service "${unit}"
+    rm -f /etc/X11/default-display-manager
+    echo "hippos: kept greetd as the display manager"
+fi

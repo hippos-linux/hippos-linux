@@ -1,7 +1,9 @@
-// Record the user's own apt installs (reinstalled after OS updates) and keep
-// ES Ports launchers in step with the games among them. Both no-op in the
-// build chroot, before /usr/share/hippos/image-packages.list exists.
+// Record the user's own apt installs (reinstalled after OS updates), keep
+// ES Ports launchers in step with the games among them, and keep greetd as the
+// display manager when a desktop's sddm/gdm3 tries to take over. All no-op in
+// the build chroot, before /usr/share/hippos/image-packages.list exists.
 DPkg::Post-Invoke {
     "/usr/lib/hippos/hippos-apt-packages record || true";
     "/usr/lib/hippos/hippos-ports sync || true";
+    "/usr/lib/hippos/hippos-keep-greetd || true";
 };
