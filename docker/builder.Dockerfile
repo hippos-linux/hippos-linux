@@ -56,6 +56,11 @@ RUN apt-get update \
 # HEAD 2>/dev/null || echo unknown` silently swallows that failure, so
 # every release's /etc/hippos-version has shipped with GIT_COMMIT=unknown
 # instead of a real commit hash.
+RUN dpkg --add-architecture arm64 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends libssl-dev:arm64 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN git config --system --add safe.directory /work
 
 WORKDIR /repo
