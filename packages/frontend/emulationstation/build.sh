@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "/work/build/common.sh"
+
 FRONTEND_NAME="emulationstation"
 ES_BRANCH="${ES_BRANCH:-hippos}"
 
@@ -23,6 +25,11 @@ git clone --recurse-submodules --branch "${ES_BRANCH}" "${ES_LOCAL}" "${SOURCE_D
 VERSION_FILE="${REPO_ROOT}/overlays/rootfs/usr/share/hippos/version"
 OS_VERSION="$(tr -d '[:space:]' < "${VERSION_FILE}" 2>/dev/null || true)"
 
+cmake_cross_args=()
+if [[ "${CROSS_BUILD}" -eq 1 ]]; then
+    cmake_cross_args=(-DCMAKE_TOOLCHAIN_FILE=/work/docker/emulators/aarch64-toolchain.cmake)
+fi
+
 log "Configuring (HippOS version: ${OS_VERSION:-unknown})"
 SCREENSCRAPER_DEV_LOGIN="${SCREENSCRAPER_DEV_LOGIN:-}"
 STEAMGRIDDB_APIKEY="${STEAMGRIDDB_APIKEY:-}"
@@ -42,7 +49,8 @@ cmake -S "${SOURCE_DIR}" -B "${BUILD_DIR}" \
     ${STEAMGRIDDB_APIKEY:+-DSTEAMGRIDDB_APIKEY="${STEAMGRIDDB_APIKEY}"} \
     ${GAMESDB_APIKEY:+-DGAMESDB_APIKEY="${GAMESDB_APIKEY}"} \
     ${CHEEVOS_DEV_LOGIN:+-DCHEEVOS_DEV_LOGIN="${CHEEVOS_DEV_LOGIN}"} \
-    -DSCREENSCRAPER_SOFTNAME="${SCREENSCRAPER_SOFTNAME}"
+    -DSCREENSCRAPER_SOFTNAME="${SCREENSCRAPER_SOFTNAME}" \
+    "${cmake_cross_args[@]+"${cmake_cross_args[@]}"}"
 
 log "Building"
 cmake --build "${BUILD_DIR}" -- -j"$(nproc)"
