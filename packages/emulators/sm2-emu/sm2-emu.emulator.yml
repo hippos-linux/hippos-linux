@@ -1,0 +1,5 @@
+requireArtifact: sm2-emu
+systems:
+- model2
+features:
+- ratio

@@ -484,6 +484,20 @@ def launch_nanoboyadvance(ctx: LaunchContext) -> int:
     env['QT_QPA_PLATFORM'] = 'xcb'
     return _run_game_command(ctx, 'nanoboyadvance', [str(bin_path), str(ctx.rom)], env).returncode
 
+def launch_sm2emu(ctx: LaunchContext) -> int:
+    bin_path = _find_emulator_bin('sm2-emu')
+    if bin_path is None:
+        _log.error("sm2-emu: binary not found")
+        return 1
+
+    conf = _load_effective_hippos_conf()
+    env = _build_game_env(conf, ctx)
+    return _run_game_command(
+        ctx, 'sm2-emu',
+        [str(bin_path), '--graphics-backend', 'opengl', str(ctx.rom)],
+        env,
+    ).returncode
+
 def launch_eka2l1(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('eka2l1')
     if bin_path is None:
