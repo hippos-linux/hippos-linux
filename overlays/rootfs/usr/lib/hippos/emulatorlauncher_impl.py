@@ -410,6 +410,7 @@ from emulatorlauncher_extras import (
     launch_applewin,
     launch_eka2l1,
     launch_snes9x,
+    launch_nanoboyadvance,
     launch_demul,
     launch_sugarbox,
 )
@@ -442,6 +443,7 @@ GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'applewin':    launch_applewin,
     'eka2l1':      launch_eka2l1,
     'snes9x':      launch_snes9x,
+    'nanoboyadvance': launch_nanoboyadvance,
     'bigpemu':     launch_bigpemu,
     'abuse':       _launch_standalone,
     'bstone':      _launch_standalone,

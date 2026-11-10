@@ -473,6 +473,17 @@ def launch_snes9x(ctx: LaunchContext) -> int:
     env['QT_QPA_PLATFORM'] = 'xcb'
     return _run_game_command(ctx, 'snes9x', [str(bin_path), str(ctx.rom)], env).returncode
 
+def launch_nanoboyadvance(ctx: LaunchContext) -> int:
+    bin_path = _find_emulator_bin('nanoboyadvance')
+    if bin_path is None:
+        _log.error("nanoboyadvance: binary not found")
+        return 1
+
+    conf = _load_effective_hippos_conf()
+    env = _build_game_env(conf, ctx)
+    env['QT_QPA_PLATFORM'] = 'xcb'
+    return _run_game_command(ctx, 'nanoboyadvance', [str(bin_path), str(ctx.rom)], env).returncode
+
 def launch_eka2l1(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('eka2l1')
     if bin_path is None:
