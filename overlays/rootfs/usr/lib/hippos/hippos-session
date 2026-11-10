@@ -78,6 +78,12 @@ if [[ -n "${HIPPOS_START_MODE:-}" ]]; then
 fi
 hippos-settings set system.session "$(hippos-settings get system.boot_session 2>/dev/null || echo es)"
 
+es_scripts="/userdata/system/configs/emulationstation/scripts"
+mkdir -p "${es_scripts}/reboot" "${es_scripts}/shutdown"
+printf '#!/bin/sh\nexec hippos-shutdown reboot\n'   > "${es_scripts}/reboot/reboot"
+printf '#!/bin/sh\nexec hippos-shutdown shutdown\n' > "${es_scripts}/shutdown/shutdown"
+chmod 0755 "${es_scripts}/reboot/reboot" "${es_scripts}/shutdown/shutdown"
+
 while [[ ! -f /run/hippos/quit-action ]] && (( ! logout_requested )); do
     if [[ -z "${xorg_pid}" ]] || ! kill -0 "${xorg_pid}" 2>/dev/null; then
         start_xorg || { sleep 2; continue; }
