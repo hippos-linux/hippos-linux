@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Merge a light gun's input devices into one virtual gun.
-
-Usage: hippos-lightgun eventN|videoN
-Started by hippos-lightgun@.service for devices that 99-hippos-lightguns.rules
-marks with HIPPOS_LIGHTGUN (the model) and HIPPOS_LIGHTGUN_PLAYER.
-"""
+"""Usage: hippos-lightgun eventN|videoN"""
 from __future__ import annotations
 
 import errno

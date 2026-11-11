@@ -1,6 +1,5 @@
-# Light guns: each model's raw input devices are hidden and merged by hippos-lightgun into one
-# "HippOS light gun <model> P<n>" device. To support another gun, add a rule setting HIPPOS_LIGHTGUN
-# to a model hippos-lightgun knows and HIPPOS_LIGHTGUN_PLAYER to its player number.
+# Light guns show up in games as "HippOS light gun <model> P<n>". To support another gun, add a rule
+# setting HIPPOS_LIGHTGUN to a model hippos-lightgun knows and HIPPOS_LIGHTGUN_PLAYER to its player number.
 # GunCon 3 and Retro Shooter: to calibrate, hold Select for 3 seconds, then shoot each point the
 # crosshair moves to. GunCon 3 calibration is saved in /userdata/system/configs/hippos/lightgun.
 
@@ -45,12 +44,10 @@ ATTRS{name}=="Fusion Piggie 4*", ENV{HIPPOS_LIGHTGUN}="fusion", ENV{HIPPOS_LIGHT
 
 ATTRS{name}=="OneHit OneHit #*", ENV{HIPPOS_LIGHTGUN}="onehit"
 
-# Sinden (PC version only): the Sinden software is downloaded from sindenlightgun.com the first
-# time a gun is plugged in, so the first plug-in needs an internet connection.
+# Sinden (PC version only): be connected to the internet the first time you plug a gun in.
 ATTRS{name}=="Unknown SindenLightgun*", ENV{HIPPOS_LIGHTGUN}="sinden"
 
-# AE lightgun shows up as a plain "Arduino Micro", like many home-made controllers, so it is
-# only treated as a gun when /userdata/system/configs/hippos/aelightgun exists (create an empty file).
+# AE lightgun: create an empty file /userdata/system/configs/hippos/aelightgun to use it.
 ATTRS{name}=="Arduino LLC Arduino Micro*", TEST=="/userdata/system/configs/hippos/aelightgun", ENV{HIPPOS_LIGHTGUN}="aelightgun"
 
 ENV{HIPPOS_LIGHTGUN}=="?*", ENV{ID_INPUT_MOUSE}="0", ENV{ID_INPUT_JOYSTICK}="0", \
