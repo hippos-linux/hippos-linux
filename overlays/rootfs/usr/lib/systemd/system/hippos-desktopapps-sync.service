@@ -1,0 +1,14 @@
+[Unit]
+Description=HippOS desktop app launcher sync
+After=local-fs.target userdata.mount hippos-roms-pool.service
+Wants=userdata.mount
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+User=hippos
+ExecStart=/usr/lib/hippos/hippos-desktopapps-sync
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

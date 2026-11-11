@@ -26,6 +26,8 @@ class DesktopApp:
     name: str
     command: str
     categories: frozenset[str]
+    comment: str | None = None
+    icon: str | None = None
 
 def read_desktop_file(path: Path) -> DesktopApp | None:
     parser = configparser.ConfigParser(interpolation=None, strict=False)
@@ -48,6 +50,8 @@ def read_desktop_file(path: Path) -> DesktopApp | None:
         name=entry.get('Name', path.stem),
         command=command,
         categories=frozenset(c for c in entry.get('Categories', '').split(';') if c),
+        comment=entry.get('Comment') or None,
+        icon=entry.get('Icon') or None,
     )
 
 def launcher_path(name: str) -> Path:

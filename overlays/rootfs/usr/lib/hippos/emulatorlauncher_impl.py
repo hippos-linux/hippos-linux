@@ -348,6 +348,7 @@ from emulatorlauncher_core import (
 from emulatorlauncher_gsplus import launch_gsplus as _launch_gsplus
 from emulatorlauncher_misc import (
     launch_clk as _launch_clk,
+    launch_desktopapps as _launch_desktopapps,
     launch_flatpak as _launch_flatpak,
     launch_heroic as _launch_heroic,
     launch_lutris as _launch_lutris,
@@ -471,6 +472,7 @@ GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'fallout1-ce': _launch_fallout1_ce,
     'fallout2-ce': _launch_fallout2_ce,
     'flatpak':     _launch_flatpak,
+    'desktopapps': _launch_desktopapps,
     'heroic':      _launch_heroic,
     'lutris':      _launch_lutris,
     'quiver':      _launch_quiver,

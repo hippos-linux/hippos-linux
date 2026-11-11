@@ -25,6 +25,7 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import BIOS, CONFIGS, SAVES, USERDATA
 from hippos_launcher_sync import CLIENT_ENTRY
+from hippos_ports import read_desktop_file
 import hippos_quiver
 
 _VICE_MACHINE_NAMES: dict[str, str] = {
@@ -218,6 +219,23 @@ def launch_flatpak(ctx: LaunchContext) -> int:
     cmd = ['/usr/bin/flatpak', 'run', app_id]
     _log.info("Launching Flatpak: %s", app_id)
     result = _run_game_command(ctx, 'flatpak', cmd, env)
+    return result.returncode
+
+def launch_desktopapps(ctx: LaunchContext) -> int:
+    try:
+        desktop_file = Path(ctx.rom.read_text(encoding='utf-8').strip())
+    except OSError as exc:
+        _log.error("Could not read desktop file path from %s: %s", ctx.rom, exc)
+        return 1
+    app = read_desktop_file(desktop_file)
+    if app is None:
+        _log.error("No launchable application in %s", desktop_file)
+        return 1
+    conf = _load_hippos_conf()
+    env = _build_game_env(conf, ctx)
+    env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
+    _log.info("Launching desktop app: %s", desktop_file)
+    result = _run_game_command(ctx, 'shell', ['/bin/sh', '-c', app.command], env)
     return result.returncode
 
 def launch_heroic(ctx: LaunchContext) -> int:

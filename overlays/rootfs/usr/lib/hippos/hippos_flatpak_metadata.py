@@ -44,7 +44,7 @@ def _developer(component: ET.Element) -> str | None:
         element = _untranslated(component, 'developer_name')
     return _text(element) if element is not None else None
 
-def _icon(share: Path, app_id: str) -> Path | None:
+def hicolor_icon(share: Path, app_id: str) -> Path | None:
     hicolor = share / 'icons' / 'hicolor'
     vector = hicolor / 'scalable' / 'apps' / f'{app_id}.svg'
     if vector.is_file():
@@ -72,4 +72,4 @@ def read_share_details(share: Path, app_id: str) -> AppDetails:
         pass
     else:
         description, developer = _description(component), _developer(component)
-    return AppDetails(description, developer, _icon(share, app_id))
+    return AppDetails(description, developer, hicolor_icon(share, app_id))

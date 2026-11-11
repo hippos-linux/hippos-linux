@@ -1,0 +1,3 @@
+systems:
+- name: desktopapps
+  as_core: desktopapps
