@@ -11,6 +11,7 @@ from pathlib import Path
 HIPPOS_CONF     = Path('/userdata/system/hippos.conf')
 DEFAULTS_CONF   = Path('/usr/share/hippos/hippos-defaults.conf')
 HIPPOS_SETTINGS = Path('/usr/lib/hippos/hippos-settings')
+HIPPOS_AUDIO    = Path('/usr/lib/hippos/hippos-audio')
 
 _DEVICE_MAPPING_DIRS = [
     Path('/userdata/system/configs/hippos-hotkeys/devices'),
@@ -463,41 +464,18 @@ def cmd_audio(args: list[str]) -> int:
     if subcmd == 'volume':
         vol_args = args[1:]
         if not vol_args:
-            r = subprocess.run(['pactl', 'get-sink-volume', '@DEFAULT_SINK@'],
-                               capture_output=True, text=True, env=env)
-            if r.returncode != 0:
-                print('pactl failed — is PipeWire running?', file=sys.stderr)
+            return subprocess.run([str(HIPPOS_AUDIO), 'getSystemVolume'], env=env).returncode
+        match vol_args:
+            case ['up']:
+                level = '+5'
+            case ['down']:
+                level = '-5'
+            case ['set', pct]:
+                level = pct.rstrip('%')
+            case _:
+                print('Usage: hippos audio volume [up|down|set <pct>]', file=sys.stderr)
                 return 1
-            print(r.stdout.strip())
-            return 0
-        action = vol_args[0]
-        if action == 'up':
-            delta = '+5%'
-        elif action == 'down':
-            delta = '-5%'
-        elif action == 'set':
-            if len(vol_args) < 2:
-                print('Usage: hippos audio volume set <pct>', file=sys.stderr)
-                return 1
-            delta = vol_args[1]
-            if not delta.endswith('%'):
-                delta += '%'
-        else:
-            print(f'Unknown volume action: {action}', file=sys.stderr)
-            return 1
-        r = subprocess.run(['pactl', 'set-sink-volume', '@DEFAULT_SINK@', delta],
-                           capture_output=True, text=True, env=env)
-        if r.returncode != 0:
-            print(f'pactl error: {r.stderr.strip()}', file=sys.stderr)
-            return 1
-        r2 = subprocess.run(['pactl', 'get-sink-volume', '@DEFAULT_SINK@'],
-                            capture_output=True, text=True, env=env)
-        if r2.returncode == 0:
-            import re as _re
-            m = _re.search(r'(\d+)%', r2.stdout)
-            if m:
-                subprocess.run([str(HIPPOS_SETTINGS), 'set', 'audio.volume', m.group(1)])
-        return 0
+        return subprocess.run([str(HIPPOS_AUDIO), 'setSystemVolume', level], env=env).returncode
 
     print(f'Unknown audio subcommand: {subcmd}', file=sys.stderr)
     print('Usage: hippos audio list|get|set|volume', file=sys.stderr)

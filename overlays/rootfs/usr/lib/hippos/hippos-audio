@@ -74,6 +74,7 @@ case "${1:-}" in
                 ;;
             *) echo "invalid volume value" >&2; exit 1 ;;
         esac
+        [[ "$VOL" == *mute* ]] || hippos-settings set audio.volume "$(_volume_pct)" 2>/dev/null || true
         ;;
     test)
         aplay /usr/share/sounds/alsa/Front_Center.wav 2>/dev/null || \
