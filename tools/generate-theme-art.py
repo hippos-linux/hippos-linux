@@ -345,9 +345,12 @@ def wordmark_svg(font_path: Path, text: str) -> str:
         f'<path fill="#fff" d="{pen.getCommands()}"/></svg>\n'
     )
 
+WORDMARKS = {"quiver": "Quiver", "desktopshortcuts": "Desktop Shortcuts"}
+
 def render_chrome(theme_dir: Path) -> None:
     assets = theme_dir / "assets"
-    (theme_dir / "art" / "quiver.svg").write_text(wordmark_svg(assets / "fonts" / "Sora-ExtraBold.ttf", "Quiver"))
+    for system, text in WORDMARKS.items():
+        (theme_dir / "art" / f"{system}.svg").write_text(wordmark_svg(assets / "fonts" / "Sora-ExtraBold.ttf", text))
     Image.new("RGBA", (4, 4), (255, 255, 255, 255)).save(assets / "white.png")
 
     size, radius = 96, 26
