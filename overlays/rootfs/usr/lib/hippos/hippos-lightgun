@@ -7,19 +7,29 @@ marks with HIPPOS_LIGHTGUN (the model) and HIPPOS_LIGHTGUN_PLAYER.
 """
 from __future__ import annotations
 
+import errno
 import fcntl
 import hashlib
+import json
 import os
 import re
+import select
+import socket
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import evdev
+from evdev import ecodes
 
 LOCK_DIR = Path('/run/hippos')
 OUTPUT_PREFIX = 'HippOS light gun'
+UNCALIBRATED_PREFIX = 'HippOS uncalibrated gun'
+CALIBRATION_DIR = Path('/userdata/system/configs/hippos/lightgun')
+CALIBRATE_BUTTON = ecodes.BTN_1
+CALIBRATE_HOLD_SECONDS = 3
 DPAD = ['--map', 'yield key:up', 'btn:5', '--map', 'yield key:down', 'btn:6',
         '--map', 'yield key:left', 'btn:7', '--map', 'yield key:right', 'btn:8']
 
@@ -30,6 +40,7 @@ class Model:
     maps: list[str]
     exclude: str = ''
     inputs: list[str] = field(default_factory=lambda: ['--input', '{devs}', 'persist=exit'])
+    calibration: str = ''
 
 
 def _player_keys(player: int) -> list[str]:
@@ -42,6 +53,29 @@ def _fusion_keys(player: int) -> list[str]:
     start = {1: 1, 2: 2, 3: 1, 4: 2, 5: 3, 6: 4}[player]
     return (_player_keys(start)
             + ['--map', f'yield key:{extra[0]}', 'btn:2', '--map', f'yield key:{extra[1]}', 'btn:3'])
+
+
+RETROSHOOTER_KEYS = {
+    1: ('1', '5', 'q', ('up', 'down', 'left', 'right')),
+    2: ('2', '6', 's', ('u', 'v', 'w', 'x')),
+    3: ('3', '7', 't', ('r', 'f', 'd', 'g')),
+    4: ('4', '8', 'y', ('i', 'k', 'j', 'l')),
+}
+
+
+def _retroshooter_keys(player: int) -> list[str]:
+    start, coin, stick, directions = RETROSHOOTER_KEYS[player]
+    maps = ['--map', 'yield btn:middle', 'btn:2', '--map', f'yield key:{start}', 'btn:middle',
+            '--map', f'yield key:{coin}', 'btn:1', '--map', f'yield key:{stick}', 'btn:3',
+            '--map', 'yield key:esc', 'btn:1']
+    for direction, button in zip(directions, ('btn:5', 'btn:6', 'btn:7', 'btn:8')):
+        maps += ['--map', f'yield key:{direction}', button]
+    return maps
+
+
+def _hat_buttons(axis: str, low: str, high: str) -> list[str]:
+    return ['--copy', f'abs:{axis}:64~..~63', f'{low}:1', '--copy', f'abs:{axis}:~63..64~', f'{low}:0',
+            '--copy', f'abs:{axis}:~191..192~', f'{high}:1', '--copy', f'abs:{axis}:192~..~191', f'{high}:0']
 
 
 def model_for(name: str, player: int) -> Model:
@@ -72,6 +106,16 @@ def model_for(name: str, player: int) -> Model:
         case 'aelightgun':
             return Model(2, ['--map', 'key:1', 'btn:1', '--map', 'key:2', 'btn:2', '--map', 'key:3', 'btn:3',
                              '--map', 'key:4', 'btn:4', '--map', 'key:up', 'btn:5', '--map', 'key:down', 'btn:6'])
+        case 'guncon3':
+            return Model(1, ['--map', 'yield btn:middle', 'btn:right', '--map', 'yield btn:right', 'btn:2',
+                             '--map', 'yield btn:west', 'btn:3', '--map', 'yield btn:z', 'btn:4',
+                             '--map', 'yield btn:tl', 'btn:9', '--map', 'yield btn:tr', 'btn:0',
+                             '--map', 'yield btn:select', 'btn:1', '--map', 'yield btn:start', 'btn:middle',
+                             *_hat_buttons('hat0y', 'btn:5', 'btn:6'), *_hat_buttons('hat0x', 'btn:7', 'btn:8')],
+                         calibration='software')
+        case 'retroshooter':
+            return Model(2, _retroshooter_keys(player), exclude=r'3AGAME 3A-3H Retro Shooter [1-4]$',
+                         calibration='firmware')
         case 'onehit':
             return Model(3, ['--map', 'abs:y:0@dpad', 'btn:5:1', '--map', 'abs:y:2048@dpad', 'btn:5:0', 'btn:6:0',
                              '--map', 'abs:y:4095@dpad', 'btn:6:1', '--map', 'abs:x:0@dpad', 'btn:7:1',
@@ -109,6 +153,158 @@ def sibling_events(parent: Path, exclude: str) -> list[str]:
     return [device for _, device in sorted(found)]
 
 
+class SoftwareCalibration:
+    targets = ((0.15, 0.15), (0.85, 0.15), (0.85, 0.85), (0.15, 0.85))
+
+    def __init__(self, store: Path, absinfo: dict[int, evdev.AbsInfo]):
+        self.store = store
+        self.absinfo = absinfo
+        self.shots: list[tuple[int, int]] = []
+        self.bounds = json.loads(store.read_text()) if store.is_file() else None
+
+    def start(self) -> None:
+        self.shots = []
+
+    def shot(self, raw: tuple[int, int]) -> None:
+        self.shots.append(raw)
+
+    def finish(self) -> None:
+        top_left, top_right, bottom_right, bottom_left = self.shots
+        self.bounds = {
+            str(ecodes.ABS_X): [(top_left[0] + bottom_left[0]) / 2, (top_right[0] + bottom_right[0]) / 2],
+            str(ecodes.ABS_Y): [(top_left[1] + top_right[1]) / 2, (bottom_left[1] + bottom_right[1]) / 2],
+        }
+        self.store.parent.mkdir(parents=True, exist_ok=True)
+        self.store.write_text(json.dumps(self.bounds))
+
+    def transform(self, code: int, value: int) -> int:
+        if not self.bounds or self.bounds[str(code)][0] == self.bounds[str(code)][1]:
+            return value
+        low, high = self.bounds[str(code)]
+        near, far = self.targets[0][code == ecodes.ABS_Y], self.targets[2][code == ecodes.ABS_Y]
+        fraction = near + (far - near) * (value - low) / (high - low)
+        info = self.absinfo[code]
+        return round(min(max(info.min + fraction * (info.max - info.min), info.min), info.max))
+
+
+class FirmwareCalibration:
+    targets = ((0.5, 0.5), (0.1, 0.1), (0.9, 0.9), (0.9, 0.1))
+    START, FIRST_SHOT, COMMIT = 0x66, 0xB1, 0xB5
+
+    def __init__(self, hidraw: Path):
+        self.hidraw = hidraw
+        self.shots = 0
+
+    def _send(self, command: int) -> None:
+        with open(self.hidraw, 'wb', buffering=0) as device:
+            device.write(bytes([0xAA, command]))
+
+    def start(self) -> None:
+        self.shots = 0
+        self._send(self.START)
+
+    def shot(self, raw: tuple[int, int]) -> None:
+        self._send(self.FIRST_SHOT + self.shots)
+        self.shots += 1
+
+    def finish(self) -> None:
+        self._send(self.COMMIT)
+
+    def transform(self, code: int, value: int) -> int:
+        return value
+
+
+def usb_hidraw(parent: Path) -> Path:
+    for node in sorted(Path('/sys/class/hidraw').glob('hidraw*')):
+        if str((node / 'device').resolve()).startswith(f'{parent}/'):
+            return Path('/dev') / node.name
+    raise SystemExit(f'hippos-lightgun: no hidraw device under {parent}')
+
+
+def start_evsieve(args: list[str], link: Path) -> subprocess.Popen:
+    notify_path = link.with_suffix('.notify')
+    notify_path.unlink(missing_ok=True)
+    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notify:
+        notify.bind(str(notify_path))
+        process = subprocess.Popen(['evsieve', *args], env={**os.environ, 'NOTIFY_SOCKET': str(notify_path)})
+        exited = os.pidfd_open(process.pid)
+        try:
+            while True:
+                ready, _, _ = select.select([notify, exited], [], [])
+                if exited in ready:
+                    raise SystemExit(f'hippos-lightgun: evsieve exited with {process.wait()}')
+                if b'READY=1' in notify.recv(4096):
+                    return process
+        finally:
+            os.close(exited)
+            notify_path.unlink()
+
+
+def point_at(target: evdev.UInput, absinfo: dict[int, evdev.AbsInfo], position: tuple[float, float]) -> None:
+    for code, fraction in zip((ecodes.ABS_X, ecodes.ABS_Y), position):
+        info = absinfo[code]
+        target.write(ecodes.EV_ABS, code, round(info.min + fraction * (info.max - info.min)))
+    target.syn()
+
+
+def relay_with_calibration(source: evdev.InputDevice, target: evdev.UInput,
+                           absinfo: dict[int, evdev.AbsInfo], calibration) -> None:
+    raw = {ecodes.ABS_X: 0, ecodes.ABS_Y: 0}
+    held_since: float | None = None
+    step: int | None = None
+    while True:
+        timeout = None if held_since is None else max(0.0, held_since + CALIBRATE_HOLD_SECONDS - time.monotonic())
+        if not select.select([source], [], [], timeout)[0]:
+            held_since, step = None, 0
+            calibration.start()
+            target.write(ecodes.EV_KEY, ecodes.KEY_CONFIG, 1)
+            point_at(target, absinfo, calibration.targets[0])
+            continue
+        for event in source.read():
+            if event.type == ecodes.EV_ABS and event.code in raw:
+                raw[event.code] = event.value
+                if step is None:
+                    target.write(ecodes.EV_ABS, event.code, calibration.transform(event.code, event.value))
+            elif step is not None:
+                if event.type == ecodes.EV_KEY and event.code == ecodes.BTN_LEFT and event.value == 1:
+                    calibration.shot((raw[ecodes.ABS_X], raw[ecodes.ABS_Y]))
+                    step += 1
+                    if step < len(calibration.targets):
+                        point_at(target, absinfo, calibration.targets[step])
+                    else:
+                        calibration.finish()
+                        step = None
+                        target.write(ecodes.EV_KEY, ecodes.KEY_CONFIG, 0)
+                        target.syn()
+            else:
+                if event.type == ecodes.EV_KEY and event.code == CALIBRATE_BUTTON:
+                    held_since = time.monotonic() if event.value == 1 else None
+                target.write_event(event)
+
+
+def run_calibrated(name: str, player: int, parent: Path, model: Model, evsieve_args: list[str],
+                   lock_name: str) -> int:
+    link = LOCK_DIR / f'{lock_name}.event'
+    process = start_evsieve([*evsieve_args, f'name={UNCALIBRATED_PREFIX} {name} P{player}',
+                             f'create-link={link}'], link)
+    try:
+        source = evdev.InputDevice(str(link))
+        absinfo = dict(source.capabilities(absinfo=True)[ecodes.EV_ABS])
+        events = {kind: codes for kind, codes in source.capabilities(absinfo=True).items()
+                  if kind not in (ecodes.EV_SYN, ecodes.EV_FF)}
+        events[ecodes.EV_KEY] = [*events.get(ecodes.EV_KEY, []), ecodes.KEY_CONFIG]
+        calibration = (SoftwareCalibration(CALIBRATION_DIR / f'{name}-P{player}.json', absinfo)
+                       if model.calibration == 'software' else FirmwareCalibration(usb_hidraw(parent)))
+        with evdev.UInput(events, name=f'{OUTPUT_PREFIX} {name} P{player}') as target:
+            relay_with_calibration(source, target, absinfo, calibration)
+    except OSError as error:
+        if error.errno != errno.ENODEV:
+            raise
+    finally:
+        process.terminate()
+    return 0
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__.strip(), file=sys.stderr)
@@ -124,8 +320,8 @@ def main() -> int:
         return 0
 
     LOCK_DIR.mkdir(parents=True, exist_ok=True)
-    lock = os.open(LOCK_DIR / f'lightgun-{hashlib.md5(str(parent).encode()).hexdigest()}.lock',
-                   os.O_CREAT | os.O_RDWR, 0o644)
+    lock_name = f'lightgun-{hashlib.md5(str(parent).encode()).hexdigest()}'
+    lock = os.open(LOCK_DIR / f'{lock_name}.lock', os.O_CREAT | os.O_RDWR, 0o644)
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
@@ -137,8 +333,10 @@ def main() -> int:
     for arg in model.inputs:
         inputs += devices if arg == '{devs}' else [named.get(arg, arg)]
     maps = [part for arg in model.maps for part in arg.split()]
-    output = f'{OUTPUT_PREFIX} {props["HIPPOS_LIGHTGUN"]} P{player}'
-    os.execvp('evsieve', ['evsieve', *inputs, *maps, '--output', f'name={output}'])
+    name = props['HIPPOS_LIGHTGUN']
+    if model.calibration:
+        return run_calibrated(name, player, parent, model, [*inputs, *maps, '--output'], lock_name)
+    os.execvp('evsieve', ['evsieve', *inputs, *maps, '--output', f'name={OUTPUT_PREFIX} {name} P{player}'])
     return 1
 
 

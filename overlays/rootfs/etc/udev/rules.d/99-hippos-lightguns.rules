@@ -1,6 +1,8 @@
 # Light guns: each model's raw input devices are hidden and merged by hippos-lightgun into one
 # "HippOS light gun <model> P<n>" device. To support another gun, add a rule setting HIPPOS_LIGHTGUN
 # to a model hippos-lightgun knows and HIPPOS_LIGHTGUN_PLAYER to its player number.
+# GunCon 3 and Retro Shooter: to calibrate, hold Select for 3 seconds, then shoot each point the
+# crosshair moves to. GunCon 3 calibration is saved in /userdata/system/configs/hippos/lightgun.
 
 ACTION!="add", GOTO="hippos_lightguns_end"
 SUBSYSTEM!="input", GOTO="hippos_lightguns_end"
@@ -12,6 +14,13 @@ ATTRS{name}=="Ultimarc ATRAK Device #*", ENV{HIPPOS_LIGHTGUN}="aimtrak"
 ATTRS{name}=="Ultimarc Ultimarc", ENV{HIPPOS_LIGHTGUN}="aimtrak"
 
 ATTRS{idVendor}=="0b9a", ATTRS{idProduct}=="016a", ENV{HIPPOS_LIGHTGUN}="guncon2"
+ATTRS{idVendor}=="0b9a", ATTRS{idProduct}=="0800", ENV{HIPPOS_LIGHTGUN}="guncon3"
+
+ATTRS{name}=="3AGAME 3A-3H Retro Shooter [1-4]*", ENV{HIPPOS_LIGHTGUN}="retroshooter"
+ATTRS{name}=="3AGAME 3A-3H Retro Shooter 1*", ENV{HIPPOS_LIGHTGUN_PLAYER}="1"
+ATTRS{name}=="3AGAME 3A-3H Retro Shooter 2*", ENV{HIPPOS_LIGHTGUN_PLAYER}="2"
+ATTRS{name}=="3AGAME 3A-3H Retro Shooter 3*", ENV{HIPPOS_LIGHTGUN_PLAYER}="3"
+ATTRS{name}=="3AGAME 3A-3H Retro Shooter 4*", ENV{HIPPOS_LIGHTGUN_PLAYER}="4"
 
 ATTRS{name}=="Arduino LLC GUN4IR*P[1-4]*", ENV{HIPPOS_LIGHTGUN}="gun4ir"
 
@@ -38,6 +47,9 @@ ATTRS{name}=="Arduino LLC Arduino Micro*", TEST=="/userdata/system/configs/hippo
 
 ENV{HIPPOS_LIGHTGUN}=="?*", ENV{ID_INPUT_MOUSE}="0", ENV{ID_INPUT_JOYSTICK}="0", \
     TAG+="systemd", ENV{SYSTEMD_WANTS}+="hippos-lightgun@%k.service"
+
+ATTRS{name}=="HippOS uncalibrated gun *", ENV{ID_INPUT_MOUSE}="0", ENV{ID_INPUT_JOYSTICK}="0", \
+    ENV{ID_INPUT_KEYBOARD}="0", ENV{ID_INPUT_KEY}="0"
 
 ATTRS{name}=="HippOS light gun *", ENV{ID_INPUT_GUN}="1", ENV{ID_INPUT_MOUSE}="1", \
     ENV{ID_INPUT_JOYSTICK}="0", ENV{ID_INPUT_KEYBOARD}="0", ENV{ID_INPUT_KEY}="0"
