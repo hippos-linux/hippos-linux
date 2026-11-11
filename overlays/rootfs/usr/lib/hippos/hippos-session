@@ -13,7 +13,7 @@ logout_requested=0
 
 start_xorg() {
     rm -f /tmp/.X0-lock /tmp/.X11-unix/X0
-    /usr/lib/xorg/Xorg :0 vt"${XDG_VTNR}" -keeptty -nolisten tcp -ac -logfile /tmp/Xorg.0.log &
+    /usr/lib/xorg/Xorg :0 vt"${XDG_VTNR}" -keeptty -noreset -nolisten tcp -ac -logfile /tmp/Xorg.0.log &
     xorg_pid=$!
     for _ in $(seq 1 40); do
         [[ -S /tmp/.X11-unix/X0 ]] && break

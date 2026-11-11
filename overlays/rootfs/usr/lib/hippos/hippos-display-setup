@@ -56,6 +56,17 @@ if [[ "${_CRT_ENABLED}" != "true" && "${_CRT_ACTIVE}" != "true" ]]; then
     fi
 fi
 
+case "$(hippos-settings get display.rgb_range 2>/dev/null || true)" in
+    limited) RGB_RANGE="Limited 16:235" ;;
+    auto)    RGB_RANGE="Automatic" ;;
+    *)       RGB_RANGE="Full" ;;
+esac
+if xrandr --prop 2>/dev/null | awk -v out="$OUTPUT" '$1 == out {found=1; next} /^[^ \t]/ {found=0} found && /Broadcast RGB:/ {ok=1} END {exit !ok}'; then
+    xrandr --output "$OUTPUT" --set "Broadcast RGB" "$RGB_RANGE" 2>/dev/null \
+        && echo "[hippos-display-setup] $OUTPUT RGB range: $RGB_RANGE" \
+        || echo "[hippos-display-setup] could not set RGB range on $OUTPUT" >&2
+fi
+
 case "$ROTATION" in
     right)    TOUCH_MATRIX="0 1 0 -1 0 1 0 0 1"  ;;
     left)     TOUCH_MATRIX="0 -1 1 1 0 0 0 0 1"  ;;
