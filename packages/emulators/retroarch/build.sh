@@ -8,12 +8,15 @@ source "/work/build/common.sh"
 
 EMULATOR_NAME='retroarch'
 
+# EXCLUDED_CORES: buildbot cores left out of this arch's package; add a core's .so name to drop it.
 case "${ARCH}" in
     amd64)
         LIBRETRO_ARCH="x86_64"
+        EXCLUDED_CORES=()
         ;;
     arm64)
         LIBRETRO_ARCH="aarch64"
+        EXCLUDED_CORES=(rpcs3_libretro.so xemu_libretro.so xenia_edge_libretro.so)
         ;;
     *)
         die "Unsupported libretro buildbot arch for ARCH=${ARCH}"
@@ -41,6 +44,11 @@ AVAILABLE=$(curl -fsSL "${BUILDBOT_BASE}/" \
     | sed 's|href="||;s|\.zip"||' \
     | xargs -n1 basename \
     | sort)
+
+for core in "${EXCLUDED_CORES[@]}"; do
+    AVAILABLE="$(grep -vxF "${core}" <<< "${AVAILABLE}" || true)"
+    rm -f "${CORES_DIR}/${core}" "${ETAG_DIR}/${core}.etag"
+done
 
 total=0
 downloaded=0

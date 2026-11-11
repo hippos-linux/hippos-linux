@@ -37,7 +37,7 @@ ARES_BIN="$(find "${BUILD}" -maxdepth 5 -name 'ares' -type f -perm /111 | head -
 log "Binary: ${ARES_BIN}"
 cp "${ARES_BIN}" "${STAGING}/bin/ares"
 mkdir -p "${STAGING}/lib"
-cp /usr/lib/${GNU_ARCH}/libao.so.4* "${STAGING}/lib/" 2>/dev/null || true
+cp -a /usr/lib/${GNU_ARCH}/libao.so.4* "${STAGING}/lib/"
 patchelf --set-rpath '$ORIGIN/../lib' "${STAGING}/bin/ares" 2>/dev/null || true
 
 # ares looks for its data next to the binary and can't load a game without Database.

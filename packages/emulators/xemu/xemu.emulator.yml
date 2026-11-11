@@ -1,4 +1,5 @@
 requireArtifact: xemu
+arch: [amd64]
 features:
   - ratio
   - rewind
