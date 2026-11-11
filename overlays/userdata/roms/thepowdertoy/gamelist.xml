@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<gameList>
+    <game>
+        <path>./The Powder Toy.libretro</path>
+        <name>The Powder Toy</name>
+        <desc>A falling-sand physics sandbox. Simulates air pressure and velocity, heat, gravity and countless interactions between substances, which you can use to build machines, explosives, terrain and more.</desc>
+        <image>./images/thepowdertoy-image.png</image>
+        <releasedate>20100101T000000</releasedate>
+        <developer>The Powder Toy contributors</developer>
+        <genre>Simulation</genre>
+        <players>1</players>
+    </game>
+</gameList>

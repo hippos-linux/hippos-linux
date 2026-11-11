@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<gameList>
+    <game>
+        <path>./MrBoom.libretro</path>
+        <name>Mr.Boom</name>
+        <desc>A multiplayer Bomberman-style game for up to 8 players, converted from the DOS original. Drop bombs to clear the maze and blast your opponents; an advanced CPU AI fills in for missing players.</desc>
+        <image>./images/mrboom-image.png</image>
+        <thumbnail>./images/mrboom-thumb.png</thumbnail>
+        <releasedate>19970101T000000</releasedate>
+        <developer>Remdy Software</developer>
+        <publisher>Remdy Software</publisher>
+        <genre>Action</genre>
+        <players>8</players>
+    </game>
+</gameList>

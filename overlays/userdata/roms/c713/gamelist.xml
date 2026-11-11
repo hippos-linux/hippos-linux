@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<gameList>
+    <game>
+        <path>./Taylor C713.libretro</path>
+        <name>Taylor C713</name>
+        <desc>An emulator of the Taylor C713 soft-serve ice cream machine's control panel, as used by a well-known fast food chain. Runs without firmware dumps.</desc>
+        <developer>Jesse Talavera</developer>
+        <genre>Simulation</genre>
+        <players>1</players>
+    </game>
+</gameList>

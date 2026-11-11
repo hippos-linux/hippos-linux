@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<gameList>
+    <game>
+        <path>./Gong.libretro</path>
+        <name>Gong</name>
+        <desc>A Pong clone written for libretro. Play against the computer or a second player.</desc>
+        <developer>Brad Parker</developer>
+        <genre>Sports</genre>
+        <players>2</players>
+    </game>
+</gameList>

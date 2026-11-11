@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<gameList>
+    <game>
+        <path>./Anarch.libretro</path>
+        <name>Anarch</name>
+        <desc>A small 90s-style first-person shooter in the spirit of Doom, released completely into the public domain (CC0). Fight through ten levels of robots and turrets with a classic weapon set.</desc>
+        <image>./images/anarch-image.png</image>
+        <marquee>./images/anarch-logo.png</marquee>
+        <releasedate>20200101T000000</releasedate>
+        <developer>Miloslav Číž (drummyfish)</developer>
+        <genre>Shooter</genre>
+        <players>1</players>
+    </game>
+</gameList>
