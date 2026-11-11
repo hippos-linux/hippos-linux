@@ -32,6 +32,7 @@ from emulatorlauncher_shared import (
     _HUD_CONFIG_PATH,
     _conf_bool,
     _get_yaml_system_options,
+    game_config_name,
     _load_es_input_configs,
     _load_hippos_conf,
     _load_yaml_defaults,
@@ -137,7 +138,7 @@ def resolve_emulator_core(
     folder_em = folder_co = None
     game_em   = game_co   = None
     if rom is not None:
-        gsname    = rom.name.replace('=', '').replace('#', '')
+        gsname    = game_config_name(rom)
         folder_em = conf.get(f'{system}.folder["{rom.parent}"].emulator') or None
         folder_co = conf.get(f'{system}.folder["{rom.parent}"].core')     or None
         game_em   = conf.get(f'{system}["{gsname}"].emulator') or None

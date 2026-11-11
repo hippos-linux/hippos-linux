@@ -404,6 +404,19 @@ def _conf_value(conf: dict[str, str], key: str, default: str = '') -> str:
         return default
     return value
 
+def game_config_name(rom: Path) -> str:
+    return rom.name.replace('=', '').replace('#', '')
+
+def _game_setting(conf: dict[str, str], system: str, rom: Path, name: str) -> str:
+    for key in (
+        f'{system}["{game_config_name(rom)}"].{name}',
+        f'{system}.folder["{rom.parent}"].{name}',
+        f'{system}.{name}',
+    ):
+        if value := _conf_value(conf, key, ''):
+            return value
+    return ''
+
 def _conf_int(conf: dict[str, str], key: str, default: int = 0) -> int:
     value = _conf_value(conf, key, '')
     if not value:

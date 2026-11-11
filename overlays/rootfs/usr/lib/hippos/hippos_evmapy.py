@@ -21,9 +21,9 @@ _MERGED_KEYS   = Path('/var/run/evmapy_merged.keys')
 
 HIPPOS_EVMAPY  = Path('/usr/lib/hippos/hippos-evmapy')
 
-def _find_keys_files(system: str, emulator: str, rom: Path) -> list[Path]:
-    candidates = [
-        (rom.parent / f'{rom.name}.keys') if not rom.is_dir() else (rom / 'padto.keys'),
+def _find_keys_files(system: str, emulator: str, rom: Path, default_maps: bool) -> list[Path]:
+    game_map = (rom.parent / f'{rom.name}.keys') if not rom.is_dir() else (rom / 'padto.keys')
+    default_candidates = [
         _USER_EVMAPY / f'{system}.{emulator}.keys',
         _USER_EVMAPY / f'{system}.keys',
         _USER_EVMAPY / f'{emulator}.keys',
@@ -33,7 +33,8 @@ def _find_keys_files(system: str, emulator: str, rom: Path) -> list[Path]:
         _SYSTEM_EVMAPY / f'{emulator}.keys',
         _SYSTEM_EVMAPY / 'any.keys',
     ]
-    found = [p for p in candidates if p.exists()]
+    candidates = [game_map, *(default_candidates if default_maps else [])]
+    found = [p for p in dict.fromkeys(candidates) if p.exists()]
 
     for hotkeys in (_USER_EVMAPY / 'hotkeys.keys', _SYSTEM_EVMAPY / 'hotkeys.keys'):
         if hotkeys.exists():
@@ -140,9 +141,10 @@ def _prepare(
     controllers: list[ControllerInfo],
     profiles: list[ESControllerProfile],
 ) -> bool:
-    from emulatorlauncher_shared import _pick_es_profile
+    from emulatorlauncher_shared import _game_setting, _load_hippos_conf, _pick_es_profile
 
-    files = _find_keys_files(system, emulator, rom)
+    default_maps = _game_setting(_load_hippos_conf(), system, rom, 'padtokey') != '0'
+    files = _find_keys_files(system, emulator, rom, default_maps)
     if not files:
         _log.debug("evmapy: no .keys files for system=%s emulator=%s", system, emulator)
         return False

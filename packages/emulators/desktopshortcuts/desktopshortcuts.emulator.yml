@@ -1,3 +1,12 @@
+features:
+  - padtokeyboard
+custom_features:
+  padtokey:
+    prompt: CONTROLLER AS MOUSE
+    description: The left stick moves the pointer and the bottom face button or R2 clicks. Turn off for games that support controllers.
+    choices:
+      On (Default): 1
+      "Off": 0
 systems:
 - name: desktopshortcuts
   as_core: desktopshortcuts
