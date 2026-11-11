@@ -755,9 +755,6 @@ systems:
   - name: coolbar
     as_core:
       - coolbaremu
-  - name: c713
-    as_core:
-      - mcsoftserve
   - name: vmu
     as_core:
       - vemulator

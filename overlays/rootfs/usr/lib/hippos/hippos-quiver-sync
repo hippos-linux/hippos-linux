@@ -14,6 +14,8 @@ from hippos_flatpak_metadata import read_share_details
 from hippos_launcher_sync import CLIENT_ENTRY, GameMetadata, known_keys, reload_es, sync_gamelist, sync_launchers
 
 ROMS_DIR     = hippos_quiver.USERDATA / 'roms' / 'quiver'
+QUIVER_IMAGE = Path('/usr/share/hippos/quiver/quiver-launcher.png')
+HIPPOS_SHARE = Path('/usr/share/hippos/quiver')
 STATE_FILE   = hippos_quiver.USERDATA / 'system' / 'quiver-launchers.json'
 ICON_CACHE   = hippos_quiver.DATA_DIR / 'Cache' / 'Icons'
 GITHUB_TIMEOUT_SECONDS = 4
@@ -70,7 +72,9 @@ def sync() -> int:
     created, updated, removed = sync_launchers(ROMS_DIR, STATE_FILE, '.quiver', entries, 'Quiver App')
 
     own = read_share_details(hippos_quiver.SHARE_DIR, hippos_quiver.APP_ID)
-    games = {CLIENT_ENTRY: GameMetadata('Quiver Launcher', own.description, own.developer)}
+    if not own.description:
+        own = read_share_details(HIPPOS_SHARE, hippos_quiver.APP_ID)
+    games = {CLIENT_ENTRY: GameMetadata('Quiver Launcher', own.description, own.developer, QUIVER_IMAGE)}
     network_up = True
     with tempfile.TemporaryDirectory() as scratch:
         for folder, app in apps.items():

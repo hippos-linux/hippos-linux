@@ -5,8 +5,13 @@
         <name>2048</name>
         <desc>Slide numbered tiles on a 4x4 grid; matching tiles merge into their sum. Reach the 2048 tile before the board fills up. A libretro port of Gabriele Cirulli's public-domain puzzle game.</desc>
         <image>./images/2048-image.png</image>
+        <thumbnail>./images/2048-thumb.png</thumbnail>
+        <marquee>./images/2048-logo.png</marquee>
+        <video>./videos/2048-video.mp4</video>
+        <rating>0.6</rating>
         <releasedate>20140309T000000</releasedate>
         <developer>Gabriele Cirulli</developer>
+        <publisher>Libretro</publisher>
         <genre>Puzzle</genre>
         <players>1</players>
     </game>

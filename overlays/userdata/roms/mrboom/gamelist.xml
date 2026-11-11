@@ -6,10 +6,13 @@
         <desc>A multiplayer Bomberman-style game for up to 8 players, converted from the DOS original. Drop bombs to clear the maze and blast your opponents; an advanced CPU AI fills in for missing players.</desc>
         <image>./images/mrboom-image.png</image>
         <thumbnail>./images/mrboom-thumb.png</thumbnail>
-        <releasedate>19970101T000000</releasedate>
+        <marquee>./images/mrboom-logo.png</marquee>
+        <video>./videos/mrboom-video.mp4</video>
+        <rating>0.8</rating>
+        <releasedate>19990101T000000</releasedate>
         <developer>Remdy Software</developer>
         <publisher>Remdy Software</publisher>
         <genre>Action</genre>
-        <players>8</players>
+        <players>1-8</players>
     </game>
 </gameList>

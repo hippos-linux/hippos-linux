@@ -4,7 +4,9 @@
         <path>./Gong.libretro</path>
         <name>Gong</name>
         <desc>A Pong clone written for libretro. Play against the computer or a second player.</desc>
+        <image>./images/gong-image.png</image>
         <developer>Brad Parker</developer>
+        <publisher>Brad Parker</publisher>
         <genre>Sports</genre>
         <players>2</players>
     </game>

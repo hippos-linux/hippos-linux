@@ -24,5 +24,6 @@
         <marquee>./images/Doom-logo.png</marquee>
         <developer>PrBoom Team</developer>
         <genre>First-Person Shooter</genre>
+        <hidden>true</hidden>
     </game>
 </gameList>

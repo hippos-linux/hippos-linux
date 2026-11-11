@@ -251,7 +251,6 @@ _emulator_defaults:
   gam4980:       { emulator: retroarch,          core: gam4980            }
   wenquxing:     { emulator: retroarch,          core: wqxemu             }
   coolbar:       { emulator: retroarch,          core: coolbaremu         }
-  c713:          { emulator: retroarch,          core: mcsoftserve        }
   vmu:           { emulator: retroarch,          core: vemulator          }
   quake2:        { emulator: retroarch,          core: vitaquake2         }
   quake3:        { emulator: retroarch,          core: vitaquake3         }
@@ -3204,13 +3203,6 @@ coolbar:
   hardware: portable
   manufacturer: Shanghai Coolbar
   name: Coolbar
-  release: 2005
-c713:
-  extensions:
-  - libretro
-  hardware: portable
-  manufacturer: Taylor
-  name: Taylor C713
   release: 2005
 vmu:
   extensions:

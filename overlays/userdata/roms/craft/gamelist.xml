@@ -4,8 +4,10 @@
         <path>./Craft.libretro</path>
         <name>Craft</name>
         <desc>A Minecraft-style voxel sandbox written in C with hardware-accelerated OpenGL. Build and dig in an endless block world. Fast and smooth, but without Minecraft's advanced features such as redstone.</desc>
+        <image>./images/craft-image.png</image>
         <releasedate>20130101T000000</releasedate>
         <developer>Michael Fogleman</developer>
+        <publisher>Michael Fogleman</publisher>
         <genre>Sandbox</genre>
         <players>1</players>
     </game>

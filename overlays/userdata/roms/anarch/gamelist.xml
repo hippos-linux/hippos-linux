@@ -8,6 +8,7 @@
         <marquee>./images/anarch-logo.png</marquee>
         <releasedate>20200101T000000</releasedate>
         <developer>Miloslav Číž (drummyfish)</developer>
+        <publisher>Miloslav Číž (drummyfish)</publisher>
         <genre>Shooter</genre>
         <players>1</players>
     </game>
