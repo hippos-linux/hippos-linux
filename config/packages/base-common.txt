@@ -228,5 +228,7 @@ hwdata
 nano
 htop
 btop
+nethogs
+libcap2-bin
 inxi
 psmisc

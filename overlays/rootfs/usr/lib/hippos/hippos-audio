@@ -11,10 +11,9 @@ case "${1:-}" in
     list)
         printf 'auto\tauto\n'
         LC_ALL=C pactl list sinks 2>/dev/null | awk '
-            /^Sink #/         { name=""; desc="" }
-            /[[:space:]]Name:/ { name=$2 }
-            /Description:/    { sub(/.*Description: /,""); desc=$0 }
-            /State:/ && name  { printf "%s\t%s\n", name, (desc?desc:name) }
+            /^Sink #/                 { name="" }
+            /[[:space:]]Name:/         { name=$2 }
+            /Description:/ && name    { sub(/.*Description: /,""); printf "%s\t%s\n", name, ($0?$0:name) }
         '
         ;;
     get)
