@@ -10,9 +10,13 @@ import zipfile
 import xml.etree.ElementTree as elementTree
 
 from emulatorlauncher_pcsx2 import PCSX2, find_bios_dir
+from emulatorlauncher_vita3k import find_firmware, firmware_installed
 
 def ps2BiosFound():
     return find_bios_dir(PCSX2, None) is not None
+
+def vitaFirmwareFound():
+    return firmware_installed() or bool(find_firmware())
 
 systems = {
 
@@ -716,7 +720,7 @@ systems = {
                                                     { "md5": "e95415b161121bef35ade12367138c63", "file": "bios/mie.zip" },
                                                     { "md5": "ee643e8c7369fe7feca610d4daa4a57c", "file": "bios/jvs13551.zip" } ] },
 
-    "psvita":   { "name": "PS Vita", "biosFiles":  [ { "md5": "59dcf059d3328fb67be7e51f8aa33418", "file": "bios/psvita/PSP2UPDAT.PUP" },
+    "psvita":   { "name": "PS Vita", "biosFound": vitaFirmwareFound, "biosFiles":  [ { "md5": "59dcf059d3328fb67be7e51f8aa33418", "file": "bios/psvita/PSP2UPDAT.PUP" },
                                                 { "md5": "f2c7b12fe85496ec88a0391b514d6e3b", "file": "bios/psvita/PSVUPDAT.PUP"} ] },
 
     "vectrex":   { "name": "GCE Vectrex", "emulator": "libretro", "core": "mame", "biosFiles":  [ { "md5": "", "file": "bios/vectrex.zip"  },
