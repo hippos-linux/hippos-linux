@@ -71,3 +71,4 @@ r2-access-key.txt
 r2-secret-key.txt
 dev-token.txt
 keys/*.txt
+.asura_index.json
