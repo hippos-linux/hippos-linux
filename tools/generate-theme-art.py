@@ -15,8 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+from fontTools.pens.boundsPen import BoundsPen
 from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
+from fontTools.svgLib.path import parse_path
 from fontTools.ttLib import TTFont
 from PIL import Image, ImageDraw
 
@@ -330,27 +332,99 @@ def logo_with_alpha(source: Path, box: tuple[int, int, int, int] | None = None) 
     image = Image.fromarray((np.dstack([np.clip(color, 0, 1), alpha]) * 255 + 0.5).astype(np.uint8), "RGBA")
     return image.crop(box) if box else image
 
-def wordmark_svg(font_path: Path, text: str) -> str:
-    font = TTFont(font_path)
-    glyphs, cmap, metrics = font.getGlyphSet(), font.getBestCmap(), font["hmtx"]
-    ascent, descent = font["hhea"].ascent, font["hhea"].descent
-    pen = SVGPathPen(glyphs)
-    x = 0
-    for character in text:
-        glyph = cmap[ord(character)]
-        glyphs[glyph].draw(TransformPen(pen, (1, 0, 0, -1, x, ascent)))
-        x += metrics[glyph][0]
-    return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {x} {ascent - descent}">'
-        f'<path fill="#fff" d="{pen.getCommands()}"/></svg>\n'
-    )
+@dataclass(frozen=True)
+class LogoLine:
+    font: str
+    text: str
+    cap_height: float
+    tracking: float = 0.0
 
-WORDMARKS = {"quiver": "Quiver", "desktopshortcuts": "Desktop Shortcuts"}
+@dataclass(frozen=True)
+class Logo:
+    icon: tuple[str, ...]
+    lines: tuple[LogoLine, ...]
+    line_gap: float
+
+def rotated(points: list[tuple[float, float]], degrees: float, center: tuple[float, float]) -> list[tuple[float, float]]:
+    a = np.radians(degrees)
+    cx, cy = center
+    return [(cx + (x - cx) * np.cos(a) - (y - cy) * np.sin(a), cy + (x - cx) * np.sin(a) + (y - cy) * np.cos(a))
+            for x, y in points]
+
+def polygon(points: list[tuple[float, float]]) -> str:
+    return "M" + "L".join(f"{x:.2f} {y:.2f}" for x, y in points) + "Z"
+
+ARROW = [(35, 0), (43, 14), (37.5, 19), (37.5, 52), (32.5, 52), (32.5, 19), (27, 14)]
+
+LOGOS = {
+    "quiver": Logo(
+        icon=(
+            *(polygon(rotated(ARROW, angle, (35, 60))) for angle in (-28, 0, 28)),
+            "M12 44H58A5 5 0 0 1 63 49V49A5 5 0 0 1 58 54H12A5 5 0 0 1 7 49V49A5 5 0 0 1 12 44Z",
+            "M10 57H60L55 84L35 100L15 84Z"
+            "M24 67L35 75L46 67L46 73L35 81L24 73Z"
+            "M24 78L35 86L46 78L46 84L35 92L24 84Z",
+        ),
+        lines=(LogoLine("Sora-ExtraBold.ttf", "QUIVER", 50, 0.08), LogoLine("Sora-SemiBold.ttf", "LAUNCHER", 20, 0.42)),
+        line_gap=14,
+    ),
+    "desktopshortcuts": Logo(
+        icon=(
+            "M10 6H90A8 8 0 0 1 98 14V64A8 8 0 0 1 90 72H10A8 8 0 0 1 2 64V14A8 8 0 0 1 10 6Z"
+            "M12 13H88A3 3 0 0 1 91 16V62A3 3 0 0 1 88 65H12A3 3 0 0 1 9 62V16A3 3 0 0 1 12 13Z"
+            "M21 19H53A5 5 0 0 1 58 24V54A5 5 0 0 1 53 59H21A5 5 0 0 1 16 54V24A5 5 0 0 1 21 19Z"
+            "M23 53V42A13 13 0 0 1 36 29H41V23L51 32L41 41V35H36A7 7 0 0 0 29 42V53Z"
+            "M66 21H82A2 2 0 0 1 84 23V35A2 2 0 0 1 82 37H66A2 2 0 0 1 64 35V23A2 2 0 0 1 66 21Z"
+            "M66 43H82A2 2 0 0 1 84 45V57A2 2 0 0 1 82 59H66A2 2 0 0 1 64 57V45A2 2 0 0 1 66 43Z",
+            "M42 71H58V85H42Z",
+            "M30 84H70A4 4 0 0 1 74 88V88A4 4 0 0 1 70 92H30A4 4 0 0 1 26 88V88A4 4 0 0 1 30 84Z",
+        ),
+        lines=(LogoLine("Sora-SemiBold.ttf", "DESKTOP", 20, 0.32), LogoLine("Sora-ExtraBold.ttf", "Shortcuts", 50)),
+        line_gap=13,
+    ),
+}
+
+def path_bounds(paths: list[str]) -> tuple[float, float, float, float]:
+    pen = BoundsPen(None)
+    for d in paths:
+        parse_path(d, pen)
+    return pen.bounds
+
+def text_path(fonts: Path, line: LogoLine, x: float, baseline: float) -> str:
+    font = TTFont(fonts / line.font)
+    glyphs, cmap, metrics = font.getGlyphSet(), font.getBestCmap(), font["hmtx"]
+    scale = line.cap_height / font["OS/2"].sCapHeight
+    pen = SVGPathPen(glyphs)
+    for character in line.text:
+        glyph = cmap[ord(character)]
+        glyphs[glyph].draw(TransformPen(pen, (scale, 0, 0, -scale, x, baseline)))
+        x += metrics[glyph][0] * scale + line.tracking * line.cap_height
+    return pen.getCommands()
+
+def logo_svg(fonts: Path, logo: Logo) -> str:
+    text_height = sum(line.cap_height for line in logo.lines) + logo.line_gap * (len(logo.lines) - 1)
+    left, top, right, bottom = path_bounds(list(logo.icon))
+    scale = text_height / (bottom - top)
+    text_left = (right - left) * scale + text_height * 0.22
+    text, baseline = [], 0.0
+    for line in logo.lines:
+        baseline += line.cap_height
+        text.append(text_path(fonts, line, text_left, baseline))
+        baseline += logo.line_gap
+    icon = f'<g fill-rule="evenodd" transform="matrix({scale:.5f} 0 0 {scale:.5f} {-left * scale:.3f} {-top * scale:.3f})">'
+    icon += "".join(f'<path d="{d}"/>' for d in logo.icon) + "</g>"
+    _, text_top, text_right, text_bottom = path_bounds(text)
+    view_top, view_bottom = min(0.0, text_top), max(text_height, text_bottom)
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" fill="#fff" '
+        f'viewBox="0 {view_top:.2f} {text_right:.2f} {view_bottom - view_top:.2f}">'
+        + icon + "".join(f'<path d="{d}"/>' for d in text) + "</svg>\n"
+    )
 
 def render_chrome(theme_dir: Path) -> None:
     assets = theme_dir / "assets"
-    for system, text in WORDMARKS.items():
-        (theme_dir / "art" / f"{system}.svg").write_text(wordmark_svg(assets / "fonts" / "Sora-ExtraBold.ttf", text))
+    for system, logo in LOGOS.items():
+        (theme_dir / "art" / f"{system}.svg").write_text(logo_svg(assets / "fonts", logo))
     Image.new("RGBA", (4, 4), (255, 255, 255, 255)).save(assets / "white.png")
 
     size, radius = 96, 26
