@@ -8,7 +8,6 @@ tmp/
 
 # Not yet public
 build/
-/setup.sh
 /build.sh
 /scripts/
 
@@ -72,4 +71,5 @@ cloudflare-r2-token.txt
 discord-announce-webhook.txt
 r2-access-key.txt
 r2-secret-key.txt
+dev-token.txt
 keys/*.txt
