@@ -5,4 +5,5 @@ grub-efi-arm64
 
 # Raspberry Pi firmware and trusted firmware
 raspi-firmware
+bluez-firmware
 arm-trusted-firmware
