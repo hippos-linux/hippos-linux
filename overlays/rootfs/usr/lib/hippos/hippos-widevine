@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import hashlib
+import io
+import json
+import platform
+import shutil
+import subprocess
+import sys
+import tempfile
+import urllib.request
+import zipfile
+from dataclasses import dataclass
+from pathlib import Path
+
+INSTALL_DIR = Path('/userdata/system/widevine')
+CHROMIUM = Path('/usr/bin/chromium')
+
+@dataclass(frozen=True)
+class Release:
+    version: str
+    url: str
+    hash_name: str
+    digest: str
+
+RELEASES = {
+    'aarch64': Release(
+        '4.10.2662.3',
+        'http://archive.raspberrypi.com/debian/pool/main/w/widevine/libwidevinecdm0_4.10.2662.3+1_arm64.deb',
+        'sha256', '0e87823a228246f4f1c7c90ac48c5f888d0607d028ac0ffd17fe610d548f5bb3',
+    ),
+    'x86_64': Release(
+        '4.10.3050.0',
+        'https://edgedl.me.gvt1.com/edgedl/release2/chrome_component/bywu6vkyg6gmcthxdaetzfkptm_4.10.3050.0/'
+        'oimompecagnajdejgnnjijobebaeigek_4.10.3050.0_linux_aduyhcxcs7a2znuo6ss5tffn5jpa.crx3',
+        'sha512', 'e578b2eed7ac887e13efd559e917e488ece43beb49db40a133c18f57bf9f6ed5da5434534e70f7fc3cf4eefdb9c766164b6559c513e1738e899d84d7943d577a',
+    ),
+}
+
+def installed_version() -> str | None:
+    try:
+        return json.loads((INSTALL_DIR / 'manifest.json').read_text(encoding='utf-8')).get('version')
+    except (OSError, json.JSONDecodeError):
+        return None
+
+def download(release: Release) -> bytes:
+    with urllib.request.urlopen(release.url, timeout=60) as response:
+        data = response.read()
+    if hashlib.new(release.hash_name, data).hexdigest() != release.digest:
+        raise SystemExit('hippos-widevine: download checksum mismatch, not installed')
+    return data
+
+def unpack(data: bytes, url: str, staging: Path) -> None:
+    if url.endswith('.crx3'):
+        zipfile.ZipFile(io.BytesIO(data)).extractall(staging)
+        return
+    with tempfile.TemporaryDirectory() as work:
+        deb = Path(work) / 'widevine.deb'
+        deb.write_bytes(data)
+        subprocess.run(['dpkg-deb', '-x', str(deb), work], check=True)
+        shutil.copytree(Path(work) / 'opt' / 'WidevineCdm', staging, symlinks=True)
+
+def install(release: Release) -> None:
+    data = download(release)
+    staging = INSTALL_DIR.with_name('widevine.new')
+    shutil.rmtree(staging, ignore_errors=True)
+    unpack(data, release.url, staging)
+    shutil.rmtree(INSTALL_DIR, ignore_errors=True)
+    staging.rename(INSTALL_DIR)
+
+def main() -> int:
+    release = RELEASES.get(platform.machine())
+    if release is None or not CHROMIUM.exists() or installed_version() == release.version:
+        return 0
+    print('hippos-widevine: downloading Widevine for Chromium', flush=True)
+    install(release)
+    print(f'hippos-widevine: Widevine {release.version} installed', flush=True)
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(main())
