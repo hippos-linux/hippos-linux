@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 import yaml
 
@@ -20,7 +22,9 @@ from emulatorlauncher_shared import (
 from HipposPaths import BIOS, CONFIGS, SAVES
 
 VITA3K_CONFIG_FILE = CONFIGS / 'Vita3K' / 'config.yml'
-VITA3K_PREF_DIR    = SAVES / 'psvita' / 'vita3k'
+VITA3K_PREF_DIR    = SAVES / 'psvita'
+VITA3K_RETROBAT_PREF_DIR = SAVES / 'psvita' / 'vita3k'
+VITA3K_TITLE_ID    = re.compile(r'[A-Z]{4}\d{5}')
 VITA3K_OLD_PREF_DIR = SAVES / 'psvita' / 'Vita3K' / 'Vita3K'
 VITA3K_FIRMWARE_FILES = ('PSVUPDAT.PUP', 'PSP2UPDAT.PUP')
 VITA3K_FIRMWARE_DIRS  = (BIOS / 'psvita', BIOS)
@@ -35,14 +39,18 @@ def _migrate_old_pref_dir() -> None:
     for item in VITA3K_OLD_PREF_DIR.iterdir():
         if not (VITA3K_PREF_DIR / item.name).exists():
             shutil.move(item, VITA3K_PREF_DIR / item.name)
-    shutil.rmtree(VITA3K_OLD_PREF_DIR.parent, ignore_errors=True)
+    for folder in (VITA3K_OLD_PREF_DIR, VITA3K_OLD_PREF_DIR.parent):
+        try:
+            folder.rmdir()
+        except OSError:
+            break
 
-def _update_vita3k_config(bin_path: Path, env: dict[str, str], conf: dict[str, str]) -> None:
+def _update_vita3k_config(bin_path: Path, env: dict[str, str], conf: dict[str, str], pref_dir: Path) -> None:
     if not VITA3K_CONFIG_FILE.exists():
         subprocess.run([str(bin_path), '--help'], env=env, cwd=bin_path.parent,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
     config = yaml.safe_load(VITA3K_CONFIG_FILE.read_text()) or {}
-    config['pref-path'] = f'{VITA3K_PREF_DIR}/'
+    config['pref-path'] = f'{pref_dir}/'
     config['initial-setup'] = False
     config['show-welcome'] = False
     config['check-for-updates-mode'] = 0
@@ -54,8 +62,11 @@ def _update_vita3k_config(bin_path: Path, env: dict[str, str], conf: dict[str, s
     config['disable-surface-sync'] = _setting_on(_conf_value(conf, 'global.vita3k_surface', ''), True)
     VITA3K_CONFIG_FILE.write_text(yaml.dump(config, default_flow_style=False, explicit_start=True))
 
+def _has_firmware(pref_dir: Path) -> bool:
+    return (pref_dir / 'vs0' / 'sys' / 'external').is_dir()
+
 def firmware_installed() -> bool:
-    return (VITA3K_PREF_DIR / 'vs0' / 'sys' / 'external').is_dir()
+    return any(_has_firmware(d) for d in (VITA3K_PREF_DIR, VITA3K_RETROBAT_PREF_DIR))
 
 def find_firmware() -> list[Path]:
     found = []
@@ -63,8 +74,26 @@ def find_firmware() -> list[Path]:
         found += [d / name for d in VITA3K_FIRMWARE_DIRS if (d / name).is_file()][:1]
     return found
 
-def _install_missing_firmware(bin_path: Path, env: dict[str, str]) -> None:
-    if firmware_installed():
+def _title_id(rom: Path) -> Optional[str]:
+    begin, end = rom.stem.find('['), rom.stem.rfind(']')
+    if 0 <= begin < end:
+        return rom.stem[begin + 1: end]
+    if rom.is_file() and rom.stat().st_size < 64:
+        content = rom.read_text(errors='replace').strip()
+        if VITA3K_TITLE_ID.fullmatch(content):
+            return content
+    return None
+
+def _pick_pref_dir(title_id: Optional[str]) -> Path:
+    candidates = (VITA3K_PREF_DIR, VITA3K_RETROBAT_PREF_DIR)
+    if title_id:
+        for pref_dir in candidates:
+            if (pref_dir / 'ux0' / 'app' / title_id).is_dir():
+                return pref_dir
+    return next((d for d in candidates if _has_firmware(d)), VITA3K_PREF_DIR)
+
+def _install_missing_firmware(bin_path: Path, env: dict[str, str], pref_dir: Path) -> None:
+    if _has_firmware(pref_dir):
         return
     for pup in find_firmware():
         _log.info("Installing Vita firmware from %s", pup)
@@ -82,14 +111,13 @@ def launch_vita3k(ctx: LaunchContext) -> int:
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
     env['XDG_DATA_HOME'] = str(SAVES / 'psvita')
     _migrate_old_pref_dir()
-    _update_vita3k_config(bin_path, env, conf)
-    _install_missing_firmware(bin_path, env)
+    title_id = _title_id(ctx.rom)
+    pref_dir = _pick_pref_dir(title_id)
+    _update_vita3k_config(bin_path, env, conf, pref_dir)
+    _install_missing_firmware(bin_path, env, pref_dir)
     cmd = [str(bin_path), '-F', '-B', _conf_value(conf, 'global.vita3k_gfxbackend', 'Vulkan')]
-    rom_stem = ctx.rom.stem
-    begin, end = rom_stem.find('['), rom_stem.rfind(']')
-    app_dir = VITA3K_PREF_DIR / 'ux0' / 'app' / rom_stem[begin + 1: end] if 0 <= begin < end else None
-    if app_dir is not None and app_dir.is_dir():
-        cmd += ['-r', app_dir.name]
+    if title_id and (pref_dir / 'ux0' / 'app' / title_id).is_dir():
+        cmd += ['-r', title_id]
     else:
         cmd.append(str(ctx.rom))
     result = _run_game_command(ctx, 'vita3k', cmd, env, cwd=bin_path.parent)
