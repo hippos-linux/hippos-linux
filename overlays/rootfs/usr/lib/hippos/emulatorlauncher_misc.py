@@ -221,7 +221,7 @@ def launch_flatpak(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'flatpak', cmd, env)
     return result.returncode
 
-def launch_desktopapps(ctx: LaunchContext) -> int:
+def launch_desktopshortcuts(ctx: LaunchContext) -> int:
     try:
         desktop_file = Path(ctx.rom.read_text(encoding='utf-8').strip())
     except OSError as exc:

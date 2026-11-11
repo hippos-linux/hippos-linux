@@ -89,7 +89,7 @@ WORLDS = {
     "androidapps": World("0a2a16", "2fb860", "d8f7d0", "4fe080", "continents"),
     "scummvm": World("062a22", "1ea888", "c8f7e8", "30e0b8", "continents"),
     "quiver": World("04192e", "1a8fd8", "c8eeff", "2fc0ff", "ice"),
-    "desktopapps": World("0a1c2e", "3f7fb8", "d8e8f7", "5fa8f0", "continents", True),
+    "desktopshortcuts": World("0a1c2e", "3f7fb8", "d8e8f7", "5fa8f0", "continents", True),
     "ports": World("2e1006", "c8501e", "ffd8c0", "ff7030", "craters"),
     "prboom": World("2a0505", "b8201e", "f2b8a0", "f03a28", "craters"),
     "auto-favorites": World("2e2004", "d8a81e", "fff6cc", "ffd23f", "ice", True),

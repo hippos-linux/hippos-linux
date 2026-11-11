@@ -223,7 +223,7 @@ _emulator_defaults:
   gx4000:        { emulator: retroarch,          core: cap32            }
   cassettevision: { emulator: retroarch,          core: mame             }
   flatpak:       { emulator: flatpak,            core: flatpak, options: { hud_support: false } }
-  desktopapps:   { emulator: desktopapps,        core: desktopapps }
+  desktopshortcuts: { emulator: desktopshortcuts, core: desktopshortcuts }
   chip8:         { emulator: retroarch,          core: jaxe               }
   pocketstation: { emulator: retroarch,          core: pokket             }
   tamagotchi:    { emulator: retroarch,          core: tamalibretro       }
@@ -2370,13 +2370,13 @@ cassettevision:
   manufacturer: Epoch
   name: Cassette Vision
   release: 1981
-desktopapps:
+desktopshortcuts:
   extensions:
-  - app
+  - shortcut
   force: true
   hardware: os
   manufacturer: Various
-  name: Desktop Apps
+  name: Desktop Shortcuts
 flatpak:
   extensions:
   - flatpak

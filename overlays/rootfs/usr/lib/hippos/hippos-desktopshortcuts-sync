@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from hippos_flatpak_metadata import hicolor_icon
+from hippos_launcher_sync import GameMetadata, reload_es, sync_gamelist, sync_launchers
+from hippos_ports import DesktopApp, read_desktop_file
+
+USERDATA    = Path('/userdata')
+DESKTOP_DIR = USERDATA / 'Desktop'
+ROMS_DIR    = USERDATA / 'roms' / 'desktopshortcuts'
+STATE_FILE  = USERDATA / 'system' / 'desktopshortcuts-launchers.json'
+SHIPPED_SHORTCUTS = frozenset({'switch-to-es.desktop', 'computer.desktop', 'network.desktop', 'trash-can.desktop'})
+ICON_SHARES = (USERDATA / '.local' / 'share', USERDATA / 'system' / '.local' / 'share', Path('/usr/share'))
+PIXMAPS = Path('/usr/share/pixmaps')
+
+def log(message: str) -> None:
+    print(f'[hippos-desktopshortcuts-sync] {message}', flush=True)
+
+def find_icon(icon: str | None) -> Path | None:
+    if not icon:
+        return None
+    if icon.startswith('/'):
+        return Path(icon) if Path(icon).is_file() else None
+    for share in ICON_SHARES:
+        if found := hicolor_icon(share, icon):
+            return found
+    return next((path for path in (PIXMAPS / f'{icon}.png', PIXMAPS / f'{icon}.svg') if path.is_file()), None)
+
+def desktop_shortcuts() -> dict[str, DesktopApp]:
+    shortcuts = {}
+    for path in sorted(DESKTOP_DIR.glob('*.desktop')):
+        if path.name not in SHIPPED_SHORTCUTS and (app := read_desktop_file(path)) is not None:
+            shortcuts[str(path)] = app
+    return shortcuts
+
+def sync() -> int:
+    shortcuts = desktop_shortcuts()
+    created, updated, removed = sync_launchers(
+        ROMS_DIR, STATE_FILE, '.shortcut', {key: app.name for key, app in shortcuts.items()}, 'Desktop Shortcut')
+    games = {key: GameMetadata(app.name, app.comment, None, find_icon(app.icon)) for key, app in shortcuts.items()}
+    details_changed = sync_gamelist(ROMS_DIR, STATE_FILE, '.shortcut', games)
+    log(f'found={len(shortcuts)} created={created} updated={updated} removed={removed} details_changed={details_changed}')
+    if created or updated or removed or details_changed:
+        reload_es()
+    return 0
+
+if __name__ == '__main__':
+    raise SystemExit(sync())

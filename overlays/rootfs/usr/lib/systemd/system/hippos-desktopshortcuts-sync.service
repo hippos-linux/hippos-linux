@@ -1,5 +1,5 @@
 [Unit]
-Description=HippOS desktop app launcher sync
+Description=HippOS desktop shortcut sync
 After=local-fs.target userdata.mount hippos-roms-pool.service
 Wants=userdata.mount
 StartLimitIntervalSec=0
@@ -7,7 +7,7 @@ StartLimitIntervalSec=0
 [Service]
 Type=oneshot
 User=hippos
-ExecStart=/usr/lib/hippos/hippos-desktopapps-sync
+ExecStart=/usr/lib/hippos/hippos-desktopshortcuts-sync
 Nice=10
 
 [Install]
