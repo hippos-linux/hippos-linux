@@ -54,10 +54,6 @@ cd "${SRC}"
 
 log "Preparing external ${VPX_PLATFORM} dependencies"
 chmod +x "standalone/${VPX_PLATFORM}/external.sh"
-# bass24-linux.zip puts bass.h at c/bass.h (not root); patch each sub-library external.sh
-# call in the main script so the sub-script is fixed before it runs.
-# Also fix libserum_concentrate repo rename: GitHub now extracts as libserum-SHA/ not
-# libserum_concentrate-SHA/.
 FFMPEG_CROSS_ARGS=""
 if [[ "${CROSS_BUILD}" -eq 1 ]]; then
     FFMPEG_CROSS_ARGS="--enable-cross-compile --arch=${VPX_ARCH} --target-os=linux --cross-prefix=${GNU_ARCH}-"
@@ -91,8 +87,6 @@ with open(script, 'w') as f:
     f.write(content)
 PYEOF
 
-# external.sh uses relative paths — must run from its own directory so SDL2/SDL_image/etc.
-# land at standalone/<platform>/external/ which is what CMakeLists_gl-<platform>.txt expects
 cd "${SRC}/standalone/${VPX_PLATFORM}"
 ./external.sh
 cd "${SRC}"
@@ -119,11 +113,7 @@ fi
 
 cp "${BUILD}/VPinballX_GL" "${STAGING}/bin/vpinball"
 chmod +x "${STAGING}/bin/vpinball"
-# Stripping (including the bundled lib/*.so fetched by external.sh) is now
-# handled centrally by build/strip-emulator-payload.sh (called from both
-# configure-rootfs.sh and build-emulators.sh).
 
-# Copy external shared libs that POST_BUILD_COPY_EXT_LIBS=OFF skipped
 EXT_LIB="${SRC}/standalone/${VPX_PLATFORM}/external/lib"
 if [[ -d "${EXT_LIB}" ]]; then
     mkdir -p "${STAGING}/lib"
