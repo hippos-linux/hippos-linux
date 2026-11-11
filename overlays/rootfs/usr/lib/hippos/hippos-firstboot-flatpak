@@ -25,14 +25,15 @@ log "Internet available — proceeding with install"
 
 APPS=(
     com.github.joseexposito.touche
-    com.usebottles.bottles
-    com.heroicgameslauncher.hgl
     com.vysp3r.ProtonPlus
     com.github.tchx84.Flatseal
     it.mijorus.gearlever
     org.localsend.localsend_app
     io.missioncenter.MissionCenter
 )
+if [[ "$(uname -m)" == "x86_64" ]]; then
+    APPS+=(com.usebottles.bottles com.heroicgameslauncher.hgl)
+fi
 
 log "Ensuring Flathub remote is configured"
 runuser -l hippos -c "flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo" \
