@@ -59,7 +59,7 @@ while IFS= read -r line; do
             log "already mounted: //${share_path}"
             continue
         fi
-        mount_opts="ro,noatime,soft,vers=3.0"
+        mount_opts="ro,noatime,soft,vers=3.0,uid=1000,gid=1000"
         [[ -n "${opts}" ]] && mount_opts="${mount_opts},${opts}"
         [[ "${mount_opts}" != *username=* && "${mount_opts}" != *credentials=* ]] && mount_opts="${mount_opts},guest"
         if mount -t cifs "//${share_path}" "${mnt}" -o "${mount_opts}"; then

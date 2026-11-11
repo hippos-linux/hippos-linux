@@ -5,7 +5,7 @@ source /usr/lib/hippos/pool-branch.sh
 
 POOL=/userdata/roms
 RW=/userdata/.roms-rw
-OPTS="cache.files=off,dropcacheonclose=true,allow_other,use_ino,moveonenospc=false"
+OPTS="cache.files=off,dropcacheonclose=true,allow_other,use_ino,moveonenospc=false,category.create=mspmfs"
 MEDIA=/media
 EXTERNAL_ROMS=/userdata/system/configs/hippos/external-roms.conf
 
