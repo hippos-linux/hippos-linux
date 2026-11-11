@@ -45,6 +45,8 @@ custom_features:
 systems:
   - name: daphne
     as_core: hypseus-singe
+    exclude_extensions:
+      - ogv
   - name: singe
     as_core: hypseus-singe
     custom_features:

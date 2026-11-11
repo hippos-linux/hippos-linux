@@ -899,6 +899,7 @@ daphne:
   - zip
   - daphne
   - squashfs
+  - ogv
   hardware: arcade
   manufacturer: Arcade
   name: Daphne

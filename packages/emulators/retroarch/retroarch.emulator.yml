@@ -803,4 +803,5 @@ systems:
       - vita3k
   - name: daphne
     as_core:
+      - dirksimple
       - hypseushw

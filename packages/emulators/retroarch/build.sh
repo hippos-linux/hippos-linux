@@ -8,15 +8,24 @@ source "/work/build/common.sh"
 
 EMULATOR_NAME='retroarch'
 
-# EXCLUDED_CORES: buildbot cores left out of this arch's package; add a core's .so name to drop it.
+# EXCLUDED_CORES: buildbot cores left out of the package; add a core's .so name to drop it.
+EXCLUDED_CORES=(
+    qemu_libretro.so hbmame_libretro.so linuxloader_libretro.so dosbox_libretro.so
+    nicaiemu_libretro.so pcem_libretro.so chailove_libretro.so mcsoftserve_libretro.so
+    romcleaner_libretro.so 3dengine_libretro.so pocketcdg_libretro.so radio_libretro.so
+    pokketstation_libretro.so remotejoy_libretro.so oberon_libretro.so video_processor_libretro.so
+    rpcs3_libretro.so xemu_libretro.so xenia_edge_libretro.so vita3k_libretro.so
+    citra_libretro.so citra2018_libretro.so panda3ds_libretro.so play_libretro.so pcee2_libretro.so
+    mame2015_libretro.so mame2016_libretro.so parallel_dc_libretro.so rust_dos_libretro.so
+    uzdoom_libretro.so n64emu_libretro.so
+)
 case "${ARCH}" in
     amd64)
         LIBRETRO_ARCH="x86_64"
-        EXCLUDED_CORES=()
+        EXCLUDED_CORES+=(cemu_libretro.so)
         ;;
     arm64)
         LIBRETRO_ARCH="aarch64"
-        EXCLUDED_CORES=(rpcs3_libretro.so xemu_libretro.so xenia_edge_libretro.so)
         ;;
     *)
         die "Unsupported libretro buildbot arch for ARCH=${ARCH}"
