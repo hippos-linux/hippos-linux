@@ -260,10 +260,10 @@ def _sdl_controller_mapping(
     ignored: set[str],
 ) -> list[tuple[str, str]]:
     button_map = [
-        ('a', 'a'),
-        ('b', 'b'),
-        ('x', 'x'),
-        ('y', 'y'),
+        ('a', 'b'),
+        ('b', 'a'),
+        ('x', 'y'),
+        ('y', 'x'),
         ('back', 'select'),
         ('start', 'start'),
         ('leftshoulder', 'pageup'),
@@ -294,6 +294,8 @@ def _sdl_controller_mapping(
         if binding is None:
             continue
         value = _sdl_binding_value(binding)
+        if value is not None and binding.type == 'axis' and sdl_name.endswith('trigger') and binding.value < 0:
+            value += '~'
         if value is not None:
             mapping.append((sdl_name, value))
 
@@ -303,10 +305,9 @@ def _sdl_controller_mapping(
         binding = profile.inputs.get(es_name)
         if binding is None:
             continue
-        positive = None
-        if binding.type == 'axis' and binding.value:
-            positive = binding.value > 0
-        value = _sdl_binding_value(binding, positive)
+        value = _sdl_binding_value(binding)
+        if value is not None and binding.type == 'axis' and binding.value > 0:
+            value += '~'
         if value is not None:
             mapping.append((sdl_name, value))
 
