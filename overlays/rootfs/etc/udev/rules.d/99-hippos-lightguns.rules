@@ -5,9 +5,13 @@
 # crosshair moves to. GunCon 3 calibration is saved in /userdata/system/configs/hippos/lightgun.
 
 ACTION!="add", GOTO="hippos_lightguns_end"
+TEST!="/usr/bin/evsieve", GOTO="hippos_lightguns_end"
+
+SUBSYSTEM=="video4linux", ENV{ID_V4L_PRODUCT}=="Sinden*", ATTR{index}=="0", ENV{HIPPOS_LIGHTGUN}="sinden", \
+    TAG+="systemd", ENV{SYSTEMD_WANTS}+="hippos-lightgun@%k.service"
+
 SUBSYSTEM!="input", GOTO="hippos_lightguns_end"
 KERNEL!="event*", GOTO="hippos_lightguns_end"
-TEST!="/usr/bin/evsieve", GOTO="hippos_lightguns_end"
 
 ATTRS{name}=="Aimtrak ATRAK Device #*", ENV{HIPPOS_LIGHTGUN}="aimtrak"
 ATTRS{name}=="Ultimarc ATRAK Device #*", ENV{HIPPOS_LIGHTGUN}="aimtrak"
@@ -41,6 +45,10 @@ ATTRS{name}=="Fusion Piggie 4*", ENV{HIPPOS_LIGHTGUN}="fusion", ENV{HIPPOS_LIGHT
 
 ATTRS{name}=="OneHit OneHit #*", ENV{HIPPOS_LIGHTGUN}="onehit"
 
+# Sinden (PC version only): the Sinden software is downloaded from sindenlightgun.com the first
+# time a gun is plugged in, so the first plug-in needs an internet connection.
+ATTRS{name}=="Unknown SindenLightgun*", ENV{HIPPOS_LIGHTGUN}="sinden"
+
 # AE lightgun shows up as a plain "Arduino Micro", like many home-made controllers, so it is
 # only treated as a gun when /userdata/system/configs/hippos/aelightgun exists (create an empty file).
 ATTRS{name}=="Arduino LLC Arduino Micro*", TEST=="/userdata/system/configs/hippos/aelightgun", ENV{HIPPOS_LIGHTGUN}="aelightgun"
@@ -53,6 +61,7 @@ ATTRS{name}=="HippOS uncalibrated gun *", ENV{ID_INPUT_MOUSE}="0", ENV{ID_INPUT_
 
 ATTRS{name}=="HippOS light gun *", ENV{ID_INPUT_GUN}="1", ENV{ID_INPUT_MOUSE}="1", \
     ENV{ID_INPUT_JOYSTICK}="0", ENV{ID_INPUT_KEYBOARD}="0", ENV{ID_INPUT_KEY}="0"
+ATTRS{name}=="HippOS light gun sinden *", ENV{ID_INPUT_GUN_NEED_BORDERS}="1"
 
 ATTRS{name}=="HJZ Mayflash Wiimote PC Adapter Mouse", ENV{ID_INPUT_GUN}="1", ENV{ID_INPUT_MOUSE}="1"
 ATTRS{name}=="Adafruit ItsyBitsy 32u4 3V 8MHz", ENV{ID_INPUT_GUN}="1"

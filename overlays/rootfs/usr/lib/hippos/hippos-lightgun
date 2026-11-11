@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Merge a light gun's input devices into one virtual gun.
 
-Usage: hippos-lightgun /dev/input/eventN
+Usage: hippos-lightgun eventN|videoN
 Started by hippos-lightgun@.service for devices that 99-hippos-lightguns.rules
 marks with HIPPOS_LIGHTGUN (the model) and HIPPOS_LIGHTGUN_PLAYER.
 """
@@ -24,6 +24,8 @@ from pathlib import Path
 import evdev
 from evdev import ecodes
 
+import hippos_sinden
+
 LOCK_DIR = Path('/run/hippos')
 OUTPUT_PREFIX = 'HippOS light gun'
 UNCALIBRATED_PREFIX = 'HippOS uncalibrated gun'
@@ -41,6 +43,8 @@ class Model:
     exclude: str = ''
     inputs: list[str] = field(default_factory=lambda: ['--input', '{devs}', 'persist=exit'])
     calibration: str = ''
+    parent_levels: int = 0
+    driver: str = ''
 
 
 def _player_keys(player: int) -> list[str]:
@@ -116,6 +120,9 @@ def model_for(name: str, player: int) -> Model:
         case 'retroshooter':
             return Model(2, _retroshooter_keys(player), exclude=r'3AGAME 3A-3H Retro Shooter [1-4]$',
                          calibration='firmware')
+        case 'sinden':
+            return Model(2, ['--map', 'key:1', 'btn:1', '--map', 'key:2', 'btn:2', *(arg.replace('yield ', '') for arg in DPAD)],
+                         parent_levels=1, driver='sinden')
         case 'onehit':
             return Model(3, ['--map', 'abs:y:0@dpad', 'btn:5:1', '--map', 'abs:y:2048@dpad', 'btn:5:0', 'btn:6:0',
                              '--map', 'abs:y:4095@dpad', 'btn:6:1', '--map', 'abs:x:0@dpad', 'btn:7:1',
@@ -131,13 +138,13 @@ def udev_properties(device: str) -> dict[str, str]:
     return dict(line.split('=', 1) for line in output.splitlines() if '=' in line)
 
 
-def usb_parent(event: str) -> Path:
-    path = Path(f'/sys/class/input/{event}/device').resolve()
+def usb_parent(node: Path) -> Path:
+    path = (node / 'device').resolve()
     while path != path.parent:
         if (path / 'idVendor').is_file():
             return path
         path = path.parent
-    raise SystemExit(f'hippos-lightgun: {event} is not on a USB device')
+    raise SystemExit(f'hippos-lightgun: {node.name} is not on a USB device')
 
 
 def sibling_events(parent: Path, exclude: str) -> list[str]:
@@ -309,12 +316,15 @@ def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__.strip(), file=sys.stderr)
         return 2
-    device = sys.argv[1]
-    props = udev_properties(device)
+    node = sys.argv[1]
+    is_input = node.startswith('event')
+    props = udev_properties(f'/dev/input/{node}' if is_input else f'/dev/{node}')
     player = int(props.get('HIPPOS_LIGHTGUN_PLAYER', '1'))
     model = model_for(props['HIPPOS_LIGHTGUN'], player)
 
-    parent = usb_parent(Path(device).name)
+    parent = usb_parent(Path('/sys/class/input' if is_input else '/sys/class/video4linux') / node)
+    for _ in range(model.parent_levels):
+        parent = parent.parent
     devices = sibling_events(parent, model.exclude)
     if len(devices) != model.devices:
         return 0
@@ -327,6 +337,9 @@ def main() -> int:
     except BlockingIOError:
         return 0
     os.set_inheritable(lock, True)
+
+    if model.driver == 'sinden' and hippos_sinden.start(parent, LOCK_DIR / f'{lock_name}.sinden') is None:
+        return 0
 
     named = {f'{{dev{i}}}': dev for i, dev in enumerate(devices, 1)}
     inputs: list[str] = []

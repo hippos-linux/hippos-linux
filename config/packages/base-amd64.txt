@@ -21,3 +21,12 @@ libglut3.12:i386
 
 # Intel thermal daemon (x86 only)
 thermald
+
+# Sinden light gun software (downloaded from Sinden on first use) runs on Mono
+mono-runtime
+libmono-system4.0-cil
+libmono-system-core4.0-cil
+libmono-system-configuration4.0-cil
+libmono-system-drawing4.0-cil
+libgdiplus
+libsdl1.2-compat
