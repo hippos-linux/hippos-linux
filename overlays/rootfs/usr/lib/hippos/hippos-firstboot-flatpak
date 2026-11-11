@@ -7,6 +7,14 @@ MAX_ATTEMPTS=5
 
 log() { echo "[hippos-firstboot-flatpak] $*"; }
 
+APPS_INSTALLING_FLAG="/run/hippos/apps-installing"
+ES_API="http://127.0.0.1:1234"
+PROGRESS_ID="firstboot-apps"
+
+es_progress() {
+    curl -sf -X POST -G "${ES_API}/progress" --data-urlencode "id=${PROGRESS_ID}" "$@" >/dev/null 2>&1 || true
+}
+
 if [[ -f "${MARKER}" ]]; then
     log "Already installed — skipping"
     exit 0
@@ -49,16 +57,43 @@ mkdir -p "$(dirname "${ATTEMPTS_FILE}")"
 attempt="$(( $(cat "${ATTEMPTS_FILE}" 2>/dev/null || echo 0) + 1 ))"
 echo "${attempt}" > "${ATTEMPTS_FILE}"
 
-failed=0
+pending=()
 for app in "${APPS[@]}"; do
-    if runuser -l hippos -c "flatpak info --user '${app}' >/dev/null 2>&1"; then
-        continue
-    fi
-    log "Installing ${app}"
-    runuser -l hippos -c "flatpak install --user --noninteractive --assumeyes flathub '${app}'" \
-        && log "  OK: ${app}" \
-        || { log "  Warning: failed to install ${app}"; failed=$(( failed + 1 )); }
+    runuser -l hippos -c "flatpak info --user '${app}' >/dev/null 2>&1" || pending+=("${app}")
 done
+
+failed=0
+installed=0
+if [[ "${#pending[@]}" -gt 0 ]]; then
+    mkdir -p "$(dirname "${APPS_INSTALLING_FLAG}")"
+    touch "${APPS_INSTALLING_FLAG}"
+    trap 'rm -f "${APPS_INSTALLING_FLAG}"; es_progress --data-urlencode "done=1"' EXIT
+    for i in "${!pending[@]}"; do
+        app="${pending[$i]}"
+        app_name="$(runuser -l hippos -c "flatpak remote-info --user flathub '${app}'" 2>/dev/null | awk -F' - ' 'NF { print $1; exit }')"
+        es_progress --data-urlencode "title=INSTALLING APPS" \
+            --data-urlencode "text=${app_name:-${app##*.}} ($(( i + 1 ))/${#pending[@]})" \
+            --data-urlencode "percent=$(( i * 100 / ${#pending[@]} ))"
+        log "Installing ${app}"
+        if runuser -l hippos -c "flatpak install --user --noninteractive --assumeyes flathub '${app}'"; then
+            log "  OK: ${app}"
+            installed=$(( installed + 1 ))
+        else
+            log "  Warning: failed to install ${app}"
+            failed=$(( failed + 1 ))
+        fi
+    done
+    [[ "${installed}" -eq 0 ]] || /usr/lib/hippos/hippos-flatpak-sync || true
+    rm -f "${APPS_INSTALLING_FLAG}"
+    es_progress --data-urlencode "done=1"
+    trap - EXIT
+    if [[ "${installed}" -gt 0 ]]; then
+        apps_word="apps are"
+        [[ "${installed}" -eq 1 ]] && apps_word="app is"
+        curl -sf -X POST "${ES_API}/reloadgames" \
+            --data "${installed} new ${apps_word} installed. Refresh the game lists to show them?" >/dev/null 2>&1 || true
+    fi
+fi
 
 if [[ "${failed}" -eq 0 ]]; then
     mkdir -p "$(dirname "${MARKER}")"

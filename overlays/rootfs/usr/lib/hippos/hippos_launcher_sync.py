@@ -11,6 +11,7 @@ from pathlib import Path
 
 _OWNER_UID, _OWNER_GID = 1000, 100
 _ES_RELOAD = 'http://127.0.0.1:1234/reloadgames'
+APPS_INSTALLING_FLAG = Path('/run/hippos/apps-installing')
 CLIENT_ENTRY = '@launcher'
 
 @dataclass(frozen=True)
@@ -172,6 +173,8 @@ def sync_gamelist(roms_dir: Path, state_file: Path, extension: str, games: dict[
     return changed
 
 def reload_es() -> None:
+    if APPS_INSTALLING_FLAG.exists():
+        return
     try:
         urllib.request.urlopen(_ES_RELOAD, timeout=2).close()
     except OSError:
