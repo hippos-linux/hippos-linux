@@ -12,7 +12,7 @@ ES_API="http://127.0.0.1:1234"
 PROGRESS_ID="firstboot-apps"
 
 es_progress() {
-    curl -sf -X POST -G "${ES_API}/progress" --data-urlencode "id=${PROGRESS_ID}" "$@" >/dev/null 2>&1 || true
+    curl -sf -X POST -d "" "${ES_API}/progress" --url-query "id=${PROGRESS_ID}" "$@" >/dev/null 2>&1 || true
 }
 
 if [[ -f "${MARKER}" ]]; then
@@ -67,13 +67,13 @@ installed=0
 if [[ "${#pending[@]}" -gt 0 ]]; then
     mkdir -p "$(dirname "${APPS_INSTALLING_FLAG}")"
     touch "${APPS_INSTALLING_FLAG}"
-    trap 'rm -f "${APPS_INSTALLING_FLAG}"; es_progress --data-urlencode "done=1"' EXIT
+    trap 'rm -f "${APPS_INSTALLING_FLAG}"; es_progress --url-query "done=1"' EXIT
     for i in "${!pending[@]}"; do
         app="${pending[$i]}"
         app_name="$(runuser -l hippos -c "flatpak remote-info --user flathub '${app}'" 2>/dev/null | awk -F' - ' 'NF { print $1; exit }')"
-        es_progress --data-urlencode "title=INSTALLING APPS" \
-            --data-urlencode "text=${app_name:-${app##*.}} ($(( i + 1 ))/${#pending[@]})" \
-            --data-urlencode "percent=$(( i * 100 / ${#pending[@]} ))"
+        es_progress --url-query "title=INSTALLING APPS" \
+            --url-query "text=${app_name:-${app##*.}} ($(( i + 1 ))/${#pending[@]})" \
+            --url-query "percent=$(( i * 100 / ${#pending[@]} ))"
         log "Installing ${app}"
         if runuser -l hippos -c "flatpak install --user --noninteractive --assumeyes flathub '${app}'"; then
             log "  OK: ${app}"
@@ -85,13 +85,12 @@ if [[ "${#pending[@]}" -gt 0 ]]; then
     done
     [[ "${installed}" -eq 0 ]] || /usr/lib/hippos/hippos-flatpak-sync || true
     rm -f "${APPS_INSTALLING_FLAG}"
-    es_progress --data-urlencode "done=1"
+    es_progress --url-query "done=1"
     trap - EXIT
     if [[ "${installed}" -gt 0 ]]; then
-        apps_word="apps are"
-        [[ "${installed}" -eq 1 ]] && apps_word="app is"
-        curl -sf -X POST "${ES_API}/reloadgames" \
-            --data "${installed} new ${apps_word} installed. Refresh the game lists to show them?" >/dev/null 2>&1 || true
+        message="${installed} new apps are installed. Refresh the game lists to show them?"
+        [[ "${installed}" -eq 1 ]] && message="1 new app is installed. Refresh the game lists to show it?"
+        curl -sf -X POST "${ES_API}/reloadgames" --data "${message}" >/dev/null 2>&1 || true
     fi
 fi
 
