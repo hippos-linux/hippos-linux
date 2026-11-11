@@ -1,0 +1,48 @@
+# Light guns: each model's raw input devices are hidden and merged by hippos-lightgun into one
+# "HippOS light gun <model> P<n>" device. To support another gun, add a rule setting HIPPOS_LIGHTGUN
+# to a model hippos-lightgun knows and HIPPOS_LIGHTGUN_PLAYER to its player number.
+
+ACTION!="add", GOTO="hippos_lightguns_end"
+SUBSYSTEM!="input", GOTO="hippos_lightguns_end"
+KERNEL!="event*", GOTO="hippos_lightguns_end"
+TEST!="/usr/bin/evsieve", GOTO="hippos_lightguns_end"
+
+ATTRS{name}=="Aimtrak ATRAK Device #*", ENV{HIPPOS_LIGHTGUN}="aimtrak"
+ATTRS{name}=="Ultimarc ATRAK Device #*", ENV{HIPPOS_LIGHTGUN}="aimtrak"
+ATTRS{name}=="Ultimarc Ultimarc", ENV{HIPPOS_LIGHTGUN}="aimtrak"
+
+ATTRS{idVendor}=="0b9a", ATTRS{idProduct}=="016a", ENV{HIPPOS_LIGHTGUN}="guncon2"
+
+ATTRS{name}=="Arduino LLC GUN4IR*P[1-4]*", ENV{HIPPOS_LIGHTGUN}="gun4ir"
+
+ATTRS{name}=="OpenFIRE FIRECon P[1-4] *", ENV{HIPPOS_LIGHTGUN}="openfire"
+ATTRS{name}=="Props3D Blamcon Lightgun - P[1-4]*", ENV{HIPPOS_LIGHTGUN}="blamcon"
+ATTRS{name}=="HONGWEIHUA XGUNNER-P[1-4] *", ENV{HIPPOS_LIGHTGUN}="xgunner"
+ATTRS{name}=="*P1*", ENV{HIPPOS_LIGHTGUN}=="openfire|blamcon|xgunner", ENV{HIPPOS_LIGHTGUN_PLAYER}="1"
+ATTRS{name}=="*P2*", ENV{HIPPOS_LIGHTGUN}=="openfire|blamcon|xgunner", ENV{HIPPOS_LIGHTGUN_PLAYER}="2"
+ATTRS{name}=="*P3*", ENV{HIPPOS_LIGHTGUN}=="openfire|blamcon|xgunner", ENV{HIPPOS_LIGHTGUN_PLAYER}="3"
+ATTRS{name}=="*P4*", ENV{HIPPOS_LIGHTGUN}=="openfire|blamcon|xgunner", ENV{HIPPOS_LIGHTGUN_PLAYER}="4"
+
+ATTRS{name}=="Fusion Mini P1*", ENV{HIPPOS_LIGHTGUN}="fusion", ENV{HIPPOS_LIGHTGUN_PLAYER}="1"
+ATTRS{name}=="Fusion Mini P2*", ENV{HIPPOS_LIGHTGUN}="fusion", ENV{HIPPOS_LIGHTGUN_PLAYER}="2"
+ATTRS{name}=="Fusion Piggie 1*", ENV{HIPPOS_LIGHTGUN}="fusion", ENV{HIPPOS_LIGHTGUN_PLAYER}="3"
+ATTRS{name}=="Fusion Piggie 2*", ENV{HIPPOS_LIGHTGUN}="fusion", ENV{HIPPOS_LIGHTGUN_PLAYER}="4"
+ATTRS{name}=="Fusion Piggie 3*", ENV{HIPPOS_LIGHTGUN}="fusion", ENV{HIPPOS_LIGHTGUN_PLAYER}="5"
+ATTRS{name}=="Fusion Piggie 4*", ENV{HIPPOS_LIGHTGUN}="fusion", ENV{HIPPOS_LIGHTGUN_PLAYER}="6"
+
+ATTRS{name}=="OneHit OneHit #*", ENV{HIPPOS_LIGHTGUN}="onehit"
+
+# AE lightgun shows up as a plain "Arduino Micro", like many home-made controllers, so it is
+# only treated as a gun when /userdata/system/configs/hippos/aelightgun exists (create an empty file).
+ATTRS{name}=="Arduino LLC Arduino Micro*", TEST=="/userdata/system/configs/hippos/aelightgun", ENV{HIPPOS_LIGHTGUN}="aelightgun"
+
+ENV{HIPPOS_LIGHTGUN}=="?*", ENV{ID_INPUT_MOUSE}="0", ENV{ID_INPUT_JOYSTICK}="0", \
+    TAG+="systemd", ENV{SYSTEMD_WANTS}+="hippos-lightgun@%k.service"
+
+ATTRS{name}=="HippOS light gun *", ENV{ID_INPUT_GUN}="1", ENV{ID_INPUT_MOUSE}="1", \
+    ENV{ID_INPUT_JOYSTICK}="0", ENV{ID_INPUT_KEYBOARD}="0", ENV{ID_INPUT_KEY}="0"
+
+ATTRS{name}=="HJZ Mayflash Wiimote PC Adapter Mouse", ENV{ID_INPUT_GUN}="1", ENV{ID_INPUT_MOUSE}="1"
+ATTRS{name}=="Adafruit ItsyBitsy 32u4 3V 8MHz", ENV{ID_INPUT_GUN}="1"
+
+LABEL="hippos_lightguns_end"

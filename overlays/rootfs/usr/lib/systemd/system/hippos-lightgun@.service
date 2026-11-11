@@ -1,0 +1,8 @@
+[Unit]
+Description=HippOS light gun %I
+BindsTo=dev-input-%i.device
+After=dev-input-%i.device local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/hippos/hippos-lightgun /dev/input/%i

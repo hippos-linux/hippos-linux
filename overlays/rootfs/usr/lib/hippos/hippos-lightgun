@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""Merge a light gun's input devices into one virtual gun.
+
+Usage: hippos-lightgun /dev/input/eventN
+Started by hippos-lightgun@.service for devices that 99-hippos-lightguns.rules
+marks with HIPPOS_LIGHTGUN (the model) and HIPPOS_LIGHTGUN_PLAYER.
+"""
+from __future__ import annotations
+
+import fcntl
+import hashlib
+import os
+import re
+import subprocess
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import evdev
+
+LOCK_DIR = Path('/run/hippos')
+OUTPUT_PREFIX = 'HippOS light gun'
+DPAD = ['--map', 'yield key:up', 'btn:5', '--map', 'yield key:down', 'btn:6',
+        '--map', 'yield key:left', 'btn:7', '--map', 'yield key:right', 'btn:8']
+
+
+@dataclass(frozen=True)
+class Model:
+    devices: int
+    maps: list[str]
+    exclude: str = ''
+    inputs: list[str] = field(default_factory=lambda: ['--input', '{devs}', 'persist=exit'])
+
+
+def _player_keys(player: int) -> list[str]:
+    return ['--map', f'yield key:{player}', 'btn:middle', '--map', f'yield key:{player + 4}', 'btn:1']
+
+
+def _fusion_keys(player: int) -> list[str]:
+    extra = {1: ('enter', 'esc'), 2: ('leftshift', 'leftctrl'), 3: ('enter', 'backspace'),
+             4: ('a', 'b'), 5: ('c', 'd'), 6: ('e', 'f')}[player]
+    start = {1: 1, 2: 2, 3: 1, 4: 2, 5: 3, 6: 4}[player]
+    return (_player_keys(start)
+            + ['--map', f'yield key:{extra[0]}', 'btn:2', '--map', f'yield key:{extra[1]}', 'btn:3'])
+
+
+def model_for(name: str, player: int) -> Model:
+    match name:
+        case 'aimtrak':
+            return Model(3, ['--map', 'btn:trigger', 'btn:middle', '--map', 'btn:thumb', 'btn:right'])
+        case 'guncon2':
+            return Model(1, ['--map', 'yield btn:middle', 'btn:3', '--map', 'yield btn:right', 'btn:2',
+                             '--map', 'yield btn:c', 'btn:right', *_player_keys(1), *DPAD])
+        case 'gun4ir':
+            return Model(3, ['--map', 'btn:middle', 'btn:2', *_player_keys(1),
+                             *(arg.replace('yield ', '') for arg in DPAD)])
+        case 'openfire' | 'blamcon':
+            return Model(2, ['--map', 'yield btn:middle', 'btn:2', '--map', 'yield btn:side', 'btn:right',
+                             *_player_keys(player), *DPAD, '--block', 'btn:extra'],
+                         exclude=r'(OpenFIRE FIRECon|Props3D Blamcon Lightgun -) P[1-4]$')
+        case 'fusion':
+            return Model(2, ['--map', 'yield btn:middle', 'btn:right', *_fusion_keys(player), *DPAD],
+                         exclude=r'Fusion Piggie [1-4]$')
+        case 'xgunner':
+            return Model(2, ['--map', 'yield btn:middle', 'btn:2', '--map', f'yield key:{player}', 'btn:middle',
+                             '--map', 'yield key:5', 'btn:1', '--map', 'yield key:q', 'btn:3',
+                             '--map', 'yield key:e', 'btn:4', '--map', 'yield key:d', 'btn:5',
+                             '--map', 'yield key:a', 'btn:6', '--map', 'yield key:w', 'btn:7',
+                             '--map', 'yield key:s', 'btn:8', '--map', 'yield key:kpenter', 'btn:right',
+                             '--block', 'key:esc'],
+                         exclude=r'HONGWEIHUA XGUNNER-P[1-4]$')
+        case 'aelightgun':
+            return Model(2, ['--map', 'key:1', 'btn:1', '--map', 'key:2', 'btn:2', '--map', 'key:3', 'btn:3',
+                             '--map', 'key:4', 'btn:4', '--map', 'key:up', 'btn:5', '--map', 'key:down', 'btn:6'])
+        case 'onehit':
+            return Model(3, ['--map', 'abs:y:0@dpad', 'btn:5:1', '--map', 'abs:y:2048@dpad', 'btn:5:0', 'btn:6:0',
+                             '--map', 'abs:y:4095@dpad', 'btn:6:1', '--map', 'abs:x:0@dpad', 'btn:7:1',
+                             '--map', 'abs:x:2048@dpad', 'btn:7:0', 'btn:8:0', '--map', 'abs:x:4095@dpad', 'btn:8:1'],
+                         inputs=['--input', '{dev1}', '{dev3}', 'persist=exit',
+                                 '--input', '{dev2}', 'domain=dpad', 'persist=exit'])
+    raise SystemExit(f'hippos-lightgun: unknown model {name!r}')
+
+
+def udev_properties(device: str) -> dict[str, str]:
+    output = subprocess.run(['udevadm', 'info', '--query=property', f'--name={device}'],
+                            capture_output=True, text=True, check=True).stdout
+    return dict(line.split('=', 1) for line in output.splitlines() if '=' in line)
+
+
+def usb_parent(event: str) -> Path:
+    path = Path(f'/sys/class/input/{event}/device').resolve()
+    while path != path.parent:
+        if (path / 'idVendor').is_file():
+            return path
+        path = path.parent
+    raise SystemExit(f'hippos-lightgun: {event} is not on a USB device')
+
+
+def sibling_events(parent: Path, exclude: str) -> list[str]:
+    found = []
+    for node in sorted(Path('/sys/class/input').glob('event*')):
+        sysfs = (node / 'device').resolve()
+        if not str(sysfs).startswith(f'{parent}/'):
+            continue
+        device = f'/dev/input/{node.name}'
+        if exclude and re.search(exclude, evdev.InputDevice(device).name):
+            continue
+        found.append((str(sysfs), device))
+    return [device for _, device in sorted(found)]
+
+
+def main() -> int:
+    if len(sys.argv) != 2:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    device = sys.argv[1]
+    props = udev_properties(device)
+    player = int(props.get('HIPPOS_LIGHTGUN_PLAYER', '1'))
+    model = model_for(props['HIPPOS_LIGHTGUN'], player)
+
+    parent = usb_parent(Path(device).name)
+    devices = sibling_events(parent, model.exclude)
+    if len(devices) != model.devices:
+        return 0
+
+    LOCK_DIR.mkdir(parents=True, exist_ok=True)
+    lock = os.open(LOCK_DIR / f'lightgun-{hashlib.md5(str(parent).encode()).hexdigest()}.lock',
+                   os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return 0
+    os.set_inheritable(lock, True)
+
+    named = {f'{{dev{i}}}': dev for i, dev in enumerate(devices, 1)}
+    inputs: list[str] = []
+    for arg in model.inputs:
+        inputs += devices if arg == '{devs}' else [named.get(arg, arg)]
+    maps = [part for arg in model.maps for part in arg.split()]
+    output = f'{OUTPUT_PREFIX} {props["HIPPOS_LIGHTGUN"]} P{player}'
+    os.execvp('evsieve', ['evsieve', *inputs, *maps, '--output', f'name={output}'])
+    return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())
