@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import configparser
+import filecmp
+import shutil
 from pathlib import Path
 
 from emulatorlauncher_shared import (
@@ -112,6 +114,34 @@ def _write_switch_qt_config(cfg_dir: Path, emu_name: str) -> None:
     with cfg_file.open('w') as fh:
         cfg.write(fh)
 
+SWITCH_BIOS = BIOS / 'switch'
+SWITCH_KEY_FILES = ('prod.keys', 'title.keys')
+SWITCH_DATA_DIRS = {'citron-neo': 'citron', 'eden': 'eden'}
+
+def _install_switch_keys(data_dir: Path) -> None:
+    keys_dir = data_dir / 'keys'
+    keys_dir.mkdir(parents=True, exist_ok=True)
+    for name in SWITCH_KEY_FILES:
+        source, target = SWITCH_BIOS / 'keys' / name, keys_dir / name
+        if source.is_file() and not (target.is_file() and filecmp.cmp(source, target, shallow=False)):
+            shutil.copyfile(source, target)
+            _log.info("Switch: installed %s", name)
+
+def _install_switch_firmware(data_dir: Path) -> None:
+    firmware = sorted((SWITCH_BIOS / 'firmware').glob('*.nca'))
+    if not firmware:
+        return
+    registered = data_dir / 'nand' / 'system' / 'Contents' / 'registered'
+    registered.mkdir(parents=True, exist_ok=True)
+    installed = sorted(registered.glob('*.nca'))
+    if [path.name for path in installed] == [path.name for path in firmware]:
+        return
+    for path in installed:
+        path.unlink()
+    for path in firmware:
+        shutil.copyfile(path, registered / path.name)
+    _log.info("Switch: installed %d firmware files", len(firmware))
+
 def _launch_switch(ctx: LaunchContext, emu_name: str) -> int:
     conf = _load_hippos_conf()
     saves_dir = SAVES / 'switch'
@@ -127,6 +157,9 @@ def _launch_switch(ctx: LaunchContext, emu_name: str) -> int:
         return 1
 
     _write_switch_qt_config(cfg_dir, emu_name)
+    data_dir = saves_dir / SWITCH_DATA_DIRS[emu_name]
+    _install_switch_keys(data_dir)
+    _install_switch_firmware(data_dir)
 
     cmd = [str(bin_path), '-f', '-g', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
