@@ -1,0 +1,3 @@
+DPkg::Post-Invoke {
+    "/usr/lib/hippos/hippos-widevine || true";
+};

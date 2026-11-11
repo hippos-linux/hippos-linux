@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import hashlib
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+import urllib.request
+from pathlib import Path
+
+VERSION = '4.10.2662.3'
+PACKAGE_URL = f'http://archive.raspberrypi.com/debian/pool/main/w/widevine/libwidevinecdm0_{VERSION}+1_arm64.deb'
+PACKAGE_SHA256 = '0e87823a228246f4f1c7c90ac48c5f888d0607d028ac0ffd17fe610d548f5bb3'
+INSTALL_DIR = Path('/userdata/system/widevine')
+CHROMIUM = Path('/usr/bin/chromium')
+
+def installed_version() -> str | None:
+    try:
+        return json.loads((INSTALL_DIR / 'manifest.json').read_text(encoding='utf-8')).get('version')
+    except (OSError, json.JSONDecodeError):
+        return None
+
+def install() -> None:
+    with urllib.request.urlopen(PACKAGE_URL, timeout=60) as response:
+        package = response.read()
+    if hashlib.sha256(package).hexdigest() != PACKAGE_SHA256:
+        raise SystemExit('hippos-widevine: download checksum mismatch, not installed')
+    with tempfile.TemporaryDirectory() as work:
+        deb = Path(work) / 'widevine.deb'
+        deb.write_bytes(package)
+        subprocess.run(['dpkg-deb', '-x', str(deb), work], check=True)
+        staging = INSTALL_DIR.with_name('widevine.new')
+        shutil.rmtree(staging, ignore_errors=True)
+        shutil.copytree(Path(work) / 'opt' / 'WidevineCdm', staging, symlinks=True)
+    shutil.rmtree(INSTALL_DIR, ignore_errors=True)
+    staging.rename(INSTALL_DIR)
+
+def main() -> int:
+    if not CHROMIUM.exists() or installed_version() == VERSION:
+        return 0
+    print('hippos-widevine: downloading Widevine for Chromium', flush=True)
+    install()
+    print(f'hippos-widevine: Widevine {VERSION} installed', flush=True)
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(main())
