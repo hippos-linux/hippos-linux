@@ -16,11 +16,16 @@ ES_LOCAL="${REPO_ROOT}/src/frontend/emulationstation"
 
 log() { printf '[frontend:%s] %s\n' "${FRONTEND_NAME}" "$*"; }
 
-log "Cloning hippos-emulationstation from local tree (${ES_BRANCH})"
 rm -rf "${SOURCE_DIR}" "${BUILD_DIR}"
 mkdir -p "${SOURCE_DIR}" "${BUILD_DIR}"
-git config --global --add safe.directory '*'
-git clone --recurse-submodules --branch "${ES_BRANCH}" "${ES_LOCAL}" "${SOURCE_DIR}"
+if [[ "${ES_FROM_WORKTREE:-0}" == "1" ]]; then
+    log "Copying hippos-emulationstation working tree, uncommitted changes included"
+    tar -C "${ES_LOCAL}" --exclude=.git -cf - . | tar -C "${SOURCE_DIR}" -xf -
+else
+    log "Cloning hippos-emulationstation from local tree (${ES_BRANCH})"
+    git config --global --add safe.directory '*'
+    git clone --recurse-submodules --branch "${ES_BRANCH}" "${ES_LOCAL}" "${SOURCE_DIR}"
+fi
 
 VERSION_FILE="${REPO_ROOT}/overlays/rootfs/usr/share/hippos/version"
 OS_VERSION="$(tr -d '[:space:]' < "${VERSION_FILE}" 2>/dev/null || true)"
