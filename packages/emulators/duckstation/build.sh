@@ -4,49 +4,95 @@ set -euo pipefail
 source "/work/build/common.sh"
 
 NAME='duckstation'
-REPO='https://github.com/stenzek/duckstation.git'
-REF="${DUCKSTATION_REF:-master}"
-
-case "${ARCH:-amd64}" in
-    arm64) _ds_deps_suffix="linux-cross-arm64" ;;
-    *)     _ds_deps_suffix="linux-x64"         ;;
-esac
-DEPS_REPO="https://github.com/duckstation/dependencies/releases/latest/download/deps-${_ds_deps_suffix}.tar.xz"
+REPO='https://github.com/duckstation/old-releases.git'
+REF="${DUCKSTATION_REF:-v0.1-7371}"
 
 ARTIFACT_ROOT="${ARTIFACT_ROOT:-/artifacts}"
 WORK_ROOT="${WORK_ROOT:-/work/work/emulators}"
 SRC="${WORK_ROOT}/${NAME}/source"
 BUILD="${WORK_ROOT}/${NAME}/build-release"
+DEPS_SRC="${WORK_ROOT}/${NAME}/deps-src"
+DEPS_PREFIX="${WORK_ROOT}/${NAME}/deps-${ARCH}"
 STAGING="${ARTIFACT_ROOT}/emulators/${NAME}"
+
+CPUINFO=7524ad504fdcfcf75a18a133da6abd75c5d48053
+DISCORD_RPC=144f3a3f1209994d8d9e8a87964a989cb9911c1e
+SHADERC=feb2460bf3a504d67011246edeb810c45ea58826
+SOUNDTOUCH=463ade388f3a51da078dc9ed062bf28e4ba29da7
+SPIRV_CROSS=vulkan-sdk-1.3.290.0
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
-clone_source "${REPO}" "${REF}" "${SRC}"
+fetch_stenzek_dep() {
+    local project="$1" commit="$2" dest="${DEPS_SRC}/$1-$2"
+    [[ -d "${dest}" ]] && return 0
+    mkdir -p "${DEPS_SRC}"
+    curl -fsSL "https://github.com/stenzek/${project}/archive/${commit}.tar.gz" | tar -xz -C "${DEPS_SRC}"
+}
 
-git -C "${SRC}" submodule update --init --recursive
+build_dep() {
+    local src="$1"; shift
+    rm -rf "${src}/build"
+    cmake -S "${src}" -B "${src}/build" -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_PREFIX_PATH="${DEPS_PREFIX}" \
+        -DCMAKE_INSTALL_PREFIX="${DEPS_PREFIX}" \
+        "$@"
+    cmake --build "${src}/build" -j"$(nproc)"
+    cmake --install "${src}/build"
+}
+
+build_deps() {
+    local stamp="${DEPS_PREFIX}/.deps-${CPUINFO}-${DISCORD_RPC}-${SHADERC}-${SOUNDTOUCH}-${SPIRV_CROSS}"
+    [[ -f "${stamp}" ]] && return 0
+    rm -rf "${DEPS_PREFIX}"
+
+    fetch_stenzek_dep cpuinfo "${CPUINFO}"
+    fetch_stenzek_dep discord-rpc "${DISCORD_RPC}"
+    fetch_stenzek_dep shaderc "${SHADERC}"
+    fetch_stenzek_dep soundtouch "${SOUNDTOUCH}"
+    [[ -d "${DEPS_SRC}/SPIRV-Cross-${SPIRV_CROSS}" ]] || \
+        git clone -q --depth 1 -b "${SPIRV_CROSS}" https://github.com/KhronosGroup/SPIRV-Cross "${DEPS_SRC}/SPIRV-Cross-${SPIRV_CROSS}"
+
+    log "Building shaderc"
+    build_dep "${DEPS_SRC}/shaderc-${SHADERC}" \
+        -DSHADERC_SKIP_TESTS=ON -DSHADERC_SKIP_EXAMPLES=ON -DSHADERC_SKIP_COPYRIGHT_CHECK=ON
+    log "Building SPIRV-Cross"
+    build_dep "${DEPS_SRC}/SPIRV-Cross-${SPIRV_CROSS}" \
+        -DSPIRV_CROSS_SHARED=ON -DSPIRV_CROSS_STATIC=OFF -DSPIRV_CROSS_CLI=OFF \
+        -DSPIRV_CROSS_ENABLE_TESTS=OFF -DSPIRV_CROSS_ENABLE_GLSL=ON -DSPIRV_CROSS_ENABLE_HLSL=OFF \
+        -DSPIRV_CROSS_ENABLE_MSL=OFF -DSPIRV_CROSS_ENABLE_CPP=OFF -DSPIRV_CROSS_ENABLE_REFLECT=OFF \
+        -DSPIRV_CROSS_ENABLE_C_API=ON -DSPIRV_CROSS_ENABLE_UTIL=ON
+    log "Building cpuinfo"
+    build_dep "${DEPS_SRC}/cpuinfo-${CPUINFO}" \
+        -DCPUINFO_LIBRARY_TYPE=shared -DCPUINFO_RUNTIME_TYPE=shared -DCPUINFO_LOG_LEVEL=error \
+        -DCPUINFO_LOG_TO_STDIO=ON -DCPUINFO_BUILD_TOOLS=OFF -DCPUINFO_BUILD_UNIT_TESTS=OFF \
+        -DCPUINFO_BUILD_MOCK_TESTS=OFF -DCPUINFO_BUILD_BENCHMARKS=OFF -DUSE_SYSTEM_LIBS=ON
+    log "Building discord-rpc"
+    build_dep "${DEPS_SRC}/discord-rpc-${DISCORD_RPC}" -DBUILD_SHARED_LIBS=ON
+    log "Building soundtouch"
+    build_dep "${DEPS_SRC}/soundtouch-${SOUNDTOUCH}" -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON
+
+    touch "${stamp}"
+}
+
+clone_source "${REPO}" "${REF}" "${SRC}" --submodules
+
+sed -i -e 's/^find_package(Qt6 6.7.2 COMPONENTS Core Gui Widgets LinguistTools REQUIRED)$/find_package(Qt6 6.7.2 COMPONENTS Core Gui GuiPrivate Widgets LinguistTools REQUIRED)/' \
+       -e 's/ Qt6::Core Qt6::Gui Qt6::Widgets)$/ Qt6::Core Qt6::Gui Qt6::GuiPrivate Qt6::Widgets)/' \
+    "${SRC}/src/duckstation-qt/CMakeLists.txt"
+grep -q 'Qt6::GuiPrivate Qt6::Widgets' "${SRC}/src/duckstation-qt/CMakeLists.txt" || die "Qt GuiPrivate link edit did not apply"
+sed -i 's/const bool visible = force_visible || !hide_window || !has_window;/const bool visible = force_visible || !hide_window || (!has_window \&\& !QtHost::InNoGUIMode());/' \
+    "${SRC}/src/duckstation-qt/mainwindow.cpp"
+grep -q '!has_window && !QtHost::InNoGUIMode()' "${SRC}/src/duckstation-qt/mainwindow.cpp" || die "nogui main window edit did not apply"
 
 source "/work/build/qt-env.sh"
 
-mkdir -p "${SRC}/dep/prebuilt" "${STAGING}/bin"
+build_deps
 
-if [[ ! -f "${SRC}/dep/prebuilt/.deps-${_ds_deps_suffix}.done" ]]; then
-    log "Downloading DuckStation deps-${_ds_deps_suffix}"
-    curl -fL "${DEPS_REPO}" -o "${WORK_ROOT}/${NAME}/deps-${_ds_deps_suffix}.tar.xz"
+rm -rf "${BUILD}" "${STAGING}"
+mkdir -p "${STAGING}/bin" "${STAGING}/lib"
 
-    log "Extracting DuckStation prebuilt dependencies"
-    tar -xJf "${WORK_ROOT}/${NAME}/deps-${_ds_deps_suffix}.tar.xz" -C "${SRC}/dep/prebuilt"
-    touch "${SRC}/dep/prebuilt/.deps-${_ds_deps_suffix}.done"
-fi
-
-rm -rf "${BUILD}"
-
-# DuckStation's source is built unmodified, so build behaviour is changed only
-# through cmake options:
-# - PREFER_CONFIG picks the prebuilt SoundTouchConfig.cmake (which defines
-#   SoundTouch::SoundTouchDLL) over the bundled FindSoundTouch module (which
-#   defines SoundTouch::SoundTouch only).
-# - Upstream sets CMAKE_INSTALL_RPATH itself, relative to its build tree, but
-#   appends to the linker flags, so the runtime library paths go there.
 DUCKSTATION_RPATH="${QT_RPATH}:${EMULATOR_RUNTIME_ROOT}/${NAME}/lib"
 
 log "Configuring"
@@ -55,69 +101,26 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER=clang \
     -DCMAKE_CXX_COMPILER=clang++ \
-    -DCMAKE_CXX_SCAN_FOR_MODULES=OFF \
-    -DCMAKE_FIND_PACKAGE_PREFER_CONFIG=ON \
     -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld -Wl,-rpath,${DUCKSTATION_RPATH}" \
     -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld" \
     -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld" \
     -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
-    -DCMAKE_PREFIX_PATH="${QT_ROOT};${SRC}/dep/prebuilt/${_ds_deps_suffix}" \
-    -DADDITIONAL_LIBRARY_PATHS="${SRC}/dep/prebuilt/${_ds_deps_suffix}/lib" \
-    -DSoundTouch_ROOT="${SRC}/dep/prebuilt/${_ds_deps_suffix}" \
-    -DSoundTouch_DIR="${SRC}/dep/prebuilt/${_ds_deps_suffix}/lib/cmake/SoundTouch" \
-    -DSHADERC_LIBRARY=/usr/lib/${GNU_ARCH}/libshaderc_combined.a \
+    -DCMAKE_PREFIX_PATH="${QT_ROOT};${DEPS_PREFIX}" \
+    -DADDITIONAL_LIBRARY_PATHS="${DEPS_PREFIX}/lib" \
     -DBUILD_QT_FRONTEND=ON
 
 log "Building"
 ninja -C "${BUILD}" -j"$(nproc)"
 
-if [[ -x "${BUILD}/bin/duckstation-qt" ]]; then
-    cp "${BUILD}/bin/duckstation-qt" "${STAGING}/bin/duckstation"
-elif [[ -x "${BUILD}/bin/duckstation-nogui" ]]; then
-    cp "${BUILD}/bin/duckstation-nogui" "${STAGING}/bin/duckstation"
-else
-    die "DuckStation binary was not produced"
-fi
+[[ -x "${BUILD}/bin/duckstation-qt" ]] || die "DuckStation binary was not produced"
+cp "${BUILD}/bin/duckstation-qt" "${STAGING}/bin/duckstation"
+cp -r "${BUILD}/bin/resources" "${BUILD}/bin/translations" "${STAGING}/bin/"
 
-chmod +x "${STAGING}/bin/duckstation"
-# Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
-
-cp -r "${BUILD}/bin/resources" "${STAGING}/bin/"
-# English is built in, but DuckStation still looks for a translation file for it
-# and opens a dialog at every launch when there isn't one. An empty one is enough.
-mkdir -p "${STAGING}/bin/translations"
-printf '<TS version="2.1" language="en"></TS>\n' > "${BUILD}/duckstation-qt_en.ts"
-/usr/lib/qt6/bin/lrelease "${BUILD}/duckstation-qt_en.ts" -qm "${STAGING}/bin/translations/duckstation-qt_en.qm"
-
-# Bundle prebuilt runtime libs that DUCKSTATION_RPATH points at.
-# libcpuinfo.so has no soname versioning in the duckstation prebuilt.
-# libsoundtouch.so.2 differs from Debian's libSoundTouch.so.1 (different case + version).
-PREBUILT_LIB="${SRC}/dep/prebuilt/${_ds_deps_suffix}/lib"
-mkdir -p "${STAGING}/lib"
-cp "${PREBUILT_LIB}/libcpuinfo.so" "${STAGING}/lib/"
-cp "${PREBUILT_LIB}/libsoundtouch.so.2.3.3" "${STAGING}/lib/"
-ln -sf libsoundtouch.so.2.3.3 "${STAGING}/lib/libsoundtouch.so.2"
-for f in "${PREBUILT_LIB}"/libplutosvg.so.0*; do
-    [[ -f "$f" ]] && cp "$f" "${STAGING}/lib/"
+for lib in libshaderc_shared.so libspirv-cross-c-shared.so.0 libcpuinfo.so libdiscord-rpc.so libsoundtouch.so.2; do
+    cp -L "${DEPS_PREFIX}/lib/${lib}" "${STAGING}/lib/${lib}"
 done
-(cd "${STAGING}/lib" && \
-    versioned="$(ls libplutosvg.so.0.* 2>/dev/null | head -1)" && \
-    [[ -n "${versioned}" ]] && ln -sf "${versioned}" libplutosvg.so.0 || true)
 
-# The prebuilt libpng16 carries the (unofficial) APNG patch — png_get_acTL/
-# png_get_num_frames/png_get_num_plays/png_set_acTL — which Debian's stock
-# libpng16 package never ships, at any version. Falling through to the
-# system libpng16.so.16 is therefore always a hard `undefined symbol` crash
-# at launch, not a version-skew issue a newer Trixie package would fix.
-for f in "${PREBUILT_LIB}"/libpng16.so.16*; do
-    [[ -f "$f" ]] && cp "$f" "${STAGING}/lib/"
-done
-(cd "${STAGING}/lib" && \
-    versioned="$(ls libpng16.so.16.* 2>/dev/null | head -1)" && \
-    [[ -n "${versioned}" ]] && ln -sf "${versioned}" libpng16.so.16 || true)
-
-# CC BY-NC-ND requires the licence notice to travel with the binaries.
 install -Dm644 "${SRC}/LICENSE" "${STAGING}/share/doc/duckstation/LICENSE"
 
-write_artifact_version "${STAGING}" "$(git -C "${SRC}" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d)"
+write_artifact_version "${STAGING}" "${REF}"
 log "Done. Artifact at ${STAGING}"

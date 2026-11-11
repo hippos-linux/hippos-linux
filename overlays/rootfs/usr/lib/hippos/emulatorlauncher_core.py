@@ -403,8 +403,11 @@ def _write_duckstation_config(ctx: LaunchContext) -> None:
     if DUCKSTATION_SETTINGS.exists():
         settings.read(DUCKSTATION_SETTINGS, encoding='utf-8')
 
-    for section in ('Main', 'ControllerPorts', 'Console', 'BIOS', 'CPU', 'GPU', 'Display', 'Audio', 'GameList', 'Hotkeys', 'CDROM', 'UI'):
+    for section in ('Main', 'ControllerPorts', 'Console', 'BIOS', 'CPU', 'GPU', 'Display', 'Audio', 'GameList', 'Hotkeys', 'CDROM', 'UI', 'AutoUpdater'):
         _ensure_section(settings, section)
+
+    settings.set('UI', 'UnofficialBuildWarningConfirmed', 'true')
+    settings.set('AutoUpdater', 'CheckAtStartup', 'false')
 
     settings.set('Main', 'SettingsVersion', '3')
     settings.set('Main', 'InhibitScreensaver', 'true')
@@ -445,7 +448,7 @@ def _write_duckstation_config(ctx: LaunchContext) -> None:
         pad_num  = f'Pad{nplayer}'
         sdl_num  = f'SDL-{ctrl.index}'
         ctrl_key = f'duckstation_Controller{nplayer}'
-        ctrl_type = conf.get(ctrl_key, 'DigitalController')
+        ctrl_type = conf.get(ctrl_key, 'AnalogController')
 
         settings.set(pad_num, 'Type',        ctrl_type)
         settings.set(pad_num, 'Up',          f'{sdl_num}/DPadUp')
@@ -477,7 +480,7 @@ def _write_duckstation_config(ctx: LaunchContext) -> None:
         settings.set(pad_num, 'VibrationBias', '8')
 
         if ctrl_type == 'AnalogController':
-            settings.set(pad_num, 'AnalogDPadInDigitalMode', conf.get('duckstation_digitalmode', 'false'))
+            settings.set(pad_num, 'AnalogDPadInDigitalMode', conf.get('duckstation_digitalmode', 'true'))
             settings.set(pad_num, 'Analog', f'{sdl_num}/Guide')
 
         if ctrl_type == 'NeGcon':
@@ -496,7 +499,13 @@ def _write_duckstation_config(ctx: LaunchContext) -> None:
 
     settings.set('Console', 'Region', _conf_value(conf, 'duckstation_region', 'Auto'))
     settings.set('Console', 'EnableCheats', _conf_value(conf, 'duckstation_cheats', 'False'))
-    settings.set('BIOS', 'SearchDirectory', '/userdata/bios')
+    settings.set('BIOS', 'SearchDirectory', str(BIOS))
+    for key, names in DUCKSTATION_BIOS_NAMES.items():
+        found = next((name for name in names if (BIOS / name).is_file()), None)
+        if found:
+            settings.set('BIOS', key, found)
+        elif settings.has_option('BIOS', key):
+            settings.remove_option('BIOS', key)
     settings.set('BIOS', 'PatchFastBoot', _conf_value(conf, 'duckstation_PatchFastBoot', 'false'))
     settings.set('CPU', 'ExecutionMode', _conf_value(conf, 'duckstation_executionmode', 'Recompiler'))
     settings.set('GPU', 'Renderer', _conf_value(conf, 'duckstation_gfxbackend', 'OpenGL'))
@@ -524,7 +533,8 @@ def _write_duckstation_config(ctx: LaunchContext) -> None:
     settings.set('Display', 'LinearFiltering', _conf_value(conf, 'duckstation_linear', 'false'))
     settings.set('Display', 'Stretch', _conf_value(conf, 'duckstation_stretch', 'false'))
     settings.set('Audio', 'StretchMode', _conf_value(conf, 'duckstation_audio_mode', 'TimeStretch'))
-    settings.set('GameList', 'RecursivePaths', '/userdata/roms/psx')
+    if settings.has_option('GameList', 'RecursivePaths'):
+        settings.remove_option('GameList', 'RecursivePaths')
     settings.set('Hotkeys', 'FastForward', 'Keyboard/Tab')
     settings.set('Hotkeys', 'Reset', 'Keyboard/F6')
     settings.set('Hotkeys', 'LoadSelectedSaveState', 'Keyboard/F1')
@@ -572,7 +582,7 @@ def _launch_duckstation(ctx: LaunchContext) -> int:
     _write_duckstation_config(ctx)
 
     conf = _load_hippos_conf()
-    db_path = DUCKSTATION_CONFIG_DIR / 'game_controller_db.txt'
+    db_path = DUCKSTATION_CONFIG_DIR / 'gamecontrollerdb.txt'
     db_path.write_text(generate_sdl_game_controller_config(ctx.controllers))
 
     if bin_path.name == 'duckstation-nogui':
@@ -781,6 +791,11 @@ DOLPHIN_QT_INI     = DOLPHIN_CONFIG_DIR / 'Qt.ini'
 
 DUCKSTATION_CONFIG_DIR = CONFIGS / 'duckstation'
 DUCKSTATION_SETTINGS   = DUCKSTATION_CONFIG_DIR / 'settings.ini'
+DUCKSTATION_BIOS_NAMES = {
+    'PathNTSCU': ('scph5501.bin', 'scph7001.bin', 'scph1001.bin', 'scph101.bin', 'psxonpsp660.bin'),
+    'PathNTSCJ': ('scph5500.bin', 'scph7000.bin', 'scph1000.bin', 'psxonpsp660.bin'),
+    'PathPAL':   ('scph5502.bin', 'scph5552.bin', 'scph7502.bin', 'scph1002.bin', 'psxonpsp660.bin'),
+}
 
 FLYCAST_CONFIG_DIR = CONFIGS / 'flycast'
 FLYCAST_EMU_CFG    = FLYCAST_CONFIG_DIR / 'emu.cfg'
