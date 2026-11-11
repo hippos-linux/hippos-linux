@@ -1144,18 +1144,54 @@ def merge_request(devname: str, mount_path: Path) -> Optional[str]:
     size = sanitize_event_field(run_text(["lsblk", "-dnro", "SIZE", f"/dev/{devname}"]).strip())
     return f"REQUEST_MERGE:{devname}:{model}:{size}:{mount_path}:{device_unique_id(devname)}"
 
-def cmd_pending_merges() -> int:
-    PROMPTED_THIS_BOOT.parent.mkdir(parents=True, exist_ok=True)
-    prompted = set(PROMPTED_THIS_BOOT.read_text(encoding="utf-8").split()) if PROMPTED_THIS_BOOT.exists() else set()
+def network_merge_requests() -> list[tuple[str, str]]:
+    if not is_true(setting("storage.prompt_merge", "true")):
+        return []
+    sources = {line.split()[0] for line in network_sources()}
+    listing = run_text(["/usr/lib/hippos/hippos-network-roms-discover", "list"])
+    requests = []
+    for line in listing.splitlines():
+        fields = line.split("\t")
+        if len(fields) < 4:
+            continue
+        ident, kind, uri, name = fields[:4]
+        if kind != "likely" or uri in sources or is_ignored_device(uri):
+            continue
+        requests.append((uri, f"REQUEST_NETWORK_MERGE:{ident}:{sanitize_event_field(name)}:{uri}"))
+    return requests
+
+def pending_merge_requests() -> list[tuple[str, str]]:
+    requests = []
     for _name, path, source, _fstype in mounted_media_roots():
         device = source.split("[", 1)[0]
-        if not device.startswith("/dev/") or device in prompted:
-            continue
-        request = merge_request(Path(device).name, path)
-        if request:
+        if device.startswith("/dev/"):
+            request = merge_request(Path(device).name, path)
+            if request:
+                requests.append((device, request))
+    return requests + network_merge_requests()
+
+def prompted_this_boot() -> set[str]:
+    return set(PROMPTED_THIS_BOOT.read_text(encoding="utf-8").split()) if PROMPTED_THIS_BOOT.exists() else set()
+
+def mark_prompted(keys: set[str]) -> None:
+    PROMPTED_THIS_BOOT.parent.mkdir(parents=True, exist_ok=True)
+    PROMPTED_THIS_BOOT.write_text("\n".join(sorted(keys)) + "\n", encoding="utf-8")
+
+def cmd_pending_merges() -> int:
+    prompted = prompted_this_boot()
+    for key, request in pending_merge_requests():
+        if key not in prompted:
             print(request)
-            prompted.add(device)
-    PROMPTED_THIS_BOOT.write_text("\n".join(sorted(prompted)) + "\n", encoding="utf-8")
+            prompted.add(key)
+    mark_prompted(prompted)
+    return 0
+
+def cmd_notify_merges() -> int:
+    prompted = prompted_this_boot()
+    for key, request in pending_merge_requests():
+        if key not in prompted and post_es("/storage/event", request):
+            prompted.add(key)
+    mark_prompted(prompted)
     return 0
 
 def cmd_mount(device: str) -> int:
@@ -1182,7 +1218,8 @@ def cmd_mount(device: str) -> int:
     if proc.returncode == 0 and mount_path:
         request = merge_request(devname, mount_path)
         if request:
-            storage_event_es(request)
+            if post_es("/storage/event", request):
+                mark_prompted(prompted_this_boot() | {f"/dev/{devname}"})
         else:
             rebuild_and_reload()
     else:
@@ -1352,6 +1389,7 @@ def main() -> int:
     sub.add_parser("list_devices")
     sub.add_parser("list_network")
     sub.add_parser("pending_merges")
+    sub.add_parser("notify_merges")
     mount_p = sub.add_parser("mount")
     mount_p.add_argument("device")
     unmount_p = sub.add_parser("unmount")
@@ -1391,6 +1429,8 @@ def main() -> int:
         return cmd_list_network()
     if args.command == "pending_merges":
         return cmd_pending_merges()
+    if args.command == "notify_merges":
+        return cmd_notify_merges()
     if args.command == "mount":
         return cmd_mount(args.device)
     if args.command == "unmount":

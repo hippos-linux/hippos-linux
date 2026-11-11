@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source /usr/lib/hippos/pool-branch.sh
+
 POOL=/userdata/bios
 RW=/userdata/.bios-rw
 OPTS="cache.files=off,dropcacheonclose=true,allow_other,use_ino,moveonenospc=false"
@@ -12,11 +14,13 @@ add_branch() {
     local branch="$1"
     [[ -d "${branch}" ]] || return 0
     [[ "${branch}" == "${RW}" || "${branch}" == "${POOL}" ]] && return 0
-    [[ ":${branches}:" == *":${branch}=RW:"* ]] && return 0
-    if [[ "$(stat -c '%u' "${branch}" 2>/dev/null)" != "1000" ]]; then
+    [[ ":${branches}:" == *":${branch}="* ]] && return 0
+    local mode
+    mode="$(pool_branch_mode "${branch}")"
+    if [[ "${mode}" == RW && "$(stat -c '%u' "${branch}" 2>/dev/null)" != "1000" ]]; then
         chown 1000:1000 "${branch}" 2>/dev/null || true
     fi
-    branches="${branches}:${branch}=RW"
+    branches="${branches}:${branch}=${mode}"
 }
 
 if findmnt "${POOL}" >/dev/null 2>&1; then

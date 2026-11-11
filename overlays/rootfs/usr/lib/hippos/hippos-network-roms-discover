@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 SYSTEM = Path("/userdata/system")
@@ -29,12 +29,21 @@ LIKELY_NAMES = {
     "userdata",
 }
 
+ROM_SYSTEM_FOLDERS = {
+    "3do", "arcade", "atomiswave", "dreamcast", "fbneo", "gamecube", "gba", "gbc",
+    "genesis", "mame", "mastersystem", "megadrive", "model2", "model3", "n64",
+    "naomi", "nds", "neogeo", "nes", "ps2", "ps3", "psp", "psx", "saturn",
+    "sega32x", "snes", "switch", "tg16", "wii", "wiiu", "xbox", "xbox360",
+}
+MAX_FOLDERS_CHECKED = 40
+
 @dataclass(frozen=True)
 class Candidate:
     uri: str
     name: str
     source: str
     comment: str = ""
+    has_roms: bool | None = None
 
     @property
     def ident(self) -> str:
@@ -46,6 +55,8 @@ class Candidate:
 
     @property
     def likely(self) -> bool:
+        if self.has_roms is not None:
+            return self.has_roms
         parts = re.split(r"[/_. -]+", self.name.lower())
         return any(part in LIKELY_NAMES for part in parts)
 
@@ -162,12 +173,42 @@ def hosts_with_port(hosts: set[str], port: int) -> list[str]:
         found = pool.map(lambda host: port_open(host, port), ordered)
     return [host for host, is_open in zip(ordered, found) if is_open]
 
+def smb_folders(host: str, share: str, path: str = "") -> set[str] | None:
+    command = f'ls "{path}\\*"' if path else "ls"
+    output = run(["smbclient", f"//{host}/{share}", "-N", "-t", "3", "-c", command], timeout=8)
+    if "NT_STATUS_" in output and not re.search(r"^\s+\S.*\s+D\s+\d+\s", output, re.M):
+        return None
+    folders = set()
+    for line in output.splitlines():
+        match = re.match(r"^\s{2}(.+?)\s+([A-Z]*D[A-Z]*)\s+\d+\s", line)
+        if match and match.group(1) not in (".", ".."):
+            folders.add(match.group(1))
+    files = {m.group(1) for m in re.finditer(r"^\s{2}(.+?)\s+[A-Z]*\s+\d+\s", output, re.M)}
+    return folders | ({"gamelist.xml"} & files)
+
+def smb_has_roms(candidate: Candidate) -> bool | None:
+    host, _, share = candidate.uri.removeprefix("cifs://").partition("/")
+    top = smb_folders(host, share)
+    if top is None:
+        return None
+    lowered = {name.lower(): name for name in top}
+    if "roms" in lowered or lowered.keys() & ROM_SYSTEM_FOLDERS or "gamelist.xml" in lowered:
+        return True
+    for folder in sorted(top)[:MAX_FOLDERS_CHECKED]:
+        inner = smb_folders(host, share, folder)
+        if inner and "roms" in {name.lower() for name in inner}:
+            return True
+    return False
+
 def discover_smb(hosts: set[str]) -> list[Candidate]:
     candidates: list[Candidate] = []
     for host in hosts_with_port(hosts, SMB_PORT):
         shares = enumerate_smb_host(host, "scan")
         candidates.extend(shares or [Candidate(f"cifs://{safe_name(host)}", host, "scan")])
-    return candidates
+    checkable = [c for c in candidates if not c.needs_signin]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = dict(zip((c.uri for c in checkable), pool.map(smb_has_roms, checkable)))
+    return [replace(c, has_roms=bool(results[c.uri])) if c.uri in results else c for c in candidates]
 
 def enumerate_nfs_host(host: str) -> list[Candidate]:
     candidates: list[Candidate] = []
@@ -205,7 +246,7 @@ def write_candidates(candidates: list[Candidate]) -> None:
             "\t".join(
                 [
                     candidate.ident,
-                    "1" if candidate.likely else "0",
+                    "?" if candidate.has_roms is None else ("1" if candidate.has_roms else "0"),
                     candidate.uri,
                     candidate.name,
                     candidate.source,
@@ -228,8 +269,9 @@ def read_candidates() -> list[Candidate]:
         parts = raw.split("\t")
         if len(parts) < 5:
             continue
-        _, _, uri, name, source, *comment = parts
-        candidates.append(Candidate(uri, name, source, "\t".join(comment)))
+        _, likely, uri, name, source, *comment = parts
+        has_roms = None if likely == "?" else likely == "1"
+        candidates.append(Candidate(uri, name, source, "\t".join(comment), has_roms))
     return candidates
 
 def cmd_discover() -> int:
@@ -245,6 +287,8 @@ def cmd_discover() -> int:
             if candidate.likely and not candidate.needs_signin:
                 append_source(candidate.uri)
         subprocess.run(["systemctl", "start", "--no-block", "hippos-network-roms.service"], check=False)
+    else:
+        subprocess.run(["/usr/lib/hippos/hippos-storage-manager", "notify_merges"], check=False)
     for candidate in candidates:
         print(
             "\t".join(
