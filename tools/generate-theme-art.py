@@ -390,6 +390,11 @@ def path_bounds(paths: list[str]) -> tuple[float, float, float, float]:
         parse_path(d, pen)
     return pen.bounds
 
+def transformed_path(d: str, transform: tuple[float, ...]) -> str:
+    pen = SVGPathPen(None)
+    parse_path(d, TransformPen(pen, transform))
+    return pen.getCommands()
+
 def text_path(fonts: Path, line: LogoLine, x: float, baseline: float) -> str:
     font = TTFont(fonts / line.font)
     glyphs, cmap, metrics = font.getGlyphSet(), font.getBestCmap(), font["hmtx"]
@@ -401,24 +406,29 @@ def text_path(fonts: Path, line: LogoLine, x: float, baseline: float) -> str:
         x += metrics[glyph][0] * scale + line.tracking * line.cap_height
     return pen.getCommands()
 
-def logo_svg(fonts: Path, logo: Logo) -> str:
+def logo_paths(fonts: Path, logo: Logo, top: float) -> tuple[list[str], list[str]]:
     text_height = sum(line.cap_height for line in logo.lines) + logo.line_gap * (len(logo.lines) - 1)
-    left, top, right, bottom = path_bounds(list(logo.icon))
-    scale = text_height / (bottom - top)
+    left, icon_top, right, bottom = path_bounds(list(logo.icon))
+    scale = text_height / (bottom - icon_top)
+    icon = [transformed_path(d, (scale, 0, 0, scale, -left * scale, -icon_top * scale - top)) for d in logo.icon]
     text_left = (right - left) * scale + text_height * 0.22
-    text, baseline = [], 0.0
+    text, baseline = [], -top
     for line in logo.lines:
         baseline += line.cap_height
         text.append(text_path(fonts, line, text_left, baseline))
         baseline += logo.line_gap
-    icon = f'<g fill-rule="evenodd" transform="matrix({scale:.5f} 0 0 {scale:.5f} {-left * scale:.3f} {-top * scale:.3f})">'
-    icon += "".join(f'<path d="{d}"/>' for d in logo.icon) + "</g>"
-    _, text_top, text_right, text_bottom = path_bounds(text)
-    view_top, view_bottom = min(0.0, text_top), max(text_height, text_bottom)
+    return icon, text
+
+def logo_svg(fonts: Path, logo: Logo) -> str:
+    _, top, _, _ = path_bounds([d for paths in logo_paths(fonts, logo, 0) for d in paths])
+    icon, text = logo_paths(fonts, logo, min(top, 0))
+    _, _, width, height = path_bounds(icon + text)
     return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" fill="#fff" '
-        f'viewBox="0 {view_top:.2f} {text_right:.2f} {view_bottom - view_top:.2f}">'
-        + icon + "".join(f'<path d="{d}"/>' for d in text) + "</svg>\n"
+        f'<?xml version="1.0" encoding="utf-8"?>\n'
+        f'<svg version="1.1" viewBox="0 0 {width:.2f} {height:.2f}" xmlns="http://www.w3.org/2000/svg">\n'
+        + "".join(f'  <path fill="#ffffff" fill-rule="evenodd" d="{d}"/>\n' for d in icon)
+        + "".join(f'  <path fill="#ffffff" d="{d}"/>\n' for d in text)
+        + "</svg>\n"
     )
 
 def render_chrome(theme_dir: Path) -> None:
