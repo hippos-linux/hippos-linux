@@ -30,7 +30,7 @@ if ! systemctl is-active --quiet var-lib-waydroid.mount; then
     systemctl start var-lib-waydroid.mount || die "Could not mount /var/lib/waydroid"
 fi
 
-if [[ ! -f /var/lib/waydroid/waydroid.cfg ]]; then
+if [[ ! -f /var/lib/waydroid/images/system.img || ! -f /var/lib/waydroid/images/vendor.img ]]; then
     svc_active="$(systemctl is-active hippos-waydroid-init.service 2>/dev/null || true)"
     svc_result="$(systemctl show -P Result hippos-waydroid-init.service 2>/dev/null || true)"
     if [[ "${svc_active}" == "activating" || "${svc_active}" == "active" ]]; then
@@ -65,6 +65,7 @@ try_weston() {
             "${HOTKEYS_BIN}" --new-context waydroid "$(python3 -c 'import json, sys; print(json.dumps(json.load(open(sys.argv[1]))["keys"]))' /usr/share/hippos/hotkeys/contexts/waydroid.json)" 2>/dev/null || true
             return 0
         }
+        kill -0 "${WESTON_PID}" 2>/dev/null || break
         sleep 0.5
     done
     kill "${WESTON_PID}" 2>/dev/null
@@ -76,7 +77,7 @@ try_weston() {
 start_weston() {
     log "Starting Weston (X11 nested, hardware GL)..."
     try_weston "" && { log "Weston ready"; return 0; }
-    log "Hardware GL failed to start within ${WESTON_TIMEOUT}s — retrying with --use-pixman (software rendering)"
+    log "Hardware GL failed to start — retrying with --use-pixman (software rendering)"
     try_weston "--use-pixman" && { log "Weston ready (software rendering)"; return 0; }
     die "Weston did not start within ${WESTON_TIMEOUT}s (hardware or software)"
 }

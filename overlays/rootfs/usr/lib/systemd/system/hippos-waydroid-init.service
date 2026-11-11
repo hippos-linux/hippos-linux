@@ -2,7 +2,8 @@
 Description=HippOS Waydroid first-boot initialisation
 After=network.target var-lib-waydroid.mount
 Requires=var-lib-waydroid.mount
-ConditionPathExists=!/userdata/system/waydroid/waydroid.cfg
+ConditionPathExists=|!/userdata/system/waydroid/images/system.img
+ConditionPathExists=|!/userdata/system/waydroid/images/vendor.img
 StartLimitIntervalSec=0
 
 [Service]
