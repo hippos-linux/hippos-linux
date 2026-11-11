@@ -57,3 +57,5 @@ case "${1:-install}" in
     remove)  remove_steam ;;
     *) echo "usage: steam install|remove" >&2; exit 2 ;;
 esac
+
+/usr/lib/hippos/hippos-steam-sync sync

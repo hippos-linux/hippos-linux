@@ -3,15 +3,23 @@
 from __future__ import annotations
 
 import re
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
 
-from hippos_launcher_sync import sync_launchers
+from hippos_launcher_sync import CLIENT_ENTRY, GameMetadata, reload_es, sync_gamelist, sync_launchers
 
 USERDATA = Path("/userdata")
 ROMS_DIR = USERDATA / "roms" / "steam"
 STATE_FILE = USERDATA / "system" / "steam-launchers.json"
+STEAM_LOGO = Path("/usr/share/hippos/steam/steam-logo.jpg")
+BIG_PICTURE = GameMetadata(
+    "Steam Big Picture",
+    "Steam Big Picture is Valve's controller-friendly interface for your full Steam library. Browse your games, access the Steam store, manage downloads, and launch titles from the couch with full gamepad support. Your entire Steam collection is available the moment you sign in.",
+    "Valve",
+    STEAM_LOGO,
+)
 STEAM_ROOTS = [
     USERDATA / ".steam" / "steam",
     USERDATA / ".local" / "share" / "Steam",
@@ -106,12 +114,23 @@ def installed_apps() -> dict[str, str]:
                 apps[appid] = name
     return apps
 
+def steam_installed() -> bool:
+    return shutil.which("steam", path="/usr/local/bin:/usr/bin:/usr/games") is not None
+
 def sync() -> int:
     apps = installed_apps()
+    launchers = dict(apps)
+    details: dict[str, GameMetadata] = {}
+    if steam_installed():
+        launchers[CLIENT_ENTRY] = "Steam"
+        details[CLIENT_ENTRY] = BIG_PICTURE
     created, updated, removed = sync_launchers(
-        ROMS_DIR, STATE_FILE, '.steam', apps, 'Steam Game', reserved_stems=('Steam',),
+        ROMS_DIR, STATE_FILE, '.steam', launchers, 'Steam Game', reserved_stems=('Steam',),
     )
-    log(f"found={len(apps)} created={created} updated={updated} removed={removed}")
+    details_changed = sync_gamelist(ROMS_DIR, STATE_FILE, '.steam', details)
+    log(f"found={len(apps)} client={CLIENT_ENTRY in launchers} created={created} updated={updated} removed={removed} details_changed={details_changed}")
+    if created or updated or removed or details_changed:
+        reload_es()
     return 0
 
 def main(argv: list[str]) -> int:

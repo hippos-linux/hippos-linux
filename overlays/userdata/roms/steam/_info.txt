@@ -1,5 +1,0 @@
-Steam
-Manufacturer: Valve
-Released: 2003
-Hardware: os
-Extensions: .steam

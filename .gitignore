@@ -35,8 +35,6 @@ staging/
 # ROMs (local only, not tracked)
 roms/
 !overlays/userdata/roms/
-!overlays/userdata/roms/steam/
-!overlays/userdata/roms/steam/Steam.steam
 
 # Logs
 *.log

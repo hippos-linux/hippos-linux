@@ -1,0 +1,55 @@
+#!/bin/bash
+set -euo pipefail
+
+STEAMLINK_DEB_URL="https://archive.raspberrypi.com/debian/pool/main/s/steamlink/steamlink_1.0.16_all.deb"
+UPDATE_URL="https://media.steampowered.com/steamlink/rpi/trixie/arm64"
+DATA_HOME="/userdata/.local/share/SteamLink"
+LAUNCHER="/usr/bin/steamlink"
+UDEV_RULE="/lib/udev/rules.d/56-steamlink.rules"
+
+install_steamlink() {
+    local tmp
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "${tmp}"' RETURN
+
+    apt-get update -qq
+    curl -fsSL "${STEAMLINK_DEB_URL}" -o "${tmp}/steamlink.deb"
+    apt-get install -y --no-install-recommends "${tmp}/steamlink.deb" zenity
+
+    local latest archive
+    latest="$(curl -fsSL "${UPDATE_URL}/public_build.txt")"
+    archive="${tmp}/$(basename "${latest}")"
+    curl -fsSL "${latest}" -o "${archive}"
+    curl -fsSL "${latest}.sig" -o "${archive}.sig"
+    sed -n '/-----BEGIN PGP PUBLIC KEY BLOCK-----/,/-----END PGP PUBLIC KEY BLOCK-----/p' "${LAUNCHER}" > "${tmp}/valve.asc"
+    gpg --batch --homedir "${tmp}" --import "${tmp}/valve.asc" 2>/dev/null
+    gpg --batch --homedir "${tmp}" --verify "${archive}.sig" "${archive}"
+
+    mkdir -p "${tmp}/runtime"
+    tar -xf "${archive}" -C "${tmp}/runtime"
+    grep -vE '^\s*(#|$)|=' "${tmp}/runtime/steamlink/steamlinkdeps.txt" | xargs apt-get install -y --no-install-recommends
+
+    install -Dm644 "${tmp}/runtime/steamlink/udev/rules.d/56-steamlink.rules" "${UDEV_RULE}"
+    install -Dm644 -t /etc/modules-load.d "${tmp}/runtime/steamlink/udev/modules-load.d/"*
+    modprobe uinput || true
+    udevadm control --reload
+    udevadm trigger
+
+    rm -rf "${DATA_HOME}"
+    mkdir -p "${DATA_HOME}"
+    mv "${tmp}/runtime/steamlink/"* "${DATA_HOME}/"
+    echo "${latest}" > "${DATA_HOME}/.version"
+    chown -R hippos:users "$(dirname "${DATA_HOME}")"
+}
+
+remove_steamlink() {
+    rm -rf "${DATA_HOME}"
+    rm -f "${UDEV_RULE}" /etc/modules-load.d/uinput.conf
+    dpkg -s steamlink >/dev/null 2>&1 && apt-get purge -y steamlink || true
+}
+
+case "${1:-install}" in
+    install) install_steamlink ;;
+    remove)  remove_steamlink ;;
+    *) echo "usage: steamlink install|remove" >&2; exit 2 ;;
+esac

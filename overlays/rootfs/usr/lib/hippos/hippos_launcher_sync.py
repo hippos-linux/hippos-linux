@@ -65,8 +65,8 @@ def sync_launchers(
             return previous
         stem = safe_filename(name, fallback_name)
         candidate = roms_dir / f'{stem}{extension}'
-        taken = candidate in claimed or _read_key(candidate) not in (None, key)
-        if stem in reserved_stems or taken:
+        taken = candidate in claimed or _read_key(candidate) not in (None, '', key)
+        if (stem in reserved_stems and key != CLIENT_ENTRY) or taken:
             candidate = roms_dir / f'{stem} ({safe_filename(key, key)}){extension}'
         return candidate
 
