@@ -447,6 +447,9 @@ RPI_CONFIG_TXT = os.path.join(EFI_MOUNT, "config.txt")
 RPI_CURRENT_DIR = os.path.join(EFI_MOUNT, "current")
 RPI_TRYBOOT_DIR = os.path.join(EFI_MOUNT, "try")
 RPI_TRYBOOT_STATE = os.path.join(EFI_MOUNT, "hippos-tryboot.json")
+RPI_TRYBOOT_TXT = os.path.join(EFI_MOUNT, "tryboot.txt")
+RPI_CURRENT_PREFIX = "os_prefix=current/"
+RPI_TRYBOOT_PREFIX = "os_prefix=try/"
 RPI_KERNEL = "kernel8.img"
 RPI_INITRD = "initramfs8"
 RPI_CMDLINE = "cmdline.txt"
@@ -524,7 +527,17 @@ def write_firmware_boot(subvol, partuuid, boot_dir=None):
         _copy_boot_firmware(subvol_path)
     return kernel_release
 
+def write_tryboot_config():
+    with open(RPI_CONFIG_TXT) as fh:
+        config = fh.read()
+    if RPI_CURRENT_PREFIX not in config:
+        die(f"{RPI_CONFIG_TXT} has no {RPI_CURRENT_PREFIX} line, so an update can't be "
+            "tried safely. Reflash the SD card with a current HippOS image.")
+    _replace_boot_file(RPI_TRYBOOT_TXT,
+                       lambda tmp: _write_text(tmp, config.replace(RPI_CURRENT_PREFIX, RPI_TRYBOOT_PREFIX)))
+
 def stage_firmware_tryboot(new_subvol, fallback_subvol, partuuid):
+    write_tryboot_config()
     if fallback_subvol:
         write_firmware_boot(fallback_subvol, partuuid)
     shutil.rmtree(RPI_TRYBOOT_DIR, ignore_errors=True)
@@ -535,10 +548,11 @@ def stage_firmware_tryboot(new_subvol, fallback_subvol, partuuid):
 
 def _remove_tryboot_files():
     shutil.rmtree(RPI_TRYBOOT_DIR, ignore_errors=True)
-    try:
-        os.remove(RPI_TRYBOOT_STATE)
-    except FileNotFoundError:
-        pass
+    for path in (RPI_TRYBOOT_STATE, RPI_TRYBOOT_TXT):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
 
 def confirm_firmware_tryboot(running_subvol, running_kernel):
     try:

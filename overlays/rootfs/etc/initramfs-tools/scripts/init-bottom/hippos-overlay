@@ -114,7 +114,7 @@ merge_accounts() {
 }
 
 DEPLOYMENT_MARKER="${BTRFS_MNT}/@overlay/deployment"
-DEPLOYMENT="${ROOT_SUBVOL} $(sed -n 's/^BUILD_ID=//p' "${BTRFS_MNT}/${ROOT_SUBVOL}/etc/hippos-version" 2>/dev/null)"
+DEPLOYMENT="$(sed -n 's/^BUILD_ID=//p' "${BTRFS_MNT}/${ROOT_SUBVOL}/etc/hippos-version" 2>/dev/null)"
 UPPER_STATUS="${UPPER}/var/lib/dpkg/status"
 STALE=""
 if [ -f "${DEPLOYMENT_MARKER}" ]; then

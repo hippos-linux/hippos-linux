@@ -196,7 +196,7 @@ class FirmwareBootTests(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         self.efi = self.tmp / "efi"
         self.efi.mkdir()
-        (self.efi / "config.txt").write_text("os_prefix=current/\n")
+        (self.efi / "config.txt").write_text("arm_64bit=1\nos_prefix=current/\nmax_framebuffers=2\n")
         self.btrfs = self.tmp / "btrfs"
         self._deployment("@rootfs", {"6.18.40-hippos": "new"})
         self._deployment("@rootfs-0.6.10", {"6.18.30-hippos": "old"})
@@ -233,6 +233,7 @@ class FirmwareBootTests(unittest.TestCase):
             RPI_CURRENT_DIR=str(efi / "current"),
             RPI_TRYBOOT_DIR=str(efi / "try"),
             RPI_TRYBOOT_STATE=str(efi / "hippos-tryboot.json"),
+            RPI_TRYBOOT_TXT=str(efi / "tryboot.txt"),
             SYSTEMD_REBOOT_PARAM=str(self.tmp / "reboot-param"),
             BTRFS_MNT=str(self.btrfs),
             efi_partition_mounted=lambda: True,
@@ -272,6 +273,15 @@ class FirmwareBootTests(unittest.TestCase):
         self.assertEqual(self._read("try/bcm2712d0-rpi-5-b.dtb"), "new-d0")
         self.assertIn("subvol=@rootfs ", self._read("try/cmdline.txt"))
         self.assertEqual((self.tmp / "reboot-param").read_text(), "0 tryboot\n")
+        self.assertEqual(self._read("tryboot.txt"), "arm_64bit=1\nos_prefix=try/\nmax_framebuffers=2\n")
+        self.assertEqual(self._read("config.txt"), "arm_64bit=1\nos_prefix=current/\nmax_framebuffers=2\n")
+
+    def test_update_refused_on_boot_partition_without_boot_sets(self):
+        (self.efi / "config.txt").write_text("arm_64bit=1\nkernel=kernel8.img\n")
+        with self.assertRaises(SystemExit):
+            self._stage_update()
+        self.assertFalse((self.efi / "try").exists())
+        self.assertFalse((self.tmp / "reboot-param").exists())
 
     def test_successful_tryboot_becomes_default(self):
         self._stage_update()
