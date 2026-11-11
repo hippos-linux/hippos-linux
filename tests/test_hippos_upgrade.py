@@ -196,58 +196,67 @@ class FirmwareBootTests(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         self.efi = self.tmp / "efi"
         self.efi.mkdir()
-        (self.efi / "config.txt").write_text("kernel=kernel8.img\n")
+        (self.efi / "config.txt").write_text("os_prefix=current/\n")
         self.btrfs = self.tmp / "btrfs"
-        self._deployment("@rootfs", {"7.3.3-hippos": "new", "6.18.62-hippos-lts": "new-lts"})
-        self._deployment("@rootfs-0.6.10", {"7.0.12-hippos": "old"})
+        self._deployment("@rootfs", {"6.18.40-hippos": "new"})
+        self._deployment("@rootfs-0.6.10", {"6.18.30-hippos": "old"})
 
     def tearDown(self):
         import shutil
         shutil.rmtree(self.tmp)
 
     def _deployment(self, name, kernels):
-        boot = self.btrfs / name / "boot"
-        boot.mkdir(parents=True)
+        root = self.btrfs / name
+        (root / "boot").mkdir(parents=True)
         for release, tag in kernels.items():
-            (boot / f"vmlinuz-{release}").write_text(f"{tag}-kernel")
-            (boot / f"initrd.img-{release}").write_text(f"{tag}-initrd")
+            (root / "boot" / f"vmlinuz-{release}").write_text(f"{tag}-kernel")
+            (root / "boot" / f"initrd.img-{release}").write_text(f"{tag}-initrd")
+            lib = root / "usr" / "lib" / f"linux-image-{release}"
+            (lib / "broadcom").mkdir(parents=True)
+            (lib / "broadcom" / "bcm2712-rpi-5-b.dtb").write_text(f"{tag}-c1")
+            (lib / "broadcom" / "bcm2712d0-rpi-5-b.dtb").write_text(f"{tag}-d0")
+            (lib / "overlays").mkdir()
+            (lib / "overlays" / "vc4-kms-v3d-pi5.dtbo").write_text(f"{tag}-overlay")
+        firmware = root / "usr" / "lib" / "raspi-firmware"
+        firmware.mkdir(parents=True)
+        (firmware / "start4.elf").write_text(f"{name}-start4")
+        (firmware / "fixup4.dat").write_text(f"{name}-fixup4")
+        (firmware / "start.elf").write_text("pi3-only")
 
-    def _patch(self, variant="standard", extra_args=()):
+    def _patch(self, extra_args=()):
         from unittest import mock
         efi = self.efi
         return mock.patch.multiple(
             hu,
+            EFI_MOUNT=str(efi),
             RPI_CONFIG_TXT=str(efi / "config.txt"),
+            RPI_CURRENT_DIR=str(efi / "current"),
+            RPI_TRYBOOT_DIR=str(efi / "try"),
             RPI_TRYBOOT_STATE=str(efi / "hippos-tryboot.json"),
             SYSTEMD_REBOOT_PARAM=str(self.tmp / "reboot-param"),
-            RPI_PRIMARY=hu.FirmwareBootSet(str(efi / "kernel8.img"), str(efi / "initramfs8"), str(efi / "cmdline.txt")),
-            RPI_TRYBOOT=hu.FirmwareBootSet(str(efi / "kernel8-try.img"), str(efi / "initramfs8-try"), str(efi / "cmdline-try.txt")),
             BTRFS_MNT=str(self.btrfs),
             efi_partition_mounted=lambda: True,
-            default_kernel_variant=lambda: variant,
+            default_kernel_variant=lambda: "standard",
             read_grub_cmdline_args=lambda: list(extra_args),
             log=lambda msg: None,
         )
 
-    def _read(self, name):
-        return (self.efi / name).read_text()
+    def _read(self, path):
+        return (self.efi / path).read_text()
 
-    def test_primary_gets_selected_variant_and_cmdline_names_deployment(self):
+    def test_boot_set_has_kernel_initrd_device_trees_and_cmdline(self):
         with self._patch(extra_args=["usbhid.mousepoll=1"]):
             self.assertTrue(hu.firmware_loads_kernel())
             hu.write_firmware_boot("@rootfs", "abcd-02")
-        self.assertEqual(self._read("kernel8.img"), "new-kernel")
-        self.assertEqual(self._read("initramfs8"), "new-initrd")
+        self.assertEqual(self._read("current/kernel8.img"), "new-kernel")
+        self.assertEqual(self._read("current/initramfs8"), "new-initrd")
+        self.assertEqual(self._read("current/bcm2712d0-rpi-5-b.dtb"), "new-d0")
+        self.assertEqual(self._read("current/overlays/vc4-kms-v3d-pi5.dtbo"), "new-overlay")
+        self.assertTrue((self.efi / "current/overlays/README").exists())
         self.assertEqual(
-            self._read("cmdline.txt"),
+            self._read("current/cmdline.txt"),
             "root=PARTUUID=abcd-02 rootfstype=btrfs rootflags=subvol=@rootfs ro quiet splash usbhid.mousepoll=1\n",
         )
-
-    def test_lts_selection_installs_lts_kernel(self):
-        with self._patch(variant="lts"):
-            hu.write_firmware_boot("@rootfs", "abcd-02")
-        self.assertEqual(self._read("kernel8.img"), "new-lts-kernel")
-        self.assertFalse((self.efi / "kernel8.img.new").exists())
 
     def _stage_update(self):
         with self._patch():
@@ -256,33 +265,32 @@ class FirmwareBootTests(unittest.TestCase):
 
     def test_update_tries_new_deployment_once_and_keeps_old_as_default(self):
         self._stage_update()
-        self.assertEqual(self._read("kernel8.img"), "old-kernel")
-        self.assertIn("subvol=@rootfs-0.6.10 ", self._read("cmdline.txt"))
-        self.assertEqual(self._read("kernel8-try.img"), "new-kernel")
-        self.assertIn("subvol=@rootfs ", self._read("cmdline-try.txt"))
+        self.assertEqual(self._read("current/kernel8.img"), "old-kernel")
+        self.assertEqual(self._read("current/bcm2712d0-rpi-5-b.dtb"), "old-d0")
+        self.assertIn("subvol=@rootfs-0.6.10 ", self._read("current/cmdline.txt"))
+        self.assertEqual(self._read("try/kernel8.img"), "new-kernel")
+        self.assertEqual(self._read("try/bcm2712d0-rpi-5-b.dtb"), "new-d0")
+        self.assertIn("subvol=@rootfs ", self._read("try/cmdline.txt"))
         self.assertEqual((self.tmp / "reboot-param").read_text(), "0 tryboot\n")
 
     def test_successful_tryboot_becomes_default(self):
         self._stage_update()
         with self._patch():
-            hu.confirm_firmware_tryboot("@rootfs", "7.3.3-hippos")
-        self.assertEqual(self._read("kernel8.img"), "new-kernel")
-        self.assertIn("subvol=@rootfs ", self._read("cmdline.txt"))
-        self.assertEqual(sorted(p.name for p in self.efi.iterdir()),
-                         ["cmdline.txt", "config.txt", "initramfs8", "kernel8.img"])
+            hu.confirm_firmware_tryboot("@rootfs", "6.18.40-hippos")
+        self.assertEqual(self._read("current/kernel8.img"), "new-kernel")
+        self.assertEqual(self._read("current/overlays/vc4-kms-v3d-pi5.dtbo"), "new-overlay")
+        self.assertEqual(sorted(p.name for p in self.efi.iterdir() if p.is_dir() or p.suffix == ".txt"), ["config.txt", "current"])
 
     def test_boot_into_old_system_discards_tryboot(self):
         self._stage_update()
         with self._patch():
-            hu.confirm_firmware_tryboot("@rootfs-0.6.10", "7.0.12-hippos")
-        self.assertEqual(self._read("kernel8.img"), "old-kernel")
-        self.assertIn("subvol=@rootfs-0.6.10 ", self._read("cmdline.txt"))
-        self.assertFalse((self.efi / "kernel8-try.img").exists())
-        self.assertFalse((self.efi / "hippos-tryboot.json").exists())
+            hu.confirm_firmware_tryboot("@rootfs-0.6.10", "6.18.30-hippos")
+        self.assertEqual(self._read("current/kernel8.img"), "old-kernel")
+        self.assertEqual(sorted(p.name for p in self.efi.iterdir() if p.is_dir() or p.suffix == ".txt"), ["config.txt", "current"])
 
-    def test_kernel_update_leaves_primary_alone(self):
-        with self._patch():
-            hu.write_firmware_boot("@rootfs-0.6.10", "abcd-02")
-            hu.update_boot_menu("@rootfs-0.6.10", [], "uuid", "abcd-02")
-        self.assertEqual(self._read("kernel8.img"), "old-kernel")
-        self.assertEqual(self._read("kernel8-try.img"), "old-kernel")
+    def test_pi4_firmware_follows_the_default_boot_set(self):
+        self._stage_update()
+        self.assertEqual(self._read("start4.elf"), "@rootfs-0.6.10-start4")
+        self.assertEqual(self._read("fixup4.dat"), "@rootfs-0.6.10-fixup4")
+        self.assertFalse((self.efi / "start.elf").exists())
+        self.assertFalse((self.efi / "try" / "start4.elf").exists())

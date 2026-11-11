@@ -444,25 +444,14 @@ def require_efi_partition():
             "point it at the deployment you want instead.")
 
 RPI_CONFIG_TXT = os.path.join(EFI_MOUNT, "config.txt")
+RPI_CURRENT_DIR = os.path.join(EFI_MOUNT, "current")
+RPI_TRYBOOT_DIR = os.path.join(EFI_MOUNT, "try")
 RPI_TRYBOOT_STATE = os.path.join(EFI_MOUNT, "hippos-tryboot.json")
+RPI_KERNEL = "kernel8.img"
+RPI_INITRD = "initramfs8"
+RPI_CMDLINE = "cmdline.txt"
+RPI_FIRMWARE_PATTERNS = ("start4*.elf", "fixup4*.dat")
 SYSTEMD_REBOOT_PARAM = "/run/systemd/reboot-param"
-
-@dataclass(frozen=True)
-class FirmwareBootSet:
-    kernel: str
-    initrd: str
-    cmdline: str
-
-RPI_PRIMARY = FirmwareBootSet(
-    os.path.join(EFI_MOUNT, "kernel8.img"),
-    os.path.join(EFI_MOUNT, "initramfs8"),
-    os.path.join(EFI_MOUNT, "cmdline.txt"),
-)
-RPI_TRYBOOT = FirmwareBootSet(
-    os.path.join(EFI_MOUNT, "kernel8-try.img"),
-    os.path.join(EFI_MOUNT, "initramfs8-try"),
-    os.path.join(EFI_MOUNT, "cmdline-try.txt"),
-)
 
 def firmware_loads_kernel():
     return os.path.isfile(RPI_CONFIG_TXT)
@@ -476,9 +465,32 @@ def _write_text(path, text):
     with open(path, "w") as fh:
         fh.write(text)
 
-def write_firmware_boot(subvol, partuuid, boot_set=None):
+def _copy_device_trees(kernel_lib, boot_dir):
+    broadcom = os.path.join(kernel_lib, "broadcom")
+    for name in sorted(os.listdir(broadcom)) if os.path.isdir(broadcom) else []:
+        if name.endswith(".dtb"):
+            _replace_boot_file(os.path.join(boot_dir, name),
+                               lambda tmp, name=name: shutil.copyfile(os.path.join(broadcom, name), tmp))
+    overlays = os.path.join(kernel_lib, "overlays")
+    if os.path.isdir(overlays):
+        boot_overlays = os.path.join(boot_dir, "overlays")
+        shutil.rmtree(boot_overlays, ignore_errors=True)
+        shutil.copytree(overlays, boot_overlays)
+        readme = os.path.join(boot_overlays, "README")
+        if not os.path.exists(readme):
+            with open(readme, "w") as f:
+                f.write(f"Device tree overlays for kernel {os.path.basename(kernel_lib)[len('linux-image-'):]}.\n")
+
+def _copy_boot_firmware(root):
+    firmware = os.path.join(root, "usr", "lib", "raspi-firmware")
+    for pattern in RPI_FIRMWARE_PATTERNS:
+        for source in sorted(glob.glob(os.path.join(firmware, pattern))):
+            dest = os.path.join(EFI_MOUNT, os.path.basename(source))
+            _replace_boot_file(dest, lambda tmp, source=source: shutil.copyfile(source, tmp))
+
+def write_firmware_boot(subvol, partuuid, boot_dir=None):
     require_efi_partition()
-    boot_set = boot_set or RPI_PRIMARY
+    boot_dir = boot_dir or RPI_CURRENT_DIR
     subvol_path = os.path.join(BTRFS_MNT, subvol)
     default_variant = default_kernel_variant()
     variant_order = [default_variant] + [v for v in _KERNEL_VARIANTS if v != default_variant]
@@ -489,10 +501,15 @@ def write_firmware_boot(subvol, partuuid, boot_set=None):
     if found is None:
         die(f"No kernel found in {subvol}/boot")
     kernel, initrd = found
+    kernel_release = kernel[len("vmlinuz-"):]
     boot = os.path.join(subvol_path, "boot")
 
-    _replace_boot_file(boot_set.kernel, lambda tmp: shutil.copyfile(os.path.join(boot, kernel), tmp))
-    _replace_boot_file(boot_set.initrd, lambda tmp: shutil.copyfile(os.path.join(boot, initrd), tmp))
+    os.makedirs(boot_dir, exist_ok=True)
+    _replace_boot_file(os.path.join(boot_dir, RPI_KERNEL),
+                       lambda tmp: shutil.copyfile(os.path.join(boot, kernel), tmp))
+    _replace_boot_file(os.path.join(boot_dir, RPI_INITRD),
+                       lambda tmp: shutil.copyfile(os.path.join(boot, initrd), tmp))
+    _copy_device_trees(os.path.join(subvol_path, "usr", "lib", f"linux-image-{kernel_release}"), boot_dir)
     cmdline = " ".join([
         f"root=PARTUUID={partuuid}",
         "rootfstype=btrfs",
@@ -502,23 +519,26 @@ def write_firmware_boot(subvol, partuuid, boot_set=None):
         "splash",
         *read_grub_cmdline_args(),
     ])
-    _replace_boot_file(boot_set.cmdline, lambda tmp: _write_text(tmp, cmdline + "\n"))
-    return kernel[len("vmlinuz-"):]
+    _replace_boot_file(os.path.join(boot_dir, RPI_CMDLINE), lambda tmp: _write_text(tmp, cmdline + "\n"))
+    if boot_dir == RPI_CURRENT_DIR:
+        _copy_boot_firmware(subvol_path)
+    return kernel_release
 
 def stage_firmware_tryboot(new_subvol, fallback_subvol, partuuid):
     if fallback_subvol:
         write_firmware_boot(fallback_subvol, partuuid)
-    kernel_release = write_firmware_boot(new_subvol, partuuid, RPI_TRYBOOT)
+    shutil.rmtree(RPI_TRYBOOT_DIR, ignore_errors=True)
+    kernel_release = write_firmware_boot(new_subvol, partuuid, RPI_TRYBOOT_DIR)
     state = json.dumps({"subvol": new_subvol, "kernel": kernel_release})
     _replace_boot_file(RPI_TRYBOOT_STATE, lambda tmp: _write_text(tmp, state + "\n"))
     _write_text(SYSTEMD_REBOOT_PARAM, "0 tryboot\n")
 
 def _remove_tryboot_files():
-    for path in (RPI_TRYBOOT.kernel, RPI_TRYBOOT.initrd, RPI_TRYBOOT.cmdline, RPI_TRYBOOT_STATE):
-        try:
-            os.remove(path)
-        except FileNotFoundError:
-            pass
+    shutil.rmtree(RPI_TRYBOOT_DIR, ignore_errors=True)
+    try:
+        os.remove(RPI_TRYBOOT_STATE)
+    except FileNotFoundError:
+        pass
 
 def confirm_firmware_tryboot(running_subvol, running_kernel):
     try:
@@ -526,11 +546,13 @@ def confirm_firmware_tryboot(running_subvol, running_kernel):
     except FileNotFoundError:
         return
     if state.get("subvol") == running_subvol and state.get("kernel") == running_kernel:
-        for try_file, primary_file in zip(
-            (RPI_TRYBOOT.kernel, RPI_TRYBOOT.initrd, RPI_TRYBOOT.cmdline),
-            (RPI_PRIMARY.kernel, RPI_PRIMARY.initrd, RPI_PRIMARY.cmdline),
-        ):
-            os.replace(try_file, primary_file)
+        retired = RPI_CURRENT_DIR + ".old"
+        shutil.rmtree(retired, ignore_errors=True)
+        if os.path.isdir(RPI_CURRENT_DIR):
+            os.rename(RPI_CURRENT_DIR, retired)
+        os.rename(RPI_TRYBOOT_DIR, RPI_CURRENT_DIR)
+        shutil.rmtree(retired, ignore_errors=True)
+        _copy_boot_firmware("/")
         log(f"{running_subvol} ({running_kernel}) booted — made it the default")
     else:
         log(f"{state.get('subvol')} ({state.get('kernel')}) did not finish booting — "
