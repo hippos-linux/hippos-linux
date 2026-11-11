@@ -8,7 +8,6 @@ ARTIFACT_ROOT="${ARTIFACT_ROOT:-/artifacts}"
 WORK_ROOT="${WORK_ROOT:-/work/work/tools}"
 STAGING="${ARTIFACT_ROOT}/${ARCH}/tools/${NAME}"
 
-# Upstream versions each driver is built from.
 NEW_LG4FF_REF="${NEW_LG4FF_REF:-2092db19f7b40854e0427a1b2e39eda9f8d0c3cd}"
 HID_TMFF2_REF="${HID_TMFF2_REF:-d890a93105a0aa52028ac49282fa1b579e12566e}"
 HID_T150_REF="${HID_T150_REF:-f7ecb30c65ee5f7870e921bc0a2354df8e1e8100}"

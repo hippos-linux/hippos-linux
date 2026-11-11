@@ -1,4 +1,3 @@
-"""Sinden light gun software: download from Sinden, configure per gun, start under Mono."""
 from __future__ import annotations
 
 import io
