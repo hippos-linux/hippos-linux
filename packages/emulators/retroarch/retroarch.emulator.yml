@@ -122,6 +122,9 @@ systems:
       - dosbox_core
       - dosbox_svn
       - rust_dos
+  - name: win98
+    as_core:
+      - dosbox_pure
   - name: dreamcast
     as_core:
       - flycast

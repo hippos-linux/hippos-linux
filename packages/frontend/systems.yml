@@ -52,6 +52,7 @@ _emulator_defaults:
   daphne:        { emulator: hypseus-singe,      core: hypseus-singe, options: { hud_support: false } }
   dice:          { emulator: retroarch,          core: dice               }
   dos:           { emulator: dosbox-staging,     core: dosbox_staging     }
+  win98:         { emulator: retroarch,          core: dosbox_pure        }
   dragon64:      { emulator: xroar,              core: xroar              }
   dreamcast:     { emulator: flycast,            core: flycast            }
   easyrpg:       { emulator: easyrpg,            core: easyrpg            }
@@ -2730,6 +2731,23 @@ wasm4:
   manufacturer: Bruno Garcia
   name: WASM-4
   release: 2021
+win98:
+  extensions:
+  - zip
+  - dosz
+  - m3u
+  - m3u8
+  - iso
+  - cue
+  - chd
+  - img
+  - vhd
+  hardware: computer
+  manufacturer: Microsoft
+  name: Windows 9x
+  platform: windows
+  release: 1995
+  theme: windows9x
 windows:
   extensions:
   - pc
