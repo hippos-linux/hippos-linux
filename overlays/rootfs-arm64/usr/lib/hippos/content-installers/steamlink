@@ -3,7 +3,7 @@ set -euo pipefail
 
 STEAMLINK_DEB_URL="https://archive.raspberrypi.com/debian/pool/main/s/steamlink/steamlink_1.0.16_all.deb"
 UPDATE_URL="https://media.steampowered.com/steamlink/rpi/trixie/arm64"
-DATA_HOME="/userdata/.local/share/SteamLink"
+DATA_HOME="/userdata/system/.local/share/SteamLink"
 LAUNCHER="/usr/bin/steamlink"
 UDEV_RULE="/lib/udev/rules.d/56-steamlink.rules"
 
@@ -39,7 +39,7 @@ install_steamlink() {
     mkdir -p "${DATA_HOME}"
     mv "${tmp}/runtime/steamlink/"* "${DATA_HOME}/"
     echo "${latest}" > "${DATA_HOME}/.version"
-    chown -R hippos:users "$(dirname "${DATA_HOME}")"
+    chown -R hippos:users "${DATA_HOME}"
 }
 
 remove_steamlink() {
