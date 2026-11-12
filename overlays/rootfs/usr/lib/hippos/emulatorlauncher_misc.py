@@ -4,7 +4,6 @@ import json
 import os
 import shlex
 import zipfile
-from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
@@ -20,7 +19,6 @@ from emulatorlauncher_shared import (
     _conf_value,
     _find_emulator_bin,
     _find_emulator_bin_in_package,
-    _game_setting,
     _load_es_input_configs,
     _load_hippos_conf,
     _log,
@@ -31,7 +29,6 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import BIOS, CONFIGS, SAVES, USERDATA
 from hippos_launcher_sync import CLIENT_ENTRY
-from hippos_onscreen_keyboard import onscreen_keyboard
 from hippos_desktop_entries import read_desktop_file
 from hippos_webapps import ADD_WEBAPP_URL, WEBAPP_PROFILES, WEBAPPS_BIN, read_webapp
 import hippos_quiver
@@ -248,10 +245,8 @@ def _run_desktop_app(ctx: LaunchContext, cmd: list[str]) -> int:
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
-    keyboard = _game_setting(conf, ctx.system, ctx.rom, 'onscreen_keyboard') != '0'
-    _log.info("Launching %s (on-screen keyboard %s)", ' '.join(cmd), 'on' if keyboard else 'off')
-    with onscreen_keyboard(env) if keyboard else nullcontext():
-        return _run_game_command(ctx, 'shell', cmd, env).returncode
+    _log.info("Launching %s", ' '.join(cmd))
+    return _run_game_command(ctx, 'shell', cmd, env).returncode
 
 def launch_desktopshortcuts(ctx: LaunchContext) -> int:
     try:

@@ -2,6 +2,9 @@ requireArtifact: dosbox-x
 features:
   - padtokeyboard
 shared_features:
+  - padtokey
+  - onscreen_keyboard
+  - padtokey_mouse_speed
   - powermode
   - tdp
   - platformprofile

@@ -111,10 +111,10 @@ def resolve_actions(actions: list[dict], profile: ESControllerProfile) -> list[d
 
 def write_maps(system: str, emulator: str, rom: Path,
                controllers: list[ControllerInfo], profiles: list[ESControllerProfile]) -> bool:
-    from emulatorlauncher_shared import _game_setting, _load_hippos_conf, _pick_es_profile
+    from emulatorlauncher_shared import _game_or_system_setting, _game_setting, _load_hippos_conf, _pick_es_profile
 
     conf = _load_hippos_conf()
-    default_maps = _game_setting(conf, system, rom, 'padtokey') != '0'
+    default_maps = _game_or_system_setting(conf, system, rom, 'padtokey') != '0'
     merged = merge_keys_files(find_keys_files(system, emulator, rom, default_maps))
     devices = {}
     for ctrl in controllers:

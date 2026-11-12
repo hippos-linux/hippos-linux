@@ -11,7 +11,7 @@ import subprocess
 import time
 import tomllib
 import xml.etree.ElementTree as ET
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from functools import cache
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,6 +24,7 @@ try:
 except ImportError:
     _HAS_YAML = False
 
+from hippos_onscreen_keyboard import onscreen_keyboard
 from hippos_padtokey import padtokey_context
 
 from HipposPaths import (
@@ -416,6 +417,9 @@ def _game_setting(conf: dict[str, str], system: str, rom: Path, name: str) -> st
         if value := _conf_value(conf, key, ''):
             return value
     return ''
+
+def _game_or_system_setting(conf: dict[str, str], system: str, rom: Path, name: str) -> str:
+    return _game_setting(conf, system, rom, name) or str(_get_yaml_system_options(system).get(name, ''))
 
 def _game_value(conf: dict[str, str], ctx: LaunchContext, key: str, default: str = '') -> str:
     return _game_setting(conf, ctx.system, ctx.rom, key) or default
@@ -847,7 +851,9 @@ def _run_game_command(
             with wheel_proxy_context(ctx, env):
                 with hotkey_context(hotkey_name):
                     profiles = _load_es_input_configs()
-                    with padtokey_context(ctx.system, ctx.emulator, ctx.rom, ctx.controllers, profiles):
+                    keyboard = _game_or_system_setting(conf, ctx.system, ctx.rom, 'onscreen_keyboard') == '1'
+                    with padtokey_context(ctx.system, ctx.emulator, ctx.rom, ctx.controllers, profiles), \
+                            onscreen_keyboard(env) if keyboard else nullcontext():
                         result = subprocess.run(cmd, env=env, text=True, cwd=str(cwd) if cwd is not None else None)
                         if result.returncode == -signal.SIGTERM:
                             result.returncode = 0

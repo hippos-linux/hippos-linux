@@ -122,9 +122,17 @@ systems:
       - dosbox_core
       - dosbox_svn
       - rust_dos
+    shared_features:
+      - padtokey
+      - onscreen_keyboard
+      - padtokey_mouse_speed
   - name: win98
     as_core:
       - dosbox_pure
+    shared_features:
+      - padtokey
+      - onscreen_keyboard
+      - padtokey_mouse_speed
     custom_features:
       dosbox_pure_bootos_ramdisk:
         prompt: WINDOWS DISK CHANGES

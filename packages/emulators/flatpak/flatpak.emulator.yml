@@ -1,3 +1,9 @@
+features:
+  - padtokeyboard
+shared_features:
+  - padtokey
+  - onscreen_keyboard
+  - padtokey_mouse_speed
 systems:
 - name: flatpak
   as_core: flatpak

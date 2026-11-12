@@ -1,4 +1,9 @@
+features:
+  - padtokeyboard
 shared_features:
+  - padtokey
+  - onscreen_keyboard
+  - padtokey_mouse_speed
   - videomode
   - mangohud
   - vkbasalt

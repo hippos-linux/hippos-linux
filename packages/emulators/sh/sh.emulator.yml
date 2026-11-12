@@ -1,3 +1,9 @@
+features:
+  - padtokeyboard
+shared_features:
+  - padtokey
+  - onscreen_keyboard
+  - padtokey_mouse_speed
 systems:
 - name: ports
   as_core: sh

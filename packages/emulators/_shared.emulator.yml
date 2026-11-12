@@ -1,15 +1,15 @@
 custom_features:
   padtokey:
     prompt: CONTROLLER AS MOUSE
-    description: The left stick moves the pointer and the bottom face button or R2 clicks. Turn off for games that support controllers.
+    description: The left stick moves the pointer and the bottom face button or R2 clicks. Auto is on for apps and off for games, which usually support controllers.
     choices:
-      On (Default): 1
+      'On': 1
       'Off': 0
   onscreen_keyboard:
     prompt: ON-SCREEN KEYBOARD
-    description: Shows a keyboard at the bottom of the screen when a text box is selected.
+    description: Shows a keyboard at the bottom of the screen when a text box is selected, or with the keyboard hotkey. Auto is on.
     choices:
-      On (Default): 1
+      'On': 1
       'Off': 0
   padtokey_mouse_speed:
     prompt: MOUSE SPEED
