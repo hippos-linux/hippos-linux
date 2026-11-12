@@ -128,11 +128,13 @@ list row:focus progressbar trough { background-color: rgba(7, 6, 15, 0.35); }
 .art { margin: 8px 6px; }
 
 /* Footer stats and button hints */
-.footer { border-top: 1px solid rgba(255, 255, 255, 0.07); padding: 12px 6px 4px 6px; }
-.footer .label { color: #8f88ae; font-size: 13px; font-weight: 600; letter-spacing: 1px; }
-.footer .value { color: #c8c2e0; font-size: 13px; margin-left: 14px; }
-.footer progressbar { min-width: 140px; }
-.footer progressbar trough, .footer progressbar progress { min-height: 5px; }
+.footer { border-top: 1px solid rgba(255, 255, 255, 0.07); padding: 12px 0 4px 0; }
+.footer .row { margin: 0 14px; }
+.footer .label { color: #8f88ae; font-size: 13px; font-weight: 600; letter-spacing: 1px; margin-right: 8px; }
+.footer .value { color: #c8c2e0; font-size: 13px; margin-left: 8px; }
+.footer progressbar { min-width: 110px; margin: 0; }
+progressbar.with-value trough, progressbar.with-value progress { min-height: 18px; }
+.bar-value { color: #ffffff; font-size: 11px; font-weight: 700; }
 .hints { padding-top: 8px; }
 .hints label { color: #8f88ae; font-size: 13px; margin-right: 18px; }
 .hints .glyph {

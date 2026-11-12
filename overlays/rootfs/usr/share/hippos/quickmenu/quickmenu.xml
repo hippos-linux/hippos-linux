@@ -3,6 +3,7 @@
      if="${command}" shows a row or tab only when the command prints something.
      afterclick="close" hides the menu after the action, "refresh" re-reads every value,
      "rescreen" moves the menu to the screen chosen in the System tab.
+     progressbar takes showvalue="true" to print its percentage inside the bar.
      choice_cmd lists one choice per line of display, runs action followed by the matching line of action_arg.
      img and qrcode take height="N%" of the screen; doc opens a manual, map or picture from content.
      In the header, the first feature is the title line and the rest are smaller lines under it. -->
@@ -84,7 +85,7 @@
 			<switch value="${hippos-planemode status}" action_on="hippos-planemode enable" action_off="hippos-planemode disable" refresh="5" />
 		</feature>
 		<feature display="Power mode">
-			<text display="${cat /sys/devices/system/cpu/cpufreq/policy0/scaling_governor}" refresh="2" />
+			<text display='${case "$(hippos-power-mode get)" in highperformance) echo "High performance" ;; balanced) echo "Balanced" ;; powersaver) echo "Power saver" ;; *) echo "Automatic" ;; esac}' refresh="2" />
 			<choice display="Automatic" action="hippos-power-mode default" />
 			<choice display="High performance" action="hippos-power-mode highperformance" />
 			<choice display="Balanced" action="hippos-power-mode balanced" />
@@ -159,8 +160,14 @@
 
 	<vgroup role="footer">
 		<feature display="CPU">
-			<progressbar display='${read -r _ u2 n2 s2 i2 w2 _ &lt; /proc/stat; F="$XDG_RUNTIME_DIR/quickmenu-cpu"; if [ -f "$F" ]; then read -r u1 s1 i1 w1 &lt; "$F"; else u1=$u2; s1=$s2; i1=$i2; w1=$w2; fi; echo "$u2 $s2 $i2 $w2" &gt; "$F"; b=$(( (u2-u1) + (s2-s1) + (w2-w1) )); t=$(( b + (i2-i1) )); [ "$t" -gt 0 ] &amp;&amp; echo $(( 100 * b / t )) || echo 0}' min="0" max="100" refresh="1" />
-			<text display='${awk "{ printf \"%d°C\", \$1 / 1000 }" /sys/class/thermal/thermal_zone0/temp 2>/dev/null}' refresh="3" />
+			<progressbar display="${hippos-sysstats cpu-usage}" min="0" max="100" showvalue="true" refresh="1" />
+			<text display='${T=$(hippos-sysstats cpu-temp); [ -n "$T" ] &amp;&amp; echo "$T°C"}' refresh="3" />
+		</feature>
+		<feature display="GPU" if="${hippos-sysstats gpu-usage}">
+			<progressbar display="${hippos-sysstats gpu-usage}" min="0" max="100" showvalue="true" refresh="1" />
+			<text display='${T=$(hippos-sysstats gpu-temp); [ -n "$T" ] &amp;&amp; echo "$T°C"}' refresh="3" />
+		</feature>
+		<feature display="Screen">
 			<text display="${hippos-resolution currentResolution}" />
 		</feature>
 	</vgroup>

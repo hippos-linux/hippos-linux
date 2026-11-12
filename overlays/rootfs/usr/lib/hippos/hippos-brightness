@@ -2,8 +2,8 @@
 
 case "${1:-boot}" in
     get)
-        val="$(brightnessctl -q get 2>/dev/null || true)"
-        max="$(brightnessctl -q max 2>/dev/null || true)"
+        val="$(brightnessctl -q --class=backlight get 2>/dev/null || true)"
+        max="$(brightnessctl -q --class=backlight max 2>/dev/null || true)"
         if [[ -n "${val}" && -n "${max}" && "${max}" -gt 0 ]]; then
             printf '%d\n' $(( val * 100 / max ))
         else
@@ -15,13 +15,13 @@ case "${1:-boot}" in
         if [[ -z "${PCT}" ]]; then
             printf 'Usage: %s set <0-100>\n' "$0" >&2; exit 1
         fi
-        brightnessctl -q set "${PCT}%" 2>/dev/null || true
+        brightnessctl -q --class=backlight set "${PCT}%" 2>/dev/null || true
         hippos-settings set display.brightness "${PCT}" 2>/dev/null || true
         ;;
     boot)
         PCT="$(hippos-settings get display.brightness 2>/dev/null || true)"
         if [[ -n "${PCT}" ]]; then
-            brightnessctl -q set "${PCT}%" 2>/dev/null || true
+            brightnessctl -q --class=backlight set "${PCT}%" 2>/dev/null || true
         fi
         ;;
     *)

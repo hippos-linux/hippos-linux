@@ -282,9 +282,9 @@ def run_menu() -> int:
             self.tabs.get_style_context().add_class('tabs')
             layout = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             layout.get_style_context().add_class('quickmenu')
-            header = self.build_static(menu.header)
+            header = self.build_static(menu.header, inline=False)
             header.get_style_context().add_class('header')
-            footer = self.build_static(menu.footer)
+            footer = self.build_static(menu.footer, inline=True)
             footer.get_style_context().add_class('footer')
             hints = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, halign=Gtk.Align.CENTER)
             hints.get_style_context().add_class('hints')
@@ -344,27 +344,37 @@ def run_menu() -> int:
                 self.watch({'if': row.condition, 'refresh': '2'}, 'if',
                            lambda output, line=line: self.set_shown(line, bool(output.strip())))
 
-        def build_static(self, rows: list[Row]) -> Gtk.Box:
-            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        def build_static(self, rows: list[Row], inline: bool) -> Gtk.Box:
+            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL if inline else Gtk.Orientation.VERTICAL,
+                          halign=Gtk.Align.CENTER if inline else Gtk.Align.FILL)
             for index, row in enumerate(rows):
                 line = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
                 line.get_style_context().add_class('row')
-                line.get_style_context().add_class('title' if index == 0 else 'subtitle')
+                if not inline:
+                    line.get_style_context().add_class('title' if index == 0 else 'subtitle')
                 if row.label:
-                    label = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END)
+                    label = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.NONE if inline else Pango.EllipsizeMode.END)
                     label.get_style_context().add_class('label')
-                    line.pack_start(label, True, True, 0)
+                    line.pack_start(label, not inline, not inline, 0)
                     self.watch({'display': row.label, 'refresh': '5'}, 'display', label.set_text)
                 controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
                 for control in row.controls:
                     widget = self.build_control(control, None)
                     if widget is not None:
                         controls.pack_start(widget, False, False, 0)
-                line.pack_end(controls, not row.label, not row.label, 0)
+                if inline:
+                    line.pack_start(controls, False, False, 0)
+                else:
+                    line.pack_end(controls, not row.label, not row.label, 0)
                 box.pack_start(line, False, False, 0)
+                if row.condition:
+                    line.set_no_show_all(True)
+                    self.watch({'if': row.condition, 'refresh': '5'}, 'if',
+                               lambda output, line=line: self.set_shown(line, bool(output.strip())))
             return box
 
         def set_shown(self, widget: Gtk.Widget, shown: bool) -> None:
+            widget.set_no_show_all(not shown)
             if shown:
                 widget.show_all()
             else:
@@ -385,14 +395,24 @@ def run_menu() -> int:
             if kind == 'progressbar':
                 bar = Gtk.ProgressBar(valign=Gtk.Align.CENTER)
                 low, high = float(attrs.get('min', 0)), float(attrs.get('max', 100))
+                percent = Gtk.Label()
+                percent.get_style_context().add_class('bar-value')
 
                 def set_level(output: str) -> None:
                     try:
-                        bar.set_fraction(max(0.0, min(1.0, (float(output) - low) / (high - low))))
+                        fraction = max(0.0, min(1.0, (float(output) - low) / (high - low)))
                     except ValueError:
-                        bar.set_fraction(0)
+                        fraction = 0.0
+                    bar.set_fraction(fraction)
+                    percent.set_text(f'{round(fraction * 100)}%')
                 self.watch(attrs, 'display', set_level)
-                return bar
+                if not is_true(attrs.get('showvalue', '')):
+                    return bar
+                bar.get_style_context().add_class('with-value')
+                overlay = Gtk.Overlay(valign=Gtk.Align.CENTER)
+                overlay.add(bar)
+                overlay.add_overlay(percent)
+                return overlay
             if kind in ('button', 'button_confirm'):
                 button = Gtk.Button(label=attrs.get('display', ''), can_focus=False, valign=Gtk.Align.CENTER)
                 button.get_style_context().add_class('pill')

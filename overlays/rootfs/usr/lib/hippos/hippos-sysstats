@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Usage: hippos-sysstats cpu-usage | cpu-temp | gpu-usage | gpu-temp
+# Usage is a percentage, temperature is whole °C. Prints nothing when the value is unavailable.
+
+CPU_SENSORS="k10temp zenpower coretemp cpu_thermal"
+
+hwmon_named() {
+    local hwmon
+    for hwmon in /sys/class/hwmon/hwmon*; do
+        [[ " $1 " == *" $(cat "${hwmon}/name" 2>/dev/null) "* ]] && { echo "${hwmon}"; return; }
+    done
+}
+
+millidegrees() {
+    [[ -r "$1" ]] && echo $(( $(cat "$1") / 1000 ))
+}
+
+cpu_usage() {
+    local state="${XDG_RUNTIME_DIR:-/tmp}/hippos-sysstats-cpu" user nice system idle iowait previous="" busy total
+    read -r _ user nice system idle iowait _ < /proc/stat
+    [[ -r "${state}" ]] && read -r previous < "${state}"
+    previous="${previous:-${user} ${nice} ${system} ${idle} ${iowait}}"
+    echo "${user} ${nice} ${system} ${idle} ${iowait}" > "${state}"
+    read -r p_user p_nice p_system p_idle p_iowait <<< "${previous}"
+    busy=$(( (user - p_user) + (nice - p_nice) + (system - p_system) ))
+    total=$(( busy + (idle - p_idle) + (iowait - p_iowait) ))
+    (( total > 0 )) && echo $(( 100 * busy / total )) || echo 0
+}
+
+cpu_temp() {
+    local hwmon zone
+    hwmon="$(hwmon_named "${CPU_SENSORS}")"
+    if [[ -n "${hwmon}" ]]; then
+        millidegrees "${hwmon}/temp1_input"
+        return
+    fi
+    for zone in /sys/class/thermal/thermal_zone*; do
+        [[ "$(cat "${zone}/type" 2>/dev/null)" =~ ^(x86_pkg_temp|cpu-thermal|cpu_thermal|soc_thermal)$ ]] && { millidegrees "${zone}/temp"; return; }
+    done
+}
+
+amd_gpu() {
+    local card
+    for card in /sys/class/drm/card[0-9]*/device; do
+        [[ -r "${card}/gpu_busy_percent" ]] && { echo "${card}"; return; }
+    done
+}
+
+nvidia_query() {
+    command -v nvidia-smi >/dev/null && nvidia-smi --query-gpu="$1" --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' '
+}
+
+gpu_usage() {
+    local card
+    card="$(amd_gpu)"
+    [[ -n "${card}" ]] && { cat "${card}/gpu_busy_percent"; return; }
+    nvidia_query utilization.gpu
+}
+
+gpu_temp() {
+    local card
+    card="$(amd_gpu)"
+    [[ -n "${card}" ]] && { millidegrees "$(ls "${card}"/hwmon/hwmon*/temp1_input 2>/dev/null | head -1)"; return; }
+    nvidia_query temperature.gpu
+}
+
+case "${1:-}" in
+    cpu-usage) cpu_usage ;;
+    cpu-temp)  cpu_temp ;;
+    gpu-usage) gpu_usage ;;
+    gpu-temp)  gpu_temp ;;
+    *)         sed -n '2,3s/^# //p' "$0" >&2; exit 2 ;;
+esac

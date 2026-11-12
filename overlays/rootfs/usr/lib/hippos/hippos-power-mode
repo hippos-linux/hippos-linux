@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# Usage: hippos-power-mode default | ac | battery | highperformance | balanced | powersaver
+#        hippos-power-mode get    prints the mode last chosen (default = follow the power settings)
+
+STATE=/run/hippos/power-mode
+
+if [[ "${1:-}" == get ]]; then
+    cat "${STATE}" 2>/dev/null || echo default
+    exit 0
+fi
 
 [[ "${EUID}" -ne 0 ]] && exec sudo -n "$0" "$@"
 
@@ -92,7 +101,13 @@ case "${power_state}" in
         apply_mode "$1"
         ;;
     *)
-        echo "Usage: $0 [ac|battery|highperformance|balanced|powersaver|default]" >&2
+        sed -n '2,3s/^# //p' "$0" >&2
         exit 1
         ;;
+esac
+
+mkdir -p "$(dirname "${STATE}")"
+case "$1" in
+    highperformance|balanced|powersaver) echo "$1" > "${STATE}" ;;
+    *)                                    echo default > "${STATE}" ;;
 esac
