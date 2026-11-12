@@ -67,8 +67,14 @@ def move_retroarch_core_folders(saves: Path = SAVES, roms: Path = ROMS, es_syste
                 _log.warning('left %s: %s', save, 'target exists' if target else 'no single matching system')
                 continue
             move(save, target, saves)
+        _remove_if_empty(folder)
+
+def _remove_if_empty(folder: Path) -> None:
+    try:
         if not any(folder.iterdir()):
             folder.rmdir()
+    except OSError as error:
+        _log.info('kept empty %s: %s', folder, error)
 
 def _own_like(path: Path, root: Path) -> None:
     owner = root.stat()
@@ -97,10 +103,10 @@ def merge_tree(source: Path, target: Path, saves: Path) -> None:
         return
     for child in sorted(source.iterdir()):
         merge_tree(child, target / child.name, saves)
-    if not any(source.iterdir()):
-        source.rmdir()
-    else:
+    if any(source.iterdir()):
         _log.warning('left %s: not everything could be moved', source)
+    else:
+        _remove_if_empty(source)
 
 def mame_state_folders(mame_saves: Path) -> list[Path]:
     keep = {'nvram', 'input', 'state', 'diff', 'comments', 'cfg', 'plugins'}
