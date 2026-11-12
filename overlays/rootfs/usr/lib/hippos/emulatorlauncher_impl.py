@@ -165,9 +165,16 @@ def _compatible_default(sys_def: dict, emulator: str, core: str, rom: Path) -> t
             return candidate['emulator'], candidate['core']
     return emulator, core
 
-def _switch_video_mode(conf: dict[str, str], system: str) -> str:
+def _game_output() -> str:
+    return subprocess.run(
+        ['hippos-resolution', 'currentOutput'],
+        capture_output=True, text=True, check=False,
+    ).stdout.strip()
+
+def _switch_video_mode(conf: dict[str, str], system: str) -> tuple[str, str]:
+    output = _game_output()
     original = subprocess.run(
-        ['hippos-resolution', 'currentMode'],
+        ['hippos-resolution', '--screen', output, 'currentMode'],
         capture_output=True, text=True, check=False,
     ).stdout.strip()
 
@@ -179,28 +186,28 @@ def _switch_video_mode(conf: dict[str, str], system: str) -> str:
             if parsed:
                 _log.info("videomode: CRT ctypes %s for '%s'", videomode, system)
                 if _switchres.switch_to_mode(*parsed):
-                    return original
+                    return output, original
                 _log.warning("videomode: ctypes failed, falling back to subprocess")
         else:
             boot_res = conf.get('crt.boot_resolution', '640x480i')
             parsed = _switchres.parse_videomode(boot_res)
             if parsed:
                 _switchres.switch_to_mode(*parsed)
-            return original
+            return output, original
 
     if videomode and videomode != 'default':
         _log.info("videomode: setting '%s' for system '%s'", videomode, system)
         subprocess.run(
-            ['hippos-resolution', 'setMode', videomode],
+            ['hippos-resolution', '--screen', output, 'applyMode', videomode],
             check=False, stderr=subprocess.DEVNULL,
         )
     else:
         subprocess.run(
-            ['hippos-resolution', 'minTomaxResolution'],
+            ['hippos-resolution', '--screen', output, 'minTomaxResolution'],
             check=False, stderr=subprocess.DEVNULL,
         )
 
-    return original
+    return output, original
 
 def _prepare_ctx_bezel(ctx: LaunchContext, conf: dict[str, str]) -> None:
     from hippos_bezels import generate_gun_help, gun_border_color
@@ -240,7 +247,7 @@ def _prepare_ctx_bezel(ctx: LaunchContext, conf: dict[str, str]) -> None:
     )
     generate_gun_help(ctx.system, ctx.rom, ctx.lightgun, ctx.game_gun, ctx.resolution)
 
-def _restore_video_mode(original_mode: str, conf: dict[str, str] | None = None) -> None:
+def _restore_video_mode(output: str, original_mode: str, conf: dict[str, str] | None = None) -> None:
     if not original_mode:
         return
     _log.info("videomode: restoring '%s'", original_mode)
@@ -251,7 +258,7 @@ def _restore_video_mode(original_mode: str, conf: dict[str, str] | None = None) 
             return
         _log.warning("videomode: ctypes restore failed, falling back to subprocess")
     subprocess.run(
-        ['hippos-resolution', 'setMode', original_mode],
+        ['hippos-resolution', '--screen', output, 'applyMode', original_mode],
         check=False, stderr=subprocess.DEVNULL,
     )
 
@@ -682,9 +689,9 @@ def main() -> int:
     profiles = _load_es_input_configs()
     start_controller_monitor(ctx, profiles)
 
-    original_mode = _switch_video_mode(conf, ctx.system)
+    game_output, original_mode = _switch_video_mode(conf, ctx.system)
     raw_res = subprocess.run(
-        ['hippos-resolution', 'currentResolution'],
+        ['hippos-resolution', '--screen', game_output, 'currentResolution'],
         capture_output=True, text=True, check=False,
     ).stdout.strip()
     if m := re.match(r'(\d+)x(\d+)', raw_res):
@@ -698,7 +705,7 @@ def main() -> int:
         with game_power_settings(conf, ctx.system, ctx.rom):
             return _run_with_squashfs(ctx, generator)
     finally:
-        _restore_video_mode(original_mode, conf)
+        _restore_video_mode(game_output, original_mode, conf)
         subprocess.run(
             ['systemctl', 'start', '--no-block', 'hippos-save-sync.service'],
             check=False, capture_output=True,

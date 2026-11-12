@@ -2,6 +2,12 @@
 export DISPLAY="${DISPLAY:-:0}"
 
 _current_output() {
+    local configured
+    configured="$(hippos-settings get display.output 2>/dev/null || true)"
+    if [[ -n "${configured}" ]] && xrandr --query 2>/dev/null | grep -q "^${configured} connected"; then
+        echo "${configured}"
+        return
+    fi
     xrandr --query 2>/dev/null | awk '/connected primary/{print $1; exit} /connected/{o=$1} END{if(o)print o}'
 }
 
@@ -57,7 +63,7 @@ case "${1:-}" in
             '
         fi
         ;;
-    setMode)
+    setMode|applyMode)
         MODE="${2:-}"
         if _crt_active; then
             _crt_setmode "${MODE}"
@@ -70,7 +76,7 @@ case "${1:-}" in
         else
             xrandr --output "$PSCREEN" --mode "$MODE"
         fi
-        hippos-settings set display.resolution "$MODE" 2>/dev/null || true
+        [[ "$1" == setMode ]] && hippos-settings set display.resolution "$MODE" 2>/dev/null || true
         ;;
     currentMode)
         xrandr --query 2>/dev/null | awk -v s="$PSCREEN" '

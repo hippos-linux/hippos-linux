@@ -41,18 +41,20 @@ if [[ "${_CRT_ENABLED}" != "true" && "${_CRT_ACTIVE}" != "true" ]]; then
     fi
 
     if [[ "$RES" == "preferred" || -z "$RES" ]]; then
-        xrandr --output "$OUTPUT" --preferred --rotate "$ROTATION" 2>/dev/null \
+        xrandr --output "$OUTPUT" --preferred --rotate "$ROTATION" --primary 2>/dev/null \
             && echo "[hippos-display-setup] $OUTPUT preferred rotate=$ROTATION" \
             || echo "[hippos-display-setup] xrandr failed for $OUTPUT" >&2
     elif [[ "$RES" == *"."* ]]; then
         RATE="${RES##*.}"; RES="${RES%.*}"
-        xrandr --output "$OUTPUT" --mode "$RES" --rate "$RATE" --rotate "$ROTATION" 2>/dev/null \
+        xrandr --output "$OUTPUT" --mode "$RES" --rate "$RATE" --rotate "$ROTATION" --primary 2>/dev/null \
             && echo "[hippos-display-setup] $OUTPUT ${RES}@${RATE}Hz rotate=$ROTATION" \
-            || echo "[hippos-display-setup] mode '$RES @ $RATE' not available for $OUTPUT" >&2
+            || { echo "[hippos-display-setup] mode '$RES @ $RATE' not available for $OUTPUT, using its preferred mode" >&2
+                 xrandr --output "$OUTPUT" --preferred --rotate "$ROTATION" --primary 2>/dev/null; }
     else
-        xrandr --output "$OUTPUT" --mode "$RES" --rotate "$ROTATION" 2>/dev/null \
+        xrandr --output "$OUTPUT" --mode "$RES" --rotate "$ROTATION" --primary 2>/dev/null \
             && echo "[hippos-display-setup] $OUTPUT $RES rotate=$ROTATION" \
-            || echo "[hippos-display-setup] mode '$RES' not available for $OUTPUT" >&2
+            || { echo "[hippos-display-setup] mode '$RES' not available for $OUTPUT, using its preferred mode" >&2
+                 xrandr --output "$OUTPUT" --preferred --rotate "$ROTATION" --primary 2>/dev/null; }
     fi
 fi
 
@@ -74,11 +76,17 @@ case "$ROTATION" in
     *)        TOUCH_MATRIX=""                      ;;
 esac
 
+INTERNAL_PANEL=$(xrandr 2>/dev/null | awk '/^(eDP|LVDS|DSI)[^ ]* connected/ {print $1; exit}')
+
 while IFS= read -r dev; do
     if xinput list-props "$dev" 2>/dev/null | grep -q "Coordinate Transformation Matrix"; then
-        xinput --map-to-output "$dev" "$OUTPUT" 2>/dev/null \
-            && echo "[hippos-display-setup] mapped $dev → $OUTPUT" || true
-        if [[ -n "$TOUCH_MATRIX" ]]; then
+        target="$OUTPUT"
+        if [[ -n "$INTERNAL_PANEL" ]] && xinput list --long "$dev" 2>/dev/null | grep -q "Touch mode: direct"; then
+            target="$INTERNAL_PANEL"
+        fi
+        xinput --map-to-output "$dev" "$target" 2>/dev/null \
+            && echo "[hippos-display-setup] mapped $dev → $target" || true
+        if [[ -n "$TOUCH_MATRIX" && "$target" == "$OUTPUT" ]]; then
             xinput set-prop "$dev" "Coordinate Transformation Matrix" $TOUCH_MATRIX 2>/dev/null \
                 && echo "[hippos-display-setup] touchscreen transform $ROTATION: $dev" || true
         fi
