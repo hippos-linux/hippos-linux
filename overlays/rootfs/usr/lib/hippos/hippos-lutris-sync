@@ -4,7 +4,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from hippos_flatpak_metadata import read_share_details
+from hippos_appstream import read_share_details
 from hippos_launcher_sync import CLIENT_ENTRY, GameMetadata, reload_es, sync_gamelist, sync_launchers
 
 USERDATA   = Path('/userdata')

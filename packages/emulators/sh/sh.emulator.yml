@@ -1,3 +1,5 @@
 systems:
 - name: ports
   as_core: sh
+- name: linux
+  as_core: sh

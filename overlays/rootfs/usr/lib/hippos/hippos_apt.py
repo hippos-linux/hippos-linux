@@ -65,3 +65,9 @@ def pre_update_user_packages(image: frozenset[str]) -> list[str]:
 def package_files(package: str) -> list[Path]:
     result = subprocess.run(['dpkg-query', '-L', package], capture_output=True, text=True, check=False)
     return [Path(line) for line in result.stdout.splitlines() if line.startswith('/')]
+
+def owning_package(path: Path) -> str | None:
+    result = subprocess.run(['dpkg-query', '-S', str(path)], capture_output=True, text=True, check=False)
+    if result.returncode != 0 or ':' not in result.stdout:
+        return None
+    return result.stdout.split(':', 1)[0].split(',')[0].strip()

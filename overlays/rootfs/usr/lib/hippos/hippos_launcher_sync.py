@@ -125,6 +125,11 @@ def known_keys(state_file: Path) -> set[str]:
     return set(_read_state(state_file))
 
 def sync_gamelist(roms_dir: Path, state_file: Path, extension: str, games: dict[str, GameMetadata]) -> bool:
+    launchers = _read_state(state_file)
+    return update_gamelist(roms_dir, extension,
+                           {Path(launchers[key]): details for key, details in games.items() if key in launchers})
+
+def update_gamelist(roms_dir: Path, extension: str, games: dict[Path, GameMetadata]) -> bool:
     gamelist = roms_dir / 'gamelist.xml'
     try:
         tree = ET.parse(gamelist)
@@ -136,9 +141,7 @@ def sync_gamelist(roms_dir: Path, state_file: Path, extension: str, games: dict[
     entries = {game.findtext('path'): game for game in root.findall('game')}
     changed = False
 
-    launchers = _read_state(state_file)
-    for key, details in games.items():
-        launcher = Path(launchers.get(key, ''))
+    for launcher, details in games.items():
         if launcher.parent != roms_dir:
             continue
         path = f'./{launcher.name}'
@@ -171,6 +174,14 @@ def sync_gamelist(roms_dir: Path, state_file: Path, extension: str, games: dict[
         _chown_to_owner(temporary)
         temporary.replace(gamelist)
     return changed
+
+def launchers_with(roms_dir: Path, tag: str) -> set[Path]:
+    try:
+        root = ET.parse(roms_dir / 'gamelist.xml').getroot()
+    except (OSError, ET.ParseError):
+        return set()
+    return {(roms_dir / game.findtext('path', '')).resolve() for game in root.findall('game')
+            if (game.findtext(tag) or '').strip()}
 
 def reload_es() -> None:
     if APPS_INSTALLING_FLAG.exists():

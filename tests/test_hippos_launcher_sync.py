@@ -8,7 +8,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'overlays/rootfs/usr/lib/hippos'))
 
-import hippos_flatpak_metadata  # noqa: E402
+import hippos_appstream  # noqa: E402
 from hippos_launcher_sync import (  # noqa: E402
     GameMetadata,
     known_keys,
@@ -133,7 +133,7 @@ class FlatpakMetadataTest(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.root = Path(directory.name)
         self.share = self.root / 'org.x.App/current/active/export/share'
-        patcher = mock.patch.object(hippos_flatpak_metadata, '_INSTALL_ROOTS', (self.root,))
+        patcher = mock.patch.object(hippos_appstream, '_INSTALL_ROOTS', (self.root,))
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -149,13 +149,13 @@ class FlatpakMetadataTest(unittest.TestCase):
 
     def test_reads_english_details_only(self):
         self.write_metainfo(METAINFO)
-        details = hippos_flatpak_metadata.read_app_details('org.x.App')
+        details = hippos_appstream.read_app_details('org.x.App')
         self.assertEqual(details.description, 'First line wrapped.\n• One')
         self.assertEqual(details.developer, 'New Dev')
 
     def test_falls_back_to_summary_and_old_developer_tag(self):
         self.write_metainfo('<component><developer_name>Old</developer_name><summary>Short</summary></component>')
-        details = hippos_flatpak_metadata.read_app_details('org.x.App')
+        details = hippos_appstream.read_app_details('org.x.App')
         self.assertEqual(details.description, 'Short')
         self.assertEqual(details.developer, 'Old')
 
@@ -164,14 +164,14 @@ class FlatpakMetadataTest(unittest.TestCase):
         self.icon('32x32')
         large = self.icon('512x512')
         self.icon('1024x1024', 'org.x.App-tray.png')
-        self.assertEqual(hippos_flatpak_metadata.read_app_details('org.x.App').icon, large)
+        self.assertEqual(hippos_appstream.read_app_details('org.x.App').icon, large)
         vector = self.icon('scalable', 'org.x.App.svg')
-        self.assertEqual(hippos_flatpak_metadata.read_app_details('org.x.App').icon, vector)
+        self.assertEqual(hippos_appstream.read_app_details('org.x.App').icon, vector)
 
     def test_not_installed_and_bad_metainfo_are_harmless(self):
-        self.assertEqual(hippos_flatpak_metadata.read_app_details('org.none'), hippos_flatpak_metadata.AppDetails())
+        self.assertEqual(hippos_appstream.read_app_details('org.none'), hippos_appstream.AppDetails())
         self.write_metainfo('<component><summary>')
-        self.assertIsNone(hippos_flatpak_metadata.read_app_details('org.x.App').description)
+        self.assertIsNone(hippos_appstream.read_app_details('org.x.App').description)
 
 
 if __name__ == '__main__':

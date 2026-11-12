@@ -140,6 +140,7 @@ _emulator_defaults:
   pico8:         { emulator: lexaloffle-pico8,   core: pico8              }
   pokemini:      { emulator: retroarch,          core: pokemini           }
   ports:         { emulator: sh,                 core: sh, options: { bezel: none } }
+  linux:         { emulator: sh,                 core: sh, options: { bezel: none } }
   prboom:        { emulator: retroarch,          core: prboom             }
   ps2:           { emulator: pcsx2,              core: pcsx2, options: { fullboot: true } }
   ps3:           { emulator: rpcs3,              core: rpcs3, options: { hud_support: false } }
@@ -2379,6 +2380,13 @@ desktopshortcuts:
   hardware: os
   manufacturer: Various
   name: Desktop Shortcuts
+linux:
+  extensions:
+  - sh
+  force: true
+  hardware: os
+  manufacturer: Various
+  name: Linux Games
 flatpak:
   extensions:
   - flatpak

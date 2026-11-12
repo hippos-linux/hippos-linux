@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+if out=$(/usr/lib/hippos/hippos-linux-games add "$1" 2>&1); then
+    notify-send "ES Linux Games" "${out}" --icon=emblem-favorite 2>/dev/null || true
+else
+    notify-send "ES Linux Games" "${out}" --icon=dialog-error 2>/dev/null || true
+    exit 1
+fi

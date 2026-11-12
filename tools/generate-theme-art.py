@@ -93,6 +93,7 @@ WORLDS = {
     "quiver": World("04192e", "1a8fd8", "c8eeff", "2fc0ff", "ice"),
     "webapps": World("0a1630", "3f5fd8", "d8e2ff", "6f8fff", "ice", True),
     "desktopshortcuts": World("0a1c2e", "3f7fb8", "d8e8f7", "5fa8f0", "continents", True),
+    "linux": World("261804", "d89a14", "fff0c0", "ffc21e", "bands"),
     "ports": World("2e1006", "c8501e", "ffd8c0", "ff7030", "craters"),
     "prboom": World("2a0505", "b8201e", "f2b8a0", "f03a28", "craters"),
     "auto-favorites": World("2e2004", "d8a81e", "fff6cc", "ffd23f", "ice", True),
@@ -414,6 +415,21 @@ LOGOS = {
             "M98 34V75L54 100V59Z",
         ),
         lines=(LogoLine("Sora-SemiBold.ttf", "APPS", 20, 0.32), LogoLine("Sora-ExtraBold.ttf", "Flatpak", 50)),
+        line_gap=13,
+    ),
+    "linux": Logo(
+        icon=(
+            "M50 2C31 2 24 19 24 37C24 50 13 62 13 77C13 92 30 98 50 98C70 98 87 92 87 77C87 62 76 50 76 37C76 19 69 2 50 2Z"
+            "M50 44C37 44 31 58 31 73C31 86 40 92 50 92C60 92 69 86 69 73C69 58 63 44 50 44Z"
+            "M40 17A6.5 7.5 0 1 0 40 32A6.5 7.5 0 1 0 40 17Z"
+            "M60 17A6.5 7.5 0 1 0 60 32A6.5 7.5 0 1 0 60 17Z"
+            "M40 35H60L50 42Z",
+            "M41.5 21A3 3.5 0 1 0 41.5 28A3 3.5 0 1 0 41.5 21Z",
+            "M58.5 21A3 3.5 0 1 0 58.5 28A3 3.5 0 1 0 58.5 21Z",
+            "M6 93C6 85 30 84 38 92C40 99 6 100 6 93Z",
+            "M94 93C94 85 70 84 62 92C60 99 94 100 94 93Z",
+        ),
+        lines=(LogoLine("Sora-SemiBold.ttf", "LINUX", 20, 0.32), LogoLine("Sora-ExtraBold.ttf", "Games", 50)),
         line_gap=13,
     ),
     "mrboom": Logo(

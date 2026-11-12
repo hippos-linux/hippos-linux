@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 import hippos_webapps
-from hippos_ports import PORTS_DIR, set_claimed, write_launcher
+from hippos_linux_games import add_catalog_game, remove_catalog_game, set_claimed
 
 USERDATA        = Path('/userdata')
 CONTENT_CACHE   = USERDATA / 'system' / 'content-cache'
@@ -31,7 +31,7 @@ INSTALL_ROOTS: dict[str, Path] = {
     'cheats':    USERDATA / 'cheats',
     'themes':    USERDATA / 'themes',
     'cores':     USERDATA / 'system' / 'emulators' / 'retroarch' / 'current' / 'cores',
-    'ports':     PORTS_DIR,
+    'ports':     USERDATA / 'roms' / 'ports',
 }
 
 _USAGE = """\
@@ -159,16 +159,6 @@ def _run_installer(name: str, action: str) -> int:
         return 1
     return subprocess.run([str(script), action]).returncode
 
-def _create_port_launcher(pkg: dict) -> Path:
-    name    = pkg.get('name', pkg['id'])
-    command = pkg.get('launcher_command', '')
-    args    = pkg.get('launcher_args', [])
-    if args:
-        command = command + ' ' + ' '.join(str(a) for a in args)
-    script = PORTS_DIR / f"{pkg['id']}.sh"
-    write_launcher(script, name, command)
-    return script
-
 def cmd_list(args: list[str]) -> int:
     catalog   = _load_catalog()
     installed = _load_installed()
@@ -242,8 +232,8 @@ def cmd_install(args: list[str]) -> int:
             set_claimed(apt_packages, False)
             print(f'apt install failed (exit {ret})', file=sys.stderr)
             return ret
-        script = _create_port_launcher(pkg)
-        print(f'Created launcher: {script}')
+        if pkg.get('launcher_command'):
+            print(f'Created launcher: {add_catalog_game(pkg)}')
         installed         = _load_installed()
         installed[pkg_id] = pkg.get('version', 'latest')
         _save_installed(installed)
@@ -272,8 +262,7 @@ def cmd_install(args: list[str]) -> int:
             print(f'Install failed (exit {ret})', file=sys.stderr)
             return ret
         if pkg.get('launcher_command'):
-            script = _create_port_launcher(pkg)
-            print(f'Created launcher: {script}')
+            print(f'Created launcher: {add_catalog_game(pkg)}')
         installed         = _load_installed()
         installed[pkg_id] = pkg.get('version', 'latest')
         _save_installed(installed)
@@ -342,18 +331,12 @@ def cmd_remove(args: list[str]) -> int:
             if apt_packages:
                 _apt('remove', apt_packages)
                 set_claimed(apt_packages, False)
-            launcher = INSTALL_ROOTS['ports'] / f'{pkg_id}.sh'
-            if launcher.exists():
-                launcher.unlink()
-                print(f'Removed launcher: {launcher}')
+            remove_catalog_game(pkg_id)
         elif pkg_type == 'webapp':
             hippos_webapps.remove(pkg.get('webapp_url', ''))
         elif pkg_type == 'installer':
             _run_installer(pkg.get('installer', ''), 'remove')
-            launcher = INSTALL_ROOTS['ports'] / f'{pkg_id}.sh'
-            if launcher.exists():
-                launcher.unlink()
-                print(f'Removed launcher: {launcher}')
+            remove_catalog_game(pkg_id)
         else:
             category = pkg.get('category', 'misc')
             root     = INSTALL_ROOTS.get(category, USERDATA / category)

@@ -1,0 +1,9 @@
+[Unit]
+Description=HippOS Linux Games launcher sync after boot
+
+[Timer]
+OnBootSec=2min
+Unit=hippos-linux-games-sync.service
+
+[Install]
+WantedBy=timers.target

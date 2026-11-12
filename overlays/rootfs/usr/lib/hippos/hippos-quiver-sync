@@ -10,7 +10,7 @@ from pathlib import Path
 from PIL import Image
 
 import hippos_quiver
-from hippos_flatpak_metadata import read_share_details
+from hippos_appstream import read_share_details
 from hippos_launcher_sync import CLIENT_ENTRY, GameMetadata, known_keys, reload_es, sync_gamelist, sync_launchers
 
 ROMS_DIR     = hippos_quiver.USERDATA / 'roms' / 'quiver'

@@ -32,7 +32,7 @@ from emulatorlauncher_shared import (
 from HipposPaths import BIOS, CONFIGS, SAVES, USERDATA
 from hippos_launcher_sync import CLIENT_ENTRY
 from hippos_onscreen_keyboard import onscreen_keyboard
-from hippos_ports import read_desktop_file
+from hippos_desktop_entries import read_desktop_file
 from hippos_webapps import ADD_WEBAPP_URL, WEBAPP_PROFILES, WEBAPPS_BIN, read_webapp
 import hippos_quiver
 

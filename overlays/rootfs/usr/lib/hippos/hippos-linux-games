@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""hippos-linux-games — ES Linux Games launchers for native games and applications.
+
+  hippos-linux-games add FILE   launcher for a .desktop file, AppImage or executable
+  hippos-linux-games sync       a launcher for each game (Categories=Game) the user
+                                installed with apt, removed with the package, plus
+                                descriptions and screenshots for them
+"""
+from __future__ import annotations
+
+import shlex
+import sys
+from pathlib import Path
+
+from hippos_apt import image_packages, installed_user_packages, package_files
+from hippos_desktop_entries import DesktopApp, read_desktop_file
+from hippos_launcher_sync import GameMetadata, launchers_with, reload_es
+from hippos_linux_games import (APT_MARKER, LAUNCHER_EXTENSION, LINUX_GAMES_DIR, apt_game_details, claimed_packages,
+                                desktop_game_details, launcher_path, packaged_game_details, read_marker,
+                                update_details, write_launcher)
+
+_APPLICATIONS = Path('/usr/share/applications')
+
+def add(file: Path) -> int:
+    if not file.is_file():
+        print(f'File not found: {file}', file=sys.stderr)
+        return 1
+    if file.suffix == '.desktop':
+        app = read_desktop_file(file)
+        if app is None:
+            print(f'No launchable application in {file.name}', file=sys.stderr)
+            return 1
+        name, command, details = app.name, app.command, desktop_game_details(app)
+    else:
+        file.chmod(file.stat().st_mode | 0o111)
+        name = file.name.removesuffix('.AppImage').removesuffix('.appimage')
+        command, details = shlex.quote(str(file)), GameMetadata(name)
+    path = launcher_path(name)
+    write_launcher(path, name, command)
+    update_details({path: (details, None)})
+    reload_es()
+    print(f'Added {name}: {path}')
+    return 0
+
+def _installed_games(image: frozenset[str]) -> dict[Path, tuple[str, DesktopApp]]:
+    games = {}
+    covered = claimed_packages()
+    for package in installed_user_packages(image):
+        if package in covered:
+            continue
+        for path in package_files(package):
+            if path.parent != _APPLICATIONS or path.suffix != '.desktop':
+                continue
+            app = read_desktop_file(path)
+            if app is not None and 'Game' in app.categories:
+                games[path] = (package, app)
+    return games
+
+def sync() -> int:
+    image = image_packages()
+    if image is None or not LINUX_GAMES_DIR.parent.is_dir():
+        return 0
+    games = _installed_games(image)
+
+    changed = False
+    launchers: dict[Path, Path] = {}
+    for launcher in LINUX_GAMES_DIR.glob(f'*{LAUNCHER_EXTENSION}'):
+        fields = read_marker(launcher, APT_MARKER)
+        if fields is None:
+            continue
+        desktop = Path(fields[-1]) if fields else None
+        if desktop in games:
+            launchers[desktop] = launcher
+        else:
+            launcher.unlink()
+            print(f'Removed {launcher.name}')
+            changed = True
+
+    for desktop, (package, app) in games.items():
+        if desktop in launchers:
+            continue
+        path = launcher_path(app.name)
+        if path.exists():
+            continue
+        write_launcher(path, app.name, app.command, marker=shlex.join([APT_MARKER, package, str(desktop)]))
+        launchers[desktop] = path
+        print(f'Added {app.name} ({package}): {path.name}')
+        changed = True
+
+    details = {launcher: apt_game_details(games[desktop][0], desktop, games[desktop][1])
+               for desktop, launcher in launchers.items()}
+    has_image = launchers_with(LINUX_GAMES_DIR, 'image')
+    for launcher in LINUX_GAMES_DIR.glob(f'*{LAUNCHER_EXTENSION}'):
+        if launcher not in details and launcher.resolve() not in has_image:
+            if (packaged := packaged_game_details(launcher)) is not None:
+                details[launcher] = packaged
+    changed |= update_details(details)
+    if changed:
+        reload_es()
+    return 0
+
+def main() -> int:
+    match sys.argv[1:]:
+        case ['add', file]:
+            return add(Path(file))
+        case ['sync']:
+            return sync()
+        case _:
+            print(__doc__.strip(), file=sys.stderr)
+            return 1
+
+if __name__ == '__main__':
+    sys.exit(main())

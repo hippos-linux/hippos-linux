@@ -4,30 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hippos_flatpak_metadata import hicolor_icon
+from hippos_desktop_entries import DesktopApp, find_icon, read_desktop_file
 from hippos_launcher_sync import GameMetadata, reload_es, sync_gamelist, sync_launchers
-from hippos_ports import DesktopApp, read_desktop_file
 
 USERDATA    = Path('/userdata')
 DESKTOP_DIR = USERDATA / 'Desktop'
 ROMS_DIR    = USERDATA / 'roms' / 'desktopshortcuts'
 STATE_FILE  = USERDATA / 'system' / 'desktopshortcuts-launchers.json'
 SHIPPED_SHORTCUTS = frozenset({'switch-to-es.desktop', 'computer.desktop', 'network.desktop', 'trash-can.desktop'})
-ICON_SHARES = (USERDATA / '.local' / 'share', USERDATA / 'system' / '.local' / 'share', Path('/usr/share'))
-PIXMAPS = Path('/usr/share/pixmaps')
 
 def log(message: str) -> None:
     print(f'[hippos-desktopshortcuts-sync] {message}', flush=True)
-
-def find_icon(icon: str | None) -> Path | None:
-    if not icon:
-        return None
-    if icon.startswith('/'):
-        return Path(icon) if Path(icon).is_file() else None
-    for share in ICON_SHARES:
-        if found := hicolor_icon(share, icon):
-            return found
-    return next((path for path in (PIXMAPS / f'{icon}.png', PIXMAPS / f'{icon}.svg') if path.is_file()), None)
 
 def desktop_shortcuts() -> dict[str, DesktopApp]:
     shortcuts = {}
