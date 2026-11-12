@@ -3,8 +3,8 @@ Description=Watch for Flatpak app installs/removals
 After=local-fs.target userdata.mount
 
 [Path]
-PathChanged=/var/lib/flatpak/exports/share/applications
-PathChanged=/userdata/.local/share/flatpak/exports/share/applications
+PathChanged=/var/lib/flatpak/.changed
+PathChanged=/userdata/.local/share/flatpak/.changed
 Unit=hippos-flatpak-sync.service
 
 [Install]

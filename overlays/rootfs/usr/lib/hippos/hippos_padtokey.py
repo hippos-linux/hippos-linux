@@ -25,6 +25,7 @@ DEFAULT_MOUSE_LEVEL = 5
 MOUSE_SPEED_AT_DEFAULT_LEVEL = 8.0
 MOUSE_INTERVAL = 0.006
 MOUSE_DEADZONE = 0.05
+SCROLL_NOTCHES_PER_SECOND = 20.0
 DIRECTION_THRESHOLD = 0.5
 
 HAT_DIRECTIONS = {1: ('y', -1), 2: ('x', 1), 4: ('y', 1), 8: ('x', -1)}
@@ -90,13 +91,13 @@ def resolve_actions(actions: list[dict], profile: ESControllerProfile) -> list[d
     resolved = []
     for action in actions:
         trigger = action.get('trigger', '')
-        if action.get('type') == 'mouse':
+        if action.get('type') in ('mouse', 'scroll'):
             x = profile.inputs.get(f'{trigger}left')
             y = profile.inputs.get(f'{trigger}up')
             if x is None or y is None or x.type != 'axis' or y.type != 'axis':
                 _log.info("padtokey: %s has no stick for %r", profile.device_name, trigger)
                 continue
-            resolved.append({'mouse': [x.code, y.code]})
+            resolved.append({action['type']: [x.code, y.code]})
             continue
         targets = action.get('target')
         targets = targets if isinstance(targets, list) else [targets]
@@ -184,9 +185,11 @@ class PadMapper:
     uinput: Any
     actions: list[_Action]
     mouse_axes: tuple[int, int] | None
+    scroll_axes: tuple[int, int] | None
     mouse_speed: float
     ranges: dict[int, tuple[int, int]]
     positions: dict[int, float] = field(default_factory=dict)
+    scroll_remainder: dict[int, float] = field(default_factory=dict)
     pressed: set[tuple] = field(default_factory=set)
     active: list[_Action] = field(default_factory=list)
     last_move: float = 0.0
@@ -210,19 +213,20 @@ class PadMapper:
                 return ('abs', ecodes.ABS_HAT0X + 2 * index + (axis == 'y'), direction)
             return None
 
-        actions, mouse_axes = [], None
+        actions, sticks = [], {}
         for entry in entries:
-            if 'mouse' in entry:
-                x, y = entry['mouse']
+            stick = next((kind for kind in ('mouse', 'scroll') if kind in entry), None)
+            if stick:
+                x, y = entry[stick]
                 if x < len(axes) and y < len(axes):
-                    mouse_axes = (axes[x], axes[y])
+                    sticks[stick] = (axes[x], axes[y])
                 continue
             inputs = [input_key(spec) for spec in entry['inputs']]
             keys = [ecodes.ecodes[name] for name in entry['keys'] if name in ecodes.ecodes]
             if None not in inputs and keys:
                 actions.append(_Action(frozenset(inputs), keys))
         ranges = {code: (info.min, info.max) for code, info in abs_info.items()}
-        return cls(uinput, actions, mouse_axes, mouse_speed, ranges)
+        return cls(uinput, actions, sticks.get('mouse'), sticks.get('scroll'), mouse_speed, ranges)
 
     def _normalised(self, code: int, value: int) -> float:
         low, high = self.ranges.get(code, (-1, 1))
@@ -271,20 +275,35 @@ class PadMapper:
                 elif not held and key in self.pressed:
                     self._release(key)
 
+    def _deflected(self, axes: tuple[int, int] | None) -> bool:
+        return axes is not None and any(abs(self.positions.get(code, 0.0)) >= MOUSE_DEADZONE for code in axes)
+
     def mouse_active(self) -> bool:
-        return self.mouse_axes is not None and any(
-            abs(self.positions.get(code, 0.0)) >= MOUSE_DEADZONE for code in self.mouse_axes)
+        return self._deflected(self.mouse_axes) or self._deflected(self.scroll_axes)
 
     def move_mouse(self, now: float) -> None:
         from evdev import ecodes
         if not self.mouse_active() or now < self.last_move + MOUSE_INTERVAL:
             return
+        elapsed = min(now - self.last_move, 10 * MOUSE_INTERVAL)
         self.last_move = now
-        for code, rel in zip(self.mouse_axes, (ecodes.REL_X, ecodes.REL_Y)):
-            position = self.positions.get(code, 0.0)
-            if abs(position) >= MOUSE_DEADZONE:
-                step = int(position * position * self.mouse_speed) + 1
-                self.uinput.write(ecodes.EV_REL, rel, step if position > 0 else -step)
+        if self._deflected(self.mouse_axes):
+            for code, rel in zip(self.mouse_axes, (ecodes.REL_X, ecodes.REL_Y)):
+                position = self.positions.get(code, 0.0)
+                if abs(position) >= MOUSE_DEADZONE:
+                    step = int(position * position * self.mouse_speed) + 1
+                    self.uinput.write(ecodes.EV_REL, rel, step if position > 0 else -step)
+        if self._deflected(self.scroll_axes):
+            for code, rel, sign in zip(self.scroll_axes, (ecodes.REL_HWHEEL, ecodes.REL_WHEEL), (1, -1)):
+                position = self.positions.get(code, 0.0)
+                if abs(position) < MOUSE_DEADZONE:
+                    self.scroll_remainder.pop(code, None)
+                    continue
+                notches = self.scroll_remainder.get(code, 0.0) + sign * position * abs(position) * SCROLL_NOTCHES_PER_SECOND * elapsed
+                whole = int(notches)
+                self.scroll_remainder[code] = notches - whole
+                if whole:
+                    self.uinput.write(ecodes.EV_REL, rel, whole)
         self.uinput.syn()
 
     def release_buttons(self) -> None:

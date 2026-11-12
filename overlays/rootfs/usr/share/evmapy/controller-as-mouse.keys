@@ -54,16 +54,9 @@
             "description": "Right"
         },
         {
-            "trigger": "joystick2up",
-            "type": "key",
-            "target": "KEY_PAGEUP",
-            "description": "Scroll up"
-        },
-        {
-            "trigger": "joystick2down",
-            "type": "key",
-            "target": "KEY_PAGEDOWN",
-            "description": "Scroll down"
+            "trigger": "joystick2",
+            "type": "scroll",
+            "description": "Scroll"
         },
         {
             "trigger": "start",

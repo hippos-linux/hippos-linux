@@ -248,7 +248,7 @@ def make_uinput() -> evdev.UInput:
         name=DEVICE_NAME,
         events={
             ecodes.EV_KEY: key_codes,
-            ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y],
+            ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y, ecodes.REL_WHEEL, ecodes.REL_HWHEEL],
         },
     )
 
@@ -453,7 +453,8 @@ class HotkeyDaemon:
         if path in self.pad_maps:
             entries, mouse_speed = self.pad_maps[path]
             pad = PadMapper.build(device, entries, self.uinput, mouse_speed)
-            log(f'  padtokey: {len(pad.actions)} actions, mouse={"on" if pad.mouse_axes else "off"}')
+            log(f'  padtokey: {len(pad.actions)} actions, mouse={"on" if pad.mouse_axes else "off"}, '
+                f'scroll={"on" if pad.scroll_axes else "off"}')
 
         self.devices[path] = DeviceState(device, button_map, action_map, grabbed=grabbed, pad=pad)
         self.fd_to_path[device.fileno()] = path
