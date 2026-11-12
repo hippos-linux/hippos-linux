@@ -4,6 +4,7 @@
      afterclick="close" hides the menu after the action, "refresh" re-reads every value,
      "rescreen" moves the menu to the screen chosen in the System tab.
      progressbar takes showvalue="true" to print its percentage inside the bar.
+     keypicker opens a keyboard; the chosen key code is added to action ("none" when cleared), display gives the current key code.
      choice_cmd lists one choice per line of display, runs action followed by the matching line of action_arg.
      img and qrcode take height="N%" of the screen; doc opens a manual, map or picture from content.
      In the header, the first feature is the title line and the rest are smaller lines under it. -->
@@ -65,123 +66,99 @@
 		</feature>
 		<feature display="Bottom button">
 			<text display="${hippos-padtokey get b}" />
-			<choice display="Not mapped" action="hippos-padtokey set b none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set b" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key b}" action="hippos-padtokey set b" />
 		</feature>
 		<feature display="Right button">
 			<text display="${hippos-padtokey get a}" />
-			<choice display="Not mapped" action="hippos-padtokey set a none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set a" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key a}" action="hippos-padtokey set a" />
 		</feature>
 		<feature display="Top button">
 			<text display="${hippos-padtokey get x}" />
-			<choice display="Not mapped" action="hippos-padtokey set x none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set x" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key x}" action="hippos-padtokey set x" />
 		</feature>
 		<feature display="Left button">
 			<text display="${hippos-padtokey get y}" />
-			<choice display="Not mapped" action="hippos-padtokey set y none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set y" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key y}" action="hippos-padtokey set y" />
 		</feature>
 		<feature display="L1">
 			<text display="${hippos-padtokey get pageup}" />
-			<choice display="Not mapped" action="hippos-padtokey set pageup none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set pageup" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key pageup}" action="hippos-padtokey set pageup" />
 		</feature>
 		<feature display="R1">
 			<text display="${hippos-padtokey get pagedown}" />
-			<choice display="Not mapped" action="hippos-padtokey set pagedown none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set pagedown" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key pagedown}" action="hippos-padtokey set pagedown" />
 		</feature>
 		<feature display="L2">
 			<text display="${hippos-padtokey get l2}" />
-			<choice display="Not mapped" action="hippos-padtokey set l2 none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set l2" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key l2}" action="hippos-padtokey set l2" />
 		</feature>
 		<feature display="R2">
 			<text display="${hippos-padtokey get r2}" />
-			<choice display="Not mapped" action="hippos-padtokey set r2 none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set r2" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key r2}" action="hippos-padtokey set r2" />
 		</feature>
 		<feature display="L3 (stick press)">
 			<text display="${hippos-padtokey get l3}" />
-			<choice display="Not mapped" action="hippos-padtokey set l3 none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set l3" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key l3}" action="hippos-padtokey set l3" />
 		</feature>
 		<feature display="R3 (stick press)">
 			<text display="${hippos-padtokey get r3}" />
-			<choice display="Not mapped" action="hippos-padtokey set r3 none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set r3" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key r3}" action="hippos-padtokey set r3" />
 		</feature>
 		<feature display="Start">
 			<text display="${hippos-padtokey get start}" />
-			<choice display="Not mapped" action="hippos-padtokey set start none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set start" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key start}" action="hippos-padtokey set start" />
 		</feature>
 		<feature display="Select">
 			<text display="${hippos-padtokey get select}" />
-			<choice display="Not mapped" action="hippos-padtokey set select none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set select" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key select}" action="hippos-padtokey set select" />
 		</feature>
 		<feature display="D-pad up">
 			<text display="${hippos-padtokey get up}" />
-			<choice display="Not mapped" action="hippos-padtokey set up none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set up" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key up}" action="hippos-padtokey set up" />
 		</feature>
 		<feature display="D-pad down">
 			<text display="${hippos-padtokey get down}" />
-			<choice display="Not mapped" action="hippos-padtokey set down none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set down" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key down}" action="hippos-padtokey set down" />
 		</feature>
 		<feature display="D-pad left">
 			<text display="${hippos-padtokey get left}" />
-			<choice display="Not mapped" action="hippos-padtokey set left none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set left" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key left}" action="hippos-padtokey set left" />
 		</feature>
 		<feature display="D-pad right">
 			<text display="${hippos-padtokey get right}" />
-			<choice display="Not mapped" action="hippos-padtokey set right none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set right" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key right}" action="hippos-padtokey set right" />
 		</feature>
 		<feature display="Left stick up">
 			<text display="${hippos-padtokey get joystick1up}" />
-			<choice display="Not mapped" action="hippos-padtokey set joystick1up none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set joystick1up" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key joystick1up}" action="hippos-padtokey set joystick1up" />
 		</feature>
 		<feature display="Left stick down">
 			<text display="${hippos-padtokey get joystick1down}" />
-			<choice display="Not mapped" action="hippos-padtokey set joystick1down none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set joystick1down" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key joystick1down}" action="hippos-padtokey set joystick1down" />
 		</feature>
 		<feature display="Left stick left">
 			<text display="${hippos-padtokey get joystick1left}" />
-			<choice display="Not mapped" action="hippos-padtokey set joystick1left none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set joystick1left" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key joystick1left}" action="hippos-padtokey set joystick1left" />
 		</feature>
 		<feature display="Left stick right">
 			<text display="${hippos-padtokey get joystick1right}" />
-			<choice display="Not mapped" action="hippos-padtokey set joystick1right none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set joystick1right" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key joystick1right}" action="hippos-padtokey set joystick1right" />
 		</feature>
 		<feature display="Right stick up">
 			<text display="${hippos-padtokey get joystick2up}" />
-			<choice display="Not mapped" action="hippos-padtokey set joystick2up none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set joystick2up" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key joystick2up}" action="hippos-padtokey set joystick2up" />
 		</feature>
 		<feature display="Right stick down">
 			<text display="${hippos-padtokey get joystick2down}" />
-			<choice display="Not mapped" action="hippos-padtokey set joystick2down none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set joystick2down" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key joystick2down}" action="hippos-padtokey set joystick2down" />
 		</feature>
 		<feature display="Right stick left">
 			<text display="${hippos-padtokey get joystick2left}" />
-			<choice display="Not mapped" action="hippos-padtokey set joystick2left none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set joystick2left" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key joystick2left}" action="hippos-padtokey set joystick2left" />
 		</feature>
 		<feature display="Right stick right">
 			<text display="${hippos-padtokey get joystick2right}" />
-			<choice display="Not mapped" action="hippos-padtokey set joystick2right none" />
-			<choice_cmd display="${hippos-padtokey keys | cut -f 1}" action="hippos-padtokey set joystick2right" action_arg="${hippos-padtokey keys | cut -f 2}" />
+			<keypicker display="${hippos-padtokey key joystick2right}" action="hippos-padtokey set joystick2right" />
 		</feature>
 	</hgroup>
 

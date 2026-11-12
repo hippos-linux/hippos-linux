@@ -59,5 +59,13 @@ class EditTests(unittest.TestCase):
         self.assertEqual(cli.get(self.rom, 'a'), '')
 
 
+class KeyPickerTests(unittest.TestCase):
+    def test_keyboard_offers_exactly_the_editor_keys(self):
+        import hippos_keypicker as picker
+        offered = {key for rows in (picker.MAIN_ROWS, picker.NAV_ROWS, picker.EXTRA_ROWS)
+                   for row in rows for _label, key, _width in row if key}
+        self.assertEqual(offered, set(cli.KEYS) | {'none'})
+
+
 if __name__ == '__main__':
     unittest.main()

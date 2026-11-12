@@ -139,6 +139,25 @@ progressbar.with-value trough, progressbar.with-value progress { min-height: 18p
 .hints label { color: #8f88ae; font-size: 13px; margin-right: 18px; }
 .hints .glyph { opacity: 0.75; margin-right: 6px; }
 
+/* Key picker */
+.keypicker button.key {
+    background-image: none;
+    background-color: rgba(255, 255, 255, 0.07);
+    border: none;
+    box-shadow: none;
+    border-radius: 7px;
+    color: #c8c2e0;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 0;
+    margin: 2px;
+    min-height: 34px;
+    min-width: 0;
+}
+.keypicker button.key.current { box-shadow: inset 0 0 0 2px #7b3fff; color: #ffffff; }
+.keypicker button.key:focus { background-image: linear-gradient(135deg, #7b3fff, #1a6fff); color: #ffffff; outline: none; }
+.keypicker-gap { min-height: 10px; }
+
 /* Documents */
 .document .hint { color: #8f88ae; font-size: 13px; padding-top: 8px; }
 scrollbar { opacity: 0.4; }

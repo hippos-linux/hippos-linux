@@ -163,6 +163,7 @@ def run_menu() -> int:
     from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
     from evdev import ecodes
     from hippos_docviewer import DocumentViewer, pixbuf_from_bytes
+    from hippos_keypicker import KeyPicker
     from hippos_es_buttons import help_icon, ok_and_back
     from hippos_gamepad_reader import GamepadReader
 
@@ -282,6 +283,10 @@ def run_menu() -> int:
             self.body.add_named(self.pages, 'pages')
             self.body.add_named(choice_view, 'choices')
             self.body.add_named(self.viewer, 'document')
+            self.picker = KeyPicker(self.pick_key)
+            self.picker_action = ''
+            self.picker_row: MenuRow | None = None
+            self.body.add_named(self.picker, 'keys')
 
             self.tabs = Gtk.StackSwitcher(stack=self.pages, halign=Gtk.Align.CENTER)
             self.tabs.get_style_context().add_class('tabs')
@@ -440,6 +445,11 @@ def run_menu() -> int:
                     row.open_target = lambda: self.open_choices(control, row.title.get_text())
                     row.opens_list = True
                 return None
+            if kind == 'keypicker':
+                if row is not None:
+                    row.open_target = lambda: self.open_keypicker(attrs, row)
+                    row.opens_list = True
+                return None
             if kind == 'choice_item':
                 if row is not None:
                     row.open_target = lambda: self.pick_choice(attrs)
@@ -545,6 +555,26 @@ def run_menu() -> int:
             self.choice_list.show_all()
             self.body.set_visible_child_name('choices')
             self.choice_list.get_children()[0].grab_focus()
+
+        def open_keypicker(self, attrs: dict[str, str], row: MenuRow) -> None:
+            self.picker_action = attrs.get('action', '')
+            self.picker_row = row
+
+            def show(current: str) -> None:
+                self.body.set_visible_child_name('keys')
+                self.picker.open(row.title.get_text(), current.strip())
+            self.run_async(evaluate, show, attrs.get('display', ''))
+
+        def pick_key(self, key: str) -> None:
+            self.body.set_visible_child_name('pages')
+            self.focus_focused_row()
+            self.run_action(f'{self.picker_action} {key}', 'refresh')
+
+        def focus_focused_row(self) -> None:
+            if self.picker_row is not None and self.picker_row.get_visible():
+                self.picker_row.grab_focus()
+            else:
+                self.focus_page()
 
         def pick_choice(self, attrs: dict[str, str]) -> None:
             self.body.set_visible_child_name('pages')
@@ -668,6 +698,8 @@ def run_menu() -> int:
             focus = self.get_focus()
             if isinstance(focus, MenuRow):
                 focus.activate_row()
+            elif isinstance(focus, Gtk.Button) and self.body.get_visible_child_name() == 'keys':
+                focus.clicked()
 
         def hide_menu(self) -> None:
             self.reader.set_grab(False)
@@ -683,7 +715,10 @@ def run_menu() -> int:
             return True
 
         def go_back(self) -> None:
-            if self.body.get_visible_child_name() == 'choices':
+            if self.body.get_visible_child_name() == 'keys':
+                self.body.set_visible_child_name('pages')
+                self.focus_focused_row()
+            elif self.body.get_visible_child_name() == 'choices':
                 self.body.set_visible_child_name('pages')
                 self.focus_page()
             else:
@@ -697,7 +732,9 @@ def run_menu() -> int:
                 self.focus_page()
 
         def navigate(self, direction: str) -> None:
-            if direction in ('up', 'down'):
+            if self.body.get_visible_child_name() == 'keys':
+                self.child_focus(getattr(Gtk.DirectionType, direction.upper()))
+            elif direction in ('up', 'down'):
                 self.move_focus(-1 if direction == 'up' else 1)
             else:
                 self.adjust_focused(-1 if direction == 'left' else 1)

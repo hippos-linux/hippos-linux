@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Usage: hippos-padtokey get <input> | set <input> <KEY_...|none> | keys | reset | edited
+"""Usage: hippos-padtokey get <input> | key <input> | set <input> <KEY_...|none> | reset | edited
 
 Edits the pad-to-keyboard profile of the running game for player 1, in the same
 <rom>.keys file as EmulationStation's padtokey editor, and applies it at once.
-get prints the key an input sends, keys lists "label<TAB>key" choices, reset
-removes the game's own profile and edited prints 1 when the game has one.
+get prints the key an input sends, key prints its key code, reset removes the
+game's own profile and edited prints 1 when the game has one.
 """
 
 import json
@@ -66,11 +66,15 @@ def targets_of(action: dict) -> list[str]:
     return target if isinstance(target, list) else [target]
 
 
-def get(rom: Path, trigger: str) -> str:
+def mapped_keys(rom: Path, trigger: str) -> list[str]:
     for action in current_profile(rom).get(PLAYER, []):
         if action.get('trigger') == trigger and action.get('type', 'key') == 'key':
-            return ' + '.join(key_label(key) for key in targets_of(action))
-    return ''
+            return targets_of(action)
+    return []
+
+
+def get(rom: Path, trigger: str) -> str:
+    return ' + '.join(key_label(key) for key in mapped_keys(rom, trigger))
 
 
 def set_key(rom: Path, trigger: str, key: str) -> None:
@@ -86,15 +90,15 @@ def set_key(rom: Path, trigger: str, key: str) -> None:
 def main(argv: list[str]) -> int:
     rom = game_rom()
     match argv:
-        case ['keys']:
-            print('\n'.join(f'{key_label(key)}\t{key}' for key in KEYS))
-            return 0
         case ['edited']:
             if rom is not None and game_keys_file(rom).exists():
                 print(1)
             return 0
         case ['get', trigger] if rom is not None:
             print(get(rom, trigger))
+            return 0
+        case ['key', trigger] if rom is not None:
+            print(next(iter(mapped_keys(rom, trigger)), 'none'))
             return 0
         case ['set', trigger, key] if rom is not None and (key in KEYS or key == 'none'):
             set_key(rom, trigger, key)
@@ -103,7 +107,7 @@ def main(argv: list[str]) -> int:
             game_keys_file(rom).unlink(missing_ok=True)
             reapply_running_game()
             return 0
-        case ['get' | 'set' | 'reset', *_] if rom is None:
+        case ['get' | 'key' | 'set' | 'reset', *_] if rom is None:
             return 1
     print(__doc__, file=sys.stderr)
     return 2
