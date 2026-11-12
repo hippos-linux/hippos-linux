@@ -51,8 +51,8 @@ _emulator_defaults:
   ctvboy:        { emulator: mame,               core: mame               }
   daphne:        { emulator: hypseus-singe,      core: hypseus-singe, options: { hud_support: false } }
   dice:          { emulator: retroarch,          core: dice               }
-  dos:           { emulator: dosbox-staging,     core: dosbox_staging, options: { padtokey: '0', onscreen_keyboard: '1' } }
-  win98:         { emulator: retroarch,          core: dosbox_pure, options: { padtokey: '0', onscreen_keyboard: '1' } }
+  dos:           { emulator: dosbox-staging,     core: dosbox_staging, options: { padtokey: '0' } }
+  win98:         { emulator: retroarch,          core: dosbox_pure, options: { padtokey: '0' } }
   dragon64:      { emulator: xroar,              core: xroar              }
   dreamcast:     { emulator: flycast,            core: flycast            }
   easyrpg:       { emulator: easyrpg,            core: easyrpg            }
@@ -139,8 +139,8 @@ _emulator_defaults:
   pico:          { emulator: retroarch,          core: genesis_plus_gx    }
   pico8:         { emulator: lexaloffle-pico8,   core: pico8              }
   pokemini:      { emulator: retroarch,          core: pokemini           }
-  ports:         { emulator: sh,                 core: sh, options: { bezel: none, padtokey: '0', onscreen_keyboard: '1' } }
-  linux:         { emulator: sh,                 core: sh, options: { bezel: none, padtokey: '0', onscreen_keyboard: '1' } }
+  ports:         { emulator: sh,                 core: sh, options: { bezel: none, padtokey: '0' } }
+  linux:         { emulator: sh,                 core: sh, options: { bezel: none, padtokey: '0' } }
   prboom:        { emulator: retroarch,          core: prboom             }
   ps2:           { emulator: pcsx2,              core: pcsx2, options: { fullboot: true } }
   ps3:           { emulator: rpcs3,              core: rpcs3, options: { hud_support: false } }
@@ -172,8 +172,8 @@ _emulator_defaults:
   socrates:      { emulator: mame,               core: mame               }
   solarus:       { emulator: solarus-engine,     core: solarus            }
   spectravideo:  { emulator: openmsx,            core: openmsx            }
-  heroic:        { emulator: heroic,             core: heroic, options: { padtokey: '0', onscreen_keyboard: '1' } }
-  lutris:        { emulator: lutris,             core: lutris, options: { padtokey: '0', onscreen_keyboard: '1' } }
+  heroic:        { emulator: heroic,             core: heroic, options: { padtokey: '0' } }
+  lutris:        { emulator: lutris,             core: lutris, options: { padtokey: '0' } }
   quiver:        { emulator: quiver,             core: quiver             }
   steam:         { emulator: steam,              core: steam              }
   sufami:        { emulator: retroarch,          core: snes9x             }
@@ -208,8 +208,8 @@ _emulator_defaults:
   wasm4:         { emulator: retroarch,          core: wasm4              }
   wii:           { emulator: dolphin-emu,        core: dolphin-emu        }
   wiiu:          { emulator: cemu,               core: cemu, options: { hud_support: false } }
-  windows:       { emulator: wine,               core: wine-tkg, options: { hud_support: false, padtokey: '0', onscreen_keyboard: '1' } }
-  windows_installers: { emulator: wine,          core: wine-tkg, options: { hud_support: false, padtokey: '0', onscreen_keyboard: '1' } }
+  windows:       { emulator: wine,               core: wine-tkg, options: { hud_support: false, padtokey: '0' } }
+  windows_installers: { emulator: wine,          core: wine-tkg, options: { hud_support: false, padtokey: '0' } }
   wswan:         { emulator: retroarch,          core: mednafen_wswan     }
   wswanc:        { emulator: retroarch,          core: mednafen_wswan     }
   x1:            { emulator: retroarch,          core: x1                 }

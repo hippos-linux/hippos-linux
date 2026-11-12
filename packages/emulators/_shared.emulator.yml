@@ -7,7 +7,7 @@ custom_features:
       'Off': 0
   onscreen_keyboard:
     prompt: ON-SCREEN KEYBOARD
-    description: Shows a keyboard at the bottom of the screen when a text box is selected, or with the keyboard hotkey. Auto is on.
+    description: Shows a keyboard at the bottom of the screen when a text box is selected, or with the keyboard hotkey. Auto is on for apps and off for games, which usually have their own.
     choices:
       'On': 1
       'Off': 0
