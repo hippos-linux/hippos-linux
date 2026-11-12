@@ -15,21 +15,10 @@ es_progress() {
     curl -sf -X POST -d "" "${ES_API}/progress" --url-query "id=${PROGRESS_ID}" "$@" >/dev/null 2>&1 || true
 }
 
-if [[ -f "${MARKER}" ]]; then
-    log "Already installed — skipping"
-    exit 0
-fi
-
 if [[ ! -w /userdata ]]; then
     log "/userdata not writable — skipping" >&2
     exit 1
 fi
-
-log "Waiting for internet connectivity..."
-until curl -s --connect-timeout 5 --max-time 10 -o /dev/null https://flathub.org; do
-    sleep 30
-done
-log "Internet available — proceeding with install"
 
 APPS=(
     com.github.joseexposito.touche
@@ -43,6 +32,28 @@ if [[ "$(uname -m)" == "x86_64" ]]; then
     APPS+=(com.usebottles.bottles com.heroicgameslauncher.hgl com.vysp3r.ProtonPlus)
 fi
 
+offer=()
+for app in "${APPS[@]}"; do
+    grep -qxF "${app}" "${MARKER}" 2>/dev/null || offer+=("${app}")
+done
+if [[ "${#offer[@]}" -eq 0 ]]; then
+    log "No new apps to offer"
+    exit 0
+fi
+
+mark_offered() {
+    mkdir -p "$(dirname "${MARKER}")"
+    printf '%s\n' "${offer[@]}" >> "${MARKER}"
+    sort -u -o "${MARKER}" "${MARKER}"
+    chown hippos:users "${MARKER}"
+}
+
+log "Waiting for internet connectivity..."
+until curl -s --connect-timeout 5 --max-time 10 -o /dev/null https://flathub.org; do
+    sleep 30
+done
+log "Internet available — proceeding with install"
+
 log "Ensuring Flathub remote is configured"
 runuser -l hippos -c "flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo" \
     || log "Warning: could not add Flathub remote — installs may fail"
@@ -51,14 +62,14 @@ log "Fetching Flathub appstream data"
 runuser -l hippos -c "flatpak update --appstream --user flathub" \
     || log "Warning: appstream update failed"
 
-log "Installing ${#APPS[@]} flatpak apps to /userdata"
+log "Installing ${#offer[@]} flatpak apps to /userdata"
 
 mkdir -p "$(dirname "${ATTEMPTS_FILE}")"
 attempt="$(( $(cat "${ATTEMPTS_FILE}" 2>/dev/null || echo 0) + 1 ))"
 echo "${attempt}" > "${ATTEMPTS_FILE}"
 
 pending=()
-for app in "${APPS[@]}"; do
+for app in "${offer[@]}"; do
     runuser -l hippos -c "flatpak info --user '${app}' >/dev/null 2>&1" || pending+=("${app}")
 done
 
@@ -83,7 +94,7 @@ if [[ "${#pending[@]}" -gt 0 ]]; then
             failed=$(( failed + 1 ))
         fi
     done
-    [[ "${installed}" -eq 0 ]] || /usr/lib/hippos/hippos-flatpak-sync || true
+    [[ "${installed}" -eq 0 ]] || systemctl restart hippos-flatpak-sync.service || true
     rm -f "${APPS_INSTALLING_FLAG}"
     es_progress --url-query "done=1"
     trap - EXIT
@@ -95,13 +106,12 @@ if [[ "${#pending[@]}" -gt 0 ]]; then
 fi
 
 if [[ "${failed}" -eq 0 ]]; then
-    mkdir -p "$(dirname "${MARKER}")"
-    touch "${MARKER}"
+    mark_offered
     rm -f "${ATTEMPTS_FILE}"
     log "Done"
 elif [[ "${attempt}" -ge "${MAX_ATTEMPTS}" ]]; then
-    mkdir -p "$(dirname "${MARKER}")"
-    touch "${MARKER}"
+    mark_offered
+    rm -f "${ATTEMPTS_FILE}"
     log "Done with ${failed} failure(s) after ${attempt} attempts — giving up, not retrying further"
 else
     log "Done with ${failed} failure(s) (attempt ${attempt}/${MAX_ATTEMPTS}) — will retry next boot"

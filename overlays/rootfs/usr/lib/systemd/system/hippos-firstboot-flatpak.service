@@ -1,7 +1,6 @@
 [Unit]
 Description=HippOS First-Boot Flatpak App Installer
-After=network.target local-fs.target
-ConditionPathExists=!/userdata/.config/hippos/flatpak-apps-installed
+After=network.target local-fs.target hippos-migrate.service
 
 [Service]
 Type=simple
