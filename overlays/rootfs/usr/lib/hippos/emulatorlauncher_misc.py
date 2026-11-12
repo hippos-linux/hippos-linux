@@ -7,6 +7,7 @@ import zipfile
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
+from shutil import which
 
 from evdev import InputDevice, ecodes
 
@@ -32,6 +33,7 @@ from HipposPaths import BIOS, CONFIGS, SAVES, USERDATA
 from hippos_launcher_sync import CLIENT_ENTRY
 from hippos_onscreen_keyboard import onscreen_keyboard
 from hippos_ports import read_desktop_file
+from hippos_webapps import ADD_WEBAPP_URL, WEBAPP_PROFILES, WEBAPPS_BIN, read_webapp
 import hippos_quiver
 
 _VICE_MACHINE_NAMES: dict[str, str] = {
@@ -242,6 +244,15 @@ def _kiosk_command(command: str) -> str:
                                       or (Path(words[0]).name == 'flatpak' and CHROMIUM_BROWSERS & set(words)))
     return f'{command} --kiosk' if starts_browser and '--kiosk' not in words else command
 
+def _run_desktop_app(ctx: LaunchContext, cmd: list[str]) -> int:
+    conf = _load_hippos_conf()
+    env = _build_game_env(conf, ctx)
+    env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
+    keyboard = _game_setting(conf, ctx.system, ctx.rom, 'onscreen_keyboard') != '0'
+    _log.info("Launching %s (on-screen keyboard %s)", ' '.join(cmd), 'on' if keyboard else 'off')
+    with onscreen_keyboard(env) if keyboard else nullcontext():
+        return _run_game_command(ctx, 'shell', cmd, env).returncode
+
 def launch_desktopshortcuts(ctx: LaunchContext) -> int:
     try:
         desktop_file = Path(ctx.rom.read_text(encoding='utf-8').strip())
@@ -252,14 +263,23 @@ def launch_desktopshortcuts(ctx: LaunchContext) -> int:
     if app is None:
         _log.error("No launchable application in %s", desktop_file)
         return 1
-    conf = _load_hippos_conf()
-    env = _build_game_env(conf, ctx)
-    env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
-    keyboard = _game_setting(conf, ctx.system, ctx.rom, 'onscreen_keyboard') != '0'
-    _log.info("Launching desktop app: %s (on-screen keyboard %s)", desktop_file, 'on' if keyboard else 'off')
-    with onscreen_keyboard(env) if keyboard else nullcontext():
-        result = _run_game_command(ctx, 'shell', ['/bin/sh', '-c', _kiosk_command(app.command)], env)
-    return result.returncode
+    return _run_desktop_app(ctx, ['/bin/sh', '-c', _kiosk_command(app.command)])
+
+def launch_webapp(ctx: LaunchContext) -> int:
+    url = read_webapp(ctx.rom)
+    if url is None:
+        _log.error("No address in %s", ctx.rom)
+        return 1
+    if url == ADD_WEBAPP_URL:
+        return _run_desktop_app(ctx, [str(WEBAPPS_BIN), 'dialog'])
+    chromium = which('chromium')
+    if chromium is None:
+        _log.error("Web apps need Chromium; add one through Web Apps or the Content Downloader to install it")
+        return 1
+    profile = WEBAPP_PROFILES / ctx.rom.stem
+    profile.mkdir(parents=True, exist_ok=True)
+    return _run_desktop_app(ctx, [chromium, f'--app={url}', '--kiosk', f'--user-data-dir={profile}',
+                                  '--no-first-run', '--no-default-browser-check'])
 
 def launch_heroic(ctx: LaunchContext) -> int:
     wrapper = Path('/usr/lib/hippos/hippos-heroic')

@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""hippos-webapps - websites as full-screen apps in ES's Web Apps system.
+
+  hippos-webapps add --url URL [--name NAME] [--icon ICON_URL]
+  hippos-webapps remove --url URL
+  hippos-webapps list
+  hippos-webapps sync
+  hippos-webapps dialog      form to add a web app with a controller
+"""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+import threading
+
+import hippos_webapps
+
+INK = '#0D0A1C'
+FIELD = '#1B1730'
+PURPLE = '#7B3FFF'
+TEXT = '#F4F1FF'
+MUTED = '#8F88AE'
+
+STYLE = f"""
+window {{ background-color: {INK}; }}
+label {{ color: {TEXT}; font-family: Sora; }}
+label.title {{ font-size: 44px; font-weight: 800; }}
+label.hint {{ color: {MUTED}; font-size: 22px; }}
+label.field {{ font-size: 26px; font-weight: 600; }}
+entry {{ background: {FIELD}; color: {TEXT}; caret-color: {TEXT}; font-family: Sora; font-size: 30px;
+         border: 2px solid {FIELD}; border-radius: 14px; padding: 14px 18px; min-width: 900px; }}
+entry:focus {{ border-color: {PURPLE}; }}
+button {{ background: {FIELD}; color: {TEXT}; font-family: Sora; font-size: 28px; font-weight: 600;
+          border: none; border-radius: 14px; padding: 14px 40px; }}
+button.primary {{ background: {PURPLE}; }}
+button:hover {{ background: #2C2452; }}
+button.primary:hover {{ background: #9466FF; }}
+"""
+
+
+def run_dialog() -> int:
+    import gi
+    gi.require_version('Gtk', '3.0')
+    from gi.repository import GLib, Gtk, Gdk
+
+    provider = Gtk.CssProvider()
+    provider.load_from_data(STYLE.encode())
+    Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), provider,
+                                             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+    window = Gtk.Window(title='Add a web app')
+    window.fullscreen()
+    window.connect('destroy', Gtk.main_quit)
+
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=22, halign=Gtk.Align.CENTER,
+                  valign=Gtk.Align.CENTER)
+    window.add(box)
+
+    def label(text: str, style: str) -> Gtk.Label:
+        widget = Gtk.Label(label=text, xalign=0)
+        widget.get_style_context().add_class(style)
+        box.pack_start(widget, False, False, 0)
+        return widget
+
+    label('Add a web app', 'title')
+    label('Any website, opened full screen with its own sign-in.', 'hint')
+    label('Address', 'field')
+    url_entry = Gtk.Entry(placeholder_text='www.example.com')
+    box.pack_start(url_entry, False, False, 0)
+    label('Name', 'field')
+    name_entry = Gtk.Entry(placeholder_text='Shown in Web Apps')
+    box.pack_start(name_entry, False, False, 0)
+    status = label('', 'hint')
+
+    buttons = Gtk.Box(spacing=20, halign=Gtk.Align.END)
+    cancel = Gtk.Button(label='Cancel')
+    save = Gtk.Button(label='Add')
+    save.get_style_context().add_class('primary')
+    buttons.pack_start(cancel, False, False, 0)
+    buttons.pack_start(save, False, False, 0)
+    box.pack_start(buttons, False, False, 10)
+
+    def finished(error: str) -> bool:
+        if error:
+            status.set_text(error)
+            save.set_sensitive(True)
+        else:
+            window.destroy()
+        return False
+
+    def work(name: str, url: str) -> None:
+        try:
+            hippos_webapps.add(name, url)
+            GLib.idle_add(finished, '')
+        except subprocess.CalledProcessError:
+            GLib.idle_add(finished, 'Could not install Chromium. Check the network and try again.')
+        except OSError as exc:
+            GLib.idle_add(finished, f'Could not add it: {exc}')
+
+    def on_save(_button: Gtk.Button) -> None:
+        url = url_entry.get_text().strip()
+        if not url:
+            status.set_text('Enter an address first.')
+            return
+        save.set_sensitive(False)
+        status.set_text('Adding… this can take a minute the first time (Chromium is installed).')
+        threading.Thread(target=work, args=(name_entry.get_text(), url), daemon=True).start()
+
+    save.connect('clicked', on_save)
+    cancel.connect('clicked', lambda _button: window.destroy())
+    url_entry.connect('activate', lambda _entry: name_entry.grab_focus())
+    name_entry.connect('activate', on_save)
+
+    window.show_all()
+    url_entry.grab_focus()
+    Gtk.main()
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog='hippos-webapps', description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    commands = parser.add_subparsers(dest='command', required=True)
+    add = commands.add_parser('add')
+    add.add_argument('--url', required=True)
+    add.add_argument('--name', default='')
+    add.add_argument('--icon', default='')
+    remove = commands.add_parser('remove')
+    remove.add_argument('--url', required=True)
+    commands.add_parser('list')
+    commands.add_parser('sync')
+    commands.add_parser('dialog')
+    args = parser.parse_args()
+
+    if args.command == 'add':
+        app = hippos_webapps.add(args.name, args.url, args.icon)
+        print(f'Added {app.name}: {app.url}')
+    elif args.command == 'remove':
+        if not hippos_webapps.remove(args.url):
+            print(f'No web app for {args.url}', file=sys.stderr)
+            return 1
+    elif args.command == 'list':
+        for app in hippos_webapps.load_webapps():
+            print(f'{app.name}\t{app.url}')
+    elif args.command == 'sync':
+        hippos_webapps.sync()
+    else:
+        return run_dialog()
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

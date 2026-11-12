@@ -91,6 +91,7 @@ WORLDS = {
     "androidapps": World("0a2a16", "2fb860", "d8f7d0", "4fe080", "continents"),
     "scummvm": World("062a22", "1ea888", "c8f7e8", "30e0b8", "continents"),
     "quiver": World("04192e", "1a8fd8", "c8eeff", "2fc0ff", "ice"),
+    "webapps": World("0a1630", "3f5fd8", "d8e2ff", "6f8fff", "ice", True),
     "desktopshortcuts": World("0a1c2e", "3f7fb8", "d8e8f7", "5fa8f0", "continents", True),
     "ports": World("2e1006", "c8501e", "ffd8c0", "ff7030", "craters"),
     "prboom": World("2a0505", "b8201e", "f2b8a0", "f03a28", "craters"),
@@ -367,6 +368,18 @@ LOGOS = {
         ),
         lines=(LogoLine("Sora-ExtraBold.ttf", "QUIVER", 50, 0.08), LogoLine("Sora-SemiBold.ttf", "LAUNCHER", 20, 0.42)),
         line_gap=14,
+    ),
+    "webapps": Logo(
+        icon=(
+            "M50 2A48 48 0 1 1 50 98A48 48 0 1 1 50 2Z" "M50 9A41 41 0 1 0 50 91A41 41 0 1 0 50 9Z",
+            "M50 2A23 48 0 1 1 50 98A23 48 0 1 1 50 2Z" "M50 9A16 41 0 1 0 50 91A16 41 0 1 0 50 9Z",
+            "M6 46H94V54H6Z",
+            "M46 4H54V96H46Z",
+            "M14 26H86V32H14Z",
+            "M14 68H86V74H14Z",
+        ),
+        lines=(LogoLine("Sora-SemiBold.ttf", "WEB", 20, 0.32), LogoLine("Sora-ExtraBold.ttf", "Apps", 50)),
+        line_gap=13,
     ),
     "desktopshortcuts": Logo(
         icon=(

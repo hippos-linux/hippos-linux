@@ -14,6 +14,7 @@ import urllib.error
 from pathlib import Path
 from typing import Optional
 
+import hippos_webapps
 from hippos_ports import PORTS_DIR, set_claimed, write_launcher
 
 USERDATA        = Path('/userdata')
@@ -249,6 +250,19 @@ def cmd_install(args: list[str]) -> int:
         print(f'Installed: {pkg_id}')
         return 0
 
+    if pkg_type == 'webapp':
+        print(f"Adding {pkg.get('name', pkg_id)} to Web Apps...")
+        try:
+            hippos_webapps.add(pkg.get('name', pkg_id), pkg['webapp_url'], pkg.get('icon_url', ''))
+        except (KeyError, OSError, subprocess.CalledProcessError) as exc:
+            print(f'Install failed: {exc}', file=sys.stderr)
+            return 1
+        installed         = _load_installed()
+        installed[pkg_id] = pkg.get('version', 'latest')
+        _save_installed(installed)
+        print(f'Installed: {pkg_id}')
+        return 0
+
     if pkg_type == 'installer':
         installer = pkg.get('installer', '')
         print(f"Installing {pkg.get('name', pkg_id)}...")
@@ -331,6 +345,8 @@ def cmd_remove(args: list[str]) -> int:
             if launcher.exists():
                 launcher.unlink()
                 print(f'Removed launcher: {launcher}')
+        elif pkg_type == 'webapp':
+            hippos_webapps.remove(pkg.get('webapp_url', ''))
         elif pkg_type == 'installer':
             _run_installer(pkg.get('installer', ''), 'remove')
             launcher = INSTALL_ROOTS['ports'] / f'{pkg_id}.sh'

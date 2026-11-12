@@ -12,6 +12,7 @@ import time
 import urllib.request
 import xml.etree.ElementTree as ET
 
+import hippos_webapps
 from hippos_ports import set_claimed
 
 _DEFAULT_CATALOG_URL = "https://hippos-linux.org/store/content-catalog.json"
@@ -162,11 +163,14 @@ def load_wine_runners(force_refresh=False):
 
 CATALOG_TABS = {
     "ports":   "Games",
+    "webapps": "Web Apps",
     "shaders": "Shaders",
     "cheats":  "Cheats",
 }
 
 def catalog_section(pkg):
+    if pkg.get("type") == "webapp":
+        return "Streaming and web apps"
     if pkg.get("type") == "installer":
         return "Launchers"
     if pkg.get("scummvm_id"):
@@ -205,6 +209,12 @@ def _pkg_node(root, pkg_id, title, repository, version, description, group, pack
     ET.SubElement(node, "installed_size").text    = str(download_size)
     ET.SubElement(node, "preview_url").text       = preview_url
 
+def is_installed(pkg, state):
+    if pkg.get("type") == "webapp":
+        url = hippos_webapps.normalise_url(pkg.get("webapp_url", ""))
+        return any(app.url == url for app in hippos_webapps.load_webapps())
+    return pkg["id"] in state
+
 def cmd_list():
     catalog = load_catalog()
     state   = load_state()
@@ -225,7 +235,7 @@ def cmd_list():
             description   = pkg.get("description", ""),
             group         = catalog_section(pkg),
             packager      = pkg.get("packager", "HippOS"),
-            installed     = pkg_id in state,
+            installed     = is_installed(pkg, state),
             url           = pkg.get("url", ""),
             download_size = pkg.get("download_size", 0),
             preview_url   = pkg.get("preview_url", ""),
@@ -502,6 +512,13 @@ def cmd_install(name):
 
     if pkg.get("type") == "apt":
         _install_apt(pkg)
+    elif pkg.get("type") == "webapp":
+        print(f"Adding {pkg['name']} to Web Apps...", flush=True)
+        try:
+            hippos_webapps.add(pkg["name"], pkg["webapp_url"], pkg.get("icon_url", ""))
+        except (OSError, subprocess.CalledProcessError) as exc:
+            print(f"ERROR: {exc}", flush=True)
+            sys.exit(1)
     else:
         _install_catalog_tarball(pkg)
 
@@ -534,7 +551,9 @@ def cmd_remove(name):
         print(f"ERROR: Package '{name}' not found", flush=True)
         sys.exit(1)
 
-    if pkg.get("type") == "apt":
+    if pkg.get("type") == "webapp":
+        hippos_webapps.remove(pkg.get("webapp_url", ""))
+    elif pkg.get("type") == "apt":
         subprocess.call(["sudo", "-n", "apt-get", "remove", "-y"] + pkg.get("apt_packages", []))
         set_claimed(pkg.get("apt_packages", []), False)
         if pkg.get("scummvm_id"):

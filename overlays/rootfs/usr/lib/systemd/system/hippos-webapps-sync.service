@@ -1,0 +1,13 @@
+[Unit]
+Description=HippOS web app launcher sync
+After=local-fs.target userdata.mount hippos-roms-pool.service
+Wants=userdata.mount
+
+[Service]
+Type=oneshot
+User=hippos
+ExecStart=/usr/lib/hippos/hippos-webapps sync
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

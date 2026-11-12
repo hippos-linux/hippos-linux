@@ -225,6 +225,7 @@ _emulator_defaults:
   cassettevision: { emulator: retroarch,          core: mame             }
   flatpak:       { emulator: flatpak,            core: flatpak, options: { hud_support: false } }
   desktopshortcuts: { emulator: desktopshortcuts, core: desktopshortcuts }
+  webapps:       { emulator: webapp,             core: webapp             }
   chip8:         { emulator: retroarch,          core: jaxe               }
   pocketstation: { emulator: retroarch,          core: pokket             }
   tamagotchi:    { emulator: retroarch,          core: tamalibretro       }
@@ -2731,6 +2732,13 @@ wasm4:
   manufacturer: Bruno Garcia
   name: WASM-4
   release: 2021
+webapps:
+  extensions:
+  - webapp
+  force: true
+  hardware: os
+  manufacturer: Various
+  name: Web Apps
 win98:
   extensions:
   - zip
