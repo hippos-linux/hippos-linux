@@ -172,18 +172,14 @@ CATALOG_TABS = {
 }
 
 def catalog_section(pkg):
-    if pkg.get("section"):
-        return pkg["section"]
-    if pkg.get("type") == "webapp":
-        return "Streaming and web apps"
+    if pkg.get("category") in ("apps", "webapps"):
+        return "Apps"
     if pkg.get("type") == "installer":
         return "Launchers"
     if pkg.get("scummvm_id"):
         return "ScummVM classics"
     if pkg.get("category") == "ports":
         return "Open-source games"
-    if pkg.get("category") == "apps":
-        return "Media"
     return "RetroArch"
 
 def for_this_machine(pkg):
