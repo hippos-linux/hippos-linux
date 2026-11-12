@@ -22,6 +22,9 @@
     <application class="*" type="normal">
       <fullscreen>yes</fullscreen>
     </application>
+    <application class="dolphin-emu">
+      <fullscreen>no</fullscreen>
+    </application>
     <application class="Lutris">
       <fullscreen>no</fullscreen>
       <maximized>yes</maximized>

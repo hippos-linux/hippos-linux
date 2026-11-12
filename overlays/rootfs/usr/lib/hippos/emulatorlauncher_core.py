@@ -248,7 +248,7 @@ def launch_dolphin(ctx: LaunchContext) -> int:
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
     _write_dolphin_config(ctx)
     conf = _load_hippos_conf()
-    cmd = [str(bin_path), str(ctx.rom)]
+    cmd = [str(bin_path), '-b', '-e', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['XDG_DATA_HOME'] = str(SAVES)
     result = _run_game_command(ctx, 'dolphin', cmd, env)
