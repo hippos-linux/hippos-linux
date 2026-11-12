@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """hippos-webapps - websites as full-screen apps in ES's Web Apps system.
 
-  hippos-webapps add --url URL [--name NAME] [--icon ICON_URL]
+  hippos-webapps add --url URL [--name NAME] [--icon ICON_URL] [--description TEXT]
   hippos-webapps remove --url URL
   hippos-webapps list
   hippos-webapps sync
@@ -126,6 +126,7 @@ def main() -> int:
     add.add_argument('--url', required=True)
     add.add_argument('--name', default='')
     add.add_argument('--icon', default='')
+    add.add_argument('--description', default='')
     remove = commands.add_parser('remove')
     remove.add_argument('--url', required=True)
     commands.add_parser('list')
@@ -134,7 +135,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.command == 'add':
-        app = hippos_webapps.add(args.name, args.url, args.icon)
+        app = hippos_webapps.add(args.name, args.url, args.icon, args.description)
         print(f'Added {app.name}: {app.url}')
     elif args.command == 'remove':
         if not hippos_webapps.remove(args.url):

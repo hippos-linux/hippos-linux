@@ -515,7 +515,7 @@ def cmd_install(name):
     elif pkg.get("type") == "webapp":
         print(f"Adding {pkg['name']} to Web Apps...", flush=True)
         try:
-            hippos_webapps.add(pkg["name"], pkg["webapp_url"], pkg.get("icon_url", ""))
+            hippos_webapps.add(pkg["name"], pkg["webapp_url"], pkg.get("icon_url", ""), pkg.get("description", ""))
         except (OSError, subprocess.CalledProcessError) as exc:
             print(f"ERROR: {exc}", flush=True)
             sys.exit(1)

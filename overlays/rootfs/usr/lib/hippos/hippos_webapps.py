@@ -32,6 +32,7 @@ class WebApp:
     name: str
     url: str
     icon: str = ''
+    description: str = ''
 
 
 def read_webapp(path: Path) -> str | None:
@@ -67,7 +68,7 @@ def sync() -> bool:
     created, updated, removed = sync_launchers(WEBAPPS_DIR, STATE_FILE, '.webapp', games, 'Web App')
     details = {ADD_WEBAPP_URL: GameMetadata(ADD_WEBAPP_NAME, 'Add any website as a full-screen app.', None,
                                             ADD_ICON if ADD_ICON.exists() else None)}
-    details |= {app.url: GameMetadata(app.name, app.url, None, Path(app.icon) if app.icon else None) for app in apps}
+    details |= {app.url: GameMetadata(app.name, app.description or app.url, None, Path(app.icon) if app.icon else None) for app in apps}
     changed = sync_gamelist(WEBAPPS_DIR, STATE_FILE, '.webapp', details)
     if created or updated or removed or changed:
         reload_es()
@@ -80,16 +81,26 @@ def ensure_chromium() -> None:
     subprocess.run(['sudo', '-n', 'apt-get', 'install', '-y', '--no-install-recommends', 'chromium'], check=True)
 
 
-class _IconLinks(HTMLParser):
+class PageHead(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.manifest = ''
         self.icons: list[tuple[int, str]] = []
+        self.descriptions: dict[str, str] = {}
+
+    @property
+    def description(self) -> str:
+        return self.descriptions.get('description') or self.descriptions.get('og:description', '')
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        values = {key: value or '' for key, value in attrs}
+        if tag == 'meta':
+            key = (values.get('name') or values.get('property', '')).lower()
+            if key in ('description', 'og:description') and values.get('content', '').strip():
+                self.descriptions.setdefault(key, ' '.join(values['content'].split()))
+            return
         if tag != 'link':
             return
-        values = {key: value or '' for key, value in attrs}
         rel = values.get('rel', '').lower().split()
         href = values.get('href', '')
         if not href:
@@ -111,13 +122,17 @@ def _fetch(url: str, limit: int = 4_000_000) -> bytes:
         return response.read(limit)
 
 
-def icon_candidates(page_url: str) -> list[str]:
-    candidates: list[tuple[int, str]] = []
+def read_page_head(page_url: str) -> PageHead | None:
     try:
-        parser = _IconLinks()
+        parser = PageHead()
         parser.feed(_fetch(page_url).decode('utf-8', errors='replace'))
     except (OSError, ValueError):
-        parser = None
+        return None
+    return parser
+
+
+def icon_candidates(page_url: str, parser: PageHead | None) -> list[str]:
+    candidates: list[tuple[int, str]] = []
     if parser and parser.manifest:
         manifest_url = urllib.parse.urljoin(page_url, parser.manifest)
         try:
@@ -132,9 +147,9 @@ def icon_candidates(page_url: str) -> list[str]:
     return [url for _, url in sorted(candidates, key=lambda item: -item[0])]
 
 
-def fetch_icon(name: str, page_url: str, icon_url: str = '') -> str:
+def fetch_icon(name: str, page_url: str, page: PageHead | None, icon_url: str = '') -> str:
     WEBAPP_ICONS.mkdir(parents=True, exist_ok=True)
-    for url in ([icon_url] if icon_url else []) + icon_candidates(page_url):
+    for url in ([icon_url] if icon_url else []) + icon_candidates(page_url, page):
         try:
             data = _fetch(url)
         except (OSError, ValueError):
@@ -155,26 +170,32 @@ def _launcher_for(url: str) -> Path:
         return Path()
 
 
-def _drop_gamelist_image(url: str) -> None:
+def _reset_gamelist_entry(url: str) -> None:
     launcher = _launcher_for(url)
     gamelist = WEBAPPS_DIR / 'gamelist.xml'
     if not launcher.name or not gamelist.exists():
         return
     tree = ET.parse(gamelist)
     for game in tree.getroot().findall('game'):
+        if game.findtext('path') != f'./{launcher.name}':
+            continue
         image = game.find('image')
-        if game.findtext('path') == f'./{launcher.name}' and image is not None:
+        if image is not None:
             (WEBAPPS_DIR / (image.text or '')).unlink(missing_ok=True)
-            game.remove(image)
-            tree.write(gamelist, encoding='utf-8', xml_declaration=True)
+        for field in (image, game.find('name'), game.find('desc')):
+            if field is not None:
+                game.remove(field)
+        tree.write(gamelist, encoding='utf-8', xml_declaration=True)
 
 
-def add(name: str, url: str, icon_url: str = '') -> WebApp:
+def add(name: str, url: str, icon_url: str = '', description: str = '') -> WebApp:
     url = normalise_url(url)
     ensure_chromium()
-    app = WebApp(name.strip() or urllib.parse.urlparse(url).hostname or url, url)
-    app.icon = fetch_icon(app.name, url, icon_url)
-    _drop_gamelist_image(url)
+    page = read_page_head(url)
+    app = WebApp(name.strip() or urllib.parse.urlparse(url).hostname or url, url,
+                 description=description.strip() or (page.description if page else ''))
+    app.icon = fetch_icon(app.name, url, page, icon_url)
+    _reset_gamelist_entry(url)
     save_webapps([existing for existing in load_webapps() if existing.url != url] + [app])
     sync()
     return app

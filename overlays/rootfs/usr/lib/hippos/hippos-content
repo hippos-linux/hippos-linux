@@ -253,7 +253,8 @@ def cmd_install(args: list[str]) -> int:
     if pkg_type == 'webapp':
         print(f"Adding {pkg.get('name', pkg_id)} to Web Apps...")
         try:
-            hippos_webapps.add(pkg.get('name', pkg_id), pkg['webapp_url'], pkg.get('icon_url', ''))
+            hippos_webapps.add(pkg.get('name', pkg_id), pkg['webapp_url'], pkg.get('icon_url', ''),
+                               pkg.get('description', ''))
         except (KeyError, OSError, subprocess.CalledProcessError) as exc:
             print(f'Install failed: {exc}', file=sys.stderr)
             return 1
