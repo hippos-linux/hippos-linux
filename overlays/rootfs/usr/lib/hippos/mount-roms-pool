@@ -5,9 +5,11 @@ source /usr/lib/hippos/pool-branch.sh
 
 POOL=/userdata/roms
 RW=/userdata/.roms-rw
-OPTS="cache.files=off,dropcacheonclose=true,allow_other,use_ino,moveonenospc=false,category.create=mspmfs"
+OPTS="cache.files=off,dropcacheonclose=true,allow_other,use_ino,moveonenospc=false,category.create=mspmfs,follow-symlinks=directory"
 MEDIA=/media
 EXTERNAL_ROMS=/userdata/system/configs/hippos/external-roms.conf
+FOLDER_ALIASES=/usr/share/hippos/rom-folder-aliases.conf
+ALIAS_ROOT=/run/hippos/roms-aliases
 
 log() { printf '[hippos-roms-pool] %s\n' "$*"; }
 
@@ -38,6 +40,22 @@ add_branch() {
         chown 1000:1000 "${branch}" 2>/dev/null || true
     fi
     branches="${branches}:${branch}=${mode}"
+    external_branches+=("${branch}")
+}
+
+add_alias_branches() {
+    rm -rf "${ALIAS_ROOT}"
+    local branch source target index=0
+    for branch in "${external_branches[@]}"; do
+        while read -r source target; do
+            [[ -z "${source}" || "${source}" == '#'* || ! -d "${branch}/${source}" ]] && continue
+            index=$((index + 1))
+            mkdir -p "${ALIAS_ROOT}/${index}"
+            ln -s "${branch}/${source}" "${ALIAS_ROOT}/${index}/${target}"
+            branches="${branches}:${ALIAS_ROOT}/${index}=RO"
+            log "${branch}/${source} appears as ${target}"
+        done < "${FOLDER_ALIASES}"
+    done
 }
 
 if findmnt "${POOL}" >/dev/null 2>&1; then
@@ -59,6 +77,7 @@ mkdir -p "${POOL}"
 chown 1000:1000 "${POOL}"
 
 branches="${RW}=RW"
+external_branches=()
 
 if [[ -f "${EXTERNAL_ROMS}" ]]; then
     while IFS= read -r line; do
@@ -84,6 +103,8 @@ for dir in "${MEDIA}"/*/; do
         add_branch "${roms_dir}"
     done < <(find "${dir%/}" -mindepth 1 -maxdepth 2 -type d -iname roms -print0 2>/dev/null)
 done
+
+add_alias_branches
 
 log "branches: ${branches}"
 
