@@ -164,7 +164,7 @@ def load_wine_runners(force_refresh=False):
 
 CATALOG_TABS = {
     "ports":   "Games",
-    "webapps": "Web Apps",
+    "webapps": "Apps",
     "apps":    "Apps",
     "shaders": "Shaders",
     "cheats":  "Cheats",
