@@ -149,6 +149,7 @@ def launch_cemu(ctx: LaunchContext) -> int:
     cmd = [str(bin_path), '-f', '-g', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['XDG_CONFIG_HOME'] = str(USERDATA / '.config')
+    env['XDG_DATA_HOME'] = str(SAVES)
     env['SDL_JOYSTICK_HIDAPI'] = '0'
     result = _run_game_command(ctx, 'cemu', cmd, env)
     return result.returncode

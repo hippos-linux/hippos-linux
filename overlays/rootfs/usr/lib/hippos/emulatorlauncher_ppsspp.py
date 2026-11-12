@@ -193,6 +193,7 @@ def launch_ppsspp(ctx: LaunchContext) -> int:
     _write_ppsspp_controls(ctx)
     cmd = [str(bin_path), '--fullscreen', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
+    env['XDG_DATA_HOME'] = str(SAVES)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(
         ctx.controllers, ignore_buttons=['hotkey']
     )

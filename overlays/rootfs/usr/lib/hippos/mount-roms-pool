@@ -43,21 +43,6 @@ add_branch() {
     external_branches+=("${branch}")
 }
 
-add_alias_branches() {
-    rm -rf "${ALIAS_ROOT}"
-    local branch source target index=0
-    for branch in "${external_branches[@]}"; do
-        while read -r source target; do
-            [[ -z "${source}" || "${source}" == '#'* || ! -d "${branch}/${source}" ]] && continue
-            index=$((index + 1))
-            mkdir -p "${ALIAS_ROOT}/${index}"
-            ln -s "${branch}/${source}" "${ALIAS_ROOT}/${index}/${target}"
-            branches="${branches}:${ALIAS_ROOT}/${index}=RO"
-            log "${branch}/${source} appears as ${target}"
-        done < "${FOLDER_ALIASES}"
-    done
-}
-
 if findmnt "${POOL}" >/dev/null 2>&1; then
     log "already mounted at ${POOL}"
     exit 0
@@ -104,7 +89,7 @@ for dir in "${MEDIA}"/*/; do
     done < <(find "${dir%/}" -mindepth 1 -maxdepth 2 -type d -iname roms -print0 2>/dev/null)
 done
 
-add_alias_branches
+add_alias_branches "${ALIAS_ROOT}" RO "${FOLDER_ALIASES}"
 
 log "branches: ${branches}"
 

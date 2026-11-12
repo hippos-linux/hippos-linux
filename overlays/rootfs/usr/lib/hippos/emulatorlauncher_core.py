@@ -42,8 +42,11 @@ def _write_mame_config(conf: dict[str, str]) -> None:
         ('rompath',            f'{MAME_ROMS};/usr/share/games/mame/roms'),
         ('cfg_directory',      str(MAME_CONFIG_DIR / 'cfg')),
         ('nvram_directory',    str(SAVES / 'mame' / 'nvram')),
+        ('input_directory',    str(SAVES / 'mame' / 'input')),
+        ('state_directory',    str(SAVES / 'mame' / 'state')),
+        ('diff_directory',     str(SAVES / 'mame' / 'diff')),
+        ('comment_directory',  str(SAVES / 'mame' / 'comments')),
         ('snapshot_directory', str(SCREENSHOTS)),
-        ('state_directory',    str(SAVES / 'mame')),
         ('video',              'opengl'),
         ('window',             '0'),
         ('mouse',              '1'),
@@ -247,6 +250,7 @@ def launch_dolphin(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     cmd = [str(bin_path), str(ctx.rom)]
     env = _build_game_env(conf, ctx)
+    env['XDG_DATA_HOME'] = str(SAVES)
     result = _run_game_command(ctx, 'dolphin', cmd, env)
     return result.returncode
 
@@ -412,8 +416,12 @@ def _write_duckstation_config(ctx: LaunchContext) -> None:
     if DUCKSTATION_SETTINGS.exists():
         settings.read(DUCKSTATION_SETTINGS, encoding='utf-8')
 
-    for section in ('Main', 'ControllerPorts', 'Console', 'BIOS', 'CPU', 'GPU', 'Display', 'Audio', 'GameList', 'Hotkeys', 'CDROM', 'UI', 'AutoUpdater'):
+    for section in ('Main', 'ControllerPorts', 'Console', 'BIOS', 'CPU', 'GPU', 'Display', 'Audio', 'GameList', 'Hotkeys', 'CDROM', 'UI', 'AutoUpdater', 'MemoryCards', 'Folders'):
         _ensure_section(settings, section)
+
+    (DUCKSTATION_SAVES / 'memcards').mkdir(parents=True, exist_ok=True)
+    settings.set('MemoryCards', 'Directory', str(DUCKSTATION_SAVES / 'memcards'))
+    settings.set('Folders', 'SaveStates', str(DUCKSTATION_SAVES))
 
     settings.set('UI', 'UnofficialBuildWarningConfirmed', 'true')
     settings.set('AutoUpdater', 'CheckAtStartup', 'false')
@@ -783,6 +791,9 @@ def _launch_flycast(ctx: LaunchContext) -> int:
 
     env = _build_game_env(conf, ctx)
     env['SDL_JOYSTICK_HIDAPI'] = '0'
+    env['XDG_DATA_HOME'] = str(FLYCAST_SAVES.parent)
+    env['FLYCAST_DATADIR'] = str(FLYCAST_SAVES.parent)
+    FLYCAST_SAVES.mkdir(parents=True, exist_ok=True)
     result = _run_game_command(ctx, 'flycast', cmd, env)
     return result.returncode
 
@@ -799,6 +810,7 @@ DOLPHIN_GFX_INI    = DOLPHIN_CONFIG_DIR / 'GFX.ini'
 DOLPHIN_QT_INI     = DOLPHIN_CONFIG_DIR / 'Qt.ini'
 
 DUCKSTATION_CONFIG_DIR = CONFIGS / 'duckstation'
+DUCKSTATION_SAVES      = SAVES / 'duckstation'
 DUCKSTATION_SETTINGS   = DUCKSTATION_CONFIG_DIR / 'settings.ini'
 DUCKSTATION_BIOS_NAMES = {
     'PathNTSCU': ('scph5501.bin', 'scph7001.bin', 'scph1001.bin', 'scph101.bin', 'psxonpsp660.bin'),
@@ -807,6 +819,7 @@ DUCKSTATION_BIOS_NAMES = {
 }
 
 FLYCAST_CONFIG_DIR = CONFIGS / 'flycast'
+FLYCAST_SAVES      = SAVES / 'dreamcast' / 'flycast'
 FLYCAST_EMU_CFG    = FLYCAST_CONFIG_DIR / 'emu.cfg'
 
 MUPEN_CONFIG_DIR   = CONFIGS / 'mupen64'

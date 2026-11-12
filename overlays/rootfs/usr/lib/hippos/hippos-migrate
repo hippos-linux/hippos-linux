@@ -97,76 +97,17 @@ if version_lt "$APPLIED" "0.6.12"; then
         chown -h hippos:users /userdata/Desktop/discover.desktop
     fi
 
-    log "0.6.12: native games move from Ports to the new Linux Games system"
+    log "0.6.12: apt game claims file renamed for Linux Games"
     if [[ -f /userdata/system/ports-apt-claims ]]; then
         mv /userdata/system/ports-apt-claims /userdata/system/linux-games-apt-claims
     fi
-    python3 - <<'PYEOF'
-import json
-import shutil
-import xml.etree.ElementTree as ET
-from pathlib import Path
+fi
 
-PORTS = Path('/userdata/roms/ports')
-LINUX = Path('/userdata/roms/linux')
-STATES = (Path('/userdata/system/hippos-store/installed.json'), Path('/userdata/system/content-cache/installed.json'))
-MEDIA = ('image', 'thumbnail', 'marquee', 'video', 'fanart', 'manual')
-
-catalog_ids = set()
-for state in STATES:
-    try:
-        catalog_ids |= set(json.loads(state.read_text(encoding='utf-8')))
-    except (OSError, ValueError):
-        pass
-
-def is_native_launcher(path: Path) -> bool:
-    try:
-        lines = path.read_text(encoding='utf-8').splitlines()
-    except (OSError, UnicodeDecodeError):
-        return False
-    return (len(lines) > 1 and lines[1].startswith('# HippOS port: ')) or path.stem in catalog_ids
-
-def load(gamelist: Path) -> ET.ElementTree:
-    try:
-        return ET.parse(gamelist)
-    except (OSError, ET.ParseError):
-        return ET.ElementTree(ET.Element('gameList'))
-
-moved = [path for path in sorted(PORTS.glob('*.sh')) if is_native_launcher(path)]
-if moved:
-    LINUX.mkdir(parents=True, exist_ok=True)
-    shutil.chown(LINUX, 'hippos', 'users')
-    ports_list, linux_list = load(PORTS / 'gamelist.xml'), load(LINUX / 'gamelist.xml')
-    for path in moved:
-        target = LINUX / path.name
-        if target.exists():
-            continue
-        text = path.read_text(encoding='utf-8')
-        text = text.replace('# HippOS port: ', '# HippOS Linux game: ', 1).replace('# hippos-ports-apt ', '# hippos-linux-games-apt ', 1)
-        target.write_text(text, encoding='utf-8')
-        target.chmod(0o755)
-        shutil.chown(target, 'hippos', 'users')
-        path.unlink()
-        for game in ports_list.getroot().findall('game'):
-            if game.findtext('path') != f'./{path.name}':
-                continue
-            for tag in MEDIA:
-                media = game.findtext(tag) or ''
-                source = PORTS / media
-                if media.startswith('./') and source.is_file():
-                    (LINUX / media).parent.mkdir(parents=True, exist_ok=True)
-                    shutil.move(source, LINUX / media)
-            ports_list.getroot().remove(game)
-            linux_list.getroot().append(game)
-        print(f'[hippos-migrate] moved {path.name} to Linux Games')
-    for gamelist, tree in ((PORTS / 'gamelist.xml', ports_list), (LINUX / 'gamelist.xml', linux_list)):
-        ET.indent(tree)
-        tree.write(gamelist, encoding='utf-8', xml_declaration=True)
-        shutil.chown(gamelist, 'hippos', 'users')
-    for folder in LINUX.rglob('*'):
-        if folder.is_dir():
-            shutil.chown(folder, 'hippos', 'users')
-PYEOF
+if version_lt "$APPLIED" "0.6.13"; then
+    log "0.6.13: native games move from Ports to Linux Games"
+    python3 -c 'import sys; sys.path.insert(0, "/usr/lib/hippos"); import hippos_linux_games; [print(f"[hippos-migrate] moved {name} to Linux Games") for name in hippos_linux_games.move_native_launchers_from_ports()]'
+    log "0.6.13: saves move to the same folders as Batocera (saves/<system>, saves/duckstation, saves/dolphin-emu...)"
+    python3 -c 'import logging, sys; sys.path.insert(0, "/usr/lib/hippos"); logging.basicConfig(level=logging.INFO, format="[hippos-migrate] %(message)s"); import hippos_save_migration; hippos_save_migration.migrate()'
 fi
 
 HIPPOS_CONFIG=/userdata/system/configs/hippos

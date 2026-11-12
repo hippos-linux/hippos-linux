@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -7,6 +8,7 @@ import shutil
 import tempfile
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from hippos_appstream import read_package_details
@@ -18,6 +20,9 @@ _APPLICATIONS = Path('/usr/share/applications')
 _SYSTEM_PATH = '/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games'
 
 LINUX_GAMES_DIR = Path('/userdata/roms/linux')
+PORTS_DIR = Path('/userdata/roms/ports')
+CATALOG_STATES = (Path('/userdata/system/hippos-store/installed.json'), Path('/userdata/system/content-cache/installed.json'))
+GAMELIST_MEDIA = ('image', 'thumbnail', 'marquee', 'video', 'fanart', 'manual')
 CLAIMS = Path('/userdata/system/linux-games-apt-claims')
 LAUNCHER_EXTENSION = '.sh'
 APT_MARKER = 'hippos-linux-games-apt'
@@ -151,3 +156,57 @@ def remove_catalog_game(pkg_id: str) -> None:
     catalog_launcher(pkg_id).unlink(missing_ok=True)
     update_gamelist(LINUX_GAMES_DIR, LAUNCHER_EXTENSION, {})
     reload_es()
+
+def _catalog_ids() -> set[str]:
+    ids: set[str] = set()
+    for state in CATALOG_STATES:
+        try:
+            ids |= set(json.loads(state.read_text(encoding='utf-8')))
+        except (OSError, ValueError):
+            pass
+    return ids
+
+def _was_native_launcher(path: Path, catalog_ids: set[str]) -> bool:
+    try:
+        lines = path.read_text(encoding='utf-8').splitlines()
+    except (OSError, UnicodeDecodeError):
+        return False
+    return (len(lines) > 1 and lines[1].startswith('# HippOS port: ')) or path.stem in catalog_ids
+
+def _load_gamelist(gamelist: Path) -> ET.ElementTree:
+    try:
+        return ET.parse(gamelist)
+    except (OSError, ET.ParseError):
+        return ET.ElementTree(ET.Element('gameList'))
+
+def move_native_launchers_from_ports() -> list[str]:
+    catalog_ids = _catalog_ids()
+    launchers = [path for path in sorted(PORTS_DIR.glob(f'*{LAUNCHER_EXTENSION}')) if _was_native_launcher(path, catalog_ids)]
+    launchers = [path for path in launchers if not (LINUX_GAMES_DIR / path.name).exists()]
+    if not launchers:
+        return []
+    LINUX_GAMES_DIR.mkdir(parents=True, exist_ok=True)
+    ports_list, linux_list = _load_gamelist(PORTS_DIR / 'gamelist.xml'), _load_gamelist(LINUX_GAMES_DIR / 'gamelist.xml')
+    for path in launchers:
+        text = path.read_text(encoding='utf-8')
+        text = text.replace('# HippOS port: ', '# HippOS Linux game: ', 1).replace('# hippos-ports-apt ', f'# {APT_MARKER} ', 1)
+        target = LINUX_GAMES_DIR / path.name
+        target.write_text(text, encoding='utf-8')
+        target.chmod(0o755)
+        path.unlink()
+        for game in ports_list.getroot().findall('game'):
+            if game.findtext('path') != f'./{path.name}':
+                continue
+            for tag in GAMELIST_MEDIA:
+                media = game.findtext(tag) or ''
+                if media.startswith('./') and (PORTS_DIR / media).is_file():
+                    (LINUX_GAMES_DIR / media).parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(PORTS_DIR / media, LINUX_GAMES_DIR / media)
+            ports_list.getroot().remove(game)
+            linux_list.getroot().append(game)
+    for gamelist, tree in ((PORTS_DIR / 'gamelist.xml', ports_list), (LINUX_GAMES_DIR / 'gamelist.xml', linux_list)):
+        ET.indent(tree)
+        tree.write(gamelist, encoding='utf-8', xml_declaration=True)
+    for item in (LINUX_GAMES_DIR, *LINUX_GAMES_DIR.rglob('*'), PORTS_DIR / 'gamelist.xml'):
+        shutil.chown(item, 'hippos', 'users')
+    return [path.name for path in launchers]

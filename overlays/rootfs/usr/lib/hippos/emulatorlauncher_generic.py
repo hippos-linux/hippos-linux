@@ -27,6 +27,7 @@ from emulatorlauncher_shared import (
 from libretro_cores import core_file_names
 
 from HipposPaths import BIOS, CHEATS, CONFIGS, EMULATORS_ROOT, SAVES, SCREENSHOTS, USERDATA, USER_DECORATIONS, USER_SHADERS
+import hippos_win9x
 
 def launch_libretro(ctx: LaunchContext) -> int:
     if not ctx.core:
@@ -417,8 +418,11 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
     conf = _load_hippos_conf()
     cfg = _KVConfig(RA_CUSTOM_CFG, separator=' ')
 
-    cfg.set('savefile_directory',       f'"{SAVES}"')
-    cfg.set('savestate_directory',      f'"{SAVES}"')
+    system_saves = SAVES / ctx.system if ctx is not None else SAVES
+    cfg.set('savefile_directory',       f'"{system_saves}"')
+    cfg.set('savestate_directory',      f'"{system_saves}"')
+    cfg.set('sort_savefiles_enable',    '"false"')
+    cfg.set('sort_savestates_enable',   '"false"')
     cfg.set('screenshot_directory',     f'"{SCREENSHOTS}"')
     cfg.set('system_directory',         f'"{BIOS}"')
     cfg.set('core_options_path',        f'"{RA_CORES_CFG}"')
@@ -633,6 +637,7 @@ def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> N
 
     elif core == 'dosbox_pure' and ctx.system == 'win98':
         opts['dosbox_pure_bootos_ramdisk'] = _game_setting(conf, ctx.system, ctx.rom, 'dosbox_pure_bootos_ramdisk') or 'diff'
+        hippos_win9x.preset_dosbox_pure_autoboot(ctx.rom)
 
     elif core in ('fbneo', 'fbalpha'):
         opts['fbneo-lightgun-hide-crosshair'] = _get('fbneo_hide_crosshair', 'enabled')

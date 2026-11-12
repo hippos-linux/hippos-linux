@@ -1,6 +1,6 @@
 [Unit]
 Description=HippOS userdata version migration
-After=local-fs.target
+After=local-fs.target hippos-roms-pool.service hippos-saves-pool.service hippos-bios-pool.service
 Before=greetd.service hippos-system-init.service
 
 [Service]

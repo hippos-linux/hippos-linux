@@ -25,6 +25,8 @@ from emulatorlauncher_shared import (
 from HipposPaths import CACHE, CONFIGS, SAVES
 
 RPCS3_CONFIG_DIR   = CONFIGS / 'rpcs3'
+RPCS3_VFS_YML      = RPCS3_CONFIG_DIR / 'vfs.yml'
+RPCS3_HDD0         = SAVES / 'ps3' / 'rpcs3' / 'dev_hdd0'
 RPCS3_CONFIG_YML   = RPCS3_CONFIG_DIR / 'config.yml'
 
 _RPCS3_INPUT_DIR = RPCS3_CONFIG_DIR / 'input_configs' / 'global'
@@ -226,6 +228,15 @@ def _write_rpcs3_controller_config(ctx: LaunchContext) -> None:
 
     _log.info("Wrote RPCS3 controller config: %s", config_path)
 
+def _write_rpcs3_vfs() -> None:
+    RPCS3_HDD0.mkdir(parents=True, exist_ok=True)
+    try:
+        vfs = yaml.safe_load(RPCS3_VFS_YML.read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        vfs = {}
+    vfs['/dev_hdd0/'] = f'{RPCS3_HDD0}/'
+    RPCS3_VFS_YML.write_text(yaml.dump(vfs, default_flow_style=False, allow_unicode=True))
+
 def launch_rpcs3(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('rpcs3')
     if bin_path is None:
@@ -234,6 +245,7 @@ def launch_rpcs3(ctx: LaunchContext) -> int:
     (SAVES / 'ps3').mkdir(parents=True, exist_ok=True)
     conf = _load_hippos_conf()
     _write_rpcs3_config(conf)
+    _write_rpcs3_vfs()
     _write_rpcs3_controller_config(ctx)
     rom = ctx.rom
     if rom.suffix.lower() == '.ink':
@@ -254,7 +266,7 @@ def launch_rpcs3(ctx: LaunchContext) -> int:
         except Exception:
             pass
         if game_id:
-            eboot = RPCS3_CONFIG_DIR / 'dev_hdd0' / 'game' / game_id / 'USRDIR' / 'EBOOT.BIN'
+            eboot = RPCS3_HDD0 / 'game' / game_id / 'USRDIR' / 'EBOOT.BIN'
             rom = eboot
     elif rom.is_dir():
         rom = rom / 'PS3_GAME' / 'USRDIR' / 'EBOOT.BIN'

@@ -5,8 +5,10 @@ source /usr/lib/hippos/pool-branch.sh
 
 POOL=/userdata/saves
 RW=/userdata/.saves-rw
-OPTS="cache.files=off,dropcacheonclose=true,allow_other,use_ino,moveonenospc=false,category.create=mspmfs"
+OPTS="cache.files=off,dropcacheonclose=true,allow_other,use_ino,moveonenospc=false,category.create=mspmfs,follow-symlinks=directory"
 MEDIA=/media
+FOLDER_ALIASES=(/usr/share/hippos/rom-folder-aliases.conf /usr/share/hippos/save-folder-aliases.conf)
+ALIAS_ROOT=/run/hippos/saves-aliases
 
 log() { printf '[hippos-saves-pool] %s\n' "$*"; }
 
@@ -21,6 +23,7 @@ add_branch() {
         chown 1000:1000 "${branch}" 2>/dev/null || true
     fi
     branches="${branches}:${branch}=${mode}"
+    external_branches+=("${branch}")
 }
 
 if findmnt "${POOL}" >/dev/null 2>&1; then
@@ -39,6 +42,7 @@ mkdir -p "${POOL}"
 chown 1000:1000 "${POOL}"
 
 branches="${RW}=RW"
+external_branches=()
 for dir in "${MEDIA}"/*/; do
     [[ -d "${dir}" ]] || continue
     add_branch "${dir%/}/saves"
@@ -48,6 +52,8 @@ for dir in "${MEDIA}"/*/; do
         add_branch "${saves_dir}"
     done < <(find "${dir%/}" -mindepth 1 -maxdepth 2 -type d -iname saves -print0 2>/dev/null)
 done
+
+add_alias_branches "${ALIAS_ROOT}" inherit "${FOLDER_ALIASES[@]}"
 
 log "branches: ${branches}"
 

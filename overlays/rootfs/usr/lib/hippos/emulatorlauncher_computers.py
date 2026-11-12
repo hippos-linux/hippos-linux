@@ -22,6 +22,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import BIOS, CACHE, CONFIGS, SAVES, SCREENSHOTS
+import hippos_win9x
 
 def launch_dosbox_staging(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -59,7 +60,6 @@ def launch_dosbox_staging(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     return _run_game_command(ctx, 'dosbox-staging', cmd, env).returncode
 
-WIN9X_IMAGE_PATTERNS = ('Windows 9*.img', 'Windows 9*.vhd', 'win9*.img', 'win9*.vhd')
 WIN9X_CD_SUFFIXES = ('.cue', '.iso', '.chd')
 WIN9X_CD_CACHE = CACHE / 'win98' / 'dosbox-x'
 WIN9X_CONFIG = """[sdl]
@@ -85,14 +85,8 @@ sbtype=sb16
 ver=7.1
 """
 
-def _win9x_base_image() -> Optional[Path]:
-    for pattern in WIN9X_IMAGE_PATTERNS:
-        if found := sorted(BIOS.glob(pattern)):
-            return found[0]
-    return None
-
 def _win9x_system_disk() -> Optional[Path]:
-    base = _win9x_base_image()
+    base = hippos_win9x.base_image()
     if base is None:
         return None
     disk = SAVES / 'win98' / 'dosbox-x' / base.name
@@ -120,7 +114,7 @@ def _win9x_game_cd(rom: Path) -> Optional[Path]:
 def _launch_dosbox_x_win9x(ctx: LaunchContext, bin_path: Path) -> int:
     disk = _win9x_system_disk()
     if disk is None:
-        _log.error("dosbox-x: no Windows 9x disk image (%s) in %s", ', '.join(WIN9X_IMAGE_PATTERNS), BIOS)
+        _log.error("dosbox-x: no Windows 9x disk image (%s) in %s", ', '.join(hippos_win9x.IMAGE_PATTERNS), BIOS)
         return 1
     cd = _win9x_game_cd(ctx.rom)
     if cd is None:
