@@ -35,19 +35,13 @@ DPAD_BUTTONS = {
 }
 
 
-NINTENDO_VENDOR = 0x057e
+ES_HELP_ICONS = Path('/usr/share/emulationstation/resources/help')
 ES_FACE_POSITIONS = {'a': 'east', 'b': 'south', 'x': 'north', 'y': 'west'}
-PRINTED_LABELS = {
-    'standard': {'south': 'A', 'east': 'B', 'west': 'X', 'north': 'Y'},
-    'nintendo': {'south': 'B', 'east': 'A', 'west': 'Y', 'north': 'X'},
-}
 
 
-def printed_label(es_name: str, vendor: int) -> str:
+def help_icon(es_name: str) -> Path:
     position = ES_FACE_POSITIONS.get(es_name)
-    if position is None:
-        return es_name.upper()
-    return PRINTED_LABELS['nintendo' if vendor == NINTENDO_VENDOR else 'standard'][position]
+    return ES_HELP_ICONS / (f'buttons_{position}.svg' if position else f'button_{es_name}.svg')
 
 
 def ok_and_back() -> tuple[str, str]:

@@ -35,14 +35,11 @@ class ButtonNameTests(unittest.TestCase):
         self.assertEqual(names[ecodes.BTN_TL], 'pageup')
 
 
-class PrintedLabelTests(unittest.TestCase):
-    def test_bottom_button_reads_a_on_most_pads(self):
-        self.assertEqual(es.printed_label('b', 0x045e), 'A')
-        self.assertEqual(es.printed_label('a', 0x045e), 'B')
-
-    def test_nintendo_pads_keep_their_layout(self):
-        self.assertEqual(es.printed_label('b', es.NINTENDO_VENDOR), 'B')
-        self.assertEqual(es.printed_label('a', es.NINTENDO_VENDOR), 'A')
+class HelpIconTests(unittest.TestCase):
+    def test_face_buttons_use_es_position_icons(self):
+        self.assertEqual(es.help_icon('b').name, 'buttons_south.svg')
+        self.assertEqual(es.help_icon('a').name, 'buttons_east.svg')
+        self.assertEqual(es.help_icon('start').name, 'button_start.svg')
 
 
 class OkAndBackTests(unittest.TestCase):

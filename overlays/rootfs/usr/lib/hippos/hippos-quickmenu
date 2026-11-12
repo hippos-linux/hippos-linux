@@ -34,6 +34,7 @@ GRAB_DELAY_MS    = 250
 WIDTH_SHARE      = 0.42
 HEIGHT_SHARE     = 0.8
 CORNER_SHARE     = 0.022
+HINT_ICON_PX     = 22
 COMMAND_WORKERS  = 4
 DEFAULT_IMAGE_HEIGHT = '10%'
 
@@ -162,7 +163,7 @@ def run_menu() -> int:
     from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
     from evdev import ecodes
     from hippos_docviewer import DocumentViewer, pixbuf_from_bytes
-    from hippos_es_buttons import ok_and_back, printed_label
+    from hippos_es_buttons import help_icon, ok_and_back
     from hippos_gamepad_reader import GamepadReader
 
     hat_directions = {(ecodes.ABS_HAT0Y, -1): 'up', (ecodes.ABS_HAT0Y, 1): 'down',
@@ -231,8 +232,12 @@ def run_menu() -> int:
         rows.connect('row-activated', lambda _list, row: row.activate_row())
         return rows
 
-    def hint(key: Gtk.Label, text: str) -> Gtk.Box:
+    def hint(button: str, text: str) -> Gtk.Box:
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        try:
+            key = Gtk.Image.new_from_pixbuf(GdkPixbuf.Pixbuf.new_from_file_at_size(str(help_icon(button)), HINT_ICON_PX, HINT_ICON_PX))
+        except GLib.Error:
+            key = Gtk.Label(label=button.upper())
         key.get_style_context().add_class('glyph')
         action = Gtk.Label(label=text)
         box.pack_start(key, False, False, 0)
@@ -287,10 +292,8 @@ def run_menu() -> int:
             footer.get_style_context().add_class('footer')
             hints = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, halign=Gtk.Align.CENTER)
             hints.get_style_context().add_class('hints')
-            self.ok_glyph, self.back_glyph = Gtk.Label(), Gtk.Label()
-            for key, text in ((self.ok_glyph, 'Select'), (self.back_glyph, 'Back'),
-                              (Gtk.Label(label='L1 R1'), 'Tabs'), (Gtk.Label(label='START'), 'Close')):
-                hints.pack_start(hint(key, text), False, False, 0)
+            for button, text in ((ok_button, 'Select'), (back_button, 'Back'), ('lr', 'Tabs'), ('start', 'Close')):
+                hints.pack_start(hint(button, text), False, False, 0)
             layout.pack_start(header, False, False, 0)
             layout.pack_start(self.tabs, False, False, 0)
             layout.pack_start(self.body, True, True, 0)
@@ -611,13 +614,7 @@ def run_menu() -> int:
             self.resize(width, height)
             self.move(area.x + (area.width - width) // 2, area.y + (area.height - height) // 2)
 
-        def label_buttons(self) -> None:
-            vendor = next(iter(self.reader.vendors()), 0)
-            self.ok_glyph.set_text(printed_label(ok_button, vendor))
-            self.back_glyph.set_text(printed_label(back_button, vendor))
-
         def show_menu(self) -> None:
-            self.label_buttons()
             self.body.set_visible_child_name('pages')
             self.place_window()
             self.show_all()
