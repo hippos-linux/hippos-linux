@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import zipfile
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -226,6 +227,21 @@ def launch_flatpak(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, 'flatpak', cmd, env)
     return result.returncode
 
+CHROMIUM_BROWSERS = frozenset({
+    'chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable',
+    'brave-browser', 'microsoft-edge', 'microsoft-edge-stable', 'vivaldi', 'vivaldi-stable',
+    'org.chromium.Chromium', 'com.google.Chrome', 'com.brave.Browser', 'com.microsoft.Edge', 'com.vivaldi.Vivaldi',
+})
+
+def _kiosk_command(command: str) -> str:
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return command
+    starts_browser = bool(words) and (Path(words[0]).name in CHROMIUM_BROWSERS
+                                      or (Path(words[0]).name == 'flatpak' and CHROMIUM_BROWSERS & set(words)))
+    return f'{command} --kiosk' if starts_browser and '--kiosk' not in words else command
+
 def launch_desktopshortcuts(ctx: LaunchContext) -> int:
     try:
         desktop_file = Path(ctx.rom.read_text(encoding='utf-8').strip())
@@ -242,7 +258,7 @@ def launch_desktopshortcuts(ctx: LaunchContext) -> int:
     keyboard = _game_setting(conf, ctx.system, ctx.rom, 'onscreen_keyboard') != '0'
     _log.info("Launching desktop app: %s (on-screen keyboard %s)", desktop_file, 'on' if keyboard else 'off')
     with onscreen_keyboard(env) if keyboard else nullcontext():
-        result = _run_game_command(ctx, 'shell', ['/bin/sh', '-c', app.command], env)
+        result = _run_game_command(ctx, 'shell', ['/bin/sh', '-c', _kiosk_command(app.command)], env)
     return result.returncode
 
 def launch_heroic(ctx: LaunchContext) -> int:
