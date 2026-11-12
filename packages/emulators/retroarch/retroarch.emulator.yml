@@ -125,6 +125,14 @@ systems:
   - name: win98
     as_core:
       - dosbox_pure
+    custom_features:
+      dosbox_pure_bootos_ramdisk:
+        prompt: WINDOWS DISK CHANGES
+        description: Where changes made inside Windows go. Per game keeps each game's installs and settings separate and never changes the Windows image.
+        choices:
+          Per game (Default): diff
+          Discard on exit: "true"
+          Write to the Windows image: "false"
   - name: dreamcast
     as_core:
       - flycast

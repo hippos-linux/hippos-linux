@@ -12,6 +12,7 @@ from emulatorlauncher_shared import (
     _conf_int,
     _conf_value,
     _find_emulator_bin,
+    _game_setting,
     _load_es_input_configs,
     _load_hippos_conf,
     _log,
@@ -629,6 +630,9 @@ def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> N
         opts['mame_softlists_enable']     = _get('mame_softlists_enable', 'enabled')
         opts['mame_softlists_auto_media'] = _get('mame_softlists_auto_media', 'enabled')
         opts['mame_media_type']           = _get('mame_media_type', 'rom')
+
+    elif core == 'dosbox_pure' and ctx.system == 'win98':
+        opts['dosbox_pure_bootos_ramdisk'] = _game_setting(conf, ctx.system, ctx.rom, 'dosbox_pure_bootos_ramdisk') or 'diff'
 
     elif core in ('fbneo', 'fbalpha'):
         opts['fbneo-lightgun-hide-crosshair'] = _get('fbneo_hide_crosshair', 'enabled')
