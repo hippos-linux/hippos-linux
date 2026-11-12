@@ -13,6 +13,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 
 import hippos_content_installers
+import hippos_flatpak_apps
 import hippos_webapps
 from hippos_linux_games import add_catalog_game, remove_catalog_game, set_claimed
 
@@ -171,6 +172,8 @@ CATALOG_TABS = {
 }
 
 def catalog_section(pkg):
+    if pkg.get("section"):
+        return pkg["section"]
     if pkg.get("type") == "webapp":
         return "Streaming and web apps"
     if pkg.get("type") == "installer":
@@ -217,6 +220,8 @@ def is_installed(pkg, state):
     if pkg.get("type") == "webapp":
         url = hippos_webapps.normalise_url(pkg.get("webapp_url", ""))
         return any(app.url == url for app in hippos_webapps.load_webapps())
+    if pkg.get("type") == "flatpak":
+        return hippos_flatpak_apps.installed(pkg.get("flatpak_id", ""))
     return pkg["id"] in state
 
 def cmd_list():
@@ -480,6 +485,11 @@ def cmd_install(name):
         _install_apt(pkg)
     elif pkg.get("type") == "installer":
         _install_with_installer(pkg)
+    elif pkg.get("type") == "flatpak":
+        print(f"Installing {pkg['name']} from Flathub...", flush=True)
+        if hippos_flatpak_apps.install(pkg.get("flatpak_id", "")) != 0:
+            print("ERROR: Flathub install failed", flush=True)
+            sys.exit(1)
     elif pkg.get("type") == "webapp":
         print(f"Adding {pkg['name']} to Web Apps...", flush=True)
         try:
@@ -524,6 +534,8 @@ def cmd_remove(name):
     elif pkg.get("type") == "installer":
         hippos_content_installers.run(pkg.get("installer", ""), "remove")
         remove_catalog_game(name)
+    elif pkg.get("type") == "flatpak":
+        hippos_flatpak_apps.remove(pkg.get("flatpak_id", ""))
     elif pkg.get("type") == "apt":
         subprocess.call(["sudo", "-n", "apt-get", "remove", "-y"] + pkg.get("apt_packages", []))
         set_claimed(pkg.get("apt_packages", []), False)

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 import hippos_content_installers
+import hippos_flatpak_apps
 import hippos_webapps
 from hippos_linux_games import add_catalog_game, remove_catalog_game, set_claimed
 
@@ -244,6 +245,18 @@ def cmd_install(args: list[str]) -> int:
         print(f'Installed: {pkg_id}')
         return 0
 
+    if pkg_type == 'flatpak':
+        print(f"Installing {pkg.get('name', pkg_id)} from Flathub...")
+        ret = hippos_flatpak_apps.install(pkg.get('flatpak_id', ''))
+        if ret != 0:
+            print(f'Install failed (exit {ret})', file=sys.stderr)
+            return ret
+        installed         = _load_installed()
+        installed[pkg_id] = pkg.get('version', 'latest')
+        _save_installed(installed)
+        print(f'Installed: {pkg_id}')
+        return 0
+
     if pkg_type == 'installer':
         installer = pkg.get('installer', '')
         print(f"Installing {pkg.get('name', pkg_id)}...")
@@ -327,6 +340,8 @@ def cmd_remove(args: list[str]) -> int:
         elif pkg_type == 'installer':
             hippos_content_installers.run(pkg.get('installer', ''), 'remove')
             remove_catalog_game(pkg_id)
+        elif pkg_type == 'flatpak':
+            hippos_flatpak_apps.remove(pkg.get('flatpak_id', ''))
         else:
             category = pkg.get('category', 'misc')
             root     = INSTALL_ROOTS.get(category, USERDATA / category)
