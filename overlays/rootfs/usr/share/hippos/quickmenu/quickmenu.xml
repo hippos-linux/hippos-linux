@@ -15,6 +15,12 @@
 		<feature display="Playing for">
 			<text display='${ps -o etime= -p "$(pgrep -of "python3 /usr/bin/emulatorlauncher")" 2>/dev/null | tr -d " "}' refresh="1" />
 		</feature>
+		<feature display="Controller as mouse" if="${hippos-controller-mouse status}">
+			<switch value="${hippos-controller-mouse status}" action_on="hippos-controller-mouse on" action_off="hippos-controller-mouse off" />
+		</feature>
+		<feature display="On-screen keyboard" if="${pgrep -xf 'python3 /usr/lib/hippos/hippos-osk'}">
+			<button display="Show / hide" action="hippos-hotkeys --send onscreen-keyboard" afterclick="close" />
+		</feature>
 		<feature display="Save state">
 			<button display="Save" action="hippos-hotkeys --send save_state" afterclick="close" />
 		</feature>

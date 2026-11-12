@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+"""Usage: hippos-controller-mouse on | off | status
+
+Turns controller as mouse on or off for the running game. status prints
+on or off, and nothing when no game is running.
+"""
+
+import sys
+
+from hippos_padtokey import pointer_enabled, running_game, set_pointer
+
+
+def main(argv: list[str]) -> int:
+    match argv:
+        case ['status']:
+            if running_game() is not None:
+                print('on' if pointer_enabled() else 'off')
+            return 0
+        case ['on' | 'off' as state]:
+            return 0 if set_pointer(state == 'on') else 1
+    print(__doc__, file=sys.stderr)
+    return 2
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

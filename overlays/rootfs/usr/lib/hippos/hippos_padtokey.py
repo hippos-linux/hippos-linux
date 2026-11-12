@@ -6,7 +6,7 @@ import os
 import subprocess
 from collections import defaultdict
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -19,6 +19,8 @@ _log = logging.getLogger(__name__)
 USER_MAPS   = Path('/userdata/system/configs/evmapy')
 SYSTEM_MAPS = Path('/usr/share/evmapy')
 MAPS_FILE   = Path('/run/hippos/padtokey.json')
+LAUNCH_FILE = Path('/run/hippos/padtokey-launch.json')
+POINTER_MAP = SYSTEM_MAPS / 'controller-as-mouse.keys'
 HOTKEYS_BIN = Path('/usr/lib/hippos/hippos-hotkeys')
 
 DEFAULT_MOUSE_LEVEL = 5
@@ -32,9 +34,8 @@ HAT_DIRECTIONS = {1: ('y', -1), 2: ('x', 1), 4: ('y', 1), 8: ('x', -1)}
 OPPOSITE_DIRECTIONS = {'down': 'up', 'right': 'left'}
 
 
-def find_keys_files(system: str, emulator: str, rom: Path, default_maps: bool) -> list[Path]:
-    game_map = (rom.parent / f'{rom.name}.keys') if not rom.is_dir() else (rom / 'padto.keys')
-    default_candidates = [
+def default_keys_files(system: str, emulator: str) -> list[Path]:
+    candidates = [
         USER_MAPS / f'{system}.{emulator}.keys',
         USER_MAPS / f'{system}.keys',
         USER_MAPS / f'{emulator}.keys',
@@ -44,8 +45,16 @@ def find_keys_files(system: str, emulator: str, rom: Path, default_maps: bool) -
         SYSTEM_MAPS / f'{emulator}.keys',
         SYSTEM_MAPS / 'any.keys',
     ]
-    candidates = [game_map, *(default_candidates if default_maps else [])]
     return [p for p in dict.fromkeys(candidates) if p.exists()]
+
+
+def find_keys_files(system: str, emulator: str, rom: Path, default_maps: bool, pointer: bool = False) -> list[Path]:
+    game_map = (rom.parent / f'{rom.name}.keys') if not rom.is_dir() else (rom / 'padto.keys')
+    files = [game_map] if game_map.exists() else []
+    defaults = default_keys_files(system, emulator) if default_maps else []
+    if pointer and not defaults:
+        defaults = [POINTER_MAP]
+    return files + defaults
 
 
 def merge_keys_files(files: list[Path]) -> dict[str, list[dict]]:
@@ -111,12 +120,13 @@ def resolve_actions(actions: list[dict], profile: ESControllerProfile) -> list[d
 
 
 def write_maps(system: str, emulator: str, rom: Path,
-               controllers: list[ControllerInfo], profiles: list[ESControllerProfile]) -> bool:
+               controllers: list[ControllerInfo], profiles: list[ESControllerProfile],
+               pointer: bool | None = None) -> bool:
     from emulatorlauncher_shared import _game_or_system_setting, _game_setting, _load_hippos_conf, _pick_es_profile
 
     conf = _load_hippos_conf()
-    default_maps = _game_or_system_setting(conf, system, rom, 'padtokey') != '0'
-    merged = merge_keys_files(find_keys_files(system, emulator, rom, default_maps))
+    default_maps = _game_or_system_setting(conf, system, rom, 'padtokey') != '0' if pointer is None else pointer
+    merged = merge_keys_files(find_keys_files(system, emulator, rom, default_maps, pointer=bool(pointer)))
     devices = {}
     for ctrl in controllers:
         actions = merged.get(f'actions_player{ctrl.player}')
@@ -127,7 +137,8 @@ def write_maps(system: str, emulator: str, rom: Path,
         clear_maps()
         return False
     level = float(_game_setting(conf, system, rom, 'padtokey_mouse_speed') or DEFAULT_MOUSE_LEVEL)
-    data = {'mouse_speed': MOUSE_SPEED_AT_DEFAULT_LEVEL * level / DEFAULT_MOUSE_LEVEL, 'devices': devices}
+    data = {'mouse_speed': MOUSE_SPEED_AT_DEFAULT_LEVEL * level / DEFAULT_MOUSE_LEVEL, 'devices': devices,
+            'pointer': default_maps and bool(pointer or default_keys_files(system, emulator))}
     temporary = MAPS_FILE.with_suffix('.tmp')
     temporary.write_text(json.dumps(data))
     os.replace(temporary, MAPS_FILE)
@@ -146,14 +157,41 @@ def reload_daemon() -> None:
 @contextmanager
 def padtokey_context(system: str, emulator: str, rom: Path,
                      controllers: list[ControllerInfo], profiles: list[ESControllerProfile]):
+    LAUNCH_FILE.write_text(json.dumps({'system': system, 'emulator': emulator, 'rom': str(rom),
+                                       'controllers': [asdict(controller) for controller in controllers]}))
     if write_maps(system, emulator, rom, controllers, profiles):
         reload_daemon()
     try:
         yield
     finally:
+        LAUNCH_FILE.unlink(missing_ok=True)
         if MAPS_FILE.exists():
             clear_maps()
             reload_daemon()
+
+
+def running_game() -> dict[str, Any] | None:
+    try:
+        return json.loads(LAUNCH_FILE.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def pointer_enabled() -> bool:
+    return bool(load_maps().get('pointer'))
+
+
+def set_pointer(enabled: bool) -> bool:
+    from emulatorlauncher_shared import ControllerInfo, _load_es_input_configs
+
+    game = running_game()
+    if game is None:
+        return False
+    controllers = [ControllerInfo(**controller) for controller in game['controllers']]
+    write_maps(game['system'], game['emulator'], Path(game['rom']), controllers, _load_es_input_configs(),
+               pointer=enabled)
+    reload_daemon()
+    return True
 
 
 def load_maps() -> dict[str, Any]:
