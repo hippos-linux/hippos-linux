@@ -20,6 +20,7 @@ _APPLICATIONS = Path('/usr/share/applications')
 _SYSTEM_PATH = '/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games'
 
 LINUX_GAMES_DIR = Path('/userdata/roms/linux')
+LINUX_APPS_DIR = Path('/userdata/roms/webapps')
 PORTS_DIR = Path('/userdata/roms/ports')
 CATALOG_STATES = (Path('/userdata/system/hippos-store/installed.json'), Path('/userdata/system/content-cache/installed.json'))
 GAMELIST_MEDIA = ('image', 'thumbnail', 'marquee', 'video', 'fanart', 'manual')
@@ -41,8 +42,11 @@ def launcher_path(name: str) -> Path:
     slug = re.sub(r'[^A-Za-z0-9._ -]', '', name).strip().replace(' ', '_')
     return LINUX_GAMES_DIR / f'{slug or "game"}{LAUNCHER_EXTENSION}'
 
-def catalog_launcher(pkg_id: str) -> Path:
-    return LINUX_GAMES_DIR / f'{pkg_id}{LAUNCHER_EXTENSION}'
+def catalog_dir(pkg: dict) -> Path:
+    return LINUX_APPS_DIR if pkg.get('category') == 'apps' else LINUX_GAMES_DIR
+
+def catalog_launcher(pkg: dict) -> Path:
+    return catalog_dir(pkg) / f"{pkg['id']}{LAUNCHER_EXTENSION}"
 
 def write_launcher(path: Path, name: str, command: str, marker: str = '') -> None:
     created_dir = not path.parent.exists()
@@ -100,8 +104,8 @@ def _download(url: str, folder: Path) -> Path | None:
         return None
     return target
 
-def update_details(games: dict[Path, tuple[GameMetadata, str | None]]) -> bool:
-    has_image = launchers_with(LINUX_GAMES_DIR, 'image')
+def update_details(games: dict[Path, tuple[GameMetadata, str | None]], games_dir: Path = LINUX_GAMES_DIR) -> bool:
+    has_image = launchers_with(games_dir, 'image')
     with tempfile.TemporaryDirectory() as scratch:
         details = {}
         for launcher, (metadata, image_url) in games.items():
@@ -111,7 +115,7 @@ def update_details(games: dict[Path, tuple[GameMetadata, str | None]]) -> bool:
                 metadata = GameMetadata(metadata.name, metadata.description, metadata.developer,
                                         _download(image_url, folder) or metadata.image)
             details[launcher] = metadata
-        return update_gamelist(LINUX_GAMES_DIR, LAUNCHER_EXTENSION, details)
+        return update_gamelist(games_dir, LAUNCHER_EXTENSION, details)
 
 def desktop_game_details(app: DesktopApp) -> GameMetadata:
     return GameMetadata(app.name, app.comment, None, find_icon(app.icon))
@@ -146,15 +150,16 @@ def packaged_game_details(launcher: Path) -> tuple[GameMetadata, str | None] | N
 def add_catalog_game(pkg: dict) -> Path:
     name = pkg.get('name', pkg['id'])
     command = ' '.join([pkg['launcher_command'], *map(str, pkg.get('launcher_args', []))])
-    launcher = catalog_launcher(pkg['id'])
+    launcher = catalog_launcher(pkg)
     write_launcher(launcher, name, command)
-    update_details({launcher: (GameMetadata(name, pkg.get('description') or None), pkg.get('preview_url') or None)})
+    update_details({launcher: (GameMetadata(name, pkg.get('description') or None), pkg.get('preview_url') or None)},
+                   catalog_dir(pkg))
     reload_es()
     return launcher
 
-def remove_catalog_game(pkg_id: str) -> None:
-    catalog_launcher(pkg_id).unlink(missing_ok=True)
-    update_gamelist(LINUX_GAMES_DIR, LAUNCHER_EXTENSION, {})
+def remove_catalog_game(pkg: dict) -> None:
+    catalog_launcher(pkg).unlink(missing_ok=True)
+    update_gamelist(catalog_dir(pkg), LAUNCHER_EXTENSION, {})
     reload_es()
 
 def _catalog_ids() -> set[str]:

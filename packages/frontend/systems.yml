@@ -2743,10 +2743,12 @@ wasm4:
 webapps:
   extensions:
   - webapp
+  - flatpak
+  - sh
   force: true
   hardware: os
   manufacturer: Various
-  name: Web Apps
+  name: Linux Apps
 win98:
   extensions:
   - zip

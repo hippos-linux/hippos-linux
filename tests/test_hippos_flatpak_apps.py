@@ -1,4 +1,5 @@
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -23,6 +24,31 @@ class AppIdTests(unittest.TestCase):
             self.assertEqual(flatpak_apps.install('com.x.y;reboot'), 1)
             self.assertEqual(flatpak_apps.remove('bad'), 1)
         run.assert_not_called()
+
+
+class ClaimTests(unittest.TestCase):
+    def setUp(self):
+        self.saved = flatpak_apps.CLAIMS
+        flatpak_apps.CLAIMS = Path(tempfile.mkdtemp()) / 'claims'
+
+    def tearDown(self):
+        flatpak_apps.CLAIMS = self.saved
+
+    def test_install_claims_the_app_and_a_failed_install_releases_it(self):
+        with mock.patch.object(flatpak_apps.subprocess, 'run') as run:
+            run.return_value.returncode = 0
+            flatpak_apps.install('com.a.b')
+            self.assertEqual(flatpak_apps.claimed_apps(), {'com.a.b'})
+            run.return_value.returncode = 1
+            flatpak_apps.install('com.c.d')
+        self.assertEqual(flatpak_apps.claimed_apps(), {'com.a.b'})
+
+    def test_remove_releases_the_claim_once_uninstalled(self):
+        flatpak_apps._set_claimed('com.a.b', True)
+        with mock.patch.object(flatpak_apps.subprocess, 'run') as run:
+            run.return_value.returncode = 1
+            flatpak_apps.remove('com.a.b')
+        self.assertEqual(flatpak_apps.claimed_apps(), set())
 
 
 class CommandTests(unittest.TestCase):

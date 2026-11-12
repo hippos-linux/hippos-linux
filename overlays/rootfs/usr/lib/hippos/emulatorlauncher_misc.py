@@ -261,6 +261,10 @@ def launch_desktopshortcuts(ctx: LaunchContext) -> int:
     return _run_desktop_app(ctx, ['/bin/sh', '-c', _kiosk_command(app.command)])
 
 def launch_webapp(ctx: LaunchContext) -> int:
+    if ctx.rom.suffix == '.flatpak':
+        return launch_flatpak(ctx)
+    if ctx.rom.suffix == '.sh':
+        return launch_sh(ctx)
     url = read_webapp(ctx.rom)
     if url is None:
         _log.error("No address in %s", ctx.rom)
@@ -269,7 +273,7 @@ def launch_webapp(ctx: LaunchContext) -> int:
         return _run_desktop_app(ctx, [str(WEBAPPS_BIN), 'dialog'])
     chromium = which('chromium')
     if chromium is None:
-        _log.error("Web apps need Chromium; add one through Web Apps or the Content Downloader to install it")
+        _log.error("Web apps need Chromium; add one through Linux Apps or the Content Downloader to install it")
         return 1
     profile = WEBAPP_PROFILES / ctx.rom.stem
     profile.mkdir(parents=True, exist_ok=True)

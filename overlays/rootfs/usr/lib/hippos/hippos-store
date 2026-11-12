@@ -487,7 +487,7 @@ def cmd_install(name):
             print("ERROR: Flathub install failed", flush=True)
             sys.exit(1)
     elif pkg.get("type") == "webapp":
-        print(f"Adding {pkg['name']} to Web Apps...", flush=True)
+        print(f"Adding {pkg['name']} to Linux Apps...", flush=True)
         try:
             hippos_webapps.add(pkg["name"], pkg["webapp_url"], pkg.get("icon_url", ""), pkg.get("description", ""))
         except (OSError, subprocess.CalledProcessError) as exc:
@@ -529,7 +529,7 @@ def cmd_remove(name):
         hippos_webapps.remove(pkg.get("webapp_url", ""))
     elif pkg.get("type") == "installer":
         hippos_content_installers.run(pkg.get("installer", ""), "remove")
-        remove_catalog_game(name)
+        remove_catalog_game(pkg)
     elif pkg.get("type") == "flatpak":
         hippos_flatpak_apps.remove(pkg.get("flatpak_id", ""))
     elif pkg.get("type") == "apt":
@@ -538,7 +538,7 @@ def cmd_remove(name):
         if pkg.get("scummvm_id"):
             _scummvm_remove(pkg)
         else:
-            remove_catalog_game(name)
+            remove_catalog_game(pkg)
     else:
         dest_root    = INSTALL_ROOTS.get(pkg.get("category", ""), "/userdata/roms/ports")
         install_path = pkg.get("install_path", "")

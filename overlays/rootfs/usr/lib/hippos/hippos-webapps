@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""hippos-webapps - websites as full-screen apps in ES's Web Apps system.
+"""hippos-webapps - websites as full-screen apps in ES's Linux Apps system.
 
   hippos-webapps add --url URL [--name NAME] [--icon ICON_URL] [--description TEXT]
   hippos-webapps remove --url URL
@@ -69,7 +69,7 @@ def run_dialog() -> int:
     url_entry = Gtk.Entry(placeholder_text='www.example.com')
     box.pack_start(url_entry, False, False, 0)
     label('Name', 'field')
-    name_entry = Gtk.Entry(placeholder_text='Shown in Web Apps')
+    name_entry = Gtk.Entry(placeholder_text='Shown in Linux Apps')
     box.pack_start(name_entry, False, False, 0)
     status = label('', 'hint')
 

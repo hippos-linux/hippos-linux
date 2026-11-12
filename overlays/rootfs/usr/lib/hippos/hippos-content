@@ -232,7 +232,7 @@ def cmd_install(args: list[str]) -> int:
         return 0
 
     if pkg_type == 'webapp':
-        print(f"Adding {pkg.get('name', pkg_id)} to Web Apps...")
+        print(f"Adding {pkg.get('name', pkg_id)} to Linux Apps...")
         try:
             hippos_webapps.add(pkg.get('name', pkg_id), pkg['webapp_url'], pkg.get('icon_url', ''),
                                pkg.get('description', ''))
@@ -334,12 +334,12 @@ def cmd_remove(args: list[str]) -> int:
             if apt_packages:
                 _apt('remove', apt_packages)
                 set_claimed(apt_packages, False)
-            remove_catalog_game(pkg_id)
+            remove_catalog_game(pkg)
         elif pkg_type == 'webapp':
             hippos_webapps.remove(pkg.get('webapp_url', ''))
         elif pkg_type == 'installer':
             hippos_content_installers.run(pkg.get('installer', ''), 'remove')
-            remove_catalog_game(pkg_id)
+            remove_catalog_game(pkg)
         elif pkg_type == 'flatpak':
             hippos_flatpak_apps.remove(pkg.get('flatpak_id', ''))
         else:
