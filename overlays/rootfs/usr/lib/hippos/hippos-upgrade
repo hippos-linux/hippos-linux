@@ -235,6 +235,21 @@ def find_kernel_files(subvol_path, variant):
     initrd = f"initrd.img-{kver}" if os.path.exists(os.path.join(boot, f"initrd.img-{kver}")) else "initrd.img"
     return kernel, initrd
 
+_KERNEL_LINK_SUFFIX = {"standard": "", "lts": ".lts"}
+
+def grub_kernel_files(subvol_path, variant):
+    found = find_kernel_files(subvol_path, variant)
+    if found is None:
+        return None
+    boot = os.path.join(subvol_path, "boot")
+    suffix = _KERNEL_LINK_SUFFIX[variant]
+    links = (f"vmlinuz{suffix}", f"initrd.img{suffix}")
+    if all(os.path.islink(os.path.join(boot, link)) and
+           os.path.realpath(os.path.join(boot, link)) == os.path.realpath(os.path.join(boot, name))
+           for link, name in zip(links, found)):
+        return links
+    return found
+
 def default_kernel_variant():
     try:
         result = subprocess.run(
@@ -615,7 +630,7 @@ def write_grub_cfg(default_subvol, all_subvols, uuid, partuuid):
         ])
 
     def kernel_for(subvol_path, variant, required=False):
-        found = find_kernel_files(subvol_path, variant)
+        found = grub_kernel_files(subvol_path, variant)
         if found is None and required:
             found = "vmlinuz", "initrd.img"
         return found
@@ -1367,6 +1382,7 @@ if __name__ == "__main__":
     if cmd not in READONLY_CMDS:
         _require_root()
         _open_log()
+        os.makedirs(os.path.dirname(LOCK_FILE), exist_ok=True)
         _lock = open(LOCK_FILE, "w")
         fcntl.flock(_lock, fcntl.LOCK_EX)
 
