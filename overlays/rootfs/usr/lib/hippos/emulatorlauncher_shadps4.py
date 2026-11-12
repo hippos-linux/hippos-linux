@@ -4,10 +4,10 @@ from pathlib import Path
 from typing import Optional
 
 from emulatorlauncher_shared import (
+    _game_bool,
+    _game_value,
     LaunchContext,
     _build_game_env,
-    _conf_bool,
-    _conf_value,
     _display_resolution_from_conf,
     _find_emulator_bin,
     _find_executable,
@@ -155,9 +155,9 @@ def write_shadps4_config(ctx: LaunchContext) -> None:
     vulkan_cfg = config.setdefault('Vulkan', {})
     vulkan_cfg['gpuId'] = int(vulkan_cfg.get('gpuId', -1))
 
-    gpu['allowHDR'] = _conf_bool(conf, 'shadps4_hdr', False)
+    gpu['allowHDR'] = _game_bool(conf, ctx, 'shadps4_hdr', False)
     settings = config.setdefault('Settings', {})
-    lang_value = _conf_value(conf, 'shadps4_console_lang', '')
+    lang_value = _game_value(conf, ctx, 'shadps4_console_lang', '')
     settings['consoleLanguage'] = int(lang_value) if lang_value else 1
 
     SHADPS4_USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)

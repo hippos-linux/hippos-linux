@@ -5,12 +5,12 @@ from pathlib import Path
 from typing import Optional
 
 from emulatorlauncher_shared import (
+    _game_bool,
+    _game_int,
+    _game_value,
     WINE_NO_INSTALLER_PROMPTS,
     LaunchContext,
     _build_game_env,
-    _conf_bool,
-    _conf_int,
-    _conf_value,
     _find_emulator_bin,
     _load_effective_hippos_conf,
     _probe_vulkan_version,
@@ -101,34 +101,34 @@ def _write_xenia_config(ctx: LaunchContext) -> tuple[Path, Path, Path]:
         config = _xenia_base_config(None)
 
     config.setdefault('CPU', {})['break_on_unimplemented_instructions'] = False
-    config.setdefault('Content', {})['license_mask'] = _conf_int(conf, 'xenia_license', 1)
-    config.setdefault('D3D12', {})['d3d12_readback_resolve'] = _conf_bool(conf, 'xenia_readback_resolve', False)
+    config.setdefault('Content', {})['license_mask'] = _game_int(conf, ctx, 'xenia_license', 1)
+    config.setdefault('D3D12', {})['d3d12_readback_resolve'] = _game_bool(conf, ctx, 'xenia_readback_resolve', False)
 
     display = config.setdefault('Display', {})
     display['fullscreen'] = True
     if canary:
-        display['internal_display_resolution'] = _conf_int(conf, 'xenia_resolution', 8)
+        display['internal_display_resolution'] = _game_int(conf, ctx, 'xenia_resolution', 8)
 
     gpu = config.setdefault('GPU', {})
-    api = _conf_value(conf, 'xenia_api', 'D3D12')
+    api = _game_value(conf, ctx, 'xenia_api', 'D3D12')
     if api.upper() == 'D3D12':
         vulkan_version = _probe_vulkan_version()
         if vulkan_version is not None and vulkan_version < (1, 3):
             api = 'Vulkan'
     gpu['gpu'] = api.lower()
-    gpu['vsync'] = _conf_bool(conf, 'xenia_vsync', True)
-    gpu['framerate_limit'] = _conf_int(conf, 'xenia_vsync_fps', 0)
-    gpu['clear_memory_page_state'] = _conf_bool(conf, 'xenia_page_state', False)
-    gpu['render_target_path_d3d12'] = _conf_value(conf, 'xenia_target_path', 'rtv')
-    gpu['query_occlusion_fake_sample_count'] = _conf_int(conf, 'xenia_query_occlusion', 1000)
-    gpu['texture_cache_memory_limit_hard'] = _conf_int(conf, 'xenia_limit_hard', 768)
-    gpu['texture_cache_memory_limit_render_to_texture'] = _conf_int(conf, 'xenia_limit_render_to_texture', 24)
-    gpu['texture_cache_memory_limit_soft'] = _conf_int(conf, 'xenia_limit_soft', 384)
-    gpu['texture_cache_memory_limit_soft_lifetime'] = _conf_int(conf, 'xenia_limit_soft_lifetime', 30)
+    gpu['vsync'] = _game_bool(conf, ctx, 'xenia_vsync', True)
+    gpu['framerate_limit'] = _game_int(conf, ctx, 'xenia_vsync_fps', 0)
+    gpu['clear_memory_page_state'] = _game_bool(conf, ctx, 'xenia_page_state', False)
+    gpu['render_target_path_d3d12'] = _game_value(conf, ctx, 'xenia_target_path', 'rtv')
+    gpu['query_occlusion_fake_sample_count'] = _game_int(conf, ctx, 'xenia_query_occlusion', 1000)
+    gpu['texture_cache_memory_limit_hard'] = _game_int(conf, ctx, 'xenia_limit_hard', 768)
+    gpu['texture_cache_memory_limit_render_to_texture'] = _game_int(conf, ctx, 'xenia_limit_render_to_texture', 24)
+    gpu['texture_cache_memory_limit_soft'] = _game_int(conf, ctx, 'xenia_limit_soft', 384)
+    gpu['texture_cache_memory_limit_soft_lifetime'] = _game_int(conf, ctx, 'xenia_limit_soft_lifetime', 30)
 
     general = config.setdefault('General', {})
     general['discord'] = False
-    general['apply_patches'] = _conf_bool(conf, 'xenia_patches', False)
+    general['apply_patches'] = _game_bool(conf, ctx, 'xenia_patches', False)
 
     config.setdefault('HID', {})['hid'] = 'sdl'
     config.setdefault('Logging', {})['log_level'] = 1
@@ -139,21 +139,21 @@ def _write_xenia_config(ctx: LaunchContext) -> tuple[Path, Path, Path]:
     storage['content_root'] = str(XENIA_SAVES_DIR)
     storage['mount_scratch'] = True
     storage['storage_root'] = str(config_dir)
-    storage['mount_cache'] = _conf_bool(conf, 'xenia_cache', True)
+    storage['mount_cache'] = _game_bool(conf, ctx, 'xenia_cache', True)
 
     ui = config.setdefault('UI', {})
-    ui['headless'] = _conf_bool(conf, 'xenia_headless', False)
-    ui['show_achievement_notification'] = _conf_bool(conf, 'xenia_achievement', False)
+    ui['headless'] = _game_bool(conf, ctx, 'xenia_headless', False)
+    ui['show_achievement_notification'] = _game_bool(conf, ctx, 'xenia_achievement', False)
 
     vulkan_cfg = config.setdefault('Vulkan', {})
     vulkan_cfg['vulkan_sparse_shared_memory'] = False
     xcfg = config.setdefault('XConfig', {})
-    xcfg['user_country'] = _conf_int(conf, 'xenia_country', 103)
-    xcfg['user_language'] = _conf_int(conf, 'xenia_language', 1)
+    xcfg['user_country'] = _game_int(conf, ctx, 'xenia_country', 103)
+    xcfg['user_language'] = _game_int(conf, ctx, 'xenia_language', 1)
 
     _write_toml(toml_file, config)
 
-    if canary and _conf_bool(conf, 'xenia_patches', False):
+    if canary and _game_bool(conf, ctx, 'xenia_patches', False):
         patches_dir = runtime_dir / 'patches'
         if patches_dir.exists():
             rom_name = re.sub(r'\[.*?\]', '', ctx.rom.stem)

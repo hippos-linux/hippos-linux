@@ -12,6 +12,7 @@ from emulatorlauncher_shared import (
     ESBinding,
     ESControllerProfile,
     LaunchContext,
+    _game_setting,
     _load_es_input_configs,
     _pick_es_profile,
 )
@@ -26,8 +27,7 @@ _SPECIAL_CONTROL_LIST = [
     'vgmplay', 'pdp1', 'vc4000', 'fmtmarty', 'gp32', 'apple2p', 'apple2e', 'apple2ee',
 ]
 
-def get_mame_alt_layout(conf: dict[str, str], rom_path: Path) -> str:
-    controller_type = conf.get('altlayout', 'auto')
+def get_mame_alt_layout(controller_type: str, rom_path: Path) -> str:
     if controller_type in ('default', 'neomini', 'neocd', 'twinstick', 'qbert'):
         return controller_type
 
@@ -82,11 +82,11 @@ def get_mame_alt_layout(conf: dict[str, str], rom_path: Path) -> str:
 def generate_mame_pads_config(cfg_dir: Path, ctx: LaunchContext, conf: dict[str, str]) -> None:
     cfg_dir.mkdir(parents=True, exist_ok=True)
 
-    alt_layout = get_mame_alt_layout(conf, ctx.rom)
+    alt_layout = get_mame_alt_layout(_game_setting(conf, ctx.system, ctx.rom, 'altlayout') or 'auto', ctx.rom)
     sys_name   = ctx.rom.stem
     use_guns   = ctx.lightgun
     use_wheels = ctx.wheel
-    custom_cfg = conf.get('mame_custom_cfg') == 'true'
+    custom_cfg = _game_setting(conf, ctx.system, ctx.rom, 'customcfg') == '1'
 
     profiles = _load_es_input_configs()
     players: list[tuple] = []
@@ -127,7 +127,7 @@ def generate_mame_pads_config(cfg_dir: Path, ctx: LaunchContext, conf: dict[str,
 
     _remove_section(config, xml_system, 'crosshairs')
     xml_crosshairs = config.createElement('crosshairs')
-    crosshair_mode = conf.get('mame_crosshair', '')
+    crosshair_mode = _game_setting(conf, ctx.system, ctx.rom, 'mame_crosshair')
     for p in range(4):
         xml_crosshair = config.createElement('crosshair')
         xml_crosshair.setAttribute('player', str(p))

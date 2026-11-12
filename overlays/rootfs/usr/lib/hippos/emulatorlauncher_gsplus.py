@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from emulatorlauncher_shared import (
+    _game_value,
     LaunchContext,
     _build_game_env,
-    _conf_value,
     _find_emulator_bin,
     _load_hippos_conf,
     _run_game_command,
@@ -96,7 +96,7 @@ def write_gsplus_config(ctx: LaunchContext) -> None:
             ('g_limit_speed', '2'),
         ]
 
-    items.append(('g_cfg_rom_path', BIOS / _conf_value(conf, 'gsplus_bios_filename', 'ROM.03')))
+    items.append(('g_cfg_rom_path', BIOS / _game_value(conf, ctx, 'gsplus_bios_filename', 'ROM.03')))
     _write_unix_settings_file(GSPLUS_CONFIG_FILE, items)
 
 def launch_gsplus(ctx: LaunchContext) -> int:

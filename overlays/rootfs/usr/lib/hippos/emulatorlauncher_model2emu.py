@@ -4,11 +4,11 @@ import re
 from pathlib import Path
 
 from emulatorlauncher_shared import (
+    _game_bool,
+    _game_value,
     WINE_NO_INSTALLER_PROMPTS,
     LaunchContext,
     _build_game_env,
-    _conf_bool,
-    _conf_value,
     _display_resolution_from_conf,
     _find_emulator_bin,
     _load_effective_hippos_conf,
@@ -103,23 +103,23 @@ def _write_model2_config(ctx: LaunchContext, runtime_emu: Path) -> Path:
     else:
         parser.set('Renderer', 'FullScreenWidth', '0')
         parser.set('Renderer', 'FullScreenHeight', '0')
-    parser.set('Renderer', 'FullMode', _conf_value(conf, 'model2_renderRes', '4'))
+    parser.set('Renderer', 'FullMode', _game_value(conf, ctx, 'model2_renderRes', '4'))
     parser.set('Renderer', 'AutoFull', '1')
     parser.set('Renderer', 'ForceSync', '1')
-    parser.set('Renderer', 'FakeGouraud', _conf_value(conf, 'model2_fakeGouraud', '0'))
-    parser.set('Renderer', 'Bilinear', _conf_value(conf, 'model2_bilinearFiltering', '1'))
-    parser.set('Renderer', 'Trilinear', _conf_value(conf, 'model2_trilinearFiltering', '0'))
-    parser.set('Renderer', 'FilterTilemaps', _conf_value(conf, 'model2_filterTilemaps', '0'))
-    parser.set('Renderer', 'ForceManaged', _conf_value(conf, 'model2_forceManaged', '0'))
-    parser.set('Renderer', 'AutoMip', _conf_value(conf, 'model2_enableMIP', '0'))
-    parser.set('Renderer', 'MeshTransparency', _conf_value(conf, 'model2_meshTransparency', '0'))
-    parser.set('Renderer', 'FSAA', _conf_value(conf, 'model2_fullscreenAA', '0'))
-    parser.set('Input', 'UseRawInput', _conf_value(conf, 'model2_useRawInput', '0'))
-    parser.set('Input', 'XInput', '1' if _conf_bool(conf, 'model2_xinput', False) else '0')
-    parser.set('Input', 'EnableFF', '1' if _conf_bool(conf, 'model2_forceFeedback', False) else '0')
+    parser.set('Renderer', 'FakeGouraud', _game_value(conf, ctx, 'model2_fakeGouraud', '0'))
+    parser.set('Renderer', 'Bilinear', _game_value(conf, ctx, 'model2_bilinearFiltering', '1'))
+    parser.set('Renderer', 'Trilinear', _game_value(conf, ctx, 'model2_trilinearFiltering', '0'))
+    parser.set('Renderer', 'FilterTilemaps', _game_value(conf, ctx, 'model2_filterTilemaps', '0'))
+    parser.set('Renderer', 'ForceManaged', _game_value(conf, ctx, 'model2_forceManaged', '0'))
+    parser.set('Renderer', 'AutoMip', _game_value(conf, ctx, 'model2_enableMIP', '0'))
+    parser.set('Renderer', 'MeshTransparency', _game_value(conf, ctx, 'model2_meshTransparency', '0'))
+    parser.set('Renderer', 'FSAA', _game_value(conf, ctx, 'model2_fullscreenAA', '0'))
+    parser.set('Input', 'UseRawInput', _game_value(conf, ctx, 'model2_useRawInput', '0'))
+    parser.set('Input', 'XInput', '1' if _game_bool(conf, ctx, 'model2_xinput', False) else '0')
+    parser.set('Input', 'EnableFF', '1' if _game_bool(conf, ctx, 'model2_forceFeedback', False) else '0')
 
-    if _conf_value(conf, 'model2_crossHairs', ''):
-        parser.set('Renderer', 'DrawCross', _conf_value(conf, 'model2_crossHairs', '0'))
+    if _game_value(conf, ctx, 'model2_crossHairs', ''):
+        parser.set('Renderer', 'DrawCross', _game_value(conf, ctx, 'model2_crossHairs', '0'))
     elif ctx.lightgun:
         parser.set('Renderer', 'DrawCross', '1')
     else:
@@ -138,8 +138,8 @@ def _write_model2_config(ctx: LaunchContext, runtime_emu: Path) -> Path:
 
     lua_file = runtime_emu / 'scripts' / f'{ctx.rom.stem}.lua'
     if lua_file.exists():
-        _modify_lua_model2_option(lua_file, 'widescreen', _conf_bool(conf, 'model2_ratio', False))
-        _modify_lua_model2_option(lua_file, 'scanlines', _conf_bool(conf, 'model2_scanlines', False))
+        _modify_lua_model2_option(lua_file, 'widescreen', _game_bool(conf, ctx, 'model2_ratio', False))
+        _modify_lua_model2_option(lua_file, 'scanlines', _game_bool(conf, ctx, 'model2_scanlines', False))
 
     known_gun_roms = {'bel', 'gunblade', 'hotd', 'rchase2', 'vcop', 'vcop2', 'vcopa'}
     if ctx.lightgun and ctx.rom.stem in known_gun_roms:
@@ -163,7 +163,7 @@ def launch_model2emu(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     env['SDL_JOYSTICK_HIDAPI'] = '0'
     env['WINEDLLOVERRIDES'] = WINE_NO_INSTALLER_PROMPTS
-    if _conf_value(conf, 'model2_Software', '0') == '1':
+    if _game_value(conf, ctx, 'model2_Software', '0') == '1':
         env.update({
             '__GLX_VENDOR_LIBRARY_NAME': 'mesa',
             'MESA_LOADER_DRIVER_OVERRIDE': 'llvmpipe',

@@ -5,9 +5,9 @@ from pathlib import Path
 from typing import Optional
 
 from emulatorlauncher_shared import (
+    _game_value,
     LaunchContext,
     _build_game_env,
-    _conf_value,
     _find_emulator_bin,
     _load_effective_hippos_conf,
     _load_es_input_configs,
@@ -62,19 +62,19 @@ def write_play_config(ctx: LaunchContext) -> None:
         for attr_name, attr_value in pref_attrs.items():
             pref_element.attrib[attr_name] = attr_value
 
-        if pref_name == 'ps2.limitframerate' and (vsync := _conf_value(conf, 'play_vsync', '')):
+        if pref_name == 'ps2.limitframerate' and (vsync := _game_value(conf, ctx, 'play_vsync', '')):
             pref_element.attrib['Value'] = vsync
-        if pref_name == 'renderer.widescreen' and (widescreen := _conf_value(conf, 'play_widescreen', '')):
+        if pref_name == 'renderer.widescreen' and (widescreen := _game_value(conf, ctx, 'play_widescreen', '')):
             pref_element.attrib['Value'] = widescreen
-        if pref_name == 'system.language' and (language := _conf_value(conf, 'play_language', '')):
+        if pref_name == 'system.language' and (language := _game_value(conf, ctx, 'play_language', '')):
             pref_element.attrib['Value'] = language
-        if pref_name == 'video.gshandler' and (api := _conf_value(conf, 'play_api', '')):
+        if pref_name == 'video.gshandler' and (api := _game_value(conf, ctx, 'play_api', '')):
             pref_element.attrib['Value'] = api
-        if pref_name == 'renderer.opengl.resfactor' and (scale := _conf_value(conf, 'play_scale', '')):
+        if pref_name == 'renderer.opengl.resfactor' and (scale := _game_value(conf, ctx, 'play_scale', '')):
             pref_element.attrib['Value'] = scale
-        if pref_name == 'renderer.presentationmode' and (mode := _conf_value(conf, 'play_mode', '')):
+        if pref_name == 'renderer.presentationmode' and (mode := _game_value(conf, ctx, 'play_mode', '')):
             pref_element.attrib['Value'] = mode
-        if pref_name == 'renderer.opengl.forcebilineartextures' and (filter_value := _conf_value(conf, 'play_filter', '')):
+        if pref_name == 'renderer.opengl.forcebilineartextures' and (filter_value := _game_value(conf, ctx, 'play_filter', '')):
             pref_element.attrib['Value'] = filter_value
 
     input_config = ET.Element('Config')

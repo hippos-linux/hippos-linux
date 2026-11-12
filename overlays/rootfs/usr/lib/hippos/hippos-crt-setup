@@ -185,7 +185,7 @@ else
 fi
 
 {
-    printf '# CRT mode — managed by hippos-crt-setup. Do not edit manually.\n'
+    printf '# CRT mode - managed by hippos-crt-setup. Do not edit manually.\n'
     while read -r output; do
         [[ "${output}" == "${CRT_OUTPUT_X11}" ]] && continue
         printf 'Section "Monitor"\n'
@@ -197,7 +197,7 @@ fi
 log "wrote ${XORG_CONF_D}/10-crt-ignore.conf"
 
 {
-    printf '# CRT mode — managed by hippos-crt-setup. Do not edit manually.\n'
+    printf '# CRT mode - managed by hippos-crt-setup. Do not edit manually.\n'
     printf 'Section "Monitor"\n'
     printf '    Identifier  "%s"\n'                "${CRT_OUTPUT_X11}"
     printf '    HorizSync   15.0-90.0\n'
@@ -284,7 +284,7 @@ if [[ "${GPU_DRIVER}" == "amdgpu" ]] && _detect_r9_380; then
 fi
 
 mkdir -p "$(dirname "${GRUB_CRT_CONF}")"
-_new_grub_conf="$(printf '# CRT mode — managed by hippos-crt-setup. Do not edit manually.\nGRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT %s"\n' "${GRUB_CMDLINE}")"
+_new_grub_conf="$(printf '# CRT mode - managed by hippos-crt-setup. Do not edit manually.\nGRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT %s"\n' "${GRUB_CMDLINE}")"
 _old_grub_conf="$(cat "${GRUB_CRT_CONF}" 2>/dev/null || true)"
 
 if [[ "${_new_grub_conf}" != "${_old_grub_conf}" ]]; then

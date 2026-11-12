@@ -10,6 +10,8 @@ from pathlib import Path
 from evdev import InputDevice, ecodes
 
 from emulatorlauncher_shared import (
+    _game_bool,
+    _game_value,
     LaunchContext,
     _build_game_env,
     _conf_bool,
@@ -380,9 +382,9 @@ def launch_tsugaru(ctx: LaunchContext) -> int:
         return 1
     conf = _load_hippos_conf()
     cmd: list[str] = [str(bin_path), str(BIOS / 'fmtowns'), '-FULLSCREEN', '-NOHIGHRESPCM', '-NOWAITBOOT', '-AUTOSCALE', '-MAINTAINASPECT', '-HIGHRES', '-GAMEPORT0', 'KEY', '-KEYBOARD', 'DIRECT', '-PAUSEKEY', 'F10']
-    if (cdrom_speed := _conf_value(conf, 'cdrom_speed', 'auto')) != 'auto':
+    if (cdrom_speed := _game_value(conf, ctx, 'cdrom_speed', 'auto')) != 'auto':
         cmd += ['-CDSPEED', cdrom_speed]
-    if _conf_bool(conf, '386dx', False):
+    if _game_bool(conf, ctx, '386dx', False):
         cmd.append('-PRETEND386DX')
     if ctx.rom.suffix.lower() in TSUGARU_CD_SYSTEMS:
         cmd += ['-CD', str(ctx.rom)]
@@ -414,10 +416,10 @@ def launch_x16emu(ctx: LaunchContext) -> int:
     autorun_cmd = romdir / 'autorun.cmd'
     if autorun_cmd.exists():
         cmd += ['-bas', str(autorun_cmd)]
-    cmd += ['-scale', _conf_value(conf, 'x16emu_scale', '2')]
-    if (quality := _conf_value(conf, 'x16emu_quality', '')):
+    cmd += ['-scale', _game_value(conf, ctx, 'x16emu_scale', '2')]
+    if (quality := _game_value(conf, ctx, 'x16emu_quality', '')):
         cmd += ['-quality', quality]
-    if _conf_value(conf, 'x16emu_ratio', '') == '16:9':
+    if _game_value(conf, ctx, 'x16emu_ratio', '') == '16:9':
         cmd.append('-widescreen')
     for nplayer, _ in enumerate(ctx.controllers[:4], start=1):
         cmd.append(f'-joy{nplayer}')
@@ -557,15 +559,15 @@ def launch_redream(ctx: LaunchContext) -> int:
 
     lines += [
         f'width={w}', f'height={h}', f'fullwidth={w}', f'fullheight={h}',
-        f'res={_conf_value(conf, "redreamResolution", "2")}',
-        f'aspect={_conf_value(conf, "redreamRatio", "4:3")}',
-        f'frameskip={_conf_value(conf, "redreamFrameSkip", "0")}',
-        f'vsync={_conf_value(conf, "redreamVsync", "0")}',
-        f'renderer={_conf_value(conf, "redreamRender", "hle_perstrip")}',
-        f'region={_conf_value(conf, "redreamRegion", "usa")}',
-        f'language={_conf_value(conf, "redreamLanguage", "english")}',
-        f'broadcast={_conf_value(conf, "redreamBroadcast", "ntsc")}',
-        f'cable={_conf_value(conf, "redreamCable", "vga")}',
+        f'res={_game_value(conf, ctx, "redreamResolution", "2")}',
+        f'aspect={_game_value(conf, ctx, "redreamRatio", "4:3")}',
+        f'frameskip={_game_value(conf, ctx, "redreamFrameSkip", "0")}',
+        f'vsync={_game_value(conf, ctx, "redreamVsync", "0")}',
+        f'renderer={_game_value(conf, ctx, "redreamRender", "hle_perstrip")}',
+        f'region={_game_value(conf, ctx, "redreamRegion", "usa")}',
+        f'language={_game_value(conf, ctx, "redreamLanguage", "english")}',
+        f'broadcast={_game_value(conf, ctx, "redreamBroadcast", "ntsc")}',
+        f'cable={_game_value(conf, ctx, "redreamCable", "vga")}',
     ]
     cfg_file.write_text('\n'.join(lines) + '\n')
 

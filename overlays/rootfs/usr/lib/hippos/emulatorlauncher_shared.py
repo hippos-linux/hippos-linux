@@ -417,6 +417,22 @@ def _game_setting(conf: dict[str, str], system: str, rom: Path, name: str) -> st
             return value
     return ''
 
+def _game_value(conf: dict[str, str], ctx: LaunchContext, key: str, default: str = '') -> str:
+    return _game_setting(conf, ctx.system, ctx.rom, key) or default
+
+def _game_bool(conf: dict[str, str], ctx: LaunchContext, key: str, default: bool = False) -> bool:
+    value = _game_setting(conf, ctx.system, ctx.rom, key)
+    if not value:
+        return default
+    return value.lower() in ('1', 'true', 'on', 'enabled', 'yes')
+
+def _game_int(conf: dict[str, str], ctx: LaunchContext, key: str, default: int = 0) -> int:
+    value = _game_setting(conf, ctx.system, ctx.rom, key)
+    try:
+        return int(float(value)) if value else default
+    except ValueError:
+        return default
+
 def _conf_int(conf: dict[str, str], key: str, default: int = 0) -> int:
     value = _conf_value(conf, key, '')
     if not value:
@@ -856,9 +872,9 @@ def _build_game_env(conf: dict[str, str], ctx: Optional[LaunchContext] = None) -
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
     env['HIPPOS_USE_GUNS'] = '1' if _conf_bool(conf, 'global.use_guns', True) else '0'
     env['HIPPOS_USE_WHEELS'] = '1' if _conf_bool(conf, 'global.use_wheels', True) else '0'
-    env['HIPPOS_WHEEL_ROTATION'] = _conf_value(conf, 'wheel_rotation', '')
-    env['HIPPOS_WHEEL_DEADZONE'] = _conf_value(conf, 'wheel_deadzone', '')
-    env['HIPPOS_WHEEL_MIDZONE'] = _conf_value(conf, 'wheel_midzone', '')
+    env['HIPPOS_WHEEL_ROTATION'] = _game_value(conf, ctx, 'wheel_rotation', '')
+    env['HIPPOS_WHEEL_DEADZONE'] = _game_value(conf, ctx, 'wheel_deadzone', '')
+    env['HIPPOS_WHEEL_MIDZONE'] = _game_value(conf, ctx, 'wheel_midzone', '')
     if ctx is not None and ctx.game_wheel:
         for key, value in ctx.game_wheel.items():
             env[f'HIPPOS_GAME_WHEEL_{key.upper()}'] = str(value)

@@ -7,6 +7,7 @@ from shutil import copyfile
 from typing import Optional
 
 from emulatorlauncher_shared import (
+    _game_value,
     LaunchContext,
     _build_game_env,
     _conf_value,
@@ -94,30 +95,30 @@ def write_xemu_config(ctx: LaunchContext) -> None:
 
     parser = _read_xemu_toml(XEMU_CONFIG_FILE, ('general', 'sys', 'sys.files', 'audio', 'net', 'net.udp') + XEMU_DISPLAY_SECTIONS)
 
-    parser.set('general', 'skip_boot_anim', _conf_value(conf, 'xemu_bootanim', 'false'))
+    parser.set('general', 'skip_boot_anim', _game_value(conf, ctx, 'xemu_bootanim', 'false'))
     parser.set('general', 'show_welcome', 'false')
     parser.set('general', 'screenshot_dir', '"/userdata/screenshots"')
 
-    parser.set('sys', 'mem_limit', f'"{_conf_value(conf, "xemu_memory", "64")}"')
+    parser.set('sys', 'mem_limit', f'"{_game_value(conf, ctx, "xemu_memory", "64")}"')
     parser.set('sys.files', 'flashrom_path', '"/userdata/bios/Complex_4627.bin"')
     parser.set('sys.files', 'bootrom_path', '"/userdata/bios/mcpx_1.0.bin"')
     parser.set('sys.files', 'hdd_path', '"/userdata/saves/xbox/xbox_hdd.qcow2"')
     parser.set('sys.files', 'eeprom_path', '"/userdata/saves/xbox/xemu_eeprom.bin"')
     parser.set('sys.files', 'dvd_path', f'"{ctx.rom}"')
-    parser.set('audio', 'use_dsp', _conf_value(conf, 'xemu_use_dsp', 'false'))
+    parser.set('audio', 'use_dsp', _game_value(conf, ctx, 'xemu_use_dsp', 'false'))
 
     _set_xemu_display(parser, conf, 'xemu', 'VULKAN')
     _set_xemu_bindings(parser, ctx)
 
-    network_type = _conf_value(conf, 'xemu_networktype', '')
+    network_type = _game_value(conf, ctx, 'xemu_networktype', '')
     if network_type:
         parser.set('net', 'enable', 'true')
         parser.set('net', 'backend', f'"{network_type}"')
     else:
         parser.set('net', 'enable', 'false')
-    if udpremote := _conf_value(conf, 'xemu_udpremote', ''):
+    if udpremote := _game_value(conf, ctx, 'xemu_udpremote', ''):
         parser.set('net.udp', 'remote_addr', f'"{udpremote}"')
-    if udpbind := _conf_value(conf, 'xemu_udpbind', ''):
+    if udpbind := _game_value(conf, ctx, 'xemu_udpbind', ''):
         parser.set('net.udp', 'bind_addr', f'"{udpbind}"')
 
     with XEMU_CONFIG_FILE.open('w', encoding='utf-8') as fh:

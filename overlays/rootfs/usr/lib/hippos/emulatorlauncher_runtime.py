@@ -6,6 +6,8 @@ from typing import Optional
 from pathlib import Path
 
 from emulatorlauncher_shared import (
+    _game_bool,
+    _game_value,
     ESBinding,
     ESControllerProfile,
     LaunchContext,
@@ -140,10 +142,10 @@ def launch_amiberry(ctx: LaunchContext) -> int:
         ('logfile_path', AMIBERRY_LOG_FILE),
         ('controllers_path', AMIBERRY_INPUTS_DIR),
         ('retroarch_config', AMIBERRY_OVERLAY_CFG),
-        ('default_vkbd_enabled', '1' if _conf_bool(conf, 'amiberry_virtual_keyboard', False) else '0'),
-        ('default_vkbd_hires', '1' if _conf_bool(conf, 'amiberry_hires_keyboard', False) else '0'),
-        ('default_vkbd_transparency', _conf_value(conf, 'amiberry_vkbd_transparency', '60')),
-        ('default_vkbd_language', _conf_value(conf, 'amiberry_vkbd_language', 'US')),
+        ('default_vkbd_enabled', '1' if _game_bool(conf, ctx, 'amiberry_virtual_keyboard', False) else '0'),
+        ('default_vkbd_hires', '1' if _game_bool(conf, ctx, 'amiberry_hires_keyboard', False) else '0'),
+        ('default_vkbd_transparency', _game_value(conf, ctx, 'amiberry_vkbd_transparency', '60')),
+        ('default_vkbd_language', _game_value(conf, ctx, 'amiberry_vkbd_language', 'US')),
         ('default_vkbd_toggle', 'leftstick'),
         ('default_fullscreen_mode', '2'),
         ('write_logfile', 'yes'),
@@ -184,10 +186,10 @@ def launch_amiberry(ctx: LaunchContext) -> int:
 
     commandArray += ['-s', f'gfx_flickerfixer={"true" if _conf_bool(conf, "amiberry_flickerfixer", False) else "false"}']
     commandArray += ['-s', f'amiberry.gfx_auto_height={"true" if _conf_bool(conf, "amiberry_auto_height", False) else "false"}']
-    commandArray += ['-s', f'gfx_linemode={_conf_value(conf, "amiberry_linemode", "double")}']
-    commandArray += ['-s', f'gfx_resolution={_conf_value(conf, "amiberry_resolution", "hires")}']
+    commandArray += ['-s', f'gfx_linemode={_game_value(conf, ctx, "amiberry_linemode", "double")}']
+    commandArray += ['-s', f'gfx_resolution={_game_value(conf, ctx, "amiberry_resolution", "hires")}']
 
-    match _conf_value(conf, 'amiberry_scalingmethod', ''):
+    match _game_value(conf, ctx, 'amiberry_scalingmethod', ''):
         case 'smooth':
             commandArray += ['-s', 'gfx_lores_mode=true', '-s', 'amiberry.scaling_method=1']
         case 'pixelated':

@@ -7,10 +7,12 @@ import shutil
 from pathlib import Path
 
 from emulatorlauncher_shared import (
+    _game_bool,
+    _game_int,
+    _game_value,
     WINE_NO_INSTALLER_PROMPTS,
     LaunchContext,
     _build_game_env,
-    _conf_bool,
     _conf_value,
     _ensure_section,
     _find_emulator_bin,
@@ -26,8 +28,6 @@ from emulatorlauncher_shared import (
 from HipposPaths import BIOS, CACHE, CONFIGS, SAVES, SCREENSHOTS
 
 from emulatorlauncher_shared import (
-    _conf_bool,
-    _conf_int,
     _conf_value,
     _load_effective_hippos_conf,
     _read_toml,
@@ -47,9 +47,9 @@ def launch_xenia_edge(ctx: LaunchContext) -> int:
     config = _read_toml(toml_file) or _xenia_base_config(None)
 
     gpu = config.setdefault('GPU', {})
-    gpu['gpu'] = _conf_value(conf, 'xenia_api', 'vulkan').lower()
-    gpu['vsync'] = _conf_bool(conf, 'xenia_vsync', True)
-    gpu['framerate_limit'] = _conf_int(conf, 'xenia_vsync_fps', 0)
+    gpu['gpu'] = _game_value(conf, ctx, 'xenia_api', 'vulkan').lower()
+    gpu['vsync'] = _game_bool(conf, ctx, 'xenia_vsync', True)
+    gpu['framerate_limit'] = _game_int(conf, ctx, 'xenia_vsync_fps', 0)
 
     storage = config.setdefault('Storage', {})
     storage['cache_root']   = str(XENIA_CACHE_DIR)
@@ -434,10 +434,10 @@ def launch_bigpemu(ctx: LaunchContext) -> int:
     cfg['BigPEmuConfig']['Video'] = {
         'DisplayMode': 2, 'ScreenScaling': 5,
         'DisplayWidth': w, 'DisplayHeight': h,
-        'VSync': int(_conf_value(conf, 'bigpemu_vsync', '1')),
-        'ScreenAspect': int(_conf_value(conf, 'bigpemu_ratio', '2')),
+        'VSync': int(_game_value(conf, ctx, 'bigpemu_vsync', '1')),
+        'ScreenAspect': int(_game_value(conf, ctx, 'bigpemu_ratio', '2')),
         'LockAspect': 1,
-        'ScreenFilter': int(_conf_value(conf, 'bigpemu_screenfilter', '0')),
+        'ScreenFilter': int(_game_value(conf, ctx, 'bigpemu_screenfilter', '0')),
     }
 
     inp: dict = {

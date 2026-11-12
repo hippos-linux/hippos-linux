@@ -4,9 +4,10 @@ from pathlib import Path
 from shutil import copyfile
 
 from emulatorlauncher_shared import (
+    _game_bool,
+    _game_value,
     LaunchContext,
     _build_game_env,
-    _conf_bool,
     _conf_value,
     _display_resolution_from_conf,
     _find_emulator_bin,
@@ -37,16 +38,16 @@ def write_vpinball_config(ctx: LaunchContext) -> None:
         if not parser.has_section(section):
             parser.add_section(section)
 
-    parser.set('Standalone', 'PinMAMEPath', './' if _conf_bool(conf, 'vpinball_folders', True) else '')
-    balltrail = _conf_value(conf, 'vpinball_balltrail', '0')
+    parser.set('Standalone', 'PinMAMEPath', './' if _game_bool(conf, ctx, 'vpinball_folders', True) else '')
+    balltrail = _game_value(conf, ctx, 'vpinball_balltrail', '0')
     parser.set('Player', 'BallTrail', '0' if balltrail == '0' else '1')
     parser.set('Player', 'BallTrailStrength', balltrail)
-    parser.set('Player', 'NudgeStrength', _conf_value(conf, 'vpinball_nudgestrength', ''))
-    parser.set('Player', 'MaxFramerate', _conf_value(conf, 'vpinball_maxframerate', ''))
-    parser.set('Player', 'SyncMode', _conf_value(conf, 'vpinball_vsync', '2'))
+    parser.set('Player', 'NudgeStrength', _game_value(conf, ctx, 'vpinball_nudgestrength', ''))
+    parser.set('Player', 'MaxFramerate', _game_value(conf, ctx, 'vpinball_maxframerate', ''))
+    parser.set('Player', 'SyncMode', _game_value(conf, ctx, 'vpinball_vsync', '2'))
     parser.set('Player', 'ExitGameKey', '62')
 
-    presets = _conf_value(conf, 'vpinball_presets', 'manual')
+    presets = _game_value(conf, ctx, 'vpinball_presets', 'manual')
     if presets != 'manual':
         match presets:
             case 'highend':
@@ -64,12 +65,12 @@ def write_vpinball_config(ctx: LaunchContext) -> None:
         parser.set('Player', 'ForceAnisotropicFiltering', force_filtering)
         parser.set('Player', 'AlphaRampAccuracy', alpha_accuracy)
 
-    if _conf_bool(conf, 'vpinball_customphysicalsetup', False):
-        screen_width = _conf_value(conf, 'vpinball_screenwidth', '')
-        screen_height = _conf_value(conf, 'vpinball_screenheight', '')
-        inclination = _conf_value(conf, 'vpinball_screeninclination', '')
-        screen_y = _conf_value(conf, 'vpinball_screenplayery', '')
-        screen_z = _conf_value(conf, 'vpinball_screenplayerz', '')
+    if _game_bool(conf, ctx, 'vpinball_customphysicalsetup', False):
+        screen_width = _game_value(conf, ctx, 'vpinball_screenwidth', '')
+        screen_height = _game_value(conf, ctx, 'vpinball_screenheight', '')
+        inclination = _game_value(conf, ctx, 'vpinball_screeninclination', '')
+        screen_y = _game_value(conf, ctx, 'vpinball_screenplayery', '')
+        screen_z = _game_value(conf, ctx, 'vpinball_screenplayerz', '')
     else:
         screen_width = screen_height = inclination = screen_y = screen_z = ''
 
@@ -78,14 +79,14 @@ def write_vpinball_config(ctx: LaunchContext) -> None:
     parser.set('Player', 'ScreenInclination', inclination)
     parser.set('Player', 'ScreenPlayerY', screen_y)
     parser.set('Player', 'ScreenPlayerZ', screen_z)
-    parser.set('Standalone', 'AltColor', '1' if _conf_bool(conf, 'vpinball_altcolor', True) else '0')
-    parser.set('Player', 'MusicVolume', _conf_value(conf, 'vpinball_musicvolume', ''))
-    parser.set('Player', 'SoundVolume', _conf_value(conf, 'vpinball_soundvolume', ''))
-    parser.set('Standalone', 'AltSound', '1' if _conf_bool(conf, 'vpinball_altsound', True) else '0')
+    parser.set('Standalone', 'AltColor', '1' if _game_bool(conf, ctx, 'vpinball_altcolor', True) else '0')
+    parser.set('Player', 'MusicVolume', _game_value(conf, ctx, 'vpinball_musicvolume', ''))
+    parser.set('Player', 'SoundVolume', _game_value(conf, ctx, 'vpinball_soundvolume', ''))
+    parser.set('Standalone', 'AltSound', '1' if _game_bool(conf, ctx, 'vpinball_altsound', True) else '0')
     parser.set('Player', 'SoundDevice', _conf_value(conf, 'vpinball_sounddevice', ''))
     parser.set('Player', 'SoundDeviceBG', _conf_value(conf, 'vpinball_sounddevicebg', ''))
-    parser.set('Player', 'JoyAddCreditKey', '1' if _conf_bool(conf, 'vpinball_pad_add_credit', False) else '0')
-    parser.set('Player', 'PBWEnabled', '1' if _conf_bool(conf, 'vpinball_pbw', True) else '0')
+    parser.set('Player', 'JoyAddCreditKey', '1' if _game_bool(conf, ctx, 'vpinball_pad_add_credit', False) else '0')
+    parser.set('Player', 'PBWEnabled', '1' if _game_bool(conf, ctx, 'vpinball_pbw', True) else '0')
 
     display_resolution = _display_resolution_from_conf(conf)
     screen_width, screen_height = display_resolution if display_resolution is not None else (1280, 720)
@@ -99,7 +100,7 @@ def write_vpinball_config(ctx: LaunchContext) -> None:
     parser.set('TableOverride', 'ViewCabRotation', '0')
     parser.set('Standalone', 'DMDServer', '0')
 
-    playfield_mode = _conf_value(conf, 'vpinball_playfieldmode', '')
+    playfield_mode = _game_value(conf, ctx, 'vpinball_playfieldmode', '')
     if playfield_mode:
         parser.set('Player', 'BGSet', playfield_mode)
     else:
@@ -132,20 +133,20 @@ def write_vpinball_config(ctx: LaunchContext) -> None:
         parser.set('Standalone', f'{window_name}Width', str(width))
         parser.set('Standalone', f'{window_name}Height', str(height))
 
-    _vpinball_set_window('PinMAMEWindow', _conf_value(conf, 'vpinball_pinmame', 'manual'), default_ratio=4.0)
-    _vpinball_set_window('FlexDMDWindow', _conf_value(conf, 'vpinball_flexdmd', 'manual'), default_ratio=4.0)
-    _vpinball_set_window('B2SBackglass', _conf_value(conf, 'vpinball_b2s', 'manual'), default_ratio=4 / 3)
-    if _conf_value(conf, 'vpinball_b2s', 'manual') == 'disabled':
+    _vpinball_set_window('PinMAMEWindow', _game_value(conf, ctx, 'vpinball_pinmame', 'manual'), default_ratio=4.0)
+    _vpinball_set_window('FlexDMDWindow', _game_value(conf, ctx, 'vpinball_flexdmd', 'manual'), default_ratio=4.0)
+    _vpinball_set_window('B2SBackglass', _game_value(conf, ctx, 'vpinball_b2s', 'manual'), default_ratio=4 / 3)
+    if _game_value(conf, ctx, 'vpinball_b2s', 'manual') == 'disabled':
         parser.set('Standalone', 'B2SWindows', '0')
     else:
         parser.set('Standalone', 'B2SWindows', '1')
 
-    b2sdmd_choice = _conf_value(conf, 'vpinball_b2sdmd', 'true').lower()
+    b2sdmd_choice = _game_value(conf, ctx, 'vpinball_b2sdmd', 'true').lower()
     parser.set('Standalone', 'B2SHideB2SDMD', '0' if b2sdmd_choice in ('1', 'true', 'yes', 'on') else '1')
-    b2sgrill_choice = _conf_value(conf, 'vpinball_b2sgrill', 'true').lower()
+    b2sgrill_choice = _game_value(conf, ctx, 'vpinball_b2sgrill', 'true').lower()
     parser.set('Standalone', 'B2SHideGrill', '0' if b2sgrill_choice in ('1', 'true', 'yes', 'on') else '1')
 
-    dmd_size = _conf_value(conf, 'vpinball_dmdsize', '128x32')
+    dmd_size = _game_value(conf, ctx, 'vpinball_dmdsize', '128x32')
     if dmd_size == '128x16':
         parser.set('Standalone', 'B2SDMDX', '0')
         parser.set('Standalone', 'B2SDMDY', '0')

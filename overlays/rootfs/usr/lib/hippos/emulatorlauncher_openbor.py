@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 from emulatorlauncher_shared import (
+    _game_value,
     ControllerInfo,
     ESControllerProfile,
     LaunchContext,
@@ -95,8 +96,8 @@ def _write_openbor_config(ctx: LaunchContext) -> str:
         ('fullscreen', '1'),
         ('usegl', '1'),
         ('usejoy', '1'),
-        ('stretch', _conf_value(conf, 'openbor_ratio', '0')),
-        ('swfilter', _conf_value(conf, 'openbor_filter', '0')),
+        ('stretch', _game_value(conf, ctx, 'openbor_ratio', '0')),
+        ('swfilter', _game_value(conf, ctx, 'openbor_filter', '0')),
         ('vsync', _conf_value(conf, 'openbor_vsync', '1')),
         ('fpslimit', _conf_value(conf, 'openbor_limit', '0')),
     ]
