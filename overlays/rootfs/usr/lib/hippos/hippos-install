@@ -39,8 +39,8 @@ get_boot_disk() {
 is_efi_partition() {
     local dev="$1"
     local parttype
-    parttype=$(blkid -s PARTTYPE -o value "$dev" 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)
-    [[ "$parttype" == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" ]]
+    parttype=$(lsblk -dno PARTTYPE "$dev" 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)
+    [[ "$parttype" == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" || "$parttype" == "0xef" ]]
 }
 
 mount_src_efi() {

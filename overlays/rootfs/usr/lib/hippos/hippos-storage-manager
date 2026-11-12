@@ -37,6 +37,7 @@ MEDIA_ROOT = Path("/media")
 ROMS_POOL = USERDATA / "roms"
 ES_API = "http://127.0.0.1:1234"
 SUPPORTED_FORMATS = {"btrfs", "ext4", "exfat"}
+EFI_SYSTEM_PARTITION_TYPES = {"c12a7328-f81f-11d2-ba4b-00a0c93ec93b", "0xef"}
 
 DEFAULT_ROOTS = [
     (USERDATA / "roms", "rom"),
@@ -992,6 +993,8 @@ def block_devices() -> list[dict[str, str]]:
 
 def is_system_device(devname: str) -> bool:
     dev = f"/dev/{devname}"
+    if run_text(["lsblk", "-dno", "PARTTYPE", dev]).strip().lower() in EFI_SYSTEM_PARTITION_TYPES:
+        return True
     for mountpoint in ("/", "/boot", "/boot/efi", "/userdata"):
         source = run_text(["findmnt", "-n", "-o", "SOURCE", mountpoint]).strip()
         if source and source == dev:
