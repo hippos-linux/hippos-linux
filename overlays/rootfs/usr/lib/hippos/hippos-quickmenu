@@ -31,8 +31,9 @@ COMMAND_TIMEOUT_S = 3
 IMAGE_TIMEOUT_S  = 5
 INACTIVITY_CLOSE_S = 20
 GRAB_DELAY_MS    = 250
-WIDTH_SHARE      = 0.45
+WIDTH_SHARE      = 0.42
 HEIGHT_SHARE     = 0.8
+CORNER_SHARE     = 0.022
 COMMAND_WORKERS  = 4
 DEFAULT_IMAGE_HEIGHT = '10%'
 
@@ -157,19 +158,16 @@ def run_menu() -> int:
     gi.require_version('Gtk', '3.0')
     gi.require_version('Gdk', '3.0')
     gi.require_version('GdkPixbuf', '2.0')
-    from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
+    gi.require_version('Pango', '1.0')
+    from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
     from evdev import ecodes
     from hippos_docviewer import DocumentViewer, pixbuf_from_bytes
     from hippos_gamepad_reader import GamepadReader
 
-    directions = {
-        ecodes.BTN_DPAD_UP: Gtk.DirectionType.UP, ecodes.BTN_DPAD_DOWN: Gtk.DirectionType.DOWN,
-        ecodes.BTN_DPAD_LEFT: Gtk.DirectionType.LEFT, ecodes.BTN_DPAD_RIGHT: Gtk.DirectionType.RIGHT,
-    }
-    hat_directions = {
-        (ecodes.ABS_HAT0Y, -1): Gtk.DirectionType.UP, (ecodes.ABS_HAT0Y, 1): Gtk.DirectionType.DOWN,
-        (ecodes.ABS_HAT0X, -1): Gtk.DirectionType.LEFT, (ecodes.ABS_HAT0X, 1): Gtk.DirectionType.RIGHT,
-    }
+    directions = {ecodes.BTN_DPAD_UP: 'up', ecodes.BTN_DPAD_DOWN: 'down',
+                  ecodes.BTN_DPAD_LEFT: 'left', ecodes.BTN_DPAD_RIGHT: 'right'}
+    hat_directions = {(ecodes.ABS_HAT0Y, -1): 'up', (ecodes.ABS_HAT0Y, 1): 'down',
+                      (ecodes.ABS_HAT0X, -1): 'left', (ecodes.ABS_HAT0X, 1): 'right'}
     close_buttons = {ecodes.BTN_START, ecodes.BTN_MODE}
 
     def selected_monitor() -> Gdk.Monitor:
@@ -179,6 +177,69 @@ def run_menu() -> int:
         return next((monitor for monitor in monitors if wanted and monitor.get_model() == wanted),
                     display.get_primary_monitor() or monitors[0])
 
+    class MenuRow(Gtk.ListBoxRow):
+        def __init__(self, menu: 'QuickMenu', row: Row) -> None:
+            super().__init__()
+            self.menu = menu
+            self.buttons: list[Gtk.Button] = []
+            self.switch: Gtk.Switch | None = None
+            self.open_target = None
+            self.opens_list = False
+            self.title = Gtk.Label(xalign=0)
+            self.get_style_context().add_class('row')
+            line = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            if row.label:
+                self.title.get_style_context().add_class('label')
+                line.pack_start(self.title, True, True, 0)
+                menu.watch({'display': row.label, 'refresh': '5'}, 'display', self.title.set_text)
+            controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, halign=Gtk.Align.END if row.label else Gtk.Align.CENTER)
+            controls.get_style_context().add_class('controls')
+            for control in row.controls:
+                widget = menu.build_control(control, self)
+                if widget is not None:
+                    controls.pack_start(widget, False, False, 0)
+            if self.opens_list:
+                chevron = Gtk.Label(label='›')
+                chevron.get_style_context().add_class('chevron')
+                controls.pack_start(chevron, False, False, 0)
+            line.pack_end(controls, not row.label, not row.label, 0)
+            self.add(line)
+            interactive = bool(self.buttons or self.switch or self.open_target)
+            self.set_activatable(interactive)
+            self.set_selectable(False)
+            self.set_can_focus(interactive)
+            if not interactive:
+                self.get_style_context().add_class('info')
+
+        def activate_row(self) -> None:
+            if self.switch is not None:
+                self.switch.set_active(not self.switch.get_active())
+            elif len(self.buttons) == 1:
+                self.buttons[0].clicked()
+            elif self.open_target is not None:
+                self.open_target()
+
+        def adjust(self, step: int) -> None:
+            if self.switch is not None:
+                self.switch.set_active(step > 0)
+            elif len(self.buttons) > 1:
+                (self.buttons[0] if step < 0 else self.buttons[-1]).clicked()
+
+    def row_list(css_class: str) -> Gtk.ListBox:
+        rows = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        rows.get_style_context().add_class(css_class)
+        rows.connect('row-activated', lambda _list, row: row.activate_row())
+        return rows
+
+    def hint(glyph: str, text: str) -> Gtk.Box:
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        key = Gtk.Label(label=glyph)
+        key.get_style_context().add_class('glyph')
+        action = Gtk.Label(label=text)
+        box.pack_start(key, False, False, 0)
+        box.pack_start(action, False, False, 0)
+        return box
+
     class QuickMenu(Gtk.Window):
         def __init__(self, menu: Menu) -> None:
             super().__init__(type=Gtk.WindowType.TOPLEVEL, title='HippOS quick menu')
@@ -187,6 +248,7 @@ def run_menu() -> int:
             self.timers: list[int] = []
             self.inactivity_timer = 0
             self.armed_confirm: Gtk.Button | None = None
+            self.confirm_labels: dict[Gtk.Button, str] = {}
             self.screen_height = selected_monitor().get_geometry().height
             self.reader = GamepadReader(self.on_button, self.on_hat)
 
@@ -196,44 +258,68 @@ def run_menu() -> int:
             self.set_skip_taskbar_hint(True)
             self.connect('key-press-event', self.on_key)
             self.connect('delete-event', lambda *_: self.hide_menu() or True)
+            self.connect('size-allocate', self.round_corners)
+            self.connect('set-focus', self.on_focus_change)
 
             self.pages = Gtk.Stack()
             self.pages.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
-            self.choice_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-            self.choice_list.get_style_context().add_class('choices')
+            self.choice_list = row_list('choices')
+            self.choice_title = Gtk.Label(xalign=0)
+            self.choice_title.get_style_context().add_class('choice-title')
             choice_scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
             choice_scroller.add(self.choice_list)
+            choice_view = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            choice_view.pack_start(self.choice_title, False, False, 0)
+            choice_view.pack_start(choice_scroller, True, True, 0)
             self.viewer = DocumentViewer(self.close_document)
             self.body = Gtk.Stack()
+            self.body.get_style_context().add_class('body')
             self.body.add_named(self.pages, 'pages')
-            self.body.add_named(choice_scroller, 'choices')
+            self.body.add_named(choice_view, 'choices')
             self.body.add_named(self.viewer, 'document')
 
             self.tabs = Gtk.StackSwitcher(stack=self.pages, halign=Gtk.Align.CENTER)
+            self.tabs.get_style_context().add_class('tabs')
             layout = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             layout.get_style_context().add_class('quickmenu')
-            header = self.build_rows(menu.header)
+            header = self.build_static(menu.header)
             header.get_style_context().add_class('header')
-            footer = self.build_rows(menu.footer)
+            footer = self.build_static(menu.footer)
             footer.get_style_context().add_class('footer')
-            hint = Gtk.Label(label='A  select      B  back      L1 / R1  tabs      START  close', xalign=0.5)
-            hint.get_style_context().add_class('hint')
+            hints = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, halign=Gtk.Align.CENTER)
+            hints.get_style_context().add_class('hints')
+            for glyph, text in (('A', 'Select'), ('B', 'Back'), ('L1 R1', 'Tabs'), ('START', 'Close')):
+                hints.pack_start(hint(glyph, text), False, False, 0)
             layout.pack_start(header, False, False, 0)
             layout.pack_start(self.tabs, False, False, 0)
             layout.pack_start(self.body, True, True, 0)
-            layout.pack_end(hint, False, False, 0)
+            layout.pack_end(hints, False, False, 0)
             layout.pack_end(footer, False, False, 0)
             self.add(layout)
             self.page_conditions: list[tuple[Gtk.Widget, str]] = []
             for page in menu.pages:
+                rows = row_list('page')
+                for row in page.rows:
+                    self.add_row(rows, row)
                 scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
-                scroller.add(self.build_rows(page.rows))
+                scroller.add(rows)
                 self.pages.add_titled(scroller, page.title, page.title)
                 if page.condition:
                     self.page_conditions.append((scroller, page.condition))
             for tab in self.tabs.get_children():
                 tab.set_can_focus(False)
             self.reader.start()
+
+        def round_corners(self, _window, allocation) -> None:
+            import cairo
+            radius = int(self.screen_height * CORNER_SHARE)
+            width, height = allocation.width, allocation.height
+            region = cairo.Region(cairo.RectangleInt(0, radius, width, max(0, height - 2 * radius)))
+            for y in range(radius):
+                inset = radius - int((radius * radius - (radius - y - 0.5) ** 2) ** 0.5)
+                region.union(cairo.RectangleInt(inset, y, width - 2 * inset, 1))
+                region.union(cairo.RectangleInt(inset, height - 1 - y, width - 2 * inset, 1))
+            self.shape_combine_region(region)
 
         def run_async(self, function, done, *args) -> None:
             future = self.executor.submit(function, *args)
@@ -250,28 +336,32 @@ def run_menu() -> int:
                 self.run_async(run_command, lambda output: apply(fill_expression(text, output)), command)
             self.refreshers.append((refresh, int(attrs.get('refresh', '0') or 0)))
 
-        def build_rows(self, rows: list[Row]) -> Gtk.Box:
+        def add_row(self, rows: Gtk.ListBox, row: Row) -> None:
+            line = MenuRow(self, row)
+            rows.add(line)
+            if row.condition:
+                line.set_no_show_all(True)
+                self.watch({'if': row.condition, 'refresh': '2'}, 'if',
+                           lambda output, line=line: self.set_shown(line, bool(output.strip())))
+
+        def build_static(self, rows: list[Row]) -> Gtk.Box:
             box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-            for row in rows:
+            for index, row in enumerate(rows):
                 line = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
                 line.get_style_context().add_class('row')
+                line.get_style_context().add_class('title' if index == 0 else 'subtitle')
                 if row.label:
-                    label = Gtk.Label(xalign=0)
+                    label = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END)
                     label.get_style_context().add_class('label')
                     line.pack_start(label, True, True, 0)
                     self.watch({'display': row.label, 'refresh': '5'}, 'display', label.set_text)
                 controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-                controls.get_style_context().add_class('controls')
                 for control in row.controls:
-                    widget = self.build_control(control)
+                    widget = self.build_control(control, None)
                     if widget is not None:
-                        controls.pack_start(widget, not row.label, not row.label, 0)
+                        controls.pack_start(widget, False, False, 0)
                 line.pack_end(controls, not row.label, not row.label, 0)
                 box.pack_start(line, False, False, 0)
-                if row.condition:
-                    line.set_no_show_all(True)
-                    self.watch({'if': row.condition, 'refresh': '2'}, 'if',
-                               lambda output, line=line: self.set_shown(line, bool(output.strip())))
             return box
 
         def set_shown(self, widget: Gtk.Widget, shown: bool) -> None:
@@ -280,13 +370,17 @@ def run_menu() -> int:
             else:
                 widget.hide()
 
-        def build_control(self, control: Control):
+        def build_control(self, control: Control, row: MenuRow | None):
             attrs = control.attrs
             kind = control.kind
             if kind == 'text':
-                label = Gtk.Label(xalign=1)
+                label = Gtk.Label(xalign=1, no_show_all=True)
                 label.get_style_context().add_class('value')
-                self.watch(attrs, 'display', label.set_text)
+
+                def set_value(output: str) -> None:
+                    label.set_text(output)
+                    label.set_visible(bool(output.strip()))
+                self.watch(attrs, 'display', set_value)
                 return label
             if kind == 'progressbar':
                 bar = Gtk.ProgressBar(valign=Gtk.Align.CENTER)
@@ -300,34 +394,50 @@ def run_menu() -> int:
                 self.watch(attrs, 'display', set_level)
                 return bar
             if kind in ('button', 'button_confirm'):
-                button = Gtk.Button(label=attrs.get('display', ''))
+                button = Gtk.Button(label=attrs.get('display', ''), can_focus=False, valign=Gtk.Align.CENTER)
+                button.get_style_context().add_class('pill')
+                if kind == 'button_confirm':
+                    button.get_style_context().add_class('danger')
                 button.connect('clicked', self.on_action, attrs, kind == 'button_confirm')
+                if row is not None:
+                    row.buttons.append(button)
                 return button
             if kind == 'switch':
-                switch = Gtk.Switch(valign=Gtk.Align.CENTER)
+                switch = Gtk.Switch(valign=Gtk.Align.CENTER, can_focus=False)
                 self.watch(attrs, 'value', lambda output: switch.set_state(is_true(output)))
                 switch.connect('state-set', self.on_switch, attrs)
+                if row is not None:
+                    row.switch = switch
                 return switch
             if kind == 'choices':
-                button = Gtk.Button(label='Select')
-                button.connect('clicked', lambda _b: self.open_choices(control))
-                return button
+                if row is not None:
+                    row.open_target = lambda: self.open_choices(control, row.title.get_text())
+                    row.opens_list = True
+                return None
+            if kind == 'choice_item':
+                if row is not None:
+                    row.open_target = lambda: self.pick_choice(attrs)
+                return None
             if kind in ('img', 'qrcode'):
                 image = Gtk.Image(no_show_all=True)
+                image.get_style_context().add_class('art')
                 height = height_pixels(attrs.get('height', ''), self.screen_height)
                 self.watch(attrs, 'display', lambda location: self.load_image(image, location, height, kind == 'qrcode'))
                 return image
             if kind == 'doc':
-                button = Gtk.Button(label=attrs.get('display', ''), no_show_all=True)
                 location = {'value': ''}
 
                 def set_location(output: str) -> None:
                     location['value'] = output.strip()
-                    button.set_visible(bool(location['value']))
+                    if row is not None:
+                        self.set_shown(row, bool(location['value']))
+                if row is not None:
+                    row.set_no_show_all(True)
+                    row.open_target = lambda: self.open_document(location['value'])
+                    row.opens_list = True
                 self.watch({'content': attrs.get('content', ''), 'refresh': attrs.get('refresh', '0')}, 'content',
                            set_location)
-                button.connect('clicked', lambda _b: self.open_document(location['value']))
-                return button
+                return None
             return None
 
         def load_image(self, image: Gtk.Image, location: str, height: int, as_qrcode: bool) -> None:
@@ -358,20 +468,35 @@ def run_menu() -> int:
 
         def on_action(self, button: Gtk.Button, attrs: dict[str, str], confirm: bool) -> None:
             if confirm and self.armed_confirm is not button:
+                self.disarm()
                 self.armed_confirm = button
+                self.confirm_labels[button] = attrs.get('display', '')
                 button.set_label('Press again to confirm')
+                button.get_style_context().add_class('armed')
                 return
             if confirm:
-                button.set_label(attrs.get('display', ''))
-                self.armed_confirm = None
+                self.disarm()
             self.run_action(attrs.get('action', ''), attrs.get('afterclick', ''))
+
+        def disarm(self) -> None:
+            button = self.armed_confirm
+            if button is None:
+                return
+            self.armed_confirm = None
+            button.get_style_context().remove_class('armed')
+            button.set_label(self.confirm_labels[button])
+
+        def on_focus_change(self, _window, widget) -> None:
+            if self.armed_confirm is not None and self.armed_confirm.get_ancestor(MenuRow) is not widget:
+                self.disarm()
 
         def on_switch(self, switch: Gtk.Switch, state: bool, attrs: dict[str, str]) -> bool:
             self.run_action(attrs.get('action_on' if state else 'action_off', ''), attrs.get('afterclick', 'refresh'))
             switch.set_state(state)
             return True
 
-        def open_choices(self, control: Control) -> None:
+        def open_choices(self, control: Control, title: str) -> None:
+            self.choice_title.set_text(title.upper())
             static = [(choice.get('display', ''), choice.get('action', ''), choice.get('afterclick', 'refresh'))
                       for choice in control.choices]
 
@@ -387,15 +512,18 @@ def run_menu() -> int:
             for child in self.choice_list.get_children():
                 self.choice_list.remove(child)
             for label, action, afterclick in choices:
-                button = Gtk.Button(label=label)
-                button.connect('clicked', lambda _b, action=action, afterclick=afterclick: (
-                    self.body.set_visible_child_name('pages'), self.run_action(action, afterclick)))
-                self.choice_list.pack_start(button, False, False, 0)
+                button = {'display': label, 'action': action, 'afterclick': afterclick}
+                self.add_row(self.choice_list, Row(label, '', [Control('choice_item', button)]))
             if not choices:
                 return
             self.choice_list.show_all()
             self.body.set_visible_child_name('choices')
             self.choice_list.get_children()[0].grab_focus()
+
+        def pick_choice(self, attrs: dict[str, str]) -> None:
+            self.body.set_visible_child_name('pages')
+            self.focus_page()
+            self.run_action(attrs['action'], attrs['afterclick'])
 
         def open_document(self, location: str) -> None:
             self.body.set_visible_child_name('document')
@@ -478,15 +606,45 @@ def run_menu() -> int:
                 self.reader.set_grab(True)
             return False
 
-        def focus_page(self) -> bool:
+        def current_rows(self) -> Gtk.ListBox | None:
+            if self.body.get_visible_child_name() == 'choices':
+                return self.choice_list
             page = self.pages.get_visible_child()
-            if page is not None:
-                page.child_focus(Gtk.DirectionType.TAB_FORWARD)
+            return page.get_child().get_child() if page is not None else None
+
+        def focus_page(self) -> bool:
+            self.move_focus(0)
             return False
+
+        def move_focus(self, step: int) -> None:
+            rows = self.current_rows()
+            if rows is None:
+                return
+            focusable = [row for row in rows.get_children() if row.get_visible() and row.get_can_focus()]
+            if not focusable:
+                return
+            focus = self.get_focus()
+            current = focusable.index(focus) if focus in focusable else -1
+            if current < 0 or step == 0:
+                target = focusable[0]
+            else:
+                target = focusable[max(0, min(len(focusable) - 1, current + step))]
+            target.grab_focus()
+
+        def adjust_focused(self, step: int) -> None:
+            focus = self.get_focus()
+            if isinstance(focus, MenuRow):
+                focus.adjust(step)
+
+        def activate_focused(self) -> None:
+            focus = self.get_focus()
+            if isinstance(focus, MenuRow):
+                focus.activate_row()
 
         def hide_menu(self) -> None:
             self.reader.set_grab(False)
             self.stop_refreshing()
+            self.disarm()
             if self.inactivity_timer:
                 GLib.source_remove(self.inactivity_timer)
                 self.inactivity_timer = 0
@@ -510,6 +668,12 @@ def run_menu() -> int:
                 self.pages.set_visible_child(visible[(visible.index(current) + step) % len(visible)])
                 self.focus_page()
 
+        def navigate(self, direction: str) -> None:
+            if direction in ('up', 'down'):
+                self.move_focus(-1 if direction == 'up' else 1)
+            else:
+                self.adjust_focused(-1 if direction == 'left' else 1)
+
         def on_button(self, code: int, pressed: bool) -> bool:
             if not pressed or not self.get_visible():
                 return False
@@ -520,9 +684,9 @@ def run_menu() -> int:
                 else:
                     self.viewer.handle_button(code)
             elif code in directions:
-                self.child_focus(directions[code])
-            elif code == ecodes.BTN_SOUTH and self.get_focus() is not None:
-                self.get_focus().activate()
+                self.navigate(directions[code])
+            elif code == ecodes.BTN_SOUTH:
+                self.activate_focused()
             elif code == ecodes.BTN_EAST:
                 self.go_back()
             elif code == ecodes.BTN_TL:
@@ -540,11 +704,18 @@ def run_menu() -> int:
             if self.body.get_visible_child_name() == 'document':
                 self.viewer.handle_hat(code, value)
             else:
-                self.child_focus(hat_directions[(code, value)])
+                self.navigate(hat_directions[(code, value)])
             return False
 
         def on_key(self, _window, event) -> bool:
             self.reset_inactivity()
+            keys = {Gdk.KEY_Up: 'up', Gdk.KEY_Down: 'down', Gdk.KEY_Left: 'left', Gdk.KEY_Right: 'right'}
+            if self.body.get_visible_child_name() != 'document' and event.keyval in keys:
+                self.navigate(keys[event.keyval])
+                return True
+            if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_space):
+                self.activate_focused()
+                return True
             if event.keyval == Gdk.KEY_Escape:
                 self.close_document() if self.body.get_visible_child_name() == 'document' else self.go_back()
                 return True

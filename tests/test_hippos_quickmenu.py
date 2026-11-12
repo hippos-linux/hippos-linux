@@ -25,7 +25,7 @@ qm = _load_hippos_quickmenu()
 class ParseMenuTests(unittest.TestCase):
     def test_default_menu_has_header_and_tabs(self):
         menu = qm.parse_menu(DEFAULT_MENU.read_text())
-        self.assertEqual(len(menu.header), 3)
+        self.assertEqual(len(menu.header), 2)
         self.assertEqual(len(menu.footer), 1)
         self.assertEqual([page.title for page in menu.pages], ['Game', 'Gun', 'System', 'Outputs', 'Record'])
         self.assertTrue(menu.pages[0].condition)

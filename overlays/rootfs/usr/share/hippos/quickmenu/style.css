@@ -1,19 +1,150 @@
-/* Copy to /userdata/system/configs/quickmenu/style.css to restyle the quick menu. */
-.quickmenu { background-color: #0d0a1c; color: #f4f1ff; padding: 18px; border: 2px solid #7b3fff; border-radius: 14px; font-size: 18px; }
-.header { padding-bottom: 8px; border-bottom: 1px solid #2c2452; }
-.header .label { font-weight: bold; }
-.row { padding: 6px 4px; }
-.label { color: #c8c2e0; }
-.value { color: #f4f1ff; margin: 0 8px; }
-.hint { color: #8f88ae; font-size: 14px; padding-top: 8px; }
-stackswitcher button { background: #1b1730; color: #c8c2e0; border: none; padding: 4px 18px; margin: 8px 2px; }
-stackswitcher button:checked { background: #7b3fff; color: #f4f1ff; }
-button { background: #1b1730; color: #f4f1ff; border: 1px solid #2c2452; border-radius: 8px; padding: 6px 14px; margin: 0 4px; }
-button:focus { background: #2c2452; border-color: #1a6fff; box-shadow: 0 0 0 2px #1a6fff; }
-switch { margin: 0 8px; }
-switch:focus { box-shadow: 0 0 0 2px #1a6fff; }
-switch:checked { background: #7b3fff; }
-progressbar { min-width: 180px; margin: 0 8px; }
-progressbar trough { background: #1b1730; min-height: 10px; border-radius: 5px; }
-progressbar progress { background: #7b3fff; min-height: 10px; border-radius: 5px; }
-.choices button { margin: 4px 40px; }
+/* Copy to /userdata/system/configs/quickmenu/style.css to restyle the quick menu.
+   Colours follow the HippOS theme: purple #7B3FFF, blue #1A6FFF, ink #07060F. */
+
+window { background-color: #0b0918; }
+
+.quickmenu {
+    background-image: linear-gradient(170deg, #1a1336 0%, #0d0a1c 38%, #07060f 100%);
+    color: #f4f1ff;
+    font-family: Sora, "Noto Sans", sans-serif;
+    font-size: 17px;
+    padding: 26px 26px 14px 26px;
+    border: 1px solid rgba(123, 63, 255, 0.55);
+    border-radius: 24px;
+}
+
+/* Header: game name, then system and version */
+.header { padding: 0 6px 18px 6px; }
+.header .title .label { font-size: 30px; font-weight: 800; color: #ffffff; }
+.header .subtitle .label { font-size: 14px; color: #b79cff; letter-spacing: 1px; padding-top: 2px; }
+.header .value {
+    font-size: 14px;
+    color: #c8c2e0;
+    background-color: rgba(255, 255, 255, 0.07);
+    border-radius: 999px;
+    padding: 5px 12px;
+    margin-left: 8px;
+}
+
+/* Tabs */
+.tabs { margin-bottom: 14px; background-color: rgba(255, 255, 255, 0.05); border-radius: 999px; padding: 4px; }
+.tabs button {
+    background: none;
+    border: none;
+    box-shadow: none;
+    border-radius: 999px;
+    color: #8f88ae;
+    font-weight: 600;
+    padding: 7px 22px;
+    margin: 0;
+}
+.tabs button:checked {
+    background-image: linear-gradient(90deg, #7b3fff, #1a6fff);
+    color: #ffffff;
+}
+
+/* Rows */
+list { background: none; }
+list row, list row:hover, list row:active, list row:selected {
+    background-color: rgba(255, 255, 255, 0.035);
+    background-image: none;
+    box-shadow: none;
+}
+list row.info, list row.info:hover { background-color: transparent; }
+list row {
+    border-radius: 14px;
+    padding: 0 18px;
+    min-height: 54px;
+    margin: 2px 0;
+    outline: none;
+    transition: background-color 120ms ease-out;
+}
+list row .label { color: #c8c2e0; font-size: 17px; }
+list row .value { color: #f4f1ff; font-weight: 600; margin: 0 10px; }
+list row.info .label { color: #8f88ae; }
+list row.info { min-height: 44px; }
+list row:focus {
+    background-image: linear-gradient(90deg, #7b3fff, #1a6fff);
+    box-shadow: 0 6px 18px rgba(26, 111, 255, 0.25);
+}
+list row:focus .label, list row:focus .value { color: #ffffff; }
+.chevron { color: #8f88ae; font-size: 22px; margin-left: 6px; }
+list row:focus .chevron { color: #ffffff; }
+.choices row .label { font-size: 18px; }
+.choice-title { color: #b79cff; font-size: 13px; font-weight: 600; letter-spacing: 2px; padding: 0 18px 8px 18px; }
+
+/* Buttons inside rows */
+button.pill {
+    background-image: none;
+    background-color: rgba(255, 255, 255, 0.08);
+    border: none;
+    box-shadow: none;
+    border-radius: 999px;
+    color: #f4f1ff;
+    font-weight: 600;
+    padding: 4px 16px;
+    margin-left: 6px;
+    min-height: 0;
+}
+list row:focus button.pill { background-color: rgba(255, 255, 255, 0.22); }
+button.pill.danger { color: #ff8fa3; }
+list row:focus button.pill.danger { color: #ffffff; }
+button.pill.armed, list row:focus button.pill.armed { background-color: #e5385a; color: #ffffff; }
+
+/* Switches */
+switch {
+    background-color: rgba(255, 255, 255, 0.12);
+    border: none;
+    border-radius: 999px;
+    min-width: 50px;
+    margin: 0 4px;
+}
+switch slider {
+    background-color: #f4f1ff;
+    border: none;
+    border-radius: 999px;
+    min-width: 24px;
+    min-height: 24px;
+    margin: 3px;
+    box-shadow: none;
+}
+switch:checked { background-image: linear-gradient(90deg, #7b3fff, #1a6fff); }
+list row:focus switch { background-color: rgba(255, 255, 255, 0.25); }
+list row:focus switch:checked { background-image: none; background-color: rgba(7, 6, 15, 0.45); }
+
+/* Bars */
+progressbar { min-width: 200px; margin: 0 10px; }
+progressbar trough { background-color: rgba(255, 255, 255, 0.1); min-height: 8px; border-radius: 999px; border: none; }
+progressbar progress {
+    background-image: linear-gradient(90deg, #7b3fff, #1a6fff);
+    min-height: 8px;
+    border-radius: 999px;
+    border: none;
+}
+list row:focus progressbar progress { background-image: none; background-color: #ffffff; }
+list row:focus progressbar trough { background-color: rgba(7, 6, 15, 0.35); }
+
+/* Pictures on the Game tab */
+.art { margin: 8px 6px; }
+
+/* Footer stats and button hints */
+.footer { border-top: 1px solid rgba(255, 255, 255, 0.07); padding: 12px 6px 4px 6px; }
+.footer .label { color: #8f88ae; font-size: 13px; font-weight: 600; letter-spacing: 1px; }
+.footer .value { color: #c8c2e0; font-size: 13px; margin-left: 14px; }
+.footer progressbar { min-width: 140px; }
+.footer progressbar trough, .footer progressbar progress { min-height: 5px; }
+.hints { padding-top: 8px; }
+.hints label { color: #8f88ae; font-size: 13px; margin-right: 18px; }
+.hints .glyph {
+    color: #0d0a1c;
+    background-color: #c8c2e0;
+    border-radius: 999px;
+    font-weight: 800;
+    font-size: 11px;
+    padding: 1px 7px;
+    margin-right: 7px;
+}
+
+/* Documents */
+.document .hint { color: #8f88ae; font-size: 13px; padding-top: 8px; }
+scrollbar { opacity: 0.4; }
