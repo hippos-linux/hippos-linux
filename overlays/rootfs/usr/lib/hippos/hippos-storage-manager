@@ -32,7 +32,7 @@ NETWORK_ROM_CONFIG = HIPPOS_CONFIG / "roms-sources.conf"
 NETWORK_CREDENTIALS_DIR = HIPPOS_CONFIG / "credentials"
 IGNORED_DEVICES = HIPPOS_CONFIG / "ignored-storage-devices.txt"
 PROMPTED_THIS_BOOT = Path("/run/hippos/storage-merge-prompted")
-MOUNT_COMMANDS = {"mount", "unmount", "eject", "format", "mount_network", "add_network", "remove_network"}
+MOUNT_COMMANDS = {"mount", "unmount", "eject", "format", "mount_network", "add_network", "remove_network", "set_network_saves"}
 MEDIA_ROOT = Path("/media")
 ROMS_POOL = USERDATA / "roms"
 ES_API = "http://127.0.0.1:1234"
@@ -804,15 +804,38 @@ def write_network_sources(lines: list[str]) -> None:
     NETWORK_ROM_CONFIG.parent.mkdir(parents=True, exist_ok=True)
     NETWORK_ROM_CONFIG.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
+def network_share(source: str) -> str:
+    return source.split(" ", 1)[0]
+
+def network_options(source: str) -> list[str]:
+    _, _, options = source.partition(" ")
+    return [option for option in options.split(",") if option]
+
+def network_saves_writable(source: str) -> bool:
+    return "saves=ro" not in network_options(source)
+
+def with_network_saves(source: str, writable: bool) -> str:
+    options = [option for option in network_options(source) if not option.startswith("saves=")]
+    if not writable:
+        options.append("saves=ro")
+    return " ".join([network_share(source), ",".join(options)]) if options else network_share(source)
+
+def written_save_folders(path: Path) -> list[str]:
+    folders = []
+    for line in run_text(["findmnt", "-rn", "-R", "-o", "TARGET,OPTIONS", str(path)]).splitlines()[1:]:
+        target, _, options = line.rpartition(" ")
+        if "rw" in options.split(","):
+            folders.append(target)
+    return folders
+
 def network_mount_path(source: str) -> Optional[Path]:
+    source = network_share(source)
     if source.startswith("nfs:"):
         share = source.removeprefix("nfs:")
         label = share.replace("/", "_").lstrip("_").replace(":", "")
         return MEDIA_ROOT / label
     if source.startswith("cifs://"):
-        rest = source.removeprefix("cifs://")
-        share_path = rest.split(" ", 1)[0]
-        return MEDIA_ROOT / share_path.replace("/", "_")
+        return MEDIA_ROOT / source.removeprefix("cifs://").replace("/", "_")
     return None
 
 def run_quiet(cmd: list[str]) -> subprocess.CompletedProcess:
@@ -1109,7 +1132,7 @@ def cmd_eject(mount_path: str) -> int:
 
     remove_external_rom_config_path(path)
     unmount_rom_pool()
-    run_quiet(["umount", str(path)])
+    run_quiet(["umount", "-R", str(path)])
     if is_mountpoint(path):
         run_quiet(["umount", "-l", str(path)])
     if is_mountpoint(path):
@@ -1256,9 +1279,22 @@ def cmd_list_devices() -> int:
 def cmd_list_network() -> int:
     for source in network_sources():
         path = network_mount_path(source)
-        status = "mounted" if path and is_mountpoint(path) else "configured"
-        print("|".join((source, str(path or ""), status)))
+        mounted = bool(path and is_mountpoint(path))
+        saves = "on" if network_saves_writable(source) else "off"
+        written = "yes" if mounted and written_save_folders(path) else "no"
+        print("|".join((source, str(path or ""), "mounted" if mounted else "configured", saves, written)))
     return 0
+
+def cmd_set_network_saves(source: str, writable: bool) -> int:
+    lines = network_sources()
+    if source not in lines:
+        log(f"not a configured network source: {source}")
+        return 1
+    write_network_sources([with_network_saves(line, writable) if line == source else line for line in lines])
+    path = network_mount_path(source)
+    if path and is_mountpoint(path):
+        cmd_eject(str(path))
+    return cmd_mount_network()
 
 def normalize_network_source(address: str) -> Optional[str]:
     address = address.strip()
@@ -1299,8 +1335,8 @@ def cmd_add_network(address: str, credentials_stdin: bool) -> int:
             return 1
         username, _, password = sys.stdin.read().partition("\n")
         source = f"{source} credentials={write_credentials(source, username.strip(), password.rstrip(chr(10)))}"
-    share = source.split(" ", 1)[0]
-    lines = [line for line in network_sources() if line.split(" ", 1)[0] != share]
+    share = network_share(source)
+    lines = [line for line in network_sources() if network_share(line) != share]
     lines.append(source)
     write_network_sources(lines)
     return cmd_mount_network()
@@ -1404,6 +1440,9 @@ def main() -> int:
                                help="read the SMB username and password from stdin, one per line")
     remove_network_p = sub.add_parser("remove_network")
     remove_network_p.add_argument("source")
+    network_saves_p = sub.add_parser("set_network_saves")
+    network_saves_p.add_argument("source")
+    network_saves_p.add_argument("state", choices=("on", "off"), help="on writes saves back to the share when the server allows it")
     eject_p = sub.add_parser("eject")
     eject_p.add_argument("mount_path")
     merge_p = sub.add_parser("merge")
@@ -1444,6 +1483,8 @@ def main() -> int:
         return cmd_add_network(args.address, args.credentials_stdin)
     if args.command == "remove_network":
         return cmd_remove_network(args.source)
+    if args.command == "set_network_saves":
+        return cmd_set_network_saves(args.source, args.state == "on")
     if args.command == "eject":
         return cmd_eject(args.mount_path)
     if args.command == "merge":

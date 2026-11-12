@@ -45,12 +45,9 @@ branches="${RW}=RW"
 external_branches=()
 for dir in "${MEDIA}"/*/; do
     [[ -d "${dir}" ]] || continue
-    add_branch "${dir%/}/saves"
-    add_branch "${dir%/}/userdata/saves"
-
     while IFS= read -r -d '' saves_dir; do
         add_branch "${saves_dir}"
-    done < <(find "${dir%/}" -mindepth 1 -maxdepth 2 -type d -iname saves -print0 2>/dev/null)
+    done < <(share_saves_dirs "${dir%/}")
 done
 
 add_alias_branches "${ALIAS_ROOT}" inherit "${FOLDER_ALIASES[@]}"

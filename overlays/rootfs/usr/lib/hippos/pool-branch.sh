@@ -6,6 +6,10 @@ pool_branch_mode() {
     fi
 }
 
+share_saves_dirs() {
+    find "$1" -mindepth 1 -maxdepth 2 -type d -iname saves -print0 2>/dev/null
+}
+
 add_alias_branches() {
     local alias_root="$1" alias_mode="$2"
     shift 2
