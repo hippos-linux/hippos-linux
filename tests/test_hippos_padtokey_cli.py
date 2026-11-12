@@ -48,14 +48,21 @@ class EditTests(unittest.TestCase):
             self.addCleanup(patcher.stop)
 
     def test_first_edit_copies_the_system_profile_into_the_game_file(self):
-        cli.set_key(self.rom, 'b', 'KEY_SPACE')
+        cli.set_keys(self.rom, 'b', ['KEY_SPACE'])
         saved = json.loads((self.folder / 'game.zip.keys').read_text())['actions_player1']
         self.assertIn({'trigger': 'a', 'type': 'key', 'target': 'KEY_ENTER'}, saved)
         self.assertIn({'trigger': 'joystick1', 'type': 'mouse'}, saved)
         self.assertEqual(cli.get(self.rom, 'b'), 'Space')
 
+    def test_combination_is_saved_as_a_list_with_modifiers_first(self):
+        cli.set_keys(self.rom, 'b', ['KEY_C', 'KEY_LEFTCTRL'])
+        saved = json.loads((self.folder / 'game.zip.keys').read_text())['actions_player1']
+        self.assertIn({'trigger': 'b', 'type': 'key', 'target': ['KEY_LEFTCTRL', 'KEY_C'],
+                       'description': 'Left Ctrl + C'}, saved)
+        self.assertEqual(cli.get(self.rom, 'b'), 'Left Ctrl + C')
+
     def test_not_mapped_removes_the_input(self):
-        cli.set_key(self.rom, 'a', 'none')
+        cli.set_keys(self.rom, 'a', [])
         self.assertEqual(cli.get(self.rom, 'a'), '')
 
 

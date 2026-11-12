@@ -4,7 +4,8 @@
      afterclick="close" hides the menu after the action, "refresh" re-reads every value,
      "rescreen" moves the menu to the screen chosen in the System tab.
      progressbar takes showvalue="true" to print its percentage inside the bar.
-     keypicker opens a keyboard; the chosen key code is added to action ("none" when cleared), display gives the current key code.
+     keypicker opens a keyboard; the chosen key codes (several for a combination, "none" when cleared) are added to action,
+     display gives the current key codes separated by spaces.
      choice_cmd lists one choice per line of display, runs action followed by the matching line of action_arg.
      img and qrcode take height="N%" of the screen; doc opens a manual, map or picture from content.
      In the header, the first feature is the title line and the rest are smaller lines under it. -->

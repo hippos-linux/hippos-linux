@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Usage: hippos-padtokey get <input> | key <input> | set <input> <KEY_...|none> | reset | edited
+"""Usage: hippos-padtokey get <input> | key <input> | set <input> <KEY_...> [KEY_...]... | set <input> none | reset | edited
 
 Edits the pad-to-keyboard profile of the running game for player 1, in the same
 <rom>.keys file as EmulationStation's padtokey editor, and applies it at once.
-get prints the key an input sends, key prints its key code, reset removes the
+Several keys make a combination, pressed together. get prints the keys an input
+sends, key prints their key codes separated by spaces, reset removes the
 game's own profile and edited prints 1 when the game has one.
 """
 
@@ -28,6 +29,8 @@ KEYS = [
     'KEY_LEFT', 'KEY_RIGHT', 'KEY_END', 'KEY_DOWN', 'KEY_PAGEDOWN', 'KEY_INSERT', 'KEY_DELETE', 'KEY_PAUSE',
     'KEY_PRINT', 'KEY_MENU', 'KEY_LEFTMETA', 'KEY_RIGHTMETA', 'BTN_LEFT', 'BTN_RIGHT', 'BTN_MIDDLE',
 ]
+MODIFIERS = ['KEY_LEFTCTRL', 'KEY_LEFTMETA', 'KEY_LEFTSHIFT', 'KEY_LEFTALT',
+             'KEY_RIGHTCTRL', 'KEY_RIGHTMETA', 'KEY_RIGHTSHIFT', 'KEY_RIGHTALT']
 KEY_LABELS = {
     'KEY_ESC': 'Esc', 'KEY_MINUS': '-', 'KEY_EQUAL': '=', 'KEY_LEFTBRACE': '[', 'KEY_RIGHTBRACE': ']',
     'KEY_SEMICOLON': ';', 'KEY_APOSTROPHE': "'", 'KEY_GRAVE': '`', 'KEY_BACKSLASH': '\\', 'KEY_COMMA': ',',
@@ -77,11 +80,18 @@ def get(rom: Path, trigger: str) -> str:
     return ' + '.join(key_label(key) for key in mapped_keys(rom, trigger))
 
 
-def set_key(rom: Path, trigger: str, key: str) -> None:
+def combination(keys: list[str]) -> list[str]:
+    unique = list(dict.fromkeys(keys))
+    return sorted(unique, key=lambda key: MODIFIERS.index(key) if key in MODIFIERS else len(MODIFIERS))
+
+
+def set_keys(rom: Path, trigger: str, keys: list[str]) -> None:
     profile = current_profile(rom)
     actions = [action for action in profile.get(PLAYER, []) if action.get('trigger') != trigger]
-    if key != 'none':
-        actions.append({'trigger': trigger, 'type': 'key', 'target': key, 'description': key_label(key)})
+    keys = combination(keys)
+    if keys:
+        actions.append({'trigger': trigger, 'type': 'key', 'target': keys[0] if len(keys) == 1 else keys,
+                        'description': ' + '.join(key_label(key) for key in keys)})
     profile[PLAYER] = actions
     game_keys_file(rom).write_text(json.dumps(profile, indent=4) + '\n')
     reapply_running_game()
@@ -98,10 +108,13 @@ def main(argv: list[str]) -> int:
             print(get(rom, trigger))
             return 0
         case ['key', trigger] if rom is not None:
-            print(next(iter(mapped_keys(rom, trigger)), 'none'))
+            print(' '.join(mapped_keys(rom, trigger)) or 'none')
             return 0
-        case ['set', trigger, key] if rom is not None and (key in KEYS or key == 'none'):
-            set_key(rom, trigger, key)
+        case ['set', trigger, 'none'] if rom is not None:
+            set_keys(rom, trigger, [])
+            return 0
+        case ['set', trigger, *keys] if rom is not None and keys and all(key in KEYS for key in keys):
+            set_keys(rom, trigger, keys)
             return 0
         case ['reset'] if rom is not None:
             game_keys_file(rom).unlink(missing_ok=True)

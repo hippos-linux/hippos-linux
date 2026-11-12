@@ -284,6 +284,11 @@ def run_menu() -> int:
             self.body.add_named(choice_view, 'choices')
             self.body.add_named(self.viewer, 'document')
             self.picker = KeyPicker(self.pick_key)
+            picker_hints = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, halign=Gtk.Align.CENTER)
+            picker_hints.get_style_context().add_class('hints')
+            for button, text in (('x', 'Add to combination'), ('y', 'Not mapped')):
+                picker_hints.pack_start(hint(button, text), False, False, 0)
+            self.picker.pack_end(picker_hints, False, False, 0)
             self.picker_action = ''
             self.picker_row: MenuRow | None = None
             self.body.add_named(self.picker, 'keys')
@@ -562,13 +567,13 @@ def run_menu() -> int:
 
             def show(current: str) -> None:
                 self.body.set_visible_child_name('keys')
-                self.picker.open(row.title.get_text(), current.strip())
+                self.picker.open(row.title.get_text(), [key for key in current.split() if key != 'none'])
             self.run_async(evaluate, show, attrs.get('display', ''))
 
-        def pick_key(self, key: str) -> None:
+        def pick_key(self, keys: list[str]) -> None:
             self.body.set_visible_child_name('pages')
             self.focus_focused_row()
-            self.run_action(f'{self.picker_action} {key}', 'refresh')
+            self.run_action(f"{self.picker_action} {' '.join(keys) or 'none'}", 'refresh')
 
         def focus_focused_row(self) -> None:
             if self.picker_row is not None and self.picker_row.get_visible():
@@ -750,6 +755,10 @@ def run_menu() -> int:
                     self.viewer.handle_button(button)
             elif button in ('up', 'down', 'left', 'right'):
                 self.navigate(button)
+            elif button == 'x' and self.body.get_visible_child_name() == 'keys':
+                self.picker.toggle_focused()
+            elif button == 'y' and self.body.get_visible_child_name() == 'keys':
+                self.picker.clear()
             elif button == ok_button:
                 self.activate_focused()
             elif button == back_button:
@@ -777,6 +786,9 @@ def run_menu() -> int:
             keys = {Gdk.KEY_Up: 'up', Gdk.KEY_Down: 'down', Gdk.KEY_Left: 'left', Gdk.KEY_Right: 'right'}
             if self.body.get_visible_child_name() != 'document' and event.keyval in keys:
                 self.navigate(keys[event.keyval])
+                return True
+            if self.body.get_visible_child_name() == 'keys' and event.keyval in (Gdk.KEY_x, Gdk.KEY_Delete):
+                self.picker.toggle_focused() if event.keyval == Gdk.KEY_x else self.picker.clear()
                 return True
             if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_space):
                 self.activate_focused()

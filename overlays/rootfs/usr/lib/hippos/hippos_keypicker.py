@@ -51,11 +51,12 @@ EXTRA_ROWS = (
 
 
 class KeyPicker(Gtk.Box):
-    def __init__(self, on_pick: Callable[[str], None]) -> None:
+    def __init__(self, on_pick: Callable[[list[str]], None]) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.get_style_context().add_class('keypicker')
         self.on_pick = on_pick
         self.buttons: dict[str, Gtk.Button] = {}
+        self.combination: list[str] = []
         self.title = Gtk.Label(xalign=0)
         self.title.get_style_context().add_class('choice-title')
         grid = Gtk.Grid(column_homogeneous=True, halign=Gtk.Align.CENTER)
@@ -76,14 +77,38 @@ class KeyPicker(Gtk.Box):
                 if key is not None:
                     button = Gtk.Button(label=label)
                     button.get_style_context().add_class('key')
-                    button.connect('clicked', lambda _button, key=key: self.on_pick(key))
+                    button.connect('clicked', lambda _button, key=key: self.pick(key))
                     grid.attach(button, column, first_row + row_index, span, 1)
                     self.buttons[key] = button
                 column += span
 
-    def open(self, title: str, current_key: str) -> None:
+    def open(self, title: str, current_keys: list[str]) -> None:
         self.title.set_text(title.upper())
+        self.combination = []
         for key, button in self.buttons.items():
             context = button.get_style_context()
-            context.add_class('current') if key == current_key else context.remove_class('current')
-        (self.buttons.get(current_key) or self.buttons['KEY_ESC']).grab_focus()
+            context.remove_class('in-combination')
+            context.add_class('current') if key in current_keys else context.remove_class('current')
+        (self.buttons.get(current_keys[-1] if current_keys else '') or self.buttons['KEY_ESC']).grab_focus()
+
+    def focused_key(self) -> str | None:
+        focus = self.get_toplevel().get_focus()
+        return next((key for key, button in self.buttons.items() if button is focus), None)
+
+    def toggle_focused(self) -> None:
+        key = self.focused_key()
+        if key is None or key == 'none':
+            return
+        context = self.buttons[key].get_style_context()
+        if key in self.combination:
+            self.combination.remove(key)
+            context.remove_class('in-combination')
+        else:
+            self.combination.append(key)
+            context.add_class('in-combination')
+
+    def pick(self, key: str) -> None:
+        self.on_pick([] if key == 'none' else self.combination + [key])
+
+    def clear(self) -> None:
+        self.on_pick([])
