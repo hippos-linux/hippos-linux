@@ -395,6 +395,39 @@ LOGOS = {
         lines=(LogoLine("Sora-SemiBold.ttf", "DESKTOP", 20, 0.32), LogoLine("Sora-ExtraBold.ttf", "Shortcuts", 50)),
         line_gap=13,
     ),
+    "lutris": Logo(
+        icon=(
+            "M30 20H70C86 20 95 32 97 50L99 70C100 84 88 90 80 82L68 70H32L20 82C12 90 0 84 1 70L3 50C5 32 14 20 30 20Z"
+            "M23 35H31V43H39V51H31V59H23V51H15V43H23Z"
+            "M72 31A6 6 0 1 0 72 43A6 6 0 1 0 72 31Z"
+            "M72 51A6 6 0 1 0 72 63A6 6 0 1 0 72 51Z"
+            "M62 41A6 6 0 1 0 62 53A6 6 0 1 0 62 41Z"
+            "M82 41A6 6 0 1 0 82 53A6 6 0 1 0 82 41Z",
+        ),
+        lines=(LogoLine("Sora-ExtraBold.ttf", "LUTRIS", 50, 0.06), LogoLine("Sora-SemiBold.ttf", "GAME LIBRARY", 20, 0.32)),
+        line_gap=14,
+    ),
+    "flatpak": Logo(
+        icon=(
+            "M50 2L94 27L50 52L6 27Z",
+            "M2 34L46 59V100L2 75Z",
+            "M98 34V75L54 100V59Z",
+        ),
+        lines=(LogoLine("Sora-SemiBold.ttf", "APPS", 20, 0.32), LogoLine("Sora-ExtraBold.ttf", "Flatpak", 50)),
+        line_gap=13,
+    ),
+    "mrboom": Logo(
+        icon=(
+            "M42 30A35 35 0 1 1 42 100A35 35 0 1 1 42 30Z"
+            "M24 52A14 14 0 0 1 38 40L38 47A8 8 0 0 0 31 55Z",
+            polygon(rotated([(56, 18), (72, 18), (72, 34), (56, 34)], 40, (64, 26))),
+            "M68 18C70 8 78 3 86 6L84 12C79 10 75 13 74 20Z",
+            polygon([(92 + r * np.sin(np.radians(a)), 6 + r * -np.cos(np.radians(a)))
+                     for a, r in zip(range(0, 360, 30), [9, 3.5] * 6)]),
+        ),
+        lines=(LogoLine("Sora-SemiBold.ttf", "MR.", 20, 0.32), LogoLine("Sora-ExtraBold.ttf", "BOOM", 50, 0.04)),
+        line_gap=13,
+    ),
 }
 
 def path_bounds(paths: list[str]) -> tuple[float, float, float, float]:
