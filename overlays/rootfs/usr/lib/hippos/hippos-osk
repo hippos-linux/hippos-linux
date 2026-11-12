@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import selectors
 import signal
 import subprocess
-import threading
 from dataclasses import dataclass
 
 import gi
@@ -16,9 +14,9 @@ gi.require_version('Pango', '1.0')
 gi.require_version('PangoCairo', '1.0')
 from gi.repository import Atspi, Gdk, GLib, Gtk, Pango, PangoCairo
 
-import evdev
-import pyudev
 from evdev import ecodes
+
+from hippos_gamepad_reader import GamepadReader
 
 HOTKEYS = '/usr/lib/hippos/hippos-hotkeys'
 
@@ -352,63 +350,6 @@ class Keyboard(Gtk.Window):
         return False
 
 
-class ControllerReader(threading.Thread):
-    def __init__(self, keyboard: Keyboard) -> None:
-        super().__init__(daemon=True)
-        self.keyboard = keyboard
-        self.selector = selectors.DefaultSelector()
-        self.devices: dict[str, evdev.InputDevice] = {}
-
-    def add(self, path: str) -> None:
-        if path in self.devices:
-            return
-        try:
-            device = evdev.InputDevice(path)
-            keys = device.capabilities().get(ecodes.EV_KEY, [])
-        except OSError:
-            return
-        if ecodes.BTN_SOUTH not in keys:
-            device.close()
-            return
-        self.devices[path] = device
-        self.selector.register(device, selectors.EVENT_READ)
-
-    def remove(self, path: str) -> None:
-        device = self.devices.pop(path, None)
-        if device is not None:
-            self.selector.unregister(device)
-            device.close()
-
-    def run(self) -> None:
-        context = pyudev.Context()
-        monitor = pyudev.Monitor.from_netlink(context)
-        monitor.filter_by(subsystem='input')
-        monitor.start()
-        self.selector.register(monitor, selectors.EVENT_READ)
-        for device in context.list_devices(subsystem='input'):
-            if device.device_node and device.device_node.startswith('/dev/input/event'):
-                self.add(device.device_node)
-        while True:
-            for selected, _ in self.selector.select():
-                if selected.fileobj is monitor:
-                    udev_device = monitor.poll(0)
-                    node = udev_device.device_node if udev_device else None
-                    if node and node.startswith('/dev/input/event'):
-                        self.add(node) if udev_device.action == 'add' else self.remove(node)
-                    continue
-                self.read(selected.fileobj)
-
-    def read(self, device: evdev.InputDevice) -> None:
-        try:
-            for event in device.read():
-                if event.type == ecodes.EV_KEY and event.value in (0, 1):
-                    GLib.idle_add(self.keyboard.on_button, event.code, event.value == 1)
-                elif event.type == ecodes.EV_ABS and event.code in (ecodes.ABS_HAT0X, ecodes.ABS_HAT0Y):
-                    GLib.idle_add(self.keyboard.on_hat, event.code, event.value)
-        except OSError:
-            self.remove(device.path)
-
-
 def watch_text_fields(keyboard: Keyboard) -> Atspi.EventListener:
     def on_focus(event: Atspi.Event) -> None:
         source = event.source
@@ -432,7 +373,7 @@ def main() -> None:
     keyboard.connect('destroy', Gtk.main_quit)
     listener = watch_text_fields(keyboard)
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, keyboard.toggle)
-    ControllerReader(keyboard).start()
+    GamepadReader(keyboard.on_button, keyboard.on_hat).start()
     try:
         Gtk.main()
     finally:

@@ -1,0 +1,19 @@
+/* Copy to /userdata/system/configs/quickmenu/style.css to restyle the quick menu. */
+.quickmenu { background-color: #0d0a1c; color: #f4f1ff; padding: 18px; border: 2px solid #7b3fff; border-radius: 14px; font-size: 18px; }
+.header { padding-bottom: 8px; border-bottom: 1px solid #2c2452; }
+.header .label { font-weight: bold; }
+.row { padding: 6px 4px; }
+.label { color: #c8c2e0; }
+.value { color: #f4f1ff; margin: 0 8px; }
+.hint { color: #8f88ae; font-size: 14px; padding-top: 8px; }
+stackswitcher button { background: #1b1730; color: #c8c2e0; border: none; padding: 4px 18px; margin: 8px 2px; }
+stackswitcher button:checked { background: #7b3fff; color: #f4f1ff; }
+button { background: #1b1730; color: #f4f1ff; border: 1px solid #2c2452; border-radius: 8px; padding: 6px 14px; margin: 0 4px; }
+button:focus { background: #2c2452; border-color: #1a6fff; box-shadow: 0 0 0 2px #1a6fff; }
+switch { margin: 0 8px; }
+switch:focus { box-shadow: 0 0 0 2px #1a6fff; }
+switch:checked { background: #7b3fff; }
+progressbar { min-width: 180px; margin: 0 8px; }
+progressbar trough { background: #1b1730; min-height: 10px; border-radius: 5px; }
+progressbar progress { background: #7b3fff; min-height: 10px; border-radius: 5px; }
+.choices button { margin: 4px 40px; }

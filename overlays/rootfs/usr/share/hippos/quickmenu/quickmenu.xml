@@ -1,0 +1,72 @@
+<!-- Copy to /userdata/system/configs/quickmenu/quickmenu.xml to change the quick menu.
+     ${command} runs a shell command and shows its output; refresh="N" re-runs it every N seconds.
+     afterclick="close" hides the menu after the action, "refresh" re-reads every value. -->
+<features>
+	<vgroup role="header">
+		<feature display='${curl -s http://127.0.0.1:1234/runningGame | jq -r ".name // empty"}' refresh="5">
+			<text display='${date +%H:%M}' refresh="10" />
+		</feature>
+		<feature display='${curl -s http://127.0.0.1:1234/runningGame | jq -r ".systemName // empty"}' refresh="5">
+			<text display='${cat /sys/class/power_supply/BAT*/capacity 2>/dev/null | head -1 | sed "s/$/%/"}' refresh="30" />
+		</feature>
+	</vgroup>
+
+	<hgroup name="Game" display="Game" if='${curl -s http://127.0.0.1:1234/runningGame | jq -r ".name // empty"}'>
+		<feature display="Playing for">
+			<text display='${ps -o etime= -p "$(pgrep -of "python3 /usr/bin/emulatorlauncher")" 2>/dev/null | tr -d " "}' refresh="1" />
+		</feature>
+		<feature display="Save state">
+			<button display="Save" action="hippos-hotkeys --send save_state" afterclick="close" />
+		</feature>
+		<feature display="Load state">
+			<button display="Load" action="hippos-hotkeys --send restore_state" afterclick="close" />
+		</feature>
+		<feature display="Reset game">
+			<button_confirm display="Reset" action="hippos-hotkeys --send reset" afterclick="close" />
+		</feature>
+		<feature display="Quit game">
+			<button_confirm display="Quit" action="hippos-hotkeys --send exit" afterclick="close" />
+		</feature>
+		<feature display="Game not responding?">
+			<button_confirm display="Force quit" action="/usr/lib/hippos/hippos-close-game" afterclick="close" />
+		</feature>
+	</hgroup>
+
+	<hgroup name="System" display="System">
+		<feature display="Volume">
+			<button display="-" action="hippos-audio setSystemVolume -5" afterclick="refresh" />
+			<progressbar display="${hippos-audio getSystemVolume}" min="0" max="100" refresh="2" />
+			<button display="+" action="hippos-audio setSystemVolume +5" afterclick="refresh" />
+		</feature>
+		<feature display="Mute">
+			<button display="Mute / unmute" action="hippos-audio setSystemVolume mute-toggle" />
+		</feature>
+		<feature display="Brightness" if="${hippos-brightness get}">
+			<button display="-" action='hippos-brightness set $(( $(hippos-brightness get) > 10 ? $(hippos-brightness get) - 10 : 1 ))' afterclick="refresh" />
+			<progressbar display="${hippos-brightness get}" min="0" max="100" refresh="2" />
+			<button display="+" action='hippos-brightness set $(( $(hippos-brightness get) &lt; 90 ? $(hippos-brightness get) + 10 : 100 ))' afterclick="refresh" />
+		</feature>
+		<feature display="Plane mode">
+			<switch value="${hippos-planemode status}" action_on="hippos-planemode enable" action_off="hippos-planemode disable" refresh="5" />
+		</feature>
+		<feature display="Power mode">
+			<text display="${cat /sys/devices/system/cpu/cpufreq/policy0/scaling_governor}" refresh="2" />
+			<choice display="Automatic" action="hippos-power-mode default" />
+			<choice display="High performance" action="hippos-power-mode highperformance" />
+			<choice display="Balanced" action="hippos-power-mode balanced" />
+			<choice display="Power saver" action="hippos-power-mode powersaver" />
+		</feature>
+	</hgroup>
+
+	<hgroup name="Info" display="Info">
+		<feature display="IP address">
+			<text display='${hostname -I | cut -d" " -f1}' refresh="5" />
+		</feature>
+		<feature display="Free space">
+			<text display="${df -h /userdata | awk 'NR==2 {print $4}'}" refresh="10" />
+		</feature>
+		<feature display="HippOS">
+			<text display="${. /etc/os-release; echo $VERSION}" />
+		</feature>
+	</hgroup>
+</features>
