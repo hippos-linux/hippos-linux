@@ -1275,11 +1275,15 @@ def mark_patch_applied(patch_id):
     with open(PATCHES_STATE_FILE, "w") as f:
         json.dump(sorted(ids), f)
 
+def manifest_patches(manifest):
+    version = current_version()
+    return [p for p in manifest.get("payloads", {}).get("patches", []) if p.get("version") == version]
+
 def cmd_list_patches():
     manifest = fetch_manifest(get_channel())
     if not manifest:
         die("Could not fetch manifest")
-    patches = manifest.get("payloads", {}).get("patches", [])
+    patches = manifest_patches(manifest)
     applied = applied_patch_ids()
     for p in patches:
         pid = p.get("id", "")
@@ -1291,9 +1295,9 @@ def cmd_apply_patches():
     manifest = fetch_manifest(get_channel())
     if not manifest:
         die("Could not fetch manifest — check network")
-    patches = manifest.get("payloads", {}).get("patches", [])
+    patches = manifest_patches(manifest)
     if not patches:
-        log("No patches in manifest")
+        log(f"No patches for {current_version()} in manifest")
         return
     applied = applied_patch_ids()
     for p in patches:
