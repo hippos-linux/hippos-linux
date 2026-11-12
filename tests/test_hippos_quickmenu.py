@@ -27,7 +27,7 @@ class ParseMenuTests(unittest.TestCase):
         menu = qm.parse_menu(DEFAULT_MENU.read_text())
         self.assertEqual(len(menu.header), 2)
         self.assertEqual([row.label for row in menu.footer], ["CPU", "GPU", "Screen"])
-        self.assertEqual([page.title for page in menu.pages], ['Game', 'Gun', 'System', 'Outputs', 'Record'])
+        self.assertEqual([page.title for page in menu.pages], ['Game', 'Keys', 'Gun', 'System', 'Outputs', 'Record'])
         self.assertTrue(menu.pages[0].condition)
 
     def test_choice_cmd_joins_the_choice_list(self):

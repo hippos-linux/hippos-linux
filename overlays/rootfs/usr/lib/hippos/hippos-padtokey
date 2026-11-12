@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""Usage: hippos-padtokey get <input> | set <input> <KEY_...|none> | keys | reset | edited
+
+Edits the pad-to-keyboard profile of the running game for player 1, in the same
+<rom>.keys file as EmulationStation's padtokey editor, and applies it at once.
+get prints the key an input sends, keys lists "label<TAB>key" choices, reset
+removes the game's own profile and edited prints 1 when the game has one.
+"""
+
+import json
+import sys
+from pathlib import Path
+
+from hippos_padtokey import find_keys_files, game_keys_file, merge_keys_files, reapply_running_game, running_game
+
+PLAYER = 'actions_player1'
+KEYS = [
+    'KEY_ESC', 'KEY_1', 'KEY_2', 'KEY_3', 'KEY_4', 'KEY_5', 'KEY_6', 'KEY_7', 'KEY_8', 'KEY_9', 'KEY_0',
+    'KEY_MINUS', 'KEY_EQUAL', 'KEY_BACKSPACE', 'KEY_TAB', 'KEY_Q', 'KEY_W', 'KEY_E', 'KEY_R', 'KEY_T', 'KEY_Y',
+    'KEY_U', 'KEY_I', 'KEY_O', 'KEY_P', 'KEY_LEFTBRACE', 'KEY_RIGHTBRACE', 'KEY_ENTER', 'KEY_LEFTCTRL', 'KEY_A',
+    'KEY_S', 'KEY_D', 'KEY_F', 'KEY_G', 'KEY_H', 'KEY_J', 'KEY_K', 'KEY_L', 'KEY_SEMICOLON', 'KEY_APOSTROPHE',
+    'KEY_GRAVE', 'KEY_LEFTSHIFT', 'KEY_BACKSLASH', 'KEY_Z', 'KEY_X', 'KEY_C', 'KEY_V', 'KEY_B', 'KEY_N', 'KEY_M',
+    'KEY_COMMA', 'KEY_DOT', 'KEY_SLASH', 'KEY_RIGHTSHIFT', 'KEY_KPASTERISK', 'KEY_LEFTALT', 'KEY_SPACE',
+    'KEY_CAPSLOCK', 'KEY_F1', 'KEY_F2', 'KEY_F3', 'KEY_F4', 'KEY_F5', 'KEY_F6', 'KEY_F7', 'KEY_F8', 'KEY_F9',
+    'KEY_F10', 'KEY_NUMLOCK', 'KEY_SCROLLLOCK', 'KEY_KP7', 'KEY_KP8', 'KEY_KP9', 'KEY_KPMINUS', 'KEY_KP4',
+    'KEY_KP5', 'KEY_KP6', 'KEY_KPPLUS', 'KEY_KP1', 'KEY_KP2', 'KEY_KP3', 'KEY_KP0', 'KEY_KPDOT', 'KEY_F11',
+    'KEY_F12', 'KEY_KPENTER', 'KEY_RIGHTCTRL', 'KEY_KPSLASH', 'KEY_RIGHTALT', 'KEY_HOME', 'KEY_UP', 'KEY_PAGEUP',
+    'KEY_LEFT', 'KEY_RIGHT', 'KEY_END', 'KEY_DOWN', 'KEY_PAGEDOWN', 'KEY_INSERT', 'KEY_DELETE', 'KEY_PAUSE',
+    'KEY_PRINT', 'KEY_MENU', 'KEY_LEFTMETA', 'KEY_RIGHTMETA', 'BTN_LEFT', 'BTN_RIGHT', 'BTN_MIDDLE',
+]
+KEY_LABELS = {
+    'KEY_ESC': 'Esc', 'KEY_MINUS': '-', 'KEY_EQUAL': '=', 'KEY_LEFTBRACE': '[', 'KEY_RIGHTBRACE': ']',
+    'KEY_SEMICOLON': ';', 'KEY_APOSTROPHE': "'", 'KEY_GRAVE': '`', 'KEY_BACKSLASH': '\\', 'KEY_COMMA': ',',
+    'KEY_DOT': '.', 'KEY_SLASH': '/', 'KEY_KPASTERISK': 'Keypad *', 'KEY_KPMINUS': 'Keypad -',
+    'KEY_KPPLUS': 'Keypad +', 'KEY_KPDOT': 'Keypad .', 'KEY_KPENTER': 'Keypad Enter', 'KEY_KPSLASH': 'Keypad /',
+    'KEY_LEFTCTRL': 'Left Ctrl', 'KEY_RIGHTCTRL': 'Right Ctrl', 'KEY_LEFTSHIFT': 'Left Shift',
+    'KEY_RIGHTSHIFT': 'Right Shift', 'KEY_LEFTALT': 'Left Alt', 'KEY_RIGHTALT': 'Right Alt',
+    'KEY_LEFTMETA': 'Left Super', 'KEY_RIGHTMETA': 'Right Super', 'KEY_CAPSLOCK': 'Caps Lock',
+    'KEY_NUMLOCK': 'Num Lock', 'KEY_SCROLLLOCK': 'Scroll Lock', 'KEY_PAGEUP': 'Page Up', 'KEY_PAGEDOWN': 'Page Down',
+    'KEY_PRINT': 'Print Screen', 'BTN_LEFT': 'Mouse left', 'BTN_RIGHT': 'Mouse right', 'BTN_MIDDLE': 'Mouse middle',
+}
+
+
+def key_label(key: str) -> str:
+    if key in KEY_LABELS:
+        return KEY_LABELS[key]
+    name = key.removeprefix('KEY_')
+    return f'Keypad {name[2:]}' if name.startswith('KP') else name.capitalize() if len(name) > 1 else name
+
+
+def game_rom() -> Path | None:
+    game = running_game()
+    return Path(game['rom']) if game else None
+
+
+def current_profile(rom: Path) -> dict[str, list[dict]]:
+    game = running_game()
+    path = game_keys_file(rom)
+    if path.exists():
+        return json.loads(path.read_text())
+    return merge_keys_files(find_keys_files(game['system'], game['emulator'], rom, default_maps=True))
+
+
+def targets_of(action: dict) -> list[str]:
+    target = action.get('target', [])
+    return target if isinstance(target, list) else [target]
+
+
+def get(rom: Path, trigger: str) -> str:
+    for action in current_profile(rom).get(PLAYER, []):
+        if action.get('trigger') == trigger and action.get('type', 'key') == 'key':
+            return ' + '.join(key_label(key) for key in targets_of(action))
+    return ''
+
+
+def set_key(rom: Path, trigger: str, key: str) -> None:
+    profile = current_profile(rom)
+    actions = [action for action in profile.get(PLAYER, []) if action.get('trigger') != trigger]
+    if key != 'none':
+        actions.append({'trigger': trigger, 'type': 'key', 'target': key, 'description': key_label(key)})
+    profile[PLAYER] = actions
+    game_keys_file(rom).write_text(json.dumps(profile, indent=4) + '\n')
+    reapply_running_game()
+
+
+def main(argv: list[str]) -> int:
+    rom = game_rom()
+    match argv:
+        case ['keys']:
+            print('\n'.join(f'{key_label(key)}\t{key}' for key in KEYS))
+            return 0
+        case ['edited']:
+            if rom is not None and game_keys_file(rom).exists():
+                print(1)
+            return 0
+        case ['get', trigger] if rom is not None:
+            print(get(rom, trigger))
+            return 0
+        case ['set', trigger, key] if rom is not None and (key in KEYS or key == 'none'):
+            set_key(rom, trigger, key)
+            return 0
+        case ['reset'] if rom is not None:
+            game_keys_file(rom).unlink(missing_ok=True)
+            reapply_running_game()
+            return 0
+        case ['get' | 'set' | 'reset', *_] if rom is None:
+            return 1
+    print(__doc__, file=sys.stderr)
+    return 2
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

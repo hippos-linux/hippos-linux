@@ -48,8 +48,12 @@ def default_keys_files(system: str, emulator: str) -> list[Path]:
     return [p for p in dict.fromkeys(candidates) if p.exists()]
 
 
+def game_keys_file(rom: Path) -> Path:
+    return rom / 'padto.keys' if rom.is_dir() else rom.parent / f'{rom.name}.keys'
+
+
 def find_keys_files(system: str, emulator: str, rom: Path, default_maps: bool, pointer: bool = False) -> list[Path]:
-    game_map = (rom.parent / f'{rom.name}.keys') if not rom.is_dir() else (rom / 'padto.keys')
+    game_map = game_keys_file(rom)
     files = [game_map] if game_map.exists() else []
     defaults = default_keys_files(system, emulator) if default_maps else []
     if pointer and not defaults:
@@ -182,14 +186,20 @@ def pointer_enabled() -> bool:
 
 
 def set_pointer(enabled: bool) -> bool:
+    return reapply_running_game(pointer=enabled)
+
+
+def reapply_running_game(pointer: bool | None = None) -> bool:
     from emulatorlauncher_shared import ControllerInfo, _load_es_input_configs
 
     game = running_game()
     if game is None:
         return False
+    if pointer is None and pointer_enabled():
+        pointer = True
     controllers = [ControllerInfo(**controller) for controller in game['controllers']]
     write_maps(game['system'], game['emulator'], Path(game['rom']), controllers, _load_es_input_configs(),
-               pointer=enabled)
+               pointer=pointer)
     reload_daemon()
     return True
 

@@ -272,6 +272,7 @@ def run_menu() -> int:
             self.choice_title.get_style_context().add_class('choice-title')
             choice_scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
             choice_scroller.add(self.choice_list)
+            self.choice_list.set_focus_vadjustment(choice_scroller.get_vadjustment())
             choice_view = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             choice_view.pack_start(self.choice_title, False, False, 0)
             choice_view.pack_start(choice_scroller, True, True, 0)
@@ -307,6 +308,7 @@ def run_menu() -> int:
                     self.add_row(rows, row)
                 scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
                 scroller.add(rows)
+                rows.set_focus_vadjustment(scroller.get_vadjustment())
                 self.pages.add_titled(scroller, page.title, page.title)
                 if page.condition:
                     self.page_conditions.append((scroller, page.condition))
@@ -654,6 +656,8 @@ def run_menu() -> int:
             else:
                 target = focusable[max(0, min(len(focusable) - 1, current + step))]
             target.grab_focus()
+            if target is focusable[0]:
+                rows.get_focus_vadjustment().set_value(0)
 
         def adjust_focused(self, step: int) -> None:
             focus = self.get_focus()
