@@ -1,3 +1,5 @@
-# Allow the hippos user to install/remove apt packages for the content downloader
+# Allow the hippos user to update apt lists, install/remove apt packages and run the content installers for the content downloader
+hippos ALL=(ALL) NOPASSWD: /usr/bin/apt-get update -qq
 hippos ALL=(ALL) NOPASSWD: /usr/bin/apt-get install *
 hippos ALL=(ALL) NOPASSWD: /usr/bin/apt-get remove *
+hippos ALL=(root) NOPASSWD: /usr/lib/hippos/content-installers/* install, /usr/lib/hippos/content-installers/* remove

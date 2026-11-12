@@ -14,6 +14,7 @@ import urllib.error
 from pathlib import Path
 from typing import Optional
 
+import hippos_content_installers
 import hippos_webapps
 from hippos_linux_games import add_catalog_game, remove_catalog_game, set_claimed
 
@@ -21,7 +22,6 @@ USERDATA        = Path('/userdata')
 CONTENT_CACHE   = USERDATA / 'system' / 'content-cache'
 INSTALLED_FILE  = CONTENT_CACHE / 'installed.json'
 HIPPOS_SETTINGS = Path('/usr/lib/hippos/hippos-settings')
-INSTALLERS_DIR  = Path('/usr/lib/hippos/content-installers')
 
 DEFAULT_CATALOG_URL = 'http://hippos-linux.org/store/content-catalog.json'
 
@@ -149,16 +149,6 @@ def _arch_ok(pkg: dict) -> bool:
     want = pkg.get('arch', '')
     return not want or want == _current_arch()
 
-def _run_installer(name: str, action: str) -> int:
-    if not name or '/' in name or name.startswith('.'):
-        print(f'Invalid installer name: {name}', file=sys.stderr)
-        return 1
-    script = INSTALLERS_DIR / name
-    if not script.is_file() or not os.access(script, os.X_OK):
-        print(f'Installer not found: {script}', file=sys.stderr)
-        return 1
-    return subprocess.run([str(script), action]).returncode
-
 def cmd_list(args: list[str]) -> int:
     catalog   = _load_catalog()
     installed = _load_installed()
@@ -257,7 +247,7 @@ def cmd_install(args: list[str]) -> int:
     if pkg_type == 'installer':
         installer = pkg.get('installer', '')
         print(f"Installing {pkg.get('name', pkg_id)}...")
-        ret = _run_installer(installer, 'install')
+        ret = hippos_content_installers.run(installer, 'install')
         if ret != 0:
             print(f'Install failed (exit {ret})', file=sys.stderr)
             return ret
@@ -335,7 +325,7 @@ def cmd_remove(args: list[str]) -> int:
         elif pkg_type == 'webapp':
             hippos_webapps.remove(pkg.get('webapp_url', ''))
         elif pkg_type == 'installer':
-            _run_installer(pkg.get('installer', ''), 'remove')
+            hippos_content_installers.run(pkg.get('installer', ''), 'remove')
             remove_catalog_game(pkg_id)
         else:
             category = pkg.get('category', 'misc')

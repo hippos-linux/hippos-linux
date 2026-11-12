@@ -12,6 +12,7 @@ import time
 import urllib.request
 import xml.etree.ElementTree as ET
 
+import hippos_content_installers
 import hippos_webapps
 from hippos_linux_games import add_catalog_game, remove_catalog_game, set_claimed
 
@@ -433,6 +434,15 @@ def _install_apt(pkg):
     elif launcher_cmd:
         add_catalog_game(pkg)
 
+def _install_with_installer(pkg):
+    print(f"Installing {pkg['name']}...", flush=True)
+    ret = hippos_content_installers.run(pkg.get("installer", ""), "install")
+    if ret != 0:
+        print(f"ERROR: install failed (exit {ret})", flush=True)
+        sys.exit(1)
+    if pkg.get("launcher_command"):
+        add_catalog_game(pkg)
+
 def cmd_install(name):
     state = load_state()
 
@@ -465,6 +475,8 @@ def cmd_install(name):
 
     if pkg.get("type") == "apt":
         _install_apt(pkg)
+    elif pkg.get("type") == "installer":
+        _install_with_installer(pkg)
     elif pkg.get("type") == "webapp":
         print(f"Adding {pkg['name']} to Web Apps...", flush=True)
         try:
@@ -506,6 +518,9 @@ def cmd_remove(name):
 
     if pkg.get("type") == "webapp":
         hippos_webapps.remove(pkg.get("webapp_url", ""))
+    elif pkg.get("type") == "installer":
+        hippos_content_installers.run(pkg.get("installer", ""), "remove")
+        remove_catalog_game(name)
     elif pkg.get("type") == "apt":
         subprocess.call(["sudo", "-n", "apt-get", "remove", "-y"] + pkg.get("apt_packages", []))
         set_claimed(pkg.get("apt_packages", []), False)
