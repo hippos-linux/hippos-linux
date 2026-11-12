@@ -20,3 +20,5 @@ systems:
     as_core: dosbox-x
     exclude_extensions:
       - zip
+  - name: win98
+    as_core: dosbox-x

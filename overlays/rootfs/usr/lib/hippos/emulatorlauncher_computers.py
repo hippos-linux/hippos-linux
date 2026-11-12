@@ -21,7 +21,7 @@ from emulatorlauncher_shared import (
     _run_game_command,
 )
 
-from HipposPaths import BIOS, CONFIGS, SAVES, SCREENSHOTS
+from HipposPaths import BIOS, CACHE, CONFIGS, SAVES, SCREENSHOTS
 
 def launch_dosbox_staging(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -59,6 +59,86 @@ def launch_dosbox_staging(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     return _run_game_command(ctx, 'dosbox-staging', cmd, env).returncode
 
+WIN9X_IMAGE_PATTERNS = ('Windows 9*.img', 'Windows 9*.vhd', 'win9*.img', 'win9*.vhd')
+WIN9X_CD_SUFFIXES = ('.cue', '.iso', '.chd')
+WIN9X_CD_CACHE = CACHE / 'win98' / 'dosbox-x'
+WIN9X_CONFIG = """[sdl]
+fullscreen=true
+output=opengl
+
+[dosbox]
+machine=svga_s3trio64
+memsize=128
+
+[cpu]
+core=dynamic
+cputype=pentium_mmx
+cycles=max
+
+[pci]
+voodoo=true
+
+[sblaster]
+sbtype=sb16
+
+[dos]
+ver=7.1
+"""
+
+def _win9x_base_image() -> Optional[Path]:
+    for pattern in WIN9X_IMAGE_PATTERNS:
+        if found := sorted(BIOS.glob(pattern)):
+            return found[0]
+    return None
+
+def _win9x_system_disk() -> Optional[Path]:
+    base = _win9x_base_image()
+    if base is None:
+        return None
+    disk = SAVES / 'win98' / 'dosbox-x' / base.name
+    if not disk.exists():
+        disk.parent.mkdir(parents=True, exist_ok=True)
+        _log.info("dosbox-x: copying %s to %s (first use)", base, disk)
+        partial = disk.with_suffix(disk.suffix + '.part')
+        shutil.copyfile(base, partial)
+        partial.replace(disk)
+    return disk
+
+def _win9x_game_cd(rom: Path) -> Optional[Path]:
+    if rom.suffix.lower() in WIN9X_CD_SUFFIXES:
+        return rom
+    target = WIN9X_CD_CACHE / rom.stem
+    if not target.is_dir():
+        shutil.rmtree(WIN9X_CD_CACHE, ignore_errors=True)
+        target.mkdir(parents=True)
+        _log.info("dosbox-x: unpacking %s", rom.name)
+        with zipfile.ZipFile(rom) as archive:
+            archive.extractall(target)
+    images = sorted(p for p in target.rglob('*') if p.suffix.lower() in WIN9X_CD_SUFFIXES)
+    return next((p for p in images if p.suffix.lower() == '.cue'), images[0] if images else None)
+
+def _launch_dosbox_x_win9x(ctx: LaunchContext, bin_path: Path) -> int:
+    disk = _win9x_system_disk()
+    if disk is None:
+        _log.error("dosbox-x: no Windows 9x disk image (%s) in %s", ', '.join(WIN9X_IMAGE_PATTERNS), BIOS)
+        return 1
+    cd = _win9x_game_cd(ctx.rom)
+    if cd is None:
+        _log.error("dosbox-x: no CD image (%s) in %s", ', '.join(WIN9X_CD_SUFFIXES), ctx.rom)
+        return 1
+    generated = CACHE / 'win98' / 'dosbox-x.conf'
+    generated.parent.mkdir(parents=True, exist_ok=True)
+    generated.write_text(WIN9X_CONFIG + '\n[autoexec]\n'
+                         f'imgmount c "{disk}" -ide 1m\n'
+                         f'imgmount d "{cd}" -t iso -ide 2m\n'
+                         'boot c:\n')
+    cmd = [str(bin_path), '-fastbioslogo', '-conf', str(generated)]
+    user_conf = CONFIGS / 'dosbox' / 'dosboxx-win98.conf'
+    if user_conf.exists():
+        cmd += ['-conf', str(user_conf)]
+    env = _build_game_env(_load_hippos_conf(), ctx)
+    return _run_game_command(ctx, 'dosbox-x', cmd, env).returncode
+
 def launch_dosbox_x(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     rom  = ctx.rom
@@ -68,6 +148,8 @@ def launch_dosbox_x(ctx: LaunchContext) -> int:
     if bin_path is None:
         _log.error("dosbox-x: binary not found")
         return 1
+    if ctx.system == 'win98':
+        return _launch_dosbox_x_win9x(ctx, bin_path)
 
     cfg_dir = CONFIGS / 'dosbox'
     cfg_dir.mkdir(parents=True, exist_ok=True)
