@@ -1,0 +1,7 @@
+[Unit]
+Description=HippOS audio output setup after a sound device is added
+
+[Service]
+Type=oneshot
+User=hippos
+ExecStart=/usr/lib/hippos/hippos-audio-setup

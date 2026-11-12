@@ -6,6 +6,7 @@ export PIPEWIRE_RUNTIME_DIR="${XDG_RUNTIME_DIR}"
 
 DEVICE=$(hippos-settings get audio.device 2>/dev/null || true)
 VOLUME=$(hippos-settings get audio.volume 2>/dev/null || true)
+SAVED_SINK_ATTEMPTS=5
 
 for _ in $(seq 1 10); do
     pactl info >/dev/null 2>&1 && break
@@ -30,8 +31,17 @@ _wait_hdmi_sink() {
     done
 }
 
+_wait_saved_sink() {
+    local attempt
+    for attempt in $(seq 1 "$SAVED_SINK_ATTEMPTS"); do
+        pactl set-default-sink "$DEVICE" 2>/dev/null && return
+        (( attempt < SAVED_SINK_ATTEMPTS )) && sleep 1
+    done
+    return 1
+}
+
 if [[ -n "$DEVICE" && "$DEVICE" != "default" && "$DEVICE" != "auto" ]]; then
-    if pactl set-default-sink "$DEVICE" 2>/dev/null; then
+    if _wait_saved_sink; then
         echo "[hippos-audio-setup] default sink: $DEVICE"
     else
         echo "[hippos-audio-setup] sink '$DEVICE' not found, waiting for HDMI sink" >&2

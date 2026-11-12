@@ -1,0 +1,7 @@
+[Unit]
+Description=HippOS audio output recovery after a sound device is removed
+
+[Service]
+Type=oneshot
+User=hippos
+ExecStart=/usr/lib/hippos/hippos-audio-recover
