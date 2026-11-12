@@ -9,7 +9,9 @@ import pyudev
 from evdev import ecodes
 from gi.repository import GLib
 
-ButtonHandler = Callable[[int, bool], bool]
+from hippos_es_buttons import DPAD_BUTTONS, button_names, es_input_root, joystick_button_maps
+
+ButtonHandler = Callable[[str, bool], bool]
 HatHandler = Callable[[int, int], bool]
 
 
@@ -20,6 +22,7 @@ class GamepadReader(threading.Thread):
         self.on_hat = on_hat
         self.selector = selectors.DefaultSelector()
         self.devices: dict[str, evdev.InputDevice] = {}
+        self.names: dict[str, dict[int, str]] = {}
         self.lock = threading.Lock()
         self.grabbing = False
 
@@ -36,6 +39,7 @@ class GamepadReader(threading.Thread):
                 device.close()
                 return
             self.devices[path] = device
+            self.names[path] = DPAD_BUTTONS | button_names(device.name, set(keys), joystick_button_maps(es_input_root()))
             self.selector.register(device, selectors.EVENT_READ)
             if self.grabbing:
                 self._grab(device)
@@ -43,6 +47,7 @@ class GamepadReader(threading.Thread):
     def remove(self, path: str) -> None:
         with self.lock:
             device = self.devices.pop(path, None)
+            self.names.pop(path, None)
             if device is not None:
                 self.selector.unregister(device)
                 device.close()
@@ -89,8 +94,9 @@ class GamepadReader(threading.Thread):
     def read(self, device: evdev.InputDevice) -> None:
         try:
             for event in device.read():
-                if event.type == ecodes.EV_KEY and event.value in (0, 1):
-                    GLib.idle_add(self.on_button, event.code, event.value == 1)
+                name = self.names.get(device.path, {}).get(event.code)
+                if event.type == ecodes.EV_KEY and event.value in (0, 1) and name:
+                    GLib.idle_add(self.on_button, name, event.value == 1)
                 elif event.type == ecodes.EV_ABS and event.code in (ecodes.ABS_HAT0X, ecodes.ABS_HAT0Y):
                     GLib.idle_add(self.on_hat, event.code, event.value)
         except OSError:

@@ -10,7 +10,6 @@ import select
 import signal
 import subprocess
 import time
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -20,7 +19,8 @@ import evdev
 import pyudev
 from evdev import ecodes
 
-from hippos_padtokey import MOUSE_INTERVAL, PadMapper, device_maps, sdl_button_codes
+from hippos_es_buttons import FALLBACK_GAMEPAD_BUTTONS, button_names, es_input_root, joystick_button_maps
+from hippos_padtokey import MOUSE_INTERVAL, PadMapper, device_maps
 
 DEVICE_NAME = "hippos hotkeys"
 
@@ -36,27 +36,6 @@ USER_COMMON_CONTEXT_FILE = USER_DIR / 'common_context.json'
 CONTEXT_FILE            = Path('/run/hippos/hotkeys.context')
 PID_FILE                = Path('/run/hippos/hotkeys.pid')
 KEYBOARD_SHOWN_FILE     = Path('/run/hippos/keyboard.shown')
-
-ES_INPUT_FILES = [
-    Path('/userdata/system/configs/emulationstation/es_input.cfg'),
-    Path('/usr/share/emulationstation/es_input.cfg'),
-]
-
-FALLBACK_GAMEPAD_BUTTONS = {
-    ecodes.BTN_MODE:   'hotkey',
-    ecodes.BTN_START:  'start',
-    ecodes.BTN_SELECT: 'select',
-    ecodes.BTN_EAST:   'a',
-    ecodes.BTN_SOUTH:  'b',
-    ecodes.BTN_WEST:   'x',
-    ecodes.BTN_NORTH:  'y',
-    ecodes.BTN_TL:     'pageup',
-    ecodes.BTN_TR:     'pagedown',
-    ecodes.BTN_TL2:    'l2',
-    ecodes.BTN_TR2:    'r2',
-    ecodes.BTN_THUMBL: 'l3',
-    ecodes.BTN_THUMBR: 'r3',
-}
 
 ECODES_NAMES: dict[int, str] = {
     code: name
@@ -186,51 +165,25 @@ def load_device_action_map(device: evdev.InputDevice) -> dict[int, str]:
     return {}
 
 def load_es_button_maps() -> tuple[dict[str, dict[int, str]], dict[int, str]]:
-    for path in ES_INPUT_FILES:
-        if path.exists():
-            break
-    else:
-        return {}, {}
-    try:
-        root = ET.parse(path).getroot()
-    except Exception as exc:
-        log(f'could not parse {path}: {exc}')
-        return {}, {}
-    maps: dict[str, dict[int, str]] = {}
+    root = es_input_root()
     keyboard_map: dict[int, str] = {}
-    for config in root.findall('inputConfig'):
-        config_type = config.attrib.get('type')
-        if config_type == 'joystick':
-            device_name = config.attrib.get('deviceName', '')
-            by_code: dict[int, str] = {}
-            for node in config.findall('input'):
-                if node.attrib.get('type') != 'button':
-                    continue
-                name = node.attrib.get('name')
-                code = node.attrib.get('id') or node.attrib.get('code')
-                if not name or code is None:
-                    continue
-                try:
-                    by_code[int(code)] = name
-                except ValueError:
-                    continue
-            if device_name and by_code:
-                maps[device_name] = by_code
-        elif config_type == 'keyboard':
-            for node in config.findall('input'):
-                if node.attrib.get('type') != 'key':
-                    continue
-                name = node.attrib.get('name')
-                sdl_id = node.attrib.get('id') or node.attrib.get('code')
-                if not name or sdl_id is None:
-                    continue
-                try:
-                    evdev_code = sdl_keycode_to_evdev(int(sdl_id))
-                except ValueError:
-                    continue
-                if evdev_code is not None:
-                    keyboard_map[evdev_code] = name
-    return maps, keyboard_map
+    for config in root.findall('inputConfig') if root is not None else []:
+        if config.attrib.get('type') != 'keyboard':
+            continue
+        for node in config.findall('input'):
+            if node.attrib.get('type') != 'key':
+                continue
+            name = node.attrib.get('name')
+            sdl_id = node.attrib.get('id') or node.attrib.get('code')
+            if not name or sdl_id is None:
+                continue
+            try:
+                evdev_code = sdl_keycode_to_evdev(int(sdl_id))
+            except ValueError:
+                continue
+            if evdev_code is not None:
+                keyboard_map[evdev_code] = name
+    return joystick_button_maps(root), keyboard_map
 
 def load_combo_actions() -> list[dict[str, Any]]:
     src = USER_HOTKEYS_FILE if USER_HOTKEYS_FILE.exists() else HOTKEYS_FILE
@@ -426,12 +379,7 @@ class HotkeyDaemon:
         action_map = load_device_action_map(device)
         keys = set(caps.get(ecodes.EV_KEY, []))
 
-        button_map = {c: n for c, n in FALLBACK_GAMEPAD_BUTTONS.items() if c in keys}
-        gamepad_btn_codes = sdl_button_codes(keys)
-        es_map = self.es_button_maps.get(device.name, {})
-        for sdl_idx, action_name in es_map.items():
-            if sdl_idx < len(gamepad_btn_codes):
-                button_map[gamepad_btn_codes[sdl_idx]] = action_name
+        button_map = button_names(device.name, keys, self.es_button_maps)
 
         if not button_map and ecodes.KEY_ESC in keys and ecodes.KEY_A in keys:
             button_map = {c: n for c, n in self.es_keyboard_map.items() if c in keys}

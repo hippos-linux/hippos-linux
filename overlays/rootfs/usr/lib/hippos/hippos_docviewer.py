@@ -121,16 +121,16 @@ class DocumentViewer(Gtk.Box):
         adjustment = self.scroller.get_vadjustment()
         adjustment.set_value(adjustment.get_value() + direction * adjustment.get_page_size() * SCROLL_STEP_SHARE)
 
-    def handle_button(self, code: int) -> None:
-        if code in (ecodes.BTN_TL, ecodes.BTN_DPAD_LEFT):
+    def handle_button(self, button: str) -> None:
+        if button in ('pageup', 'left'):
             self.turn(-1)
-        elif code in (ecodes.BTN_TR, ecodes.BTN_DPAD_RIGHT):
+        elif button in ('pagedown', 'right'):
             self.turn(1)
-        elif code == ecodes.BTN_DPAD_UP:
+        elif button == 'up':
             self.scroll(-1)
-        elif code == ecodes.BTN_DPAD_DOWN:
+        elif button == 'down':
             self.scroll(1)
-        elif code == ecodes.BTN_EAST:
+        elif button == 'b':
             self.on_close()
 
     def handle_hat(self, code: int, value: int) -> None:

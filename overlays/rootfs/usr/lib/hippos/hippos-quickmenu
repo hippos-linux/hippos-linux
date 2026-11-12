@@ -164,11 +164,9 @@ def run_menu() -> int:
     from hippos_docviewer import DocumentViewer, pixbuf_from_bytes
     from hippos_gamepad_reader import GamepadReader
 
-    directions = {ecodes.BTN_DPAD_UP: 'up', ecodes.BTN_DPAD_DOWN: 'down',
-                  ecodes.BTN_DPAD_LEFT: 'left', ecodes.BTN_DPAD_RIGHT: 'right'}
     hat_directions = {(ecodes.ABS_HAT0Y, -1): 'up', (ecodes.ABS_HAT0Y, 1): 'down',
                       (ecodes.ABS_HAT0X, -1): 'left', (ecodes.ABS_HAT0X, 1): 'right'}
-    close_buttons = {ecodes.BTN_START, ecodes.BTN_MODE}
+    close_buttons = {'start', 'hotkey'}
 
     def selected_monitor() -> Gdk.Monitor:
         display = Gdk.Display.get_default()
@@ -694,26 +692,26 @@ def run_menu() -> int:
             else:
                 self.adjust_focused(-1 if direction == 'left' else 1)
 
-        def on_button(self, code: int, pressed: bool) -> bool:
+        def on_button(self, button: str, pressed: bool) -> bool:
             if not pressed or not self.get_visible():
                 return False
             self.reset_inactivity()
             if self.body.get_visible_child_name() == 'document':
-                if code in close_buttons:
+                if button in close_buttons:
                     self.hide_menu()
                 else:
-                    self.viewer.handle_button(code)
-            elif code in directions:
-                self.navigate(directions[code])
-            elif code == ecodes.BTN_SOUTH:
+                    self.viewer.handle_button(button)
+            elif button in ('up', 'down', 'left', 'right'):
+                self.navigate(button)
+            elif button == 'a':
                 self.activate_focused()
-            elif code == ecodes.BTN_EAST:
+            elif button == 'b':
                 self.go_back()
-            elif code == ecodes.BTN_TL:
+            elif button == 'pageup':
                 self.switch_page(-1)
-            elif code == ecodes.BTN_TR:
+            elif button == 'pagedown':
                 self.switch_page(1)
-            elif code in close_buttons:
+            elif button in close_buttons:
                 self.hide_menu()
             return False
 

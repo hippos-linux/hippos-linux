@@ -318,29 +318,21 @@ class Keyboard(Gtk.Window):
         area.queue_draw()
         return False
 
-    def on_button(self, code: int, pressed: bool) -> bool:
+    def on_button(self, button: str, pressed: bool) -> bool:
         if not self.get_visible():
             return False
-        directions = {ecodes.BTN_DPAD_LEFT: (-1, 0), ecodes.BTN_DPAD_RIGHT: (1, 0),
-                      ecodes.BTN_DPAD_UP: (0, -1), ecodes.BTN_DPAD_DOWN: (0, 1)}
-        if code in directions:
-            self.start_repeat(*directions[code]) if pressed else self.stop_repeat()
+        directions = {'left': (-1, 0), 'right': (1, 0), 'up': (0, -1), 'down': (0, 1)}
+        shortcuts = {'l2': 'shift', 'pageup': 'delete', 'pagedown': 'space', 'r2': 'alt', 'start': 'ok'}
+        if button in directions:
+            self.start_repeat(*directions[button]) if pressed else self.stop_repeat()
         elif not pressed:
             return False
-        elif code == ecodes.BTN_SOUTH:
+        elif button == 'a':
             self.activate(self.focused)
-        elif code == ecodes.BTN_EAST:
+        elif button == 'b':
             self.hide_now()
-        elif code == ecodes.BTN_TL2:
-            self.activate(next(key for key in self.keys if key.action == 'shift'))
-        elif code == ecodes.BTN_TL:
-            self.activate(next(key for key in self.keys if key.action == 'delete'))
-        elif code == ecodes.BTN_TR:
-            self.activate(next(key for key in self.keys if key.action == 'space'))
-        elif code == ecodes.BTN_TR2:
-            self.activate(next(key for key in self.keys if key.action == 'alt'))
-        elif code == ecodes.BTN_START:
-            self.activate(next(key for key in self.keys if key.action == 'ok'))
+        elif button in shortcuts:
+            self.activate(next(key for key in self.keys if key.action == shortcuts[button]))
         return False
 
     def on_hat(self, code: int, value: int) -> bool:
