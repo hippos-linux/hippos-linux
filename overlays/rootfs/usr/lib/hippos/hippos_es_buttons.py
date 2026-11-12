@@ -7,6 +7,7 @@ from evdev import ecodes
 
 from hippos_padtokey import sdl_button_codes
 
+ES_SETTINGS = Path('/userdata/system/configs/emulationstation/es_settings.cfg')
 ES_INPUT_FILES = (
     Path('/userdata/system/configs/emulationstation/es_input.cfg'),
     Path('/usr/share/emulationstation/es_input.cfg'),
@@ -32,6 +33,31 @@ DPAD_BUTTONS = {
     ecodes.BTN_DPAD_UP: 'up', ecodes.BTN_DPAD_DOWN: 'down',
     ecodes.BTN_DPAD_LEFT: 'left', ecodes.BTN_DPAD_RIGHT: 'right',
 }
+
+
+NINTENDO_VENDOR = 0x057e
+ES_FACE_POSITIONS = {'a': 'east', 'b': 'south', 'x': 'north', 'y': 'west'}
+PRINTED_LABELS = {
+    'standard': {'south': 'A', 'east': 'B', 'west': 'X', 'north': 'Y'},
+    'nintendo': {'south': 'B', 'east': 'A', 'west': 'Y', 'north': 'X'},
+}
+
+
+def printed_label(es_name: str, vendor: int) -> str:
+    position = ES_FACE_POSITIONS.get(es_name)
+    if position is None:
+        return es_name.upper()
+    return PRINTED_LABELS['nintendo' if vendor == NINTENDO_VENDOR else 'standard'][position]
+
+
+def ok_and_back() -> tuple[str, str]:
+    try:
+        root = ET.parse(ES_SETTINGS).getroot()
+    except (OSError, ET.ParseError):
+        root = None
+    swapped = root is not None and any(node.get('name') == 'InvertButtons' and node.get('value') == 'true'
+                                       for node in root.iter('bool'))
+    return ('a', 'b') if swapped else ('b', 'a')
 
 
 def es_input_root() -> ET.Element | None:

@@ -18,6 +18,7 @@ from gi.repository import Atspi, Gdk, GLib, Gtk, Pango, PangoCairo
 
 from evdev import ecodes
 
+from hippos_es_buttons import ok_and_back
 from hippos_gamepad_reader import GamepadReader
 from hippos_session_app import claim, release, toggle
 
@@ -116,6 +117,7 @@ def rgb(colour: tuple[int, int, int]) -> tuple[float, float, float]:
 class Keyboard(Gtk.Window):
     def __init__(self) -> None:
         super().__init__(type=Gtk.WindowType.POPUP)
+        self.ok_button, self.back_button = ok_and_back()
         self.keys = build_keys()
         self.grid = {(cell_column, cell_row): key for key in self.keys
                      for cell_column in range(key.column, key.column + key.width)
@@ -327,9 +329,9 @@ class Keyboard(Gtk.Window):
             self.start_repeat(*directions[button]) if pressed else self.stop_repeat()
         elif not pressed:
             return False
-        elif button == 'a':
+        elif button == self.ok_button:
             self.activate(self.focused)
-        elif button == 'b':
+        elif button == self.back_button:
             self.hide_now()
         elif button in shortcuts:
             self.activate(next(key for key in self.keys if key.action == shortcuts[button]))

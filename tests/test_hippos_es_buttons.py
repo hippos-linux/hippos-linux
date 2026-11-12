@@ -35,5 +35,33 @@ class ButtonNameTests(unittest.TestCase):
         self.assertEqual(names[ecodes.BTN_TL], 'pageup')
 
 
+class PrintedLabelTests(unittest.TestCase):
+    def test_bottom_button_reads_a_on_most_pads(self):
+        self.assertEqual(es.printed_label('b', 0x045e), 'A')
+        self.assertEqual(es.printed_label('a', 0x045e), 'B')
+
+    def test_nintendo_pads_keep_their_layout(self):
+        self.assertEqual(es.printed_label('b', es.NINTENDO_VENDOR), 'B')
+        self.assertEqual(es.printed_label('a', es.NINTENDO_VENDOR), 'A')
+
+
+class OkAndBackTests(unittest.TestCase):
+    def settings(self, text):
+        import tempfile
+        handle = tempfile.NamedTemporaryFile('w', suffix='.cfg', delete=False)
+        handle.write(text)
+        handle.close()
+        self.addCleanup(Path(handle.name).unlink)
+        return Path(handle.name)
+
+    def test_es_confirms_with_b_by_default(self):
+        es.ES_SETTINGS = self.settings('<config><bool name="LoadEmptySystems" value="false" /></config>')
+        self.assertEqual(es.ok_and_back(), ('b', 'a'))
+
+    def test_swap_validate_and_back_setting(self):
+        es.ES_SETTINGS = self.settings('<config><bool name="InvertButtons" value="true" /></config>')
+        self.assertEqual(es.ok_and_back(), ('a', 'b'))
+
+
 if __name__ == '__main__':
     unittest.main()

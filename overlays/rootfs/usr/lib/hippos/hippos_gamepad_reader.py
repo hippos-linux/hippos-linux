@@ -52,6 +52,10 @@ class GamepadReader(threading.Thread):
                 self.selector.unregister(device)
                 device.close()
 
+    def vendors(self) -> list[int]:
+        with self.lock:
+            return [device.info.vendor for device in self.devices.values()]
+
     def set_grab(self, grab: bool) -> None:
         with self.lock:
             self.grabbing = grab

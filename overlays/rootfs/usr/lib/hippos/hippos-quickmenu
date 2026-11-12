@@ -162,11 +162,13 @@ def run_menu() -> int:
     from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
     from evdev import ecodes
     from hippos_docviewer import DocumentViewer, pixbuf_from_bytes
+    from hippos_es_buttons import ok_and_back, printed_label
     from hippos_gamepad_reader import GamepadReader
 
     hat_directions = {(ecodes.ABS_HAT0Y, -1): 'up', (ecodes.ABS_HAT0Y, 1): 'down',
                       (ecodes.ABS_HAT0X, -1): 'left', (ecodes.ABS_HAT0X, 1): 'right'}
     close_buttons = {'start', 'hotkey'}
+    ok_button, back_button = ok_and_back()
 
     def selected_monitor() -> Gdk.Monitor:
         display = Gdk.Display.get_default()
@@ -229,9 +231,8 @@ def run_menu() -> int:
         rows.connect('row-activated', lambda _list, row: row.activate_row())
         return rows
 
-    def hint(glyph: str, text: str) -> Gtk.Box:
+    def hint(key: Gtk.Label, text: str) -> Gtk.Box:
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        key = Gtk.Label(label=glyph)
         key.get_style_context().add_class('glyph')
         action = Gtk.Label(label=text)
         box.pack_start(key, False, False, 0)
@@ -286,8 +287,10 @@ def run_menu() -> int:
             footer.get_style_context().add_class('footer')
             hints = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, halign=Gtk.Align.CENTER)
             hints.get_style_context().add_class('hints')
-            for glyph, text in (('A', 'Select'), ('B', 'Back'), ('L1 R1', 'Tabs'), ('START', 'Close')):
-                hints.pack_start(hint(glyph, text), False, False, 0)
+            self.ok_glyph, self.back_glyph = Gtk.Label(), Gtk.Label()
+            for key, text in ((self.ok_glyph, 'Select'), (self.back_glyph, 'Back'),
+                              (Gtk.Label(label='L1 R1'), 'Tabs'), (Gtk.Label(label='START'), 'Close')):
+                hints.pack_start(hint(key, text), False, False, 0)
             layout.pack_start(header, False, False, 0)
             layout.pack_start(self.tabs, False, False, 0)
             layout.pack_start(self.body, True, True, 0)
@@ -608,7 +611,13 @@ def run_menu() -> int:
             self.resize(width, height)
             self.move(area.x + (area.width - width) // 2, area.y + (area.height - height) // 2)
 
+        def label_buttons(self) -> None:
+            vendor = next(iter(self.reader.vendors()), 0)
+            self.ok_glyph.set_text(printed_label(ok_button, vendor))
+            self.back_glyph.set_text(printed_label(back_button, vendor))
+
         def show_menu(self) -> None:
+            self.label_buttons()
             self.body.set_visible_child_name('pages')
             self.place_window()
             self.show_all()
@@ -703,9 +712,9 @@ def run_menu() -> int:
                     self.viewer.handle_button(button)
             elif button in ('up', 'down', 'left', 'right'):
                 self.navigate(button)
-            elif button == 'a':
+            elif button == ok_button:
                 self.activate_focused()
-            elif button == 'b':
+            elif button == back_button:
                 self.go_back()
             elif button == 'pageup':
                 self.switch_page(-1)

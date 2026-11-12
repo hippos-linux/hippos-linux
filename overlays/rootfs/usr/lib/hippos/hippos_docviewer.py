@@ -14,6 +14,8 @@ gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import GdkPixbuf, Gtk
 from evdev import ecodes
 
+from hippos_es_buttons import ok_and_back
+
 DOWNLOAD_TIMEOUT_S = 10
 RENDER_TIMEOUT_S = 15
 SCROLL_STEP_SHARE = 0.25
@@ -71,6 +73,7 @@ class DocumentViewer(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.get_style_context().add_class('document')
         self.on_close = on_close
+        self.back_button = ok_and_back()[1]
         self.folder = tempfile.TemporaryDirectory(prefix='hippos-quickmenu-')
         self.pages: list[Callable[[], GdkPixbuf.Pixbuf]] = []
         self.page = 0
@@ -130,7 +133,7 @@ class DocumentViewer(Gtk.Box):
             self.scroll(-1)
         elif button == 'down':
             self.scroll(1)
-        elif button == 'b':
+        elif button == self.back_button:
             self.on_close()
 
     def handle_hat(self, code: int, value: int) -> None:
