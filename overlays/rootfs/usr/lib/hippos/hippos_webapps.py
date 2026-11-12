@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass
 from html.parser import HTMLParser
 from pathlib import Path
@@ -147,11 +148,33 @@ def fetch_icon(name: str, page_url: str, icon_url: str = '') -> str:
     return ''
 
 
+def _launcher_for(url: str) -> Path:
+    try:
+        return Path(json.loads(STATE_FILE.read_text(encoding='utf-8')).get(url, ''))
+    except (OSError, json.JSONDecodeError):
+        return Path()
+
+
+def _drop_gamelist_image(url: str) -> None:
+    launcher = _launcher_for(url)
+    gamelist = WEBAPPS_DIR / 'gamelist.xml'
+    if not launcher.name or not gamelist.exists():
+        return
+    tree = ET.parse(gamelist)
+    for game in tree.getroot().findall('game'):
+        image = game.find('image')
+        if game.findtext('path') == f'./{launcher.name}' and image is not None:
+            (WEBAPPS_DIR / (image.text or '')).unlink(missing_ok=True)
+            game.remove(image)
+            tree.write(gamelist, encoding='utf-8', xml_declaration=True)
+
+
 def add(name: str, url: str, icon_url: str = '') -> WebApp:
     url = normalise_url(url)
     ensure_chromium()
     app = WebApp(name.strip() or urllib.parse.urlparse(url).hostname or url, url)
     app.icon = fetch_icon(app.name, url, icon_url)
+    _drop_gamelist_image(url)
     save_webapps([existing for existing in load_webapps() if existing.url != url] + [app])
     sync()
     return app
@@ -163,10 +186,7 @@ def remove(url: str) -> bool:
     gone = [app for app in apps if app.url == url]
     if not gone:
         return False
-    try:
-        launcher = Path(json.loads(STATE_FILE.read_text(encoding='utf-8')).get(url, ''))
-    except (OSError, json.JSONDecodeError):
-        launcher = Path()
+    launcher = _launcher_for(url)
     save_webapps([app for app in apps if app.url != url])
     sync()
     for app in gone:
