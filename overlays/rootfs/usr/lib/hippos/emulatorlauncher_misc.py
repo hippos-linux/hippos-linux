@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import zipfile
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from emulatorlauncher_shared import (
     _conf_value,
     _find_emulator_bin,
     _find_emulator_bin_in_package,
+    _game_setting,
     _load_es_input_configs,
     _load_hippos_conf,
     _log,
@@ -25,6 +27,7 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import BIOS, CONFIGS, SAVES, USERDATA
 from hippos_launcher_sync import CLIENT_ENTRY
+from hippos_onscreen_keyboard import onscreen_keyboard
 from hippos_ports import read_desktop_file
 import hippos_quiver
 
@@ -234,8 +237,10 @@ def launch_desktopshortcuts(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
-    _log.info("Launching desktop app: %s", desktop_file)
-    result = _run_game_command(ctx, 'shell', ['/bin/sh', '-c', app.command], env)
+    keyboard = _game_setting(conf, ctx.system, ctx.rom, 'onscreen_keyboard') != '0'
+    _log.info("Launching desktop app: %s (on-screen keyboard %s)", desktop_file, 'on' if keyboard else 'off')
+    with onscreen_keyboard(env) if keyboard else nullcontext():
+        result = _run_game_command(ctx, 'shell', ['/bin/sh', '-c', app.command], env)
     return result.returncode
 
 def launch_heroic(ctx: LaunchContext) -> int:

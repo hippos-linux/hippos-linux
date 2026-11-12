@@ -24,7 +24,7 @@ try:
 except ImportError:
     _HAS_YAML = False
 
-from hippos_evmapy import evmapy_context
+from hippos_padtokey import padtokey_context
 
 from HipposPaths import (
     CONFIGS, EMULATORLAUNCHER_DEFAULTS, EMULATORS_ROOT, HIPPOS_CONF, HIPPOS_SHARE_DIR, USER_ES_DIR,
@@ -831,7 +831,7 @@ def _run_game_command(
             with wheel_proxy_context(ctx, env):
                 with hotkey_context(hotkey_name):
                     profiles = _load_es_input_configs()
-                    with evmapy_context(ctx.system, ctx.emulator, ctx.rom, ctx.controllers, profiles):
+                    with padtokey_context(ctx.system, ctx.emulator, ctx.rom, ctx.controllers, profiles):
                         result = subprocess.run(cmd, env=env, text=True, cwd=str(cwd) if cwd is not None else None)
                         if result.returncode == -signal.SIGTERM:
                             result.returncode = 0

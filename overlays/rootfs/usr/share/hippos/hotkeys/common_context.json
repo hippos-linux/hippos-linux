@@ -8,5 +8,6 @@
   "brightness-cycle": "brightnessctl set +10%",
   "power":            "systemctl poweroff",
   "swap_screen":      "hippos-swap-screen",
+  "onscreen-keyboard": "pkill -USR1 -xf '/usr/bin/python3 /usr/lib/hippos/hippos-osk'",
   "fullscreen":       ["KEY_LEFTALT", "KEY_ENTER"]
 }

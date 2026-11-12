@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import subprocess
 import threading
 import time
 from copy import deepcopy
@@ -65,19 +64,17 @@ def _rebuild_path_map(controllers: list[ControllerInfo]) -> dict[int, str]:
 
     return result
 
-def _reconfigure_evmapy(
+def _reconfigure_padtokey(
     system: str,
     emulator: str,
     rom: Path,
     controllers: list[ControllerInfo],
     profiles: list[ESControllerProfile],
 ) -> None:
-    from hippos_evmapy import HIPPOS_EVMAPY, _prepare
-    _log.info("controller monitor: reconfiguring evmapy")
-    subprocess.call([str(HIPPOS_EVMAPY), 'stop'],  stderr=subprocess.DEVNULL)
-    time.sleep(0.5)
-    _prepare(system, emulator, rom, controllers, profiles)
-    subprocess.call([str(HIPPOS_EVMAPY), 'start'], stderr=subprocess.DEVNULL)
+    from hippos_padtokey import reload_daemon, write_maps
+    _log.info("controller monitor: reconfiguring padtokey")
+    write_maps(system, emulator, rom, controllers, profiles)
+    reload_daemon()
 
 def _monitor_loop(
     ctx: LaunchContext,
@@ -118,7 +115,7 @@ def _monitor_loop(
                 if ctrl.index in new_map:
                     ctrl.device_path = new_map[ctrl.index]
 
-        _reconfigure_evmapy(
+        _reconfigure_padtokey(
             ctx.system, ctx.emulator, ctx.rom,
             ctx.controllers, profiles,
         )

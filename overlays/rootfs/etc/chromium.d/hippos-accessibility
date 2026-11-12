@@ -1,0 +1,3 @@
+if [ "$ACCESSIBILITY_ENABLED" = 1 ]; then
+    export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --force-renderer-accessibility"
+fi

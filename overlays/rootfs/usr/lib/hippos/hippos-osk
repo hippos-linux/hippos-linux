@@ -1,0 +1,444 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import selectors
+import signal
+import subprocess
+import threading
+from dataclasses import dataclass
+
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+gi.require_version('Atspi', '2.0')
+gi.require_version('Pango', '1.0')
+gi.require_version('PangoCairo', '1.0')
+from gi.repository import Atspi, Gdk, GLib, Gtk, Pango, PangoCairo
+
+import evdev
+import pyudev
+from evdev import ecodes
+
+HOTKEYS = '/usr/lib/hippos/hippos-hotkeys'
+
+COLUMNS = 13
+ROWS = 5
+WIDTH_SHARE = 2 / 3
+HEIGHT_SHARE = 1 / 3
+MARGIN_SHARE = 0.03
+HELP_SHARE = 0.12
+GAP_SHARE = 0.12
+RADIUS_SHARE = 0.18
+LABEL_SHARE = 0.36
+HELP_TEXT = 'A  type      B  close      L1  delete      R1  space      L2  shift      R2  accents      START  done'
+REPEAT_DELAY_MS = 400
+REPEAT_INTERVAL_MS = 110
+FLASH_MS = 120
+HIDE_DELAY_MS = 200
+
+INK = (0x0D, 0x0A, 0x1C)
+KEY = (0x1B, 0x17, 0x30)
+KEY_DARK = (0x11, 0x0E, 0x20)
+KEY_FOCUS = (0x2C, 0x24, 0x52)
+PURPLE = (0x7B, 0x3F, 0xFF)
+BLUE = (0x1A, 0x6F, 0xFF)
+TEXT = (0xF4, 0xF1, 0xFF)
+TEXT_DIM = (0xC8, 0xC2, 0xE0)
+TEXT_MUTED = (0x8F, 0x88, 0xAE)
+
+CHARACTER_ROWS = (
+    (('1', '!', '1', '!'), ('2', '@', '2', '@'), ('3', '#', '3', '#'), ('4', '$', '4', '$'), ('5', '%', '5', '%'),
+     ('6', '^', '6', '^'), ('7', '&', '7', '&'), ('8', '*', '8', '*'), ('9', '(', '9', '('), ('0', ')', '0', ')'),
+     ('_', '-', '_', '-'), ('+', '=', '+', '=')),
+    (('q', 'Q', 'à', 'À'), ('w', 'W', 'ä', 'Ä'), ('e', 'E', 'è', 'È'), ('r', 'R', 'ë', 'Ë'), ('t', 'T', 'ì', 'Ì'),
+     ('y', 'Y', 'ï', 'Ï'), ('u', 'U', 'ò', 'Ò'), ('i', 'I', 'ö', 'Ö'), ('o', 'O', 'ù', 'Ù'), ('p', 'P', 'ü', 'Ü'),
+     ('{', '[', '¨', '¨'), ('}', ']', '¿', '¿')),
+    (('a', 'A', 'á', 'Á'), ('s', 'S', 'â', 'Â'), ('d', 'D', 'é', 'É'), ('f', 'F', 'ê', 'Ê'), ('g', 'G', 'í', 'Í'),
+     ('h', 'H', 'î', 'Î'), ('j', 'J', 'ó', 'Ó'), ('k', 'K', 'ô', 'Ô'), ('l', 'L', 'ú', 'Ú'), (';', ':', 'û', 'Û'),
+     ('"', "'", 'ñ', 'Ñ'), ('|', '\\', '¡', '¡')),
+    (('~', '`', '€', '€'), ('z', 'Z', '', ''), ('x', 'X', '', ''), ('c', 'C', '', ''), ('v', 'V', '', ''),
+     ('b', 'B', '', ''), ('n', 'N', '', ''), ('m', 'M', '', ''), (',', '<', '', ''), ('.', '>', '', ''),
+     ('?', '/', '', '')),
+)
+
+
+@dataclass(frozen=True)
+class Key:
+    column: int
+    row: int
+    width: int
+    height: int
+    characters: tuple[str, str, str, str] = ('', '', '', '')
+    action: str = ''
+
+    def label(self, shift: bool, alt: bool) -> str:
+        if self.action:
+            return {'delete': 'DEL', 'ok': 'OK', 'shift': 'SHIFT', 'alt': 'ALT',
+                    'space': 'SPACE', 'close': 'CLOSE'}[self.action]
+        return self.characters[2 * alt + shift]
+
+
+def build_keys() -> list[Key]:
+    keys = [Key(column, row, 1, 1, characters)
+            for row, characters_row in enumerate(CHARACTER_ROWS)
+            for column, characters in enumerate(characters_row)]
+    keys += [
+        Key(12, 0, 1, 1, action='delete'),
+        Key(12, 1, 1, 2, action='ok'),
+        Key(11, 3, 2, 1, action='alt'),
+        Key(0, 4, 2, 1, action='shift'),
+        Key(2, 4, 7, 1, action='space'),
+        Key(9, 4, 4, 1, action='close'),
+    ]
+    return keys
+
+
+def type_text(text: str) -> None:
+    subprocess.Popen(['xdotool', 'type', '--clearmodifiers', '--delay', '0', '--', text])
+
+
+def press_key(name: str) -> None:
+    subprocess.Popen(['xdotool', 'key', '--clearmodifiers', name])
+
+
+def tell_hotkeys(shown: bool) -> None:
+    subprocess.Popen([HOTKEYS, '--keyboard-shown', 'on' if shown else 'off'])
+
+
+def rgb(colour: tuple[int, int, int]) -> tuple[float, float, float]:
+    return tuple(channel / 255 for channel in colour)
+
+
+class Keyboard(Gtk.Window):
+    def __init__(self) -> None:
+        super().__init__(type=Gtk.WindowType.POPUP)
+        self.keys = build_keys()
+        self.grid = {(cell_column, cell_row): key for key in self.keys
+                     for cell_column in range(key.column, key.column + key.width)
+                     for cell_row in range(key.row, key.row + key.height)}
+        self.focus_column, self.focus_row = 0, 1
+        self.shift = self.alt = False
+        self.flash: Key | None = None
+        self.hover: Key | None = None
+        self.repeat_source = 0
+        self.hide_source = 0
+        self.set_app_paintable(True)
+        self.set_accept_focus(False)
+        self.set_keep_above(True)
+        area = Gtk.DrawingArea()
+        area.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.POINTER_MOTION_MASK
+                        | Gdk.EventMask.LEAVE_NOTIFY_MASK)
+        area.connect('draw', self.on_draw)
+        area.connect('button-press-event', self.on_click)
+        area.connect('motion-notify-event', self.on_motion)
+        area.connect('leave-notify-event', self.on_leave)
+        self.add(area)
+        self.area = area
+
+    @property
+    def focused(self) -> Key:
+        return self.grid[(self.focus_column, self.focus_row)]
+
+    def present_for(self, accessible: Atspi.Accessible | None) -> None:
+        if self.hide_source:
+            GLib.source_remove(self.hide_source)
+            self.hide_source = 0
+        display = Gdk.Display.get_default()
+        screen = (display.get_primary_monitor() or display.get_monitor(0)).get_geometry()
+        width, height = int(screen.width * WIDTH_SHARE), int(screen.height * HEIGHT_SHARE)
+        margin = int(screen.height * MARGIN_SHARE)
+        bottom_y = screen.y + screen.height - height - margin
+        component = accessible.get_component_iface() if accessible else None
+        field = component.get_extents(Atspi.CoordType.SCREEN) if component else None
+        covered = field is not None and field.y + field.height > bottom_y
+        self.resize(width, height)
+        self.move(screen.x + (screen.width - width) // 2, screen.y + margin if covered else bottom_y)
+        if not self.get_visible():
+            self.show_all()
+            tell_hotkeys(True)
+        self.area.queue_draw()
+
+    def toggle(self) -> bool:
+        if self.get_visible():
+            self.hide_now()
+        else:
+            self.present_for(None)
+        return True
+
+    def request_hide(self) -> None:
+        if self.get_visible() and not self.hide_source:
+            self.hide_source = GLib.timeout_add(HIDE_DELAY_MS, self.hide_now)
+
+    def hide_now(self) -> bool:
+        self.hide_source = 0
+        self.stop_repeat()
+        if self.get_visible():
+            self.hide()
+            tell_hotkeys(False)
+        return False
+
+    def layout(self) -> tuple[float, float, float, float]:
+        width, height = self.area.get_allocated_width(), self.area.get_allocated_height()
+        help_height = height * HELP_SHARE
+        return width / COLUMNS, (height - help_height) / ROWS, help_height, height
+
+    def key_rect(self, key: Key) -> tuple[float, float, float, float]:
+        cell_width, cell_height, _, _ = self.layout()
+        gap = min(cell_width, cell_height) * GAP_SHARE
+        return (key.column * cell_width + gap / 2, key.row * cell_height + gap / 2,
+                key.width * cell_width - gap, key.height * cell_height - gap)
+
+    def key_at(self, x: float, y: float) -> Key | None:
+        cell_width, cell_height, _, _ = self.layout()
+        return self.grid.get((int(x // cell_width), int(y // cell_height)))
+
+    def key_fill(self, key: Key) -> tuple[int, int, int]:
+        if key is self.flash or (key.action == 'shift' and self.shift) or (key.action == 'alt' and self.alt):
+            return PURPLE
+        if key.action == 'ok':
+            return BLUE
+        if key is self.focused or key is self.hover:
+            return KEY_FOCUS
+        return KEY_DARK if key.action else KEY
+
+    def on_draw(self, area: Gtk.DrawingArea, cr) -> bool:
+        cell_width, cell_height, help_height, height = self.layout()
+        cr.set_source_rgb(*rgb(INK))
+        cr.paint()
+        for key in self.keys:
+            x, y, width, height_key = self.key_rect(key)
+            radius = min(width, height_key) * RADIUS_SHARE
+            self.rounded(cr, x, y, width, height_key, radius)
+            cr.set_source_rgb(*rgb(self.key_fill(key)))
+            cr.fill_preserve()
+            if key is self.focused:
+                cr.set_source_rgb(*rgb(PURPLE))
+                cr.set_line_width(max(2.0, cell_height * 0.05))
+                cr.stroke()
+            else:
+                cr.new_path()
+            label = key.label(self.shift, self.alt)
+            colour = TEXT_DIM if key.action and key.action != 'ok' else TEXT
+            self.text(cr, label, x + width / 2, y + height_key / 2, cell_height * LABEL_SHARE, colour, 'SemiBold')
+        self.text(cr, HELP_TEXT, area.get_allocated_width() / 2, height - help_height / 2,
+                  help_height * 0.42, TEXT_MUTED, 'Regular')
+        return True
+
+    @staticmethod
+    def rounded(cr, x: float, y: float, width: float, height: float, radius: float) -> None:
+        cr.new_sub_path()
+        cr.arc(x + width - radius, y + radius, radius, -1.5708, 0)
+        cr.arc(x + width - radius, y + height - radius, radius, 0, 1.5708)
+        cr.arc(x + radius, y + height - radius, radius, 1.5708, 3.1416)
+        cr.arc(x + radius, y + radius, radius, 3.1416, 4.7124)
+        cr.close_path()
+
+    @staticmethod
+    def text(cr, text: str, centre_x: float, centre_y: float, size: float, colour, weight: str) -> None:
+        layout = PangoCairo.create_layout(cr)
+        layout.set_font_description(Pango.FontDescription(f'Sora {weight} {max(1, int(size))}px'))
+        layout.set_text(text, -1)
+        width, height = layout.get_pixel_size()
+        cr.set_source_rgb(*rgb(colour))
+        cr.move_to(centre_x - width / 2, centre_y - height / 2)
+        PangoCairo.show_layout(cr, layout)
+
+    def activate(self, key: Key) -> None:
+        self.flash = key
+        GLib.timeout_add(FLASH_MS, self.end_flash, key)
+        if key.action == 'delete':
+            press_key('BackSpace')
+        elif key.action == 'space':
+            type_text(' ')
+        elif key.action == 'ok':
+            press_key('Return')
+            self.hide_now()
+        elif key.action == 'close':
+            self.hide_now()
+        elif key.action == 'shift':
+            self.shift = not self.shift
+        elif key.action == 'alt':
+            self.alt = not self.alt
+        elif text := key.label(self.shift, self.alt):
+            type_text(text)
+        self.area.queue_draw()
+
+    def end_flash(self, key: Key) -> bool:
+        if self.flash is key:
+            self.flash = None
+            self.area.queue_draw()
+        return False
+
+    def move_focus(self, dx: int, dy: int) -> None:
+        current = self.focused
+        column, row = self.focus_column, self.focus_row
+        while self.grid[(column, row)] is current:
+            column, row = (column + dx) % COLUMNS, (row + dy) % ROWS
+        self.focus_column, self.focus_row = column, row
+        self.area.queue_draw()
+
+    def start_repeat(self, dx: int, dy: int) -> None:
+        self.stop_repeat()
+        self.move_focus(dx, dy)
+        self.repeat_source = GLib.timeout_add(REPEAT_DELAY_MS, self.begin_repeat, dx, dy)
+
+    def begin_repeat(self, dx: int, dy: int) -> bool:
+        self.repeat_source = GLib.timeout_add(REPEAT_INTERVAL_MS, self.repeat, dx, dy)
+        return False
+
+    def repeat(self, dx: int, dy: int) -> bool:
+        self.move_focus(dx, dy)
+        return True
+
+    def stop_repeat(self) -> None:
+        if self.repeat_source:
+            GLib.source_remove(self.repeat_source)
+            self.repeat_source = 0
+
+    def on_click(self, area: Gtk.DrawingArea, event: Gdk.EventButton) -> bool:
+        if key := self.key_at(event.x, event.y):
+            if key is not self.focused:
+                self.focus_column, self.focus_row = key.column, key.row
+            self.activate(key)
+        return True
+
+    def on_motion(self, area: Gtk.DrawingArea, event: Gdk.EventMotion) -> bool:
+        key = self.key_at(event.x, event.y)
+        if key is not self.hover:
+            self.hover = key
+            area.queue_draw()
+        return False
+
+    def on_leave(self, area: Gtk.DrawingArea, event: Gdk.EventCrossing) -> bool:
+        self.hover = None
+        area.queue_draw()
+        return False
+
+    def on_button(self, code: int, pressed: bool) -> bool:
+        if not self.get_visible():
+            return False
+        directions = {ecodes.BTN_DPAD_LEFT: (-1, 0), ecodes.BTN_DPAD_RIGHT: (1, 0),
+                      ecodes.BTN_DPAD_UP: (0, -1), ecodes.BTN_DPAD_DOWN: (0, 1)}
+        if code in directions:
+            self.start_repeat(*directions[code]) if pressed else self.stop_repeat()
+        elif not pressed:
+            return False
+        elif code == ecodes.BTN_SOUTH:
+            self.activate(self.focused)
+        elif code == ecodes.BTN_EAST:
+            self.hide_now()
+        elif code == ecodes.BTN_TL2:
+            self.activate(next(key for key in self.keys if key.action == 'shift'))
+        elif code == ecodes.BTN_TL:
+            self.activate(next(key for key in self.keys if key.action == 'delete'))
+        elif code == ecodes.BTN_TR:
+            self.activate(next(key for key in self.keys if key.action == 'space'))
+        elif code == ecodes.BTN_TR2:
+            self.activate(next(key for key in self.keys if key.action == 'alt'))
+        elif code == ecodes.BTN_START:
+            self.activate(next(key for key in self.keys if key.action == 'ok'))
+        return False
+
+    def on_hat(self, code: int, value: int) -> bool:
+        if not self.get_visible():
+            return False
+        if value == 0:
+            self.stop_repeat()
+        elif code == ecodes.ABS_HAT0X:
+            self.start_repeat(value, 0)
+        else:
+            self.start_repeat(0, value)
+        return False
+
+
+class ControllerReader(threading.Thread):
+    def __init__(self, keyboard: Keyboard) -> None:
+        super().__init__(daemon=True)
+        self.keyboard = keyboard
+        self.selector = selectors.DefaultSelector()
+        self.devices: dict[str, evdev.InputDevice] = {}
+
+    def add(self, path: str) -> None:
+        if path in self.devices:
+            return
+        try:
+            device = evdev.InputDevice(path)
+            keys = device.capabilities().get(ecodes.EV_KEY, [])
+        except OSError:
+            return
+        if ecodes.BTN_SOUTH not in keys:
+            device.close()
+            return
+        self.devices[path] = device
+        self.selector.register(device, selectors.EVENT_READ)
+
+    def remove(self, path: str) -> None:
+        device = self.devices.pop(path, None)
+        if device is not None:
+            self.selector.unregister(device)
+            device.close()
+
+    def run(self) -> None:
+        context = pyudev.Context()
+        monitor = pyudev.Monitor.from_netlink(context)
+        monitor.filter_by(subsystem='input')
+        monitor.start()
+        self.selector.register(monitor, selectors.EVENT_READ)
+        for device in context.list_devices(subsystem='input'):
+            if device.device_node and device.device_node.startswith('/dev/input/event'):
+                self.add(device.device_node)
+        while True:
+            for selected, _ in self.selector.select():
+                if selected.fileobj is monitor:
+                    udev_device = monitor.poll(0)
+                    node = udev_device.device_node if udev_device else None
+                    if node and node.startswith('/dev/input/event'):
+                        self.add(node) if udev_device.action == 'add' else self.remove(node)
+                    continue
+                self.read(selected.fileobj)
+
+    def read(self, device: evdev.InputDevice) -> None:
+        try:
+            for event in device.read():
+                if event.type == ecodes.EV_KEY and event.value in (0, 1):
+                    GLib.idle_add(self.keyboard.on_button, event.code, event.value == 1)
+                elif event.type == ecodes.EV_ABS and event.code in (ecodes.ABS_HAT0X, ecodes.ABS_HAT0Y):
+                    GLib.idle_add(self.keyboard.on_hat, event.code, event.value)
+        except OSError:
+            self.remove(device.path)
+
+
+def watch_text_fields(keyboard: Keyboard) -> Atspi.EventListener:
+    def on_focus(event: Atspi.Event) -> None:
+        source = event.source
+        try:
+            editable = source.get_state_set().contains(Atspi.StateType.EDITABLE)
+        except GLib.Error:
+            return
+        if event.detail1 and editable:
+            keyboard.present_for(source)
+        elif event.detail1 or editable:
+            keyboard.request_hide()
+
+    listener = Atspi.EventListener.new(on_focus)
+    listener.register('object:state-changed:focused')
+    return listener
+
+
+def main() -> None:
+    Atspi.init()
+    keyboard = Keyboard()
+    keyboard.connect('destroy', Gtk.main_quit)
+    listener = watch_text_fields(keyboard)
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, keyboard.toggle)
+    ControllerReader(keyboard).start()
+    try:
+        Gtk.main()
+    finally:
+        listener.deregister('object:state-changed:focused')
+        tell_hotkeys(False)
+
+
+if __name__ == '__main__':
+    main()

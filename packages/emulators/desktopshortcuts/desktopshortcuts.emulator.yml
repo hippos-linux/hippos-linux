@@ -7,6 +7,17 @@ custom_features:
     choices:
       On (Default): 1
       "Off": 0
+  onscreen_keyboard:
+    prompt: ON-SCREEN KEYBOARD
+    description: Shows a keyboard at the bottom of the screen when a text box is selected.
+    choices:
+      On (Default): 1
+      "Off": 0
+  padtokey_mouse_speed:
+    prompt: MOUSE SPEED
+    description: How fast the left stick moves the pointer.
+    preset: slider
+    preset_parameters: 1 9 1 5
 systems:
 - name: desktopshortcuts
   as_core: desktopshortcuts

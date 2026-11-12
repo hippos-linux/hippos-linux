@@ -20,6 +20,8 @@ import evdev
 import pyudev
 from evdev import ecodes
 
+from hippos_padtokey import MOUSE_INTERVAL, PadMapper, device_maps, sdl_button_codes
+
 DEVICE_NAME = "hippos hotkeys"
 
 SYSTEM_DIR              = Path('/usr/share/hippos/hotkeys/devices')
@@ -33,6 +35,7 @@ COMMON_CONTEXT_FILE     = Path('/usr/share/hippos/hotkeys/common_context.json')
 USER_COMMON_CONTEXT_FILE = USER_DIR / 'common_context.json'
 CONTEXT_FILE            = Path('/run/hippos/hotkeys.context')
 PID_FILE                = Path('/run/hippos/hotkeys.pid')
+KEYBOARD_SHOWN_FILE     = Path('/run/hippos/keyboard.shown')
 
 ES_INPUT_FILES = [
     Path('/userdata/system/configs/emulationstation/es_input.cfg'),
@@ -240,7 +243,7 @@ def make_uinput() -> evdev.UInput:
         c for c in range(ecodes.KEY_MAX)
         if c in ECODES_NAMES and ECODES_NAMES[c].startswith('KEY_')
     ]
-    key_codes.append(ecodes.BTN_LEFT)
+    key_codes += [ecodes.BTN_LEFT, ecodes.BTN_RIGHT, ecodes.BTN_MIDDLE]
     return evdev.UInput(
         name=DEVICE_NAME,
         events={
@@ -294,6 +297,7 @@ class DeviceState:
     pressed:    set[str] = field(default_factory=set)
     consumed_keys: set[int] = field(default_factory=set)
     active_combos: set[frozenset[str]] = field(default_factory=set)
+    pad:        PadMapper | None = None
 
 class HotkeyDaemon:
     def __init__(self, permanent: bool = False) -> None:
@@ -311,7 +315,10 @@ class HotkeyDaemon:
         self.es_button_maps: dict[str, dict[int, str]] = {}
         self.es_keyboard_map: dict[int, str] = {}
         self.combo_actions: list[dict[str, Any]] = []
+        self.pad_maps: dict[str, tuple[list[dict], float]] = {}
+        self.keyboard_shown = KEYBOARD_SHOWN_FILE.exists()
         self.require_reconfig = False
+        self.require_keyboard_update = False
         self._reload_all()
 
     def _reload_all(self) -> None:
@@ -320,11 +327,23 @@ class HotkeyDaemon:
         self.default_map = load_default_mapping()
         self.es_button_maps, self.es_keyboard_map = load_es_button_maps()
         self.combo_actions = load_combo_actions()
+        self.pad_maps = device_maps()
         log(f'context={self.context.get("name", "")}')
 
     def _handle_sighup(self, signum: int, frame: Any) -> None:
         log('SIGHUP received, reconfig queued')
         self.require_reconfig = True
+
+    def _handle_sigusr1(self, signum: int, frame: Any) -> None:
+        self.require_keyboard_update = True
+
+    def _update_keyboard_shown(self) -> None:
+        self.keyboard_shown = KEYBOARD_SHOWN_FILE.exists()
+        log(f'on-screen keyboard {"shown" if self.keyboard_shown else "hidden"}')
+        if self.keyboard_shown:
+            for state in self.devices.values():
+                if state.pad is not None:
+                    state.pad.release_buttons()
 
     def _do_reconfig(self) -> None:
         old = self.context.get('name', '')
@@ -408,7 +427,7 @@ class HotkeyDaemon:
         keys = set(caps.get(ecodes.EV_KEY, []))
 
         button_map = {c: n for c, n in FALLBACK_GAMEPAD_BUTTONS.items() if c in keys}
-        gamepad_btn_codes = sorted(c for c in keys if c >= ecodes.BTN_GAMEPAD)
+        gamepad_btn_codes = sdl_button_codes(keys)
         es_map = self.es_button_maps.get(device.name, {})
         for sdl_idx, action_name in es_map.items():
             if sdl_idx < len(gamepad_btn_codes):
@@ -430,7 +449,13 @@ class HotkeyDaemon:
             except OSError as exc:
                 log(f'could not grab {path} {device.name}: {exc} — hotkeys will not suppress raw passthrough here')
 
-        self.devices[path] = DeviceState(device, button_map, action_map, grabbed=grabbed)
+        pad = None
+        if path in self.pad_maps:
+            entries, mouse_speed = self.pad_maps[path]
+            pad = PadMapper.build(device, entries, self.uinput, mouse_speed)
+            log(f'  padtokey: {len(pad.actions)} actions, mouse={"on" if pad.mouse_axes else "off"}')
+
+        self.devices[path] = DeviceState(device, button_map, action_map, grabbed=grabbed, pad=pad)
         self.fd_to_path[device.fileno()] = path
         self.poll.register(device, select.POLLIN)
         log(f'listening {path} {device.name}{" (grabbed)" if grabbed else ""}')
@@ -442,6 +467,8 @@ class HotkeyDaemon:
         state = self.devices.pop(path, None)
         if state is None:
             return
+        if state.pad is not None:
+            state.pad.release_all()
         fd = state.device.fileno()
         self.fd_to_path.pop(fd, None)
         try:
@@ -497,6 +524,8 @@ class HotkeyDaemon:
             return
         try:
             for event in state.device.read():
+                if state.pad is not None:
+                    state.pad.handle(event, buttons=not self.keyboard_shown)
                 if event.type != ecodes.EV_KEY:
                     continue
                 if event.code in state.button_map:
@@ -529,6 +558,7 @@ class HotkeyDaemon:
         if self.permanent:
             PID_FILE.write_text(str(os.getpid()))
         signal.signal(signal.SIGHUP, self._handle_sighup)
+        signal.signal(signal.SIGUSR1, self._handle_sigusr1)
 
         self.monitor.start()
         self.poll.register(self.monitor, select.POLLIN)
@@ -540,9 +570,14 @@ class HotkeyDaemon:
             if self.require_reconfig:
                 self.require_reconfig = False
                 self._do_reconfig()
+            if self.require_keyboard_update:
+                self.require_keyboard_update = False
+                self._update_keyboard_shown()
 
+            pads = [state.pad for state in self.devices.values() if state.pad is not None]
+            timeout = int(MOUSE_INTERVAL * 1000) if any(pad.mouse_active() for pad in pads) else 1000
             try:
-                events = self.poll.poll(1000)
+                events = self.poll.poll(timeout)
             except select.error:
                 continue
 
@@ -563,6 +598,10 @@ class HotkeyDaemon:
                 except Exception as exc:
                     if fd != self.monitor.fileno():
                         log(f'event error fd={fd}: {exc}')
+
+            moment = time.monotonic()
+            for pad in pads:
+                pad.move_mouse(moment)
 
 def _read_pid() -> int:
     return int(PID_FILE.read_text().strip())
@@ -626,6 +665,13 @@ def cmd_default_context() -> None:
 def cmd_reload() -> None:
     _signal_daemon()
 
+def cmd_keyboard_shown(shown: bool) -> None:
+    if shown:
+        KEYBOARD_SHOWN_FILE.touch()
+    else:
+        KEYBOARD_SHOWN_FILE.unlink(missing_ok=True)
+    _signal_daemon(signal.SIGUSR1)
+
 def cmd_list() -> None:
     context = load_context()
     common  = load_common_context()
@@ -677,6 +723,8 @@ if __name__ == '__main__':
                         help='Signal the daemon to reload its config')
     parser.add_argument('--list', action='store_true',
                         help='List devices and action mappings')
+    parser.add_argument('--keyboard-shown', choices=('on', 'off'),
+                        help='Tell the daemon whether the on-screen keyboard is showing')
     args = parser.parse_args()
 
     if args.send:
@@ -689,5 +737,7 @@ if __name__ == '__main__':
         cmd_reload()
     elif args.list:
         cmd_list()
+    elif args.keyboard_shown:
+        cmd_keyboard_shown(args.keyboard_shown == 'on')
     else:
         HotkeyDaemon(permanent=args.permanent).run()

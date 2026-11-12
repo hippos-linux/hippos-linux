@@ -115,7 +115,7 @@ openbox
 xserver-xorg-core
 xserver-xorg-input-libinput
 libeis1
-onboard
+gir1.2-atspi-2.0
 xinput-calibrator
 xdotool
 xinit
