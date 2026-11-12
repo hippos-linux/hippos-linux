@@ -56,6 +56,9 @@ case "${1:-}" in
     getSystemVolume)
         _volume_pct
         ;;
+    getSystemMute)
+        LC_ALL=C pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null | grep -q 'yes' && echo true || echo false
+        ;;
     setSystemVolume)
         VOL="${2:-}"
         case "$VOL" in
@@ -81,7 +84,7 @@ case "${1:-}" in
             speaker-test -t sine -f 440 -l 1 2>/dev/null || true
         ;;
     *)
-        echo "Usage: $0 list|get|set|list-profiles|get-profile|set-profile|getSystemVolume|setSystemVolume|test" >&2
+        echo "Usage: $0 list|get|set|list-profiles|get-profile|set-profile|getSystemVolume|getSystemMute|setSystemVolume|test" >&2
         exit 1
         ;;
 esac

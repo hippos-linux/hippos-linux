@@ -90,14 +90,14 @@ case "${1:-}" in
         '
         ;;
     listOutputs)
-        xrandr --query 2>/dev/null | awk '/connected/{print $1}'
+        xrandr --query 2>/dev/null | awk '$2 == "connected" || / [0-9]+x[0-9]+\+[0-9]+\+[0-9]+ / {print $1}'
         ;;
     currentOutput)
         echo "$PSCREEN"
         ;;
     setOutput)
         OUT="${2:-}"
-        xrandr --query 2>/dev/null | awk '/connected/{print $1}' | while read -r o; do
+        xrandr --query 2>/dev/null | awk '$2 == "connected" || / [0-9]+x[0-9]+\+[0-9]+\+[0-9]+ / {print $1}' | while read -r o; do
             [[ "$o" != "$OUT" ]] && xrandr --output "$o" --off 2>/dev/null || true
         done
         xrandr --output "$OUT" --primary --auto

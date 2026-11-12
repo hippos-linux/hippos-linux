@@ -35,6 +35,8 @@ mangohud
 vkbasalt
 python3-pil
 python3-qrcode
+# Game manuals in the quick menu
+poppler-utils
 # evmapy installed via pip in configure-rootfs.sh (not in Debian repos)
 # source: https://github.com/kempniu/evmapy
 inotify-tools

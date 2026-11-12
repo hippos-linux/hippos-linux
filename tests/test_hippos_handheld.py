@@ -53,6 +53,18 @@ class SettingLinesTests(unittest.TestCase):
         self.assertEqual(rows, ['ayaneo_2_rev_1'])
 
 
+class ChoiceLinesTests(unittest.TestCase):
+    def test_choices_pair_labels_with_settings(self):
+        lines = hh.setting_lines([_handheld(['xbox-elite', 'keyboard'])], {'/p/default.yaml': 'Default'})
+        self.assertIn('DualSense\tayaneo_2_rev_1.controller=ds5', hh.choice_lines(lines, 'controller'))
+        self.assertEqual(hh.choice_lines(lines, 'profile'), ['Default\tayaneo_2_rev_1.profile=/p/default.yaml'])
+
+    def test_labels_name_the_device_when_there_are_several(self):
+        second = hh.Handheld('/x', 'other', 'Legion Go', ['ds5'], '')
+        lines = hh.setting_lines([_handheld(['xbox-elite']), second], {})
+        self.assertIn('Steam Deck (Legion Go)\tother.controller=deck', hh.choice_lines(lines, 'controller'))
+
+
 class ProfileTests(unittest.TestCase):
     def test_profiles_use_their_name_and_skip_debug_ones(self):
         with tempfile.TemporaryDirectory() as directory:

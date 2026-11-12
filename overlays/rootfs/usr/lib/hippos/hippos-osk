@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import signal
 import subprocess
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -17,8 +19,11 @@ from gi.repository import Atspi, Gdk, GLib, Gtk, Pango, PangoCairo
 from evdev import ecodes
 
 from hippos_gamepad_reader import GamepadReader
+from hippos_session_app import claim, release, toggle
 
 HOTKEYS = '/usr/lib/hippos/hippos-hotkeys'
+SCRIPT = Path('/usr/lib/hippos/hippos-osk')
+PID_FILE = Path('/run/hippos/osk.pid')
 
 COLUMNS = 13
 ROWS = 5
@@ -367,19 +372,29 @@ def watch_text_fields(keyboard: Keyboard) -> Atspi.EventListener:
     return listener
 
 
-def main() -> None:
+def main(argv: list[str]) -> int:
+    if argv == ['--toggle']:
+        toggle(PID_FILE, SCRIPT, ['--show'])
+        return 0
+    if not claim(PID_FILE, SCRIPT):
+        return 0
     Atspi.init()
     keyboard = Keyboard()
     keyboard.connect('destroy', Gtk.main_quit)
     listener = watch_text_fields(keyboard)
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, keyboard.toggle)
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, Gtk.main_quit)
     GamepadReader(keyboard.on_button, keyboard.on_hat).start()
+    if argv == ['--show']:
+        keyboard.present_for(None)
     try:
         Gtk.main()
     finally:
         listener.deregister('object:state-changed:focused')
         tell_hotkeys(False)
+        release(PID_FILE)
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main(sys.argv[1:]))

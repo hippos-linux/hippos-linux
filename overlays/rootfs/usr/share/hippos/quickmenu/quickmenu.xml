@@ -1,24 +1,42 @@
 <!-- Copy to /userdata/system/configs/quickmenu/quickmenu.xml to change the quick menu.
      ${command} runs a shell command and shows its output; refresh="N" re-runs it every N seconds.
-     afterclick="close" hides the menu after the action, "refresh" re-reads every value. -->
+     if="${command}" shows a row or tab only when the command prints something.
+     afterclick="close" hides the menu after the action, "refresh" re-reads every value,
+     "rescreen" moves the menu to the screen chosen in the System tab.
+     choice_cmd lists one choice per line of display, runs action followed by the matching line of action_arg.
+     img and qrcode take height="N%" of the screen; doc opens a manual, map or picture from content. -->
 <features>
 	<vgroup role="header">
-		<feature display='${curl -s http://127.0.0.1:1234/runningGame | jq -r ".name // empty"}' refresh="5">
+		<feature display='${hippos-info}'>
+			<text display='${[ "$(hippos-record is_running)" = true ] &amp;&amp; echo "● REC"}' refresh="2" />
 			<text display='${date +%H:%M}' refresh="10" />
 		</feature>
-		<feature display='${curl -s http://127.0.0.1:1234/runningGame | jq -r ".systemName // empty"}' refresh="5">
+		<feature display='${curl -s http://127.0.0.1:1234/runningGame | jq -r ".name // empty"}' refresh="5">
 			<text display='${cat /sys/class/power_supply/BAT*/capacity 2>/dev/null | head -1 | sed "s/$/%/"}' refresh="30" />
+		</feature>
+		<feature display="Touch keyboard" if="${hippos-touchscreen-detect >/dev/null &amp;&amp; echo 1}">
+			<button display="Show / hide" action="hippos-hotkeys --send onscreen-keyboard" afterclick="close" />
 		</feature>
 	</vgroup>
 
 	<hgroup name="Game" display="Game" if='${curl -s http://127.0.0.1:1234/runningGame | jq -r ".name // empty"}'>
+		<feature>
+			<img display='${M=$(curl -s http://127.0.0.1:1234/runningGame | jq -r ".marquee // empty"); [ -n "$M" ] &amp;&amp; echo "http://127.0.0.1:1234$M"}' height="8%" refresh="5" />
+			<img display='${T=$(curl -s http://127.0.0.1:1234/runningGame | jq -r ".thumbnail // .image // empty"); [ -n "$T" ] &amp;&amp; echo "http://127.0.0.1:1234$T"}' height="16%" refresh="5" />
+			<qrcode display='${C=$(curl -s http://127.0.0.1:1234/runningGame | jq -r ".cheevosId // empty"); [ -n "$C" ] &amp;&amp; [ "$C" != 0 ] &amp;&amp; echo "https://retroachievements.org/game/$C"}' height="16%" refresh="5" />
+		</feature>
 		<feature display="Playing for">
 			<text display='${ps -o etime= -p "$(pgrep -of "python3 /usr/bin/emulatorlauncher")" 2>/dev/null | tr -d " "}' refresh="1" />
+		</feature>
+		<feature>
+			<doc display="Manual" content='${M=$(curl -s http://127.0.0.1:1234/runningGame | jq -r ".manual // empty"); [ -n "$M" ] &amp;&amp; echo "http://127.0.0.1:1234$M"}' refresh="5" />
+			<doc display="Map" content='${M=$(curl -s http://127.0.0.1:1234/runningGame | jq -r ".map // empty"); [ -n "$M" ] &amp;&amp; echo "http://127.0.0.1:1234$M"}' refresh="5" />
+			<doc display="Controls" content='${S=$(curl -s http://127.0.0.1:1234/runningGame | jq -r ".systemName // empty"); for f in "/userdata/system/configs/controller-overlays/$S.png" "/usr/share/hippos/controller-overlays/$S.png"; do [ -n "$S" ] &amp;&amp; [ -f "$f" ] &amp;&amp; { echo "$f"; break; }; done}' refresh="5" />
 		</feature>
 		<feature display="Controller as mouse" if="${hippos-controller-mouse status}">
 			<switch value="${hippos-controller-mouse status}" action_on="hippos-controller-mouse on" action_off="hippos-controller-mouse off" />
 		</feature>
-		<feature display="On-screen keyboard" if="${pgrep -xf 'python3 /usr/lib/hippos/hippos-osk'}">
+		<feature display="On-screen keyboard" if="${hippos-touchscreen-detect >/dev/null || echo 1}">
 			<button display="Show / hide" action="hippos-hotkeys --send onscreen-keyboard" afterclick="close" />
 		</feature>
 		<feature display="Save state">
@@ -38,19 +56,25 @@
 		</feature>
 	</hgroup>
 
+	<hgroup name="Gun" display="Gun" if="${[ -f /var/run/hippos/gun_help.png ] &amp;&amp; curl -s http://127.0.0.1:1234/runningGame | jq -r '.name // empty'}">
+		<feature>
+			<img display="/var/run/hippos/gun_help.png" height="45%" />
+		</feature>
+	</hgroup>
+
 	<hgroup name="System" display="System">
 		<feature display="Volume">
 			<button display="-" action="hippos-audio setSystemVolume -5" afterclick="refresh" />
 			<progressbar display="${hippos-audio getSystemVolume}" min="0" max="100" refresh="2" />
 			<button display="+" action="hippos-audio setSystemVolume +5" afterclick="refresh" />
 		</feature>
-		<feature display="Mute">
-			<button display="Mute / unmute" action="hippos-audio setSystemVolume mute-toggle" />
-		</feature>
 		<feature display="Brightness" if="${hippos-brightness get}">
 			<button display="-" action='hippos-brightness set $(( $(hippos-brightness get) > 10 ? $(hippos-brightness get) - 10 : 1 ))' afterclick="refresh" />
 			<progressbar display="${hippos-brightness get}" min="0" max="100" refresh="2" />
 			<button display="+" action='hippos-brightness set $(( $(hippos-brightness get) &lt; 90 ? $(hippos-brightness get) + 10 : 100 ))' afterclick="refresh" />
+		</feature>
+		<feature display="Mute sound">
+			<switch value="${hippos-audio getSystemMute}" action_on="hippos-audio setSystemVolume mute" action_off="hippos-audio setSystemVolume unmute" refresh="2" />
 		</feature>
 		<feature display="Plane mode">
 			<switch value="${hippos-planemode status}" action_on="hippos-planemode enable" action_off="hippos-planemode disable" refresh="5" />
@@ -62,17 +86,78 @@
 			<choice display="Balanced" action="hippos-power-mode balanced" />
 			<choice display="Power saver" action="hippos-power-mode powersaver" />
 		</feature>
-	</hgroup>
-
-	<hgroup name="Info" display="Info">
+		<feature display="Handheld controller" if="${hippos-handheld available &amp;&amp; echo 1}">
+			<choice_cmd display="${hippos-handheld choices controller | cut -f 1}" action="hippos-handheld set" action_arg="${hippos-handheld choices controller | cut -f 2}" />
+		</feature>
+		<feature display="Button mapping" if="${hippos-handheld available &amp;&amp; echo 1}">
+			<choice_cmd display="${hippos-handheld choices profile | cut -f 1}" action="hippos-handheld set" action_arg="${hippos-handheld choices profile | cut -f 2}" />
+		</feature>
+		<feature display="Menu screen" if='${[ "$(hippos-resolution listOutputs | wc -l)" -gt 1 ] &amp;&amp; echo 1}'>
+			<text display='${S=$(hippos-settings get quickmenu.screen); echo "${S:-Auto}"}' refresh="2" />
+			<choice display="Auto" action="hippos-settings del quickmenu.screen" afterclick="rescreen" />
+			<choice_cmd display="${hippos-resolution listOutputs}" action="hippos-settings set quickmenu.screen" afterclick="rescreen" />
+		</feature>
+		<feature display="Game not responding?">
+			<button_confirm display="Force quit" action="/usr/lib/hippos/hippos-close-game" afterclick="close" />
+		</feature>
 		<feature display="IP address">
 			<text display='${hostname -I | cut -d" " -f1}' refresh="5" />
 		</feature>
 		<feature display="Free space">
 			<text display="${df -h /userdata | awk 'NR==2 {print $4}'}" refresh="10" />
 		</feature>
-		<feature display="HippOS">
-			<text display="${. /etc/os-release; echo $VERSION}" />
+	</hgroup>
+
+	<hgroup name="Outputs" display="Outputs">
+		<feature display="Audio output">
+			<text display="${hippos-audio list | awk -F '\t' -v d=&quot;$(hippos-audio get)&quot; '$1 == d { print $2 }'}" refresh="3" />
+			<choice_cmd display="${hippos-audio list | cut -f 2}" action="hippos-audio set" action_arg="${hippos-audio list | cut -f 1}" />
+		</feature>
+		<feature display="Audio profile">
+			<text display="${hippos-audio list-profiles | awk -F '\t' -v d=&quot;$(hippos-audio get-profile)&quot; '$1 == d { print $2 }'}" refresh="3" />
+			<choice_cmd display="${hippos-audio list-profiles | cut -f 2}" action="hippos-audio set-profile" action_arg="${hippos-audio list-profiles | cut -f 1}" />
+		</feature>
+		<feature display="Video output" if='${curl -s http://127.0.0.1:1234/runningGame | jq -e ".name" >/dev/null &amp;&amp; exit 0; [ "$(hippos-resolution listOutputs | wc -l)" -gt 1 ] &amp;&amp; echo 1}'>
+			<text display="${hippos-resolution currentOutput}" refresh="3" />
+			<choice_cmd display="${hippos-resolution listOutputs}" action="hippos-resolution setOutput" />
 		</feature>
 	</hgroup>
+
+	<hgroup name="Record" display="Record">
+		<feature display="Recording">
+			<switch value="${hippos-record is_running}" action_on="hippos-record start" action_off="hippos-record stop" afterclick="close" refresh="2" />
+		</feature>
+		<feature display="Quality">
+			<text display="${hippos-record get-quality}" refresh="2" />
+			<choice display="Ultra (60 fps)" action="hippos-record set-quality ultra" />
+			<choice display="High (60 fps)" action="hippos-record set-quality high" />
+			<choice display="Medium (30 fps)" action="hippos-record set-quality mid" />
+			<choice display="Low (30 fps, half size)" action="hippos-record set-quality low" />
+		</feature>
+		<feature display="Audio source">
+			<text display="${hippos-record get-audio}" refresh="2" />
+			<choice display="System sound" action="hippos-record set-audio auto" />
+			<choice display="Microphone" action="hippos-record set-audio mic" />
+			<choice display="No audio" action="hippos-record set-audio none" />
+		</feature>
+		<feature display="Record all screens" if='${[ "$(hippos-resolution listOutputs | wc -l)" -gt 1 ] &amp;&amp; echo 1}'>
+			<switch value="${hippos-record get-all}" action_on="hippos-record set-all true" action_off="hippos-record set-all false" />
+		</feature>
+		<feature display="Screenshot">
+			<text display='${echo "after $(cat "$XDG_RUNTIME_DIR/quickmenu-screenshot-delay" 2>/dev/null || echo 2) s"}' refresh="1" />
+			<button display="Take" action='(sleep "$(cat "$XDG_RUNTIME_DIR/quickmenu-screenshot-delay" 2>/dev/null || echo 2)"; hippos-screenshot) >/dev/null 2>&amp;1 &amp;' afterclick="close" />
+			<choice display="Immediately" action='echo 0 > "$XDG_RUNTIME_DIR/quickmenu-screenshot-delay"' />
+			<choice display="After 2 seconds" action='echo 2 > "$XDG_RUNTIME_DIR/quickmenu-screenshot-delay"' />
+			<choice display="After 5 seconds" action='echo 5 > "$XDG_RUNTIME_DIR/quickmenu-screenshot-delay"' />
+			<choice display="After 10 seconds" action='echo 10 > "$XDG_RUNTIME_DIR/quickmenu-screenshot-delay"' />
+		</feature>
+	</hgroup>
+
+	<vgroup role="footer">
+		<feature display="CPU">
+			<progressbar display='${read -r _ u2 n2 s2 i2 w2 _ &lt; /proc/stat; F="$XDG_RUNTIME_DIR/quickmenu-cpu"; if [ -f "$F" ]; then read -r u1 s1 i1 w1 &lt; "$F"; else u1=$u2; s1=$s2; i1=$i2; w1=$w2; fi; echo "$u2 $s2 $i2 $w2" &gt; "$F"; b=$(( (u2-u1) + (s2-s1) + (w2-w1) )); t=$(( b + (i2-i1) )); [ "$t" -gt 0 ] &amp;&amp; echo $(( 100 * b / t )) || echo 0}' min="0" max="100" refresh="1" />
+			<text display='${awk "{ printf \"%d°C\", \$1 / 1000 }" /sys/class/thermal/thermal_zone0/temp 2>/dev/null}' refresh="3" />
+			<text display="${hippos-resolution currentResolution}" />
+		</feature>
+	</vgroup>
 </features>

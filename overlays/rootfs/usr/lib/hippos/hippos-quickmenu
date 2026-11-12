@@ -6,29 +6,35 @@ Shows or hides the HippOS quick menu. --run starts the menu process itself.
 
 from __future__ import annotations
 
-import os
-import pwd
+import io
 import re
+import shlex
 import signal
 import subprocess
 import sys
+import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
-SESSION_USER     = 'hippos'
+from hippos_session_app import claim, release, toggle
+
+SCRIPT           = Path('/usr/lib/hippos/hippos-quickmenu')
 PID_FILE         = Path('/run/hippos/quickmenu.pid')
 MENU_FILES       = (Path('/userdata/system/configs/quickmenu/quickmenu.xml'),
                     Path('/usr/share/hippos/quickmenu/quickmenu.xml'))
 STYLE_FILES      = (Path('/userdata/system/configs/quickmenu/style.css'),
                     Path('/usr/share/hippos/quickmenu/style.css'))
+SCREEN_SETTING   = 'quickmenu.screen'
 COMMAND_TIMEOUT_S = 3
+IMAGE_TIMEOUT_S  = 5
 INACTIVITY_CLOSE_S = 20
 GRAB_DELAY_MS    = 250
 WIDTH_SHARE      = 0.45
-HEIGHT_SHARE     = 0.75
+HEIGHT_SHARE     = 0.8
 COMMAND_WORKERS  = 4
+DEFAULT_IMAGE_HEIGHT = '10%'
 
 EXPRESSION = re.compile(r'\$\{(.*)\}', re.DOTALL)
 
@@ -38,6 +44,7 @@ class Control:
     kind: str
     attrs: dict[str, str]
     choices: list[dict[str, str]] = field(default_factory=list)
+    sources: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -57,32 +64,32 @@ class Page:
 @dataclass
 class Menu:
     header: list[Row]
+    footer: list[Row]
     pages: list[Page]
 
 
 def _row(element: ET.Element) -> Row:
-    controls: list[Control] = []
+    controls = [Control(child.tag, dict(child.attrib)) for child in element
+                if child.tag not in ('choice', 'choice_cmd')]
     choices = [dict(child.attrib) for child in element if child.tag == 'choice']
-    for child in element:
-        if child.tag == 'choice':
-            continue
-        controls.append(Control(child.tag, dict(child.attrib)))
-    if choices:
-        controls.append(Control('choices', {}, choices))
+    sources = [dict(child.attrib) for child in element if child.tag == 'choice_cmd']
+    if choices or sources:
+        controls.append(Control('choices', {}, choices, sources))
     return Row(element.get('display', ''), element.get('if', ''), controls)
 
 
 def parse_menu(text: str) -> Menu:
     root = ET.fromstring(text)
-    header: list[Row] = []
-    pages: list[Page] = []
+    menu = Menu([], [], [])
     for group in root:
         rows = [_row(feature) for feature in group if feature.tag == 'feature']
         if group.get('role') == 'header':
-            header.extend(rows)
+            menu.header.extend(rows)
+        elif group.get('role') == 'footer':
+            menu.footer.extend(rows)
         elif group.tag == 'hgroup':
-            pages.append(Page(group.get('display', group.get('name', '')), group.get('if', ''), rows))
-    return Menu(header, pages)
+            menu.pages.append(Page(group.get('display', group.get('name', '')), group.get('if', ''), rows))
+    return menu
 
 
 def expression_command(text: str) -> str | None:
@@ -107,46 +114,52 @@ def run_command(command: str) -> str:
     return result.stdout.strip()
 
 
+def evaluate(text: str) -> str:
+    command = expression_command(text)
+    return text if command is None else fill_expression(text, run_command(command))
+
+
+def command_choices(source: dict[str, str]) -> list[tuple[str, str]]:
+    labels = evaluate(source.get('display', '')).splitlines()
+    values = evaluate(source.get('action_arg', '')).splitlines() if source.get('action_arg') else labels
+    action = source.get('action', '')
+    return [(label, f'{action} {shlex.quote(value)}') for label, value in zip(labels, values) if label.strip()]
+
+
+def height_pixels(spec: str, screen_height: int) -> int:
+    spec = spec or DEFAULT_IMAGE_HEIGHT
+    return int(screen_height * float(spec[:-1]) / 100) if spec.endswith('%') else int(spec)
+
+
+def image_bytes(location: str) -> bytes:
+    if location.startswith(('http://', 'https://')):
+        with urllib.request.urlopen(location, timeout=IMAGE_TIMEOUT_S) as response:
+            return response.read()
+    return Path(location).read_bytes()
+
+
+def qrcode_png(text: str) -> bytes:
+    import qrcode
+    buffer = io.BytesIO()
+    qrcode.make(text, border=2).save(buffer, format='PNG')
+    return buffer.getvalue()
+
+
 def first_existing(paths: tuple[Path, ...]) -> Path:
     return next(path for path in paths if path.is_file())
 
 
-def _running_pid() -> int | None:
-    try:
-        pid = int(PID_FILE.read_text())
-        cmdline = Path(f'/proc/{pid}/cmdline').read_bytes()
-    except (OSError, ValueError):
-        return None
-    return pid if b'hippos-quickmenu' in cmdline and b'--run' in cmdline else None
-
-
-def _session_env() -> dict[str, str]:
-    runtime_dir = f'/run/user/{pwd.getpwnam(SESSION_USER).pw_uid}'
-    return {**os.environ,
-            'DISPLAY': os.environ.get('DISPLAY', ':0'),
-            'XDG_RUNTIME_DIR': runtime_dir,
-            'DBUS_SESSION_BUS_ADDRESS': f'unix:path={runtime_dir}/bus'}
-
-
-def toggle() -> int:
-    pid = _running_pid()
-    if pid is not None:
-        os.kill(pid, signal.SIGUSR1)
-        return 0
-    command = [str(Path(__file__).resolve()), '--run']
-    if os.geteuid() == 0:
-        command = ['runuser', '-u', SESSION_USER, '--'] + command
-    subprocess.Popen(command, env=_session_env(), start_new_session=True,
-                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return 0
-
-
 def run_menu() -> int:
+    if not claim(PID_FILE, SCRIPT):
+        return 0
+
     import gi
     gi.require_version('Gtk', '3.0')
     gi.require_version('Gdk', '3.0')
-    from gi.repository import Gdk, GLib, Gtk
+    gi.require_version('GdkPixbuf', '2.0')
+    from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
     from evdev import ecodes
+    from hippos_docviewer import DocumentViewer, pixbuf_from_bytes
     from hippos_gamepad_reader import GamepadReader
 
     directions = {
@@ -159,25 +172,28 @@ def run_menu() -> int:
     }
     close_buttons = {ecodes.BTN_START, ecodes.BTN_MODE}
 
+    def selected_monitor() -> Gdk.Monitor:
+        display = Gdk.Display.get_default()
+        wanted = run_command(f'hippos-settings get {SCREEN_SETTING}')
+        monitors = [display.get_monitor(index) for index in range(display.get_n_monitors())]
+        return next((monitor for monitor in monitors if wanted and monitor.get_model() == wanted),
+                    display.get_primary_monitor() or monitors[0])
+
     class QuickMenu(Gtk.Window):
         def __init__(self, menu: Menu) -> None:
             super().__init__(type=Gtk.WindowType.TOPLEVEL, title='HippOS quick menu')
-            self.menu = menu
             self.executor = ThreadPoolExecutor(max_workers=COMMAND_WORKERS)
             self.refreshers: list = []
             self.timers: list[int] = []
             self.inactivity_timer = 0
             self.armed_confirm: Gtk.Button | None = None
+            self.screen_height = selected_monitor().get_geometry().height
             self.reader = GamepadReader(self.on_button, self.on_hat)
 
             self.set_decorated(False)
             self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
             self.set_keep_above(True)
             self.set_skip_taskbar_hint(True)
-            geometry = Gdk.Display.get_default().get_primary_monitor() or Gdk.Display.get_default().get_monitor(0)
-            area = geometry.get_geometry()
-            self.set_default_size(int(area.width * WIDTH_SHARE), int(area.height * HEIGHT_SHARE))
-            self.set_position(Gtk.WindowPosition.CENTER_ALWAYS)
             self.connect('key-press-event', self.on_key)
             self.connect('delete-event', lambda *_: self.hide_menu() or True)
 
@@ -185,21 +201,28 @@ def run_menu() -> int:
             self.pages.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
             self.choice_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             self.choice_list.get_style_context().add_class('choices')
+            choice_scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
+            choice_scroller.add(self.choice_list)
+            self.viewer = DocumentViewer(self.close_document)
             self.body = Gtk.Stack()
             self.body.add_named(self.pages, 'pages')
-            self.body.add_named(self.choice_list, 'choices')
+            self.body.add_named(choice_scroller, 'choices')
+            self.body.add_named(self.viewer, 'document')
 
             self.tabs = Gtk.StackSwitcher(stack=self.pages, halign=Gtk.Align.CENTER)
             layout = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             layout.get_style_context().add_class('quickmenu')
             header = self.build_rows(menu.header)
             header.get_style_context().add_class('header')
+            footer = self.build_rows(menu.footer)
+            footer.get_style_context().add_class('footer')
+            hint = Gtk.Label(label='A  select      B  back      L1 / R1  tabs      START  close', xalign=0.5)
+            hint.get_style_context().add_class('hint')
             layout.pack_start(header, False, False, 0)
             layout.pack_start(self.tabs, False, False, 0)
             layout.pack_start(self.body, True, True, 0)
-            hint = Gtk.Label(label='A  select      B  back      L1 / R1  tabs      START  close', xalign=0.5)
-            hint.get_style_context().add_class('hint')
             layout.pack_end(hint, False, False, 0)
+            layout.pack_end(footer, False, False, 0)
             self.add(layout)
             self.page_conditions: list[tuple[Gtk.Widget, str]] = []
             for page in menu.pages:
@@ -212,8 +235,8 @@ def run_menu() -> int:
                 tab.set_can_focus(False)
             self.reader.start()
 
-        def run_async(self, command: str, done) -> None:
-            future = self.executor.submit(run_command, command)
+        def run_async(self, function, done, *args) -> None:
+            future = self.executor.submit(function, *args)
             future.add_done_callback(lambda result: GLib.idle_add(done, result.result()))
 
         def watch(self, attrs: dict[str, str], key: str, apply) -> None:
@@ -224,7 +247,7 @@ def run_menu() -> int:
                 return
 
             def refresh() -> None:
-                self.run_async(command, lambda output: apply(fill_expression(text, output)))
+                self.run_async(run_command, lambda output: apply(fill_expression(text, output)), command)
             self.refreshers.append((refresh, int(attrs.get('refresh', '0') or 0)))
 
         def build_rows(self, rows: list[Row]) -> Gtk.Box:
@@ -236,7 +259,7 @@ def run_menu() -> int:
                     label = Gtk.Label(xalign=0)
                     label.get_style_context().add_class('label')
                     line.pack_start(label, True, True, 0)
-                    self.watch({'display': row.label}, 'display', label.set_text)
+                    self.watch({'display': row.label, 'refresh': '5'}, 'display', label.set_text)
                 controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
                 controls.get_style_context().add_class('controls')
                 for control in row.controls:
@@ -248,17 +271,24 @@ def run_menu() -> int:
                 if row.condition:
                     line.set_no_show_all(True)
                     self.watch({'if': row.condition, 'refresh': '2'}, 'if',
-                               lambda output, line=line: line.set_visible(bool(output.strip())))
+                               lambda output, line=line: self.set_shown(line, bool(output.strip())))
             return box
+
+        def set_shown(self, widget: Gtk.Widget, shown: bool) -> None:
+            if shown:
+                widget.show_all()
+            else:
+                widget.hide()
 
         def build_control(self, control: Control):
             attrs = control.attrs
-            if control.kind == 'text':
+            kind = control.kind
+            if kind == 'text':
                 label = Gtk.Label(xalign=1)
                 label.get_style_context().add_class('value')
                 self.watch(attrs, 'display', label.set_text)
                 return label
-            if control.kind == 'progressbar':
+            if kind == 'progressbar':
                 bar = Gtk.ProgressBar(valign=Gtk.Align.CENTER)
                 low, high = float(attrs.get('min', 0)), float(attrs.get('max', 100))
 
@@ -269,20 +299,62 @@ def run_menu() -> int:
                         bar.set_fraction(0)
                 self.watch(attrs, 'display', set_level)
                 return bar
-            if control.kind in ('button', 'button_confirm'):
+            if kind in ('button', 'button_confirm'):
                 button = Gtk.Button(label=attrs.get('display', ''))
-                button.connect('clicked', self.on_action, attrs, control.kind == 'button_confirm')
+                button.connect('clicked', self.on_action, attrs, kind == 'button_confirm')
                 return button
-            if control.kind == 'switch':
+            if kind == 'switch':
                 switch = Gtk.Switch(valign=Gtk.Align.CENTER)
                 self.watch(attrs, 'value', lambda output: switch.set_state(is_true(output)))
                 switch.connect('state-set', self.on_switch, attrs)
                 return switch
-            if control.kind == 'choices':
+            if kind == 'choices':
                 button = Gtk.Button(label='Select')
-                button.connect('clicked', lambda _b: self.open_choices(control.choices))
+                button.connect('clicked', lambda _b: self.open_choices(control))
+                return button
+            if kind in ('img', 'qrcode'):
+                image = Gtk.Image(no_show_all=True)
+                height = height_pixels(attrs.get('height', ''), self.screen_height)
+                self.watch(attrs, 'display', lambda location: self.load_image(image, location, height, kind == 'qrcode'))
+                return image
+            if kind == 'doc':
+                button = Gtk.Button(label=attrs.get('display', ''), no_show_all=True)
+                location = {'value': ''}
+
+                def set_location(output: str) -> None:
+                    location['value'] = output.strip()
+                    button.set_visible(bool(location['value']))
+                self.watch({'content': attrs.get('content', ''), 'refresh': attrs.get('refresh', '0')}, 'content',
+                           set_location)
+                button.connect('clicked', lambda _b: self.open_document(location['value']))
                 return button
             return None
+
+        def load_image(self, image: Gtk.Image, location: str, height: int, as_qrcode: bool) -> None:
+            location = location.strip()
+            if not location:
+                image.hide()
+                return
+
+            def read() -> bytes | None:
+                try:
+                    return qrcode_png(location) if as_qrcode else image_bytes(location)
+                except (OSError, ValueError):
+                    return None
+
+            def show(data: bytes | None) -> None:
+                if data is None:
+                    image.hide()
+                    return
+                try:
+                    pixbuf = pixbuf_from_bytes(data)
+                except GLib.Error:
+                    image.hide()
+                    return
+                width = max(1, pixbuf.get_width() * height // max(1, pixbuf.get_height()))
+                image.set_from_pixbuf(pixbuf.scale_simple(width, height, GdkPixbuf.InterpType.BILINEAR))
+                image.show()
+            self.run_async(read, show)
 
         def on_action(self, button: Gtk.Button, attrs: dict[str, str], confirm: bool) -> None:
             if confirm and self.armed_confirm is not button:
@@ -299,25 +371,52 @@ def run_menu() -> int:
             switch.set_state(state)
             return True
 
-        def open_choices(self, choices: list[dict[str, str]]) -> None:
+        def open_choices(self, control: Control) -> None:
+            static = [(choice.get('display', ''), choice.get('action', ''), choice.get('afterclick', 'refresh'))
+                      for choice in control.choices]
+
+            def collect() -> list[tuple[str, str, str]]:
+                dynamic = []
+                for source in control.sources:
+                    dynamic += [(label, action, source.get('afterclick', 'refresh'))
+                                for label, action in command_choices(source)]
+                return dynamic
+            self.run_async(collect, lambda dynamic: self.show_choices(static + dynamic))
+
+        def show_choices(self, choices: list[tuple[str, str, str]]) -> None:
             for child in self.choice_list.get_children():
                 self.choice_list.remove(child)
-            for choice in choices:
-                button = Gtk.Button(label=choice.get('display', ''))
-                button.connect('clicked', lambda _b, choice=choice: (
-                    self.body.set_visible_child_name('pages'),
-                    self.run_action(choice.get('action', ''), choice.get('afterclick', 'refresh'))))
+            for label, action, afterclick in choices:
+                button = Gtk.Button(label=label)
+                button.connect('clicked', lambda _b, action=action, afterclick=afterclick: (
+                    self.body.set_visible_child_name('pages'), self.run_action(action, afterclick)))
                 self.choice_list.pack_start(button, False, False, 0)
+            if not choices:
+                return
             self.choice_list.show_all()
             self.body.set_visible_child_name('choices')
             self.choice_list.get_children()[0].grab_focus()
+
+        def open_document(self, location: str) -> None:
+            self.body.set_visible_child_name('document')
+            self.viewer.open(location, self.body.get_allocated_height())
+
+        def close_document(self) -> None:
+            self.body.set_visible_child_name('pages')
+            self.focus_page()
 
         def run_action(self, action: str, afterclick: str) -> None:
             if not action:
                 return
             if afterclick == 'close':
                 self.hide_menu()
-            self.run_async(action, lambda _output: self.refresh_all() if afterclick == 'refresh' else None)
+
+            def after(_output: str) -> None:
+                if afterclick == 'refresh':
+                    self.refresh_all()
+                elif afterclick == 'rescreen':
+                    self.place_window()
+            self.run_async(run_command, after, action)
 
         def refresh_all(self) -> None:
             for refresh, _interval in self.refreshers:
@@ -329,8 +428,8 @@ def run_menu() -> int:
                 if interval > 0:
                     self.timers.append(GLib.timeout_add_seconds(interval, lambda refresh=refresh: refresh() or True))
             for page, condition in self.page_conditions:
-                self.run_async(expression_command(condition) or condition,
-                               lambda output, page=page: self.set_page_visible(page, bool(output.strip())))
+                self.run_async(run_command, lambda output, page=page: self.set_page_visible(page, bool(output.strip())),
+                               expression_command(condition) or condition)
 
         def set_page_visible(self, page: Gtk.Widget, visible: bool) -> None:
             page.set_visible(visible)
@@ -350,11 +449,22 @@ def run_menu() -> int:
 
         def on_inactive(self) -> bool:
             self.inactivity_timer = 0
+            if self.body.get_visible_child_name() == 'document':
+                return False
             self.hide_menu()
             return False
 
+        def place_window(self) -> None:
+            area = selected_monitor().get_geometry()
+            self.screen_height = area.height
+            width, height = int(area.width * WIDTH_SHARE), int(area.height * HEIGHT_SHARE)
+            self.set_size_request(width, height)
+            self.resize(width, height)
+            self.move(area.x + (area.width - width) // 2, area.y + (area.height - height) // 2)
+
         def show_menu(self) -> None:
             self.body.set_visible_child_name('pages')
+            self.place_window()
             self.show_all()
             self.set_focus_visible(True)
             self.present()
@@ -389,6 +499,7 @@ def run_menu() -> int:
         def go_back(self) -> None:
             if self.body.get_visible_child_name() == 'choices':
                 self.body.set_visible_child_name('pages')
+                self.focus_page()
             else:
                 self.hide_menu()
 
@@ -403,7 +514,12 @@ def run_menu() -> int:
             if not pressed or not self.get_visible():
                 return False
             self.reset_inactivity()
-            if code in directions:
+            if self.body.get_visible_child_name() == 'document':
+                if code in close_buttons:
+                    self.hide_menu()
+                else:
+                    self.viewer.handle_button(code)
+            elif code in directions:
                 self.child_focus(directions[code])
             elif code == ecodes.BTN_SOUTH and self.get_focus() is not None:
                 self.get_focus().activate()
@@ -418,15 +534,22 @@ def run_menu() -> int:
             return False
 
         def on_hat(self, code: int, value: int) -> bool:
-            if value and self.get_visible():
-                self.reset_inactivity()
+            if not value or not self.get_visible():
+                return False
+            self.reset_inactivity()
+            if self.body.get_visible_child_name() == 'document':
+                self.viewer.handle_hat(code, value)
+            else:
                 self.child_focus(hat_directions[(code, value)])
             return False
 
         def on_key(self, _window, event) -> bool:
             self.reset_inactivity()
             if event.keyval == Gdk.KEY_Escape:
-                self.go_back()
+                self.close_document() if self.body.get_visible_child_name() == 'document' else self.go_back()
+                return True
+            if event.keyval in (Gdk.KEY_Page_Up, Gdk.KEY_Page_Down) and self.body.get_visible_child_name() == 'pages':
+                self.switch_page(-1 if event.keyval == Gdk.KEY_Page_Up else 1)
                 return True
             return False
 
@@ -435,7 +558,6 @@ def run_menu() -> int:
     Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), provider,
                                              Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
     window = QuickMenu(parse_menu(first_existing(MENU_FILES).read_text()))
-    PID_FILE.write_text(str(os.getpid()))
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, window.toggle)
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, Gtk.main_quit)
     window.show_menu()
@@ -443,7 +565,7 @@ def run_menu() -> int:
         Gtk.main()
     finally:
         window.reader.set_grab(False)
-        PID_FILE.unlink(missing_ok=True)
+        release(PID_FILE)
     return 0
 
 
@@ -451,7 +573,8 @@ def main(argv: list[str]) -> int:
     if argv == ['--run']:
         return run_menu()
     if not argv:
-        return toggle()
+        toggle(PID_FILE, SCRIPT, ['--run'])
+        return 0
     print(__doc__, file=sys.stderr)
     return 2
 

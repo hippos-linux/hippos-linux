@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Usage: hippos-record start | stop | is_running
+#        hippos-record get-quality | set-quality ultra|high|mid|low
+#        hippos-record get-audio | set-audio auto|mic|none
+#        hippos-record get-all | set-all true|false
+# Recordings are saved in /userdata/recordings.
+
+export DISPLAY="${DISPLAY:-:0}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u hippos)}"
+export PULSE_SERVER="${PULSE_SERVER:-unix:${XDG_RUNTIME_DIR}/pulse/native}"
+
+PID_FILE=/run/hippos/record.pid
+OUTPUT_DIR=/userdata/recordings
+LOG_FILE=/userdata/system/logs/hippos-record.log
+STOP_WAIT_SECONDS=10
+
+setting() { local value; value="$(hippos-settings get "record.$1" 2>/dev/null)"; echo "${value:-$2}"; }
+
+is_running() {
+    local pid
+    pid="$(cat "${PID_FILE}" 2>/dev/null)" || return 1
+    [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null
+}
+
+capture_area() {
+    if [[ "$(setting all false)" == true ]]; then
+        xdpyinfo | awk '/dimensions:/ { print $2 "+0,0"; exit }'
+    else
+        xrandr --current | awk '/ connected primary [0-9]/ { match($0, /[0-9]+x[0-9]+\+[0-9]+\+[0-9]+/); g = substr($0, RSTART, RLENGTH); split(g, p, "+"); print p[1] "+" p[2] "," p[3]; exit }'
+    fi
+}
+
+vaapi_device() {
+    local device
+    for device in /dev/dri/renderD*; do
+        vainfo --display drm --device "${device}" 2>/dev/null | grep -q 'VAProfileH264.*VAEntrypointEncSlice' && { echo "${device}"; return; }
+    done
+}
+
+start() {
+    is_running && return 0
+    mkdir -p "${OUTPUT_DIR}" "$(dirname "${LOG_FILE}")"
+    local area size offset fps crf scale audio=() video=() device
+    area="$(capture_area)"
+    [[ -n "${area}" ]] || area="$(xdpyinfo | awk '/dimensions:/ { print $2 "+0,0"; exit }')"
+    size="${area%%+*}"; offset="${area#*+}"
+    case "$(setting quality mid)" in
+        ultra) fps=60; crf=18; scale=1 ;;
+        high)  fps=60; crf=23; scale=1 ;;
+        low)   fps=30; crf=30; scale=2 ;;
+        *)     fps=30; crf=26; scale=1 ;;
+    esac
+    case "$(setting audio auto)" in
+        auto) audio=(-f pulse -i "$(LC_ALL=C pactl get-default-sink).monitor") ;;
+        mic)  audio=(-f pulse -i "$(LC_ALL=C pactl get-default-source)") ;;
+    esac
+    device="$(vaapi_device)"
+    if [[ -n "${device}" ]]; then
+        video=(-vaapi_device "${device}" -vf "scale=iw/${scale}:ih/${scale},format=nv12,hwupload" -c:v h264_vaapi -qp "${crf}")
+    else
+        video=(-vf "scale=iw/${scale}:ih/${scale}" -c:v libx264 -preset ultrafast -crf "${crf}" -pix_fmt yuv420p)
+    fi
+    [[ ${#audio[@]} -gt 0 ]] && video+=(-c:a aac -b:a 160k)
+    ffmpeg -nostdin -y -f x11grab -framerate "${fps}" -video_size "${size}" -i "${DISPLAY}+${offset}" "${audio[@]}" \
+        "${video[@]}" "${OUTPUT_DIR}/recording-$(date +%Y%m%d-%H%M%S).mkv" >>"${LOG_FILE}" 2>&1 &
+    echo $! >"${PID_FILE}"
+}
+
+stop() {
+    is_running || return 0
+    local pid
+    pid="$(cat "${PID_FILE}")"
+    kill -INT "${pid}"
+    for _ in $(seq "${STOP_WAIT_SECONDS}"); do
+        kill -0 "${pid}" 2>/dev/null || break
+        sleep 1
+    done
+    kill -0 "${pid}" 2>/dev/null && kill -TERM "${pid}"
+    rm -f "${PID_FILE}"
+}
+
+case "${1:-}" in
+    start)        start ;;
+    stop)         stop ;;
+    is_running)   is_running && echo true || echo false ;;
+    get-quality)  setting quality mid ;;
+    set-quality)  hippos-settings set record.quality "$2" ;;
+    get-audio)    setting audio auto ;;
+    set-audio)    hippos-settings set record.audio "$2" ;;
+    get-all)      setting all false ;;
+    set-all)      hippos-settings set record.all "$2" ;;
+    *)            sed -n '2,6s/^# //p' "$0" >&2; exit 2 ;;
+esac

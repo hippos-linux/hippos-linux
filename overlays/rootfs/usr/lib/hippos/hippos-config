@@ -7,7 +7,7 @@ case "${1:-}" in
         exit $?
         ;;
     lsoutputs)
-        xrandr --query 2>/dev/null | awk '/connected/{print $1}'
+        xrandr --query 2>/dev/null | awk '$2 == "connected" || / [0-9]+x[0-9]+\+[0-9]+\+[0-9]+ / {print $1}'
         ;;
     lscrtoutputs)
         for p in /sys/class/drm/card[0-9]*-*; do
