@@ -102,6 +102,12 @@ class SyncGamelistTest(unittest.TestCase):
         self.assertFalse(self.sync({'id': GameMetadata('App', 'About')}))
         self.assertEqual((self.roms / 'gamelist.xml').read_text(), '<gameList><game>')
 
+    def test_replaced_key_takes_over_the_freed_name(self):
+        self.sync({'old': GameMetadata('App')})
+        self.sync({'new': GameMetadata('App')})
+        self.assertEqual(sorted(p.name for p in self.roms.glob('*.app')), ['App.app'])
+        self.assertEqual((self.roms / 'App.app').read_text().strip(), 'new')
+
     def test_known_keys_follow_launchers(self):
         self.assertEqual(known_keys(self.state), set())
         self.sync({'a': GameMetadata('A'), 'b': GameMetadata('B')})

@@ -26,7 +26,6 @@ APPS=(
     it.mijorus.gearlever
     org.localsend.localsend_app
     io.missioncenter.MissionCenter
-    io.github.kolunmi.Bazaar
 )
 if [[ "$(uname -m)" == "x86_64" ]]; then
     APPS+=(com.usebottles.bottles com.heroicgameslauncher.hgl com.vysp3r.ProtonPlus)

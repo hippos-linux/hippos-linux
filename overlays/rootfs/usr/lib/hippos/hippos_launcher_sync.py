@@ -70,6 +70,12 @@ def sync_launchers(
             candidate = roms_dir / f'{stem} ({safe_filename(key, key)}){extension}'
         return candidate
 
+    for key, old_path_text in old_state.items():
+        old_path = Path(old_path_text)
+        if key not in games and old_path.parent == roms_dir and _read_key(old_path) == key:
+            old_path.unlink()
+            removed += 1
+
     for key, name in sorted(games.items(), key=lambda item: safe_filename(item[1], fallback_name).lower()):
         path = path_for(key, name)
         claimed.add(path)
@@ -81,14 +87,6 @@ def sync_launchers(
             else:
                 updated += 1
         new_state[key] = str(path)
-
-    for key, old_path_text in old_state.items():
-        if key in new_state:
-            continue
-        old_path = Path(old_path_text)
-        if old_path.parent == roms_dir and old_path not in claimed and _read_key(old_path) == key:
-            old_path.unlink()
-            removed += 1
 
     _write_state(state_file, new_state)
     for path in (roms_dir, state_file, *map(Path, new_state.values())):

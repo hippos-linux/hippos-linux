@@ -82,13 +82,19 @@ if version_lt "$APPLIED" "0.6.8"; then
 fi
 
 if version_lt "$APPLIED" "0.6.12"; then
-    log "0.6.12: first-boot apps marker lists offered apps, so new ones (Bazaar) still install"
+    log "0.6.12: first-boot apps marker lists offered apps, so apps added later still install"
     FLATPAK_MARKER=/userdata/.config/hippos/flatpak-apps-installed
     if [[ -f "${FLATPAK_MARKER}" && ! -s "${FLATPAK_MARKER}" ]]; then
         printf '%s\n' com.github.joseexposito.touche com.vysp3r.ProtonPlus com.github.tchx84.Flatseal \
             it.mijorus.gearlever org.localsend.localsend_app io.missioncenter.MissionCenter \
             com.usebottles.bottles com.heroicgameslauncher.hgl > "${FLATPAK_MARKER}"
         chown hippos:users "${FLATPAK_MARKER}"
+    fi
+
+    log "0.6.12: Discover shortcut on the desktop, listed in ES Desktop Shortcuts"
+    if [[ -d /userdata/Desktop && ! -e /userdata/Desktop/discover.desktop ]]; then
+        ln -s /usr/share/applications/org.kde.discover.desktop /userdata/Desktop/discover.desktop
+        chown -h hippos:users /userdata/Desktop/discover.desktop
     fi
 
     log "0.6.12: native games move from Ports to the new Linux Games system"

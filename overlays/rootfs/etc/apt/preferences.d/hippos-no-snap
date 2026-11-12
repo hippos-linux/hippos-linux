@@ -1,0 +1,3 @@
+Package: snapd plasma-discover-backend-snap gnome-software-plugin-snap
+Pin: release *
+Pin-Priority: -1
