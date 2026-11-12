@@ -165,6 +165,7 @@ def load_wine_runners(force_refresh=False):
 CATALOG_TABS = {
     "ports":   "Games",
     "webapps": "Web Apps",
+    "apps":    "Apps",
     "shaders": "Shaders",
     "cheats":  "Cheats",
 }
@@ -178,6 +179,8 @@ def catalog_section(pkg):
         return "ScummVM classics"
     if pkg.get("category") == "ports":
         return "Open-source games"
+    if pkg.get("category") == "apps":
+        return "Media"
     return "RetroArch"
 
 def for_this_machine(pkg):
