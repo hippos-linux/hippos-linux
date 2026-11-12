@@ -1,0 +1,7 @@
+polkit.addRule(function(action, subject) {
+    if ((action.id.indexOf("org.shadowblip.Input") === 0 ||
+         action.id.indexOf("org.shadowblip.Output") === 0) &&
+        subject.user === "hippos") {
+        return polkit.Result.YES;
+    }
+});

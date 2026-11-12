@@ -1,0 +1,219 @@
+#!/usr/bin/env python3
+"""Usage: hippos-handheld available | list | set KEY=VALUE... | apply | watch
+
+Lists and changes the built-in controller settings of a handheld.
+"""
+
+from __future__ import annotations
+
+import re
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+BUS_NAME          = 'org.shadowblip.InputPlumber'
+OBJECT_ROOT       = '/org/shadowblip/InputPlumber'
+COMPOSITE_IFACE   = 'org.shadowblip.Input.CompositeDevice'
+TARGET_IFACE      = 'org.shadowblip.Input.Target'
+PROPERTIES_IFACE  = 'org.freedesktop.DBus.Properties'
+OBJECT_MANAGER    = 'org.freedesktop.DBus.ObjectManager'
+SETTINGS_BIN      = '/usr/bin/hippos-settings'
+
+GAMEPAD_TARGETS = {
+    'xbox-elite':   'Xbox Elite',
+    'xbox-series':  'Xbox Series',
+    'xb360':        'Xbox 360',
+    'ds5':          'DualSense',
+    'ds5-edge':     'DualSense Edge',
+    'deck':         'Steam Deck',
+}
+PROFILE_DIRS = (Path('/usr/share/inputplumber/profiles'), Path('/userdata/system/configs/inputplumber/profiles'))
+HIDDEN_PROFILES = {'debug.yaml', 'test.yaml'}
+
+
+@dataclass
+class Handheld:
+    path: str
+    persistent_id: str
+    name: str
+    targets: list[str]
+    profile_path: str
+
+    @property
+    def setting_id(self) -> str:
+        return re.sub(r'[^A-Za-z0-9_-]', '_', self.persistent_id)
+
+    @property
+    def gamepad(self) -> str:
+        return next((kind for kind in self.targets if kind in GAMEPAD_TARGETS), '')
+
+
+def _field(text: str) -> str:
+    return ' '.join(text.split())
+
+
+def profile_title(path: Path) -> str:
+    match = re.search(r'^name:\s*(.+)$', path.read_text(errors='replace'), re.MULTILINE)
+    return _field(match.group(1).strip('\'"')) if match else path.stem
+
+
+def available_profiles(directories: tuple[Path, ...] = PROFILE_DIRS) -> dict[str, str]:
+    profiles = {}
+    for directory in directories:
+        for path in sorted(directory.glob('*.yaml')):
+            if path.name not in HIDDEN_PROFILES:
+                profiles[str(path)] = profile_title(path)
+    return profiles
+
+
+def setting_lines(handhelds: list[Handheld], profiles: dict[str, str]) -> list[str]:
+    rows = []
+    for handheld in handhelds:
+        rows.append(['group', handheld.setting_id, _field(handheld.name), '', '', ''])
+        if handheld.gamepad:
+            rows.append(['multiple', f'{handheld.setting_id}.controller', 'CONTROLLER TYPE', handheld.gamepad,
+                         '|'.join(f'{kind}={title}' for kind, title in GAMEPAD_TARGETS.items()),
+                         'The controller games see. Xbox works everywhere; DualSense and Steam Deck add '
+                         'gyro and touchpad in games that support them.'])
+        if profiles:
+            rows.append(['multiple', f'{handheld.setting_id}.profile', 'BUTTON MAPPING', handheld.profile_path,
+                         '|'.join(f'{path}={title}' for path, title in profiles.items()),
+                         'Mapping profile for the built-in controls. Add your own profiles to '
+                         '/userdata/system/configs/inputplumber/profiles.'])
+    return ['\t'.join(row) for row in rows]
+
+
+def with_gamepad(targets: list[str], gamepad: str) -> list[str]:
+    return [gamepad] + [kind for kind in targets if kind not in GAMEPAD_TARGETS]
+
+
+def _saved(key: str) -> str:
+    return subprocess.run([SETTINGS_BIN, 'get', key], capture_output=True, text=True).stdout.strip()
+
+
+def _save(key: str, value: str) -> None:
+    subprocess.run([SETTINGS_BIN, 'set', key, value], check=True)
+
+
+class InputPlumber:
+    def __init__(self) -> None:
+        import dbus
+        self.bus = dbus.SystemBus()
+
+    def _object(self, path: str):
+        return self.bus.get_object(BUS_NAME, path)
+
+    def _property(self, path: str, interface: str, name: str):
+        return self._object(path).Get(interface, name, dbus_interface=PROPERTIES_IFACE)
+
+    def handheld(self, path: str) -> Handheld:
+        targets = [str(self._property(target, TARGET_IFACE, 'DeviceType'))
+                   for target in self._property(path, COMPOSITE_IFACE, 'TargetDevices')]
+        return Handheld(
+            path=path,
+            persistent_id=str(self._property(path, COMPOSITE_IFACE, 'PersistentId')),
+            name=str(self._property(path, COMPOSITE_IFACE, 'Name')),
+            targets=targets,
+            profile_path=str(self._property(path, COMPOSITE_IFACE, 'ProfilePath')),
+        )
+
+    def handhelds(self) -> list[Handheld]:
+        objects = self._object(OBJECT_ROOT).GetManagedObjects(dbus_interface=OBJECT_MANAGER)
+        return [self.handheld(str(path)) for path, interfaces in sorted(objects.items())
+                if COMPOSITE_IFACE in interfaces]
+
+    def set_gamepad(self, handheld: Handheld, gamepad: str) -> None:
+        if gamepad in GAMEPAD_TARGETS and gamepad != handheld.gamepad:
+            self._object(handheld.path).SetTargetDevices(with_gamepad(handheld.targets, gamepad),
+                                                         dbus_interface=COMPOSITE_IFACE)
+
+    def load_profile(self, handheld: Handheld, profile_path: str) -> None:
+        if profile_path and profile_path != handheld.profile_path and Path(profile_path).is_file():
+            self._object(handheld.path).LoadProfilePath(profile_path, dbus_interface=COMPOSITE_IFACE)
+
+    def apply_saved(self, path: str) -> None:
+        setting_id = self.handheld(path).setting_id
+        self.load_profile(self.handheld(path), _saved(f'handheld.{setting_id}.profile'))
+        self.set_gamepad(self.handheld(path), _saved(f'handheld.{setting_id}.controller'))
+
+
+def cmd_available() -> int:
+    import dbus
+    try:
+        return 0 if InputPlumber().handhelds() else 1
+    except dbus.exceptions.DBusException:
+        return 1
+
+
+def cmd_list() -> int:
+    print('\n'.join(setting_lines(InputPlumber().handhelds(), available_profiles())))
+    return 0
+
+
+def cmd_set(args: list[str]) -> int:
+    changes = [arg.split('=', 1) for arg in args if '=' in arg]
+    if not changes or len(changes) != len(args):
+        print(__doc__, file=sys.stderr)
+        return 2
+    plumber = InputPlumber()
+    handhelds = {handheld.setting_id: handheld for handheld in plumber.handhelds()}
+    for key, value in changes:
+        setting_id, _, name = key.partition('.')
+        handheld = handhelds.get(setting_id)
+        if handheld is None or name not in ('controller', 'profile'):
+            print(f'Unknown setting: {key}', file=sys.stderr)
+            return 1
+        _save(f'handheld.{key}', value)
+        if name == 'controller':
+            plumber.set_gamepad(handheld, value)
+        else:
+            plumber.load_profile(handheld, value)
+    return 0
+
+
+def cmd_apply() -> int:
+    plumber = InputPlumber()
+    for handheld in plumber.handhelds():
+        plumber.apply_saved(handheld.path)
+    return 0
+
+
+def cmd_watch() -> int:
+    from dbus.mainloop.glib import DBusGMainLoop
+    from gi.repository import GLib
+
+    DBusGMainLoop(set_as_default=True)
+    plumber = InputPlumber()
+    for handheld in plumber.handhelds():
+        plumber.apply_saved(handheld.path)
+
+    def on_added(path, interfaces):
+        if COMPOSITE_IFACE in interfaces:
+            plumber.apply_saved(str(path))
+
+    plumber.bus.add_signal_receiver(on_added, signal_name='InterfacesAdded', dbus_interface=OBJECT_MANAGER,
+                                    bus_name=BUS_NAME, path=OBJECT_ROOT)
+    GLib.MainLoop().run()
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    command, args = (argv[0], argv[1:]) if argv else ('', [])
+    match command:
+        case 'available':
+            return cmd_available()
+        case 'list':
+            return cmd_list()
+        case 'set':
+            return cmd_set(args)
+        case 'apply':
+            return cmd_apply()
+        case 'watch':
+            return cmd_watch()
+    print(__doc__, file=sys.stderr)
+    return 2
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

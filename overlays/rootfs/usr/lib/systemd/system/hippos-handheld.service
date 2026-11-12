@@ -1,0 +1,13 @@
+[Unit]
+Description=HippOS handheld controller settings
+After=inputplumber.service userdata.mount
+Requires=inputplumber.service
+PartOf=inputplumber.service
+Wants=userdata.mount
+
+[Service]
+ExecStart=/usr/lib/hippos/hippos-handheld watch
+Restart=on-failure
+
+[Install]
+WantedBy=inputplumber.service
