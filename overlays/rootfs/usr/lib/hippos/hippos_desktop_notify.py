@@ -47,16 +47,15 @@ class DesktopNotifier:
             self.last_progress = percent
             self.show(summary, f'{percent}%', percent)
 
-    def ask(self, summary: str, body: str, label: str, command: str) -> None:
+    def ask(self, summary: str, body: str, actions: dict[str, str]) -> None:
         if not self.enabled:
             return
-        prompt = shlex.join(self._notify_send(summary, body, '--action', f'yes={label}', '--wait'))
-        subprocess.run(self._as_session_user('systemd-run', '--user', '--collect', '--quiet',
-                                             'sh', '-c', f'{prompt} | grep -qx yes && {command}'),
+        options = [option for index, label in enumerate(actions) for option in ('--action', f'a{index}={label}')]
+        prompt = shlex.join(self._notify_send(summary, body, *options, '--wait'))
+        cases = ' '.join(f'a{index}) {command} ;;' for index, command in enumerate(actions.values()))
+        subprocess.run(self._as_session_user('systemd-run', '--user', '--collect', '--quiet', 'sh', '-c',
+                                             f'case "$({prompt} | tail -n 1)" in {cases} esac'),
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
     def offer_restart(self, summary: str, body: str) -> None:
-        self.ask(summary, body, 'Restart now', 'sudo /usr/lib/hippos/hippos-shutdown reboot')
-
-    def offer_update(self, summary: str, body: str) -> None:
-        self.ask(summary, body, 'Update now', 'sudo /usr/lib/hippos/hippos-upgrade apply')
+        self.ask(summary, body, {'Restart now': 'sudo /usr/lib/hippos/hippos-shutdown reboot'})

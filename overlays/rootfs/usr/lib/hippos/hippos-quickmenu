@@ -18,14 +18,13 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from HipposPaths import HIPPOS_STYLE_FILES
 from hippos_session_app import claim, release, toggle
 
 SCRIPT           = Path('/usr/lib/hippos/hippos-quickmenu')
 PID_FILE         = Path('/run/hippos/quickmenu.pid')
 MENU_FILES       = (Path('/userdata/system/configs/quickmenu/quickmenu.xml'),
                     Path('/usr/share/hippos/quickmenu/quickmenu.xml'))
-STYLE_FILES      = (Path('/userdata/system/configs/quickmenu/style.css'),
-                    Path('/usr/share/hippos/quickmenu/style.css'))
 SCREEN_SETTING   = 'quickmenu.screen'
 COMMAND_TIMEOUT_S = 3
 IMAGE_TIMEOUT_S  = 5
@@ -802,7 +801,7 @@ def run_menu() -> int:
             return False
 
     provider = Gtk.CssProvider()
-    provider.load_from_path(str(first_existing(STYLE_FILES)))
+    provider.load_from_path(str(first_existing(HIPPOS_STYLE_FILES)))
     Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), provider,
                                              Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
     window = QuickMenu(parse_menu(first_existing(MENU_FILES).read_text()))

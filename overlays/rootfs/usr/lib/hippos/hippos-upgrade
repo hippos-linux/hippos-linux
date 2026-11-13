@@ -15,11 +15,12 @@ import traceback
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 
 from hippos_apt import install_packages, recorded_user_packages
 from hippos_desktop_notify import DesktopNotifier
+import hippos_updates
 
 VERSION_FILE      = "/usr/share/hippos/version"
 BUILD_INFO_FILE   = "/etc/hippos-version"
@@ -32,7 +33,8 @@ OVERLAY_UPPER     = "@overlay/upper"
 USER_APT_SOURCES  = ("etc/apt", "usr/share/keyrings")
 STAGING_ROOTFS    = "@rootfs.new"
 UPDATE_PENDING    = "/run/hippos-update-pending"
-NOTIFIED_VERSION  = "/var/lib/hippos/update-notified-version"
+NOTIFIED_UPDATES  = "/var/lib/hippos/update-notified"
+UPDATES_WINDOW    = "/usr/lib/hippos/hippos-updates"
 LOCK_FILE         = "/run/lock/hippos-upgrade.lock"
 KERNEL_SNAPSHOT_PREFIX = "@rootfs-kernel-"
 LOG_FILE          = "/userdata/system/logs/upgrade.log"
@@ -838,6 +840,63 @@ def fetch_archive(url, archive, sha256="", timeout=None, on_progress=None):
         if os.path.exists(part):
             os.remove(part)
 
+@dataclass(frozen=True)
+class AvailableUpdate:
+    kind: str
+    name: str
+    installed: str
+    available: str
+    command: tuple
+    detail: str = ""
+
+    @property
+    def needs_restart(self):
+        return self.kind in ("system", "kernel")
+
+def available_updates(manifest):
+    payloads = manifest.get("payloads", {})
+    updates = []
+    current, remote = current_version(), manifest.get("version", "0.0.0")
+    if ver_tuple(remote) > ver_tuple(current):
+        updates.append(AvailableUpdate("system", "HippOS", current, remote, ("apply",)))
+    if kernel := payloads.get("kernel"):
+        installed = installed_kernel_version() or ""
+        if installed != kernel.get("version", ""):
+            updates.append(AvailableUpdate("kernel", "kernel", installed, kernel.get("version", ""), ("update-kernel",)))
+    for name, info in sorted(payloads.get("frontend", {}).items()):
+        installed = installed_frontend_version(name) or ""
+        if installed != info.get("version", ""):
+            updates.append(AvailableUpdate("frontend", name, installed, info.get("version", ""), ("update-frontend", name)))
+    for name, info in sorted(manifest_emulators(manifest).items()):
+        if not emulator_up_to_date(name, info):
+            updates.append(AvailableUpdate("emulator", name, installed_emulator_version(name) or "",
+                                           info.get("version", ""), ("update-emulator", name)))
+    applied = applied_patch_ids()
+    for patch in manifest_patches(manifest):
+        if patch.get("id") and patch["id"] not in applied:
+            updates.append(AvailableUpdate("patch", patch["id"], "", patch.get("version", ""), ("apply-patches",),
+                                           detail=patch.get("dest", "")))
+    return updates
+
+def fetch_available_updates():
+    manifest = fetch_manifest(get_channel())
+    if not manifest:
+        die("Could not fetch manifest")
+    return available_updates(manifest)
+
+def cmd_list_updates(kind):
+    for update in fetch_available_updates():
+        if update.kind != kind:
+            continue
+        if kind == "patch":
+            print(f"{update.name}\t{update.detail}")
+        else:
+            print(f"{update.name}\t{update.installed or 'not installed'} → {update.available}")
+
+def cmd_list_available_json():
+    print(json.dumps([{**asdict(update), "needs_restart": update.needs_restart}
+                      for update in fetch_available_updates()]))
+
 def cmd_check():
     cur = current_version()
     manifest = fetch_manifest(get_channel())
@@ -856,19 +915,23 @@ def cmd_notify_available():
     manifest = fetch_manifest(get_channel())
     if not manifest:
         return
-    remote, cur = manifest.get("version", "0.0.0"), current_version()
+    offered = [update for update in (asdict(u) for u in available_updates(manifest)) if hippos_updates.is_offered(update)]
+    key = hippos_updates.notification_key(offered)
     try:
-        with open(NOTIFIED_VERSION) as f:
-            already_notified = f.read().strip() == remote
+        with open(NOTIFIED_UPDATES) as f:
+            already_notified = f.read() == key
     except FileNotFoundError:
         already_notified = False
-    if ver_tuple(remote) <= ver_tuple(cur) or already_notified:
+    if not offered or already_notified:
         return
-    notifier.offer_update(f"HippOS {remote} is available", f"You have {cur}. The update downloads in the background.")
-    os.makedirs(os.path.dirname(NOTIFIED_VERSION), exist_ok=True)
-    with open(NOTIFIED_VERSION, "w") as f:
-        f.write(remote + "\n")
-    log(f"Told the desktop session that {remote} is available")
+    notifier.ask(hippos_updates.headline(offered), hippos_updates.summary(offered), {
+        "Update all": f"env DISPLAY=:0 {UPDATES_WINDOW} --install-all",
+        "Show updates": f"env DISPLAY=:0 {UPDATES_WINDOW}",
+    })
+    os.makedirs(os.path.dirname(NOTIFIED_UPDATES), exist_ok=True)
+    with open(NOTIFIED_UPDATES, "w") as f:
+        f.write(key)
+    log(f"Told the desktop session about: {hippos_updates.summary(offered)}")
 
 def cmd_list_deployments():
     cur = current_subvol()
@@ -1114,19 +1177,6 @@ def installed_kernel_version():
         return None
     return sorted(kernels, key=lambda v: tuple(int(x) for x in v.replace("-hippos", "").split(".")))[-1]
 
-def cmd_list_kernel_update():
-    manifest = fetch_manifest(get_channel())
-    if not manifest:
-        die("Could not fetch manifest")
-    kernel = manifest.get("payloads", {}).get("kernel", {})
-    if not kernel:
-        log("No kernel payload in manifest")
-        return
-    remote = kernel.get("version", "")
-    installed = installed_kernel_version()
-    if installed != remote:
-        print(f"kernel\t{installed or 'not installed'} → {remote}")
-
 def cmd_update_kernel():
     require_no_pending_update()
     manifest = fetch_manifest(get_channel())
@@ -1249,21 +1299,6 @@ def manifest_emulators(manifest):
             chosen[name] = max(runnable, key=lambda b: ver_tuple(b["min_os"]))
     return chosen
 
-def cmd_list_emulator_updates():
-    manifest = fetch_manifest(get_channel())
-    if not manifest:
-        die("Could not fetch manifest")
-    emulators = manifest_emulators(manifest)
-    if not emulators:
-        log("No emulator payloads in manifest")
-        return
-    for name, info in sorted(emulators.items()):
-        remote = info.get("version", "")
-        installed = installed_emulator_version(name)
-        if not emulator_up_to_date(name, info):
-            status = f"{installed or 'not installed'} → {remote}"
-            print(f"{name}\t{status}")
-
 def cmd_update_emulator(name, force=False):
     manifest = fetch_manifest(get_channel())
     if not manifest:
@@ -1333,21 +1368,6 @@ def cmd_update_all_emulators():
         else:
             cmd_update_emulator(name)
 
-def cmd_list_frontend_updates():
-    manifest = fetch_manifest(get_channel())
-    if not manifest:
-        die("Could not fetch manifest")
-    frontends = manifest.get("payloads", {}).get("frontend", {})
-    if not frontends:
-        log("No frontend payloads in manifest")
-        return
-    for name, info in sorted(frontends.items()):
-        remote = info.get("version", "")
-        installed = installed_frontend_version(name)
-        if installed != remote:
-            status = f"{installed or 'not installed'} → {remote}"
-            print(f"{name}\t{status}")
-
 def cmd_update_frontend(name):
     manifest = fetch_manifest(get_channel())
     if not manifest:
@@ -1404,18 +1424,6 @@ def mark_patch_applied(patch_id):
 def manifest_patches(manifest):
     version = current_version()
     return [p for p in manifest.get("payloads", {}).get("patches", []) if p.get("version") == version]
-
-def cmd_list_patches():
-    manifest = fetch_manifest(get_channel())
-    if not manifest:
-        die("Could not fetch manifest")
-    patches = manifest_patches(manifest)
-    applied = applied_patch_ids()
-    for p in patches:
-        pid = p.get("id", "")
-        dest = p.get("dest", "")
-        if pid and pid not in applied:
-            print(f"{pid}\t{dest}")
 
 def cmd_apply_patches():
     manifest = fetch_manifest(get_channel())
@@ -1488,12 +1496,12 @@ def _require_root():
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "apply"
 
-    READONLY_CMDS = {"check", "list-emulator-updates",
+    READONLY_CMDS = {"check", "list-available", "list-emulator-updates",
                      "list-frontend-updates", "list-kernel-update", "list-patches"}
     if cmd not in READONLY_CMDS:
         _require_root()
         _open_log()
-        if cmd in ("apply", "notify-available"):
+        if cmd in ("apply", "notify-available") and "--no-notify" not in sys.argv:
             notifier = DesktopNotifier()
         os.makedirs(os.path.dirname(LOCK_FILE), exist_ok=True)
         _lock = open(LOCK_FILE, "w")
@@ -1503,6 +1511,8 @@ if __name__ == "__main__":
         cmd_check()
     elif cmd == "notify-available":
         cmd_notify_available()
+    elif cmd == "list-available":
+        cmd_list_available_json()
     elif cmd == "list-deployments":
         cmd_list_deployments()
     elif cmd == "rollback":
@@ -1510,7 +1520,7 @@ if __name__ == "__main__":
             die("Usage: hippos-upgrade rollback <subvol>")
         cmd_rollback(sys.argv[2])
     elif cmd == "list-emulator-updates":
-        cmd_list_emulator_updates()
+        cmd_list_updates("emulator")
     elif cmd == "update-emulator":
         args = [a for a in sys.argv[2:] if not a.startswith("-")]
         force = "--force" in sys.argv
@@ -1520,17 +1530,17 @@ if __name__ == "__main__":
     elif cmd == "update-all-emulators":
         cmd_update_all_emulators()
     elif cmd == "list-frontend-updates":
-        cmd_list_frontend_updates()
+        cmd_list_updates("frontend")
     elif cmd == "update-frontend":
         if len(sys.argv) < 3:
             die("Usage: hippos-upgrade update-frontend <name>")
         cmd_update_frontend(sys.argv[2])
     elif cmd == "list-kernel-update":
-        cmd_list_kernel_update()
+        cmd_list_updates("kernel")
     elif cmd == "update-kernel":
         cmd_update_kernel()
     elif cmd == "list-patches":
-        cmd_list_patches()
+        cmd_list_updates("patch")
     elif cmd == "apply-patches":
         cmd_apply_patches()
     elif cmd == "update-grub":

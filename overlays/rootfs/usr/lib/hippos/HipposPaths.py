@@ -31,6 +31,7 @@ ROMS: Final = USERDATA / 'roms'
 CHEATS: Final = USERDATA / 'cheats'
 LOGS: Final = HOME / 'logs'
 HIPPOS_CONF: Final = HOME / 'hippos.conf'
+HIPPOS_STYLE_FILES: Final = (CONFIGS / 'quickmenu' / 'style.css', HIPPOS_SHARE_DIR / 'quickmenu' / 'style.css')
 
 USER_ES_DIR: Final = CONFIGS / 'emulationstation'
 HIPPOS_ES_DIR: Final = Path('/usr/share/emulationstation')

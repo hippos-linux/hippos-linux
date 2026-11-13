@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+"""Usage: hippos-updates [--install-all]
+
+Lists the HippOS, EmulationStation, emulator and fix updates available for this
+machine and installs the ones you pick. --install-all picks every update and starts.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+import sys
+import threading
+
+import gi
+
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
+
+import hippos_updates  # noqa: E402
+from HipposPaths import HIPPOS_STYLE_FILES  # noqa: E402
+
+UPGRADE = '/usr/lib/hippos/hippos-upgrade'
+SHUTDOWN = '/usr/lib/hippos/hippos-shutdown'
+PROGRESS = re.compile(r'(\d+)%')
+LOG_PREFIX = '[hippos-upgrade] '
+INSTALL_ORDER = ('emulator', 'frontend', 'patch', 'kernel', 'system')
+INCLUDED_IN_SYSTEM = ('frontend', 'patch', 'kernel')
+
+
+def styled(widget: Gtk.Widget, *classes: str) -> Gtk.Widget:
+    for css_class in classes:
+        widget.get_style_context().add_class(css_class)
+    return widget
+
+
+def label(text: str, *classes: str, xalign: float = 0) -> Gtk.Label:
+    return styled(Gtk.Label(label=text, xalign=xalign), 'label', *classes)
+
+
+class UpdateRow(Gtk.ListBoxRow):
+    def __init__(self, updates: list[dict], on_toggle) -> None:
+        super().__init__()
+        self.updates = updates
+        first = updates[0]
+        self.kind = first['kind']
+        styled(self, 'row')
+        line = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        line.pack_start(label(hippos_updates.title(first)), True, True, 0)
+        if self.kind == 'patch':
+            versions = f"{len(updates)} for HippOS {first['available']}"
+        else:
+            versions = (f"{first['available']} · new build" if first['installed'] == first['available']
+                        else f"{first['installed']} → {first['available']}" if first['installed'] else first['available'])
+        self.versions = versions
+        self.value = styled(Gtk.Label(label=versions), 'value')
+        line.pack_start(self.value, False, False, 0)
+        self.switch = Gtk.Switch(valign=Gtk.Align.CENTER, active=True)
+        self.switch.connect('notify::active', lambda *_: on_toggle())
+        line.pack_end(self.switch, False, False, 0)
+        self.add(line)
+        self.set_selectable(False)
+
+    @property
+    def selected(self) -> bool:
+        return self.switch.get_active() and self.get_sensitive()
+
+    def include_in(self, system_version: str | None) -> None:
+        self.set_sensitive(system_version is None)
+        self.switch.set_opacity(0 if system_version else 1)
+        style = self.get_style_context()
+        style.add_class('info') if system_version else style.remove_class('info')
+        self.value.set_text(f'included in {system_version}' if system_version else self.versions)
+
+    def commands(self) -> list[tuple[str, ...]]:
+        return list(dict.fromkeys(tuple(update['command']) for update in self.updates))
+
+    @property
+    def needs_restart(self) -> bool:
+        return any(update['needs_restart'] for update in self.updates)
+
+
+class UpdatesWindow(Gtk.Window):
+    def __init__(self, install_all: bool) -> None:
+        super().__init__(title='HippOS Update')
+        self.install_all = install_all
+        self.rows: list[UpdateRow] = []
+        self.set_default_size(680, 560)
+        self.set_icon_name('system-software-update')
+        layout = styled(Gtk.Box(orientation=Gtk.Orientation.VERTICAL), 'quickmenu')
+        header = styled(Gtk.Box(orientation=Gtk.Orientation.VERTICAL), 'header')
+        self.subtitle = label('CHECKING FOR UPDATES…')
+        for css_class, text_label in (('title', label('Updates')), ('subtitle', self.subtitle)):
+            line = styled(Gtk.Box(), css_class)
+            line.add(text_label)
+            header.pack_start(line, False, False, 0)
+        self.list = styled(Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE), 'page')
+        self.list.connect('row-activated', lambda _list, row: row.switch.set_active(not row.switch.get_active()))
+        scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
+        scroller.add(self.list)
+        footer = styled(Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8), 'footer')
+        self.status = label('')
+        self.progress = Gtk.ProgressBar(no_show_all=True)
+        buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, halign=Gtk.Align.END)
+        self.install_button = self.pill('Install selected', self.install_selected)
+        self.restart_button = self.pill('Restart now', lambda: subprocess.Popen(['sudo', SHUTDOWN, 'reboot']))
+        self.restart_button.set_no_show_all(True)
+        self.close_button = self.pill('Close', self.close)
+        for button in (self.install_button, self.restart_button, self.close_button):
+            buttons.pack_start(button, False, False, 0)
+        footer.pack_start(self.status, False, False, 0)
+        footer.pack_start(self.progress, False, False, 0)
+        footer.pack_start(buttons, False, False, 0)
+        layout.pack_start(header, False, False, 0)
+        layout.pack_start(scroller, True, True, 0)
+        layout.pack_end(footer, False, False, 0)
+        self.add(layout)
+        self.install_button.set_sensitive(False)
+        self.connect('destroy', Gtk.main_quit)
+        threading.Thread(target=self.check, daemon=True).start()
+
+    def pill(self, text: str, action) -> Gtk.Button:
+        button = styled(Gtk.Button(label=text), 'pill')
+        button.connect('clicked', lambda _button: action())
+        return button
+
+    def check(self) -> None:
+        result = subprocess.run([UPGRADE, 'list-available'], capture_output=True, text=True, check=False)
+        updates = json.loads(result.stdout) if result.returncode == 0 and result.stdout.strip() else None
+        GLib.idle_add(self.show_updates, updates)
+
+    def show_updates(self, updates: list[dict] | None) -> None:
+        if updates is None:
+            self.subtitle.set_text("COULDN'T REACH THE UPDATE SERVER")
+            return
+        offered = [update for update in updates if hippos_updates.is_offered(update)]
+        groups: dict[str, list[dict]] = {}
+        for update in sorted(offered, key=lambda u: INSTALL_ORDER.index(u['kind']), reverse=True):
+            groups.setdefault('patch' if update['kind'] == 'patch' else f"{update['kind']}:{update['name']}", []).append(update)
+        for group in groups.values():
+            row = UpdateRow(group, self.refresh_selection)
+            self.rows.append(row)
+            self.list.add(row)
+        self.list.show_all()
+        self.subtitle.set_text(f'{len(self.rows)} AVAILABLE' if self.rows else 'EVERYTHING IS UP TO DATE')
+        self.refresh_selection()
+        if self.install_all and self.rows:
+            self.install_selected()
+
+    def refresh_selection(self) -> None:
+        system = next((row for row in self.rows if row.kind == 'system' and row.switch.get_active()), None)
+        for row in self.rows:
+            if row.kind in INCLUDED_IN_SYSTEM:
+                row.include_in(system.updates[0]['available'] if system else None)
+        self.install_button.set_sensitive(any(row.selected for row in self.rows))
+
+    def install_selected(self) -> None:
+        chosen = sorted((row for row in self.rows if row.selected), key=lambda row: INSTALL_ORDER.index(row.kind))
+        commands = [command for row in chosen for command in row.commands()]
+        needs_restart = any(row.needs_restart for row in chosen)
+        for widget in (self.install_button, self.list):
+            widget.set_sensitive(False)
+        self.progress.show()
+        threading.Thread(target=self.install, args=(commands, needs_restart), daemon=True).start()
+
+    def install(self, commands: list[tuple[str, ...]], needs_restart: bool) -> None:
+        for index, command in enumerate(commands, 1):
+            GLib.idle_add(self.subtitle.set_text, f'INSTALLING {index} OF {len(commands)}')
+            process = subprocess.Popen(['sudo', UPGRADE, *command, '--no-notify'], stdout=subprocess.PIPE,
+                                       stderr=subprocess.STDOUT, text=True)
+            last_line = ''
+            for line in process.stdout:
+                last_line = line.strip().removeprefix(LOG_PREFIX)
+                GLib.idle_add(self.report, last_line)
+            if process.wait() != 0:
+                GLib.idle_add(self.finish, f'Stopped: {last_line}', False)
+                return
+        GLib.idle_add(self.finish, 'Restart to finish installing.' if needs_restart else 'All done.', needs_restart)
+
+    def report(self, line: str) -> None:
+        if match := PROGRESS.search(line):
+            self.progress.set_fraction(int(match.group(1)) / 100)
+            self.status.set_text(line.split('...')[0].strip() if '...' in line else line)
+        else:
+            self.progress.pulse()
+            self.status.set_text(line)
+
+    def finish(self, message: str, needs_restart: bool) -> None:
+        self.progress.hide()
+        self.install_button.hide()
+        self.status.set_text(message)
+        self.subtitle.set_text('RESTART NEEDED' if needs_restart else 'FINISHED')
+        if needs_restart:
+            self.restart_button.show()
+
+
+def main(argv: list[str]) -> int:
+    if argv not in ([], ['--install-all']):
+        print(__doc__, file=sys.stderr)
+        return 2
+    provider = Gtk.CssProvider()
+    provider.load_from_path(str(next(path for path in HIPPOS_STYLE_FILES if path.is_file())))
+    Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+    UpdatesWindow(install_all=bool(argv)).show_all()
+    Gtk.main()
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))
