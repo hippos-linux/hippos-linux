@@ -22,19 +22,23 @@ class DesktopNotifier:
         self.notification_id = ''
         self.last_progress = -PROGRESS_STEP
 
-    def _notify_send(self, summary: str, body: str, *options: str) -> list[str]:
+    def _as_session_user(self, *command: str) -> list[str]:
         uid = pwd.getpwnam(SESSION_USER).pw_uid
-        replace = ['--replace-id', self.notification_id] if self.notification_id else []
         return ['runuser', '-u', SESSION_USER, '--', 'env',
-                f'DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{uid}/bus',
-                'notify-send', '--app-name', APP_NAME, '--icon', ICON, '--print-id', *replace, *options,
+                f'DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{uid}/bus', f'XDG_RUNTIME_DIR=/run/user/{uid}',
+                *command]
+
+    def _notify_send(self, summary: str, body: str, *options: str) -> list[str]:
+        replace = ['--replace-id', self.notification_id] if self.notification_id else []
+        return ['notify-send', '--app-name', APP_NAME, '--icon', ICON, '--print-id', *replace, *options,
                 summary, body]
 
     def show(self, summary: str, body: str = '', progress: int | None = None) -> None:
         if not self.enabled:
             return
         hint = ['--hint', f'int:value:{progress}'] if progress is not None else []
-        result = subprocess.run(self._notify_send(summary, body, *hint), capture_output=True, text=True, check=False)
+        result = subprocess.run(self._as_session_user(*self._notify_send(summary, body, *hint)),
+                                capture_output=True, text=True, check=False)
         if result.stdout.strip().isdigit():
             self.notification_id = result.stdout.strip()
 
@@ -43,9 +47,16 @@ class DesktopNotifier:
             self.last_progress = percent
             self.show(summary, f'{percent}%', percent)
 
-    def offer_restart(self, summary: str, body: str) -> None:
+    def ask(self, summary: str, body: str, label: str, command: str) -> None:
         if not self.enabled:
             return
-        ask = shlex.join(self._notify_send(summary, body, '--action', 'restart=Restart now', '--wait'))
-        subprocess.Popen(['sh', '-c', f'{ask} | grep -qx restart && /usr/lib/hippos/hippos-shutdown reboot'],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        prompt = shlex.join(self._notify_send(summary, body, '--action', f'yes={label}', '--wait'))
+        subprocess.run(self._as_session_user('systemd-run', '--user', '--collect', '--quiet',
+                                             'sh', '-c', f'{prompt} | grep -qx yes && {command}'),
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+
+    def offer_restart(self, summary: str, body: str) -> None:
+        self.ask(summary, body, 'Restart now', 'sudo /usr/lib/hippos/hippos-shutdown reboot')
+
+    def offer_update(self, summary: str, body: str) -> None:
+        self.ask(summary, body, 'Update now', 'sudo /usr/lib/hippos/hippos-upgrade apply')

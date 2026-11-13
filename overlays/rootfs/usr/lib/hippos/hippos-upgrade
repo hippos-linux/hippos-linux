@@ -32,6 +32,7 @@ OVERLAY_UPPER     = "@overlay/upper"
 USER_APT_SOURCES  = ("etc/apt", "usr/share/keyrings")
 STAGING_ROOTFS    = "@rootfs.new"
 UPDATE_PENDING    = "/run/hippos-update-pending"
+NOTIFIED_VERSION  = "/var/lib/hippos/update-notified-version"
 LOCK_FILE         = "/run/lock/hippos-upgrade.lock"
 KERNEL_SNAPSHOT_PREFIX = "@rootfs-kernel-"
 LOG_FILE          = "/userdata/system/logs/upgrade.log"
@@ -849,6 +850,26 @@ def cmd_check():
         sys.exit(0)
     sys.exit(1)
 
+def cmd_notify_available():
+    if not notifier.enabled or os.path.exists(UPDATE_PENDING):
+        return
+    manifest = fetch_manifest(get_channel())
+    if not manifest:
+        return
+    remote, cur = manifest.get("version", "0.0.0"), current_version()
+    try:
+        with open(NOTIFIED_VERSION) as f:
+            already_notified = f.read().strip() == remote
+    except FileNotFoundError:
+        already_notified = False
+    if ver_tuple(remote) <= ver_tuple(cur) or already_notified:
+        return
+    notifier.offer_update(f"HippOS {remote} is available", f"You have {cur}. The update downloads in the background.")
+    os.makedirs(os.path.dirname(NOTIFIED_VERSION), exist_ok=True)
+    with open(NOTIFIED_VERSION, "w") as f:
+        f.write(remote + "\n")
+    log(f"Told the desktop session that {remote} is available")
+
 def cmd_list_deployments():
     cur = current_subvol()
     try:
@@ -1472,7 +1493,7 @@ if __name__ == "__main__":
     if cmd not in READONLY_CMDS:
         _require_root()
         _open_log()
-        if cmd == "apply":
+        if cmd in ("apply", "notify-available"):
             notifier = DesktopNotifier()
         os.makedirs(os.path.dirname(LOCK_FILE), exist_ok=True)
         _lock = open(LOCK_FILE, "w")
@@ -1480,6 +1501,8 @@ if __name__ == "__main__":
 
     if cmd == "check":
         cmd_check()
+    elif cmd == "notify-available":
+        cmd_notify_available()
     elif cmd == "list-deployments":
         cmd_list_deployments()
     elif cmd == "rollback":

@@ -1,0 +1,10 @@
+[Unit]
+Description=HippOS check for OS updates to announce on the desktop
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=6h
+Unit=hippos-update-notify.service
+
+[Install]
+WantedBy=timers.target

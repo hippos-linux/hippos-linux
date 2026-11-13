@@ -1,0 +1,9 @@
+[Unit]
+Description=HippOS desktop notification when an OS update is available
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/hippos/hippos-upgrade notify-available
+Nice=10
