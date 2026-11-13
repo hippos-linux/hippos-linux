@@ -27,6 +27,7 @@ from emulatorlauncher_shared import (
 from libretro_cores import core_file_names
 
 from HipposPaths import BIOS, CHEATS, CONFIGS, EMULATORS_ROOT, SAVES, SCREENSHOTS, USERDATA, USER_DECORATIONS, USER_SHADERS
+import hippos_dosbox_pure_ddrive
 import hippos_win9x
 
 def launch_libretro(ctx: LaunchContext) -> int:
@@ -637,6 +638,10 @@ def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> N
 
     elif core == 'dosbox_pure' and ctx.system == 'win98':
         opts['dosbox_pure_bootos_ramdisk'] = _game_setting(conf, ctx.system, ctx.rom, 'dosbox_pure_bootos_ramdisk') or 'diff'
+        free_space = _game_setting(conf, ctx.system, ctx.rom, 'dosbox_pure_bootos_dfreespace')
+        if free_space in ('', 'auto'):
+            free_space = hippos_dosbox_pure_ddrive.free_space_for(ctx.rom, hippos_win9x.DOSBOX_PURE_SAVES)
+        opts['dosbox_pure_bootos_dfreespace'] = free_space
         hippos_win9x.preset_dosbox_pure_autoboot(ctx.rom)
 
     elif core in ('fbneo', 'fbalpha'):

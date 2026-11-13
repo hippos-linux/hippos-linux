@@ -141,6 +141,15 @@ systems:
           Per game (Default): diff
           Discard on exit: "true"
           Write to the Windows image: "false"
+      dosbox_pure_bootos_dfreespace:
+        prompt: FREE SPACE ON D DRIVE
+        description: Size of the drive games install to. Auto matches the drive an existing install was made with, so installs from other setups load instead of starting blank.
+        choices:
+          Auto (Default): auto
+          1 GB: "1024"
+          2 GB: "2048"
+          4 GB: "4096"
+          8 GB: "8192"
   - name: dreamcast
     as_core:
       - flycast
