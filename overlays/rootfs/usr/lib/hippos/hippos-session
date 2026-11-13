@@ -6,7 +6,9 @@ mkdir -p /run/hippos
 echo $$ > /run/hippos/session-loop
 
 SESSION_PROCS="/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/cgroup.procs"
+ES_QUIT_WAIT_S=20
 xorg_pid=""
+mode_pid=""
 running_mode=""
 end_requested=0
 logout_requested=0
@@ -31,7 +33,7 @@ start_xorg() {
 signal_mode() {
     local pid
     while read -r pid; do
-        [[ "${pid}" == "$$" || "${pid}" == "${xorg_pid}" ]] && continue
+        [[ "${pid}" == "$$" || "${pid}" == "${BASHPID}" || "${pid}" == "${xorg_pid}" ]] && continue
         [[ -O "/proc/${pid}" ]] || continue
         kill "-$1" "${pid}" 2>/dev/null
     done < "${SESSION_PROCS}"
@@ -51,6 +53,10 @@ wanted_mode() {
 
 end_mode() {
     end_requested=1
+    if [[ "${running_mode}" == es ]] && curl -sf --connect-timeout 2 --max-time 5 -o /dev/null http://127.0.0.1:1234/quit; then
+        ( sleep "${ES_QUIT_WAIT_S}"; kill -0 "${mode_pid}" 2>/dev/null && signal_mode TERM ) &
+        return
+    fi
     signal_mode TERM
 }
 

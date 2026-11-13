@@ -10,6 +10,7 @@ source /usr/lib/hippos/pool-branch.sh
 
 CONFIG=/userdata/system/configs/hippos/roms-sources.conf
 MEDIA=/media
+USERDATA_ID=/userdata/system/.userdata-id
 
 log() { printf '[hippos-network-roms] %s\n' "$*"; }
 
@@ -36,6 +37,28 @@ split_options() {
             *) mount_options="${mount_options:+${mount_options},}${option}" ;;
         esac
     done
+}
+
+own_host() {
+    local address
+    for address in $(getent ahosts "$1" | awk '{print $1}' | sort -u); do
+        ip -o addr show | awk '{print $4}' | cut -d/ -f1 | grep -qxF "${address}" && return 0
+    done
+    return 1
+}
+
+own_userdata() {
+    local id
+    for id in "$1/system/.userdata-id" "$1/userdata/system/.userdata-id"; do
+        cmp -s "${id}" "${USERDATA_ID}" && return 0
+    done
+    return 1
+}
+
+skip_own_share() {
+    log "$1 is this machine's own storage; not merging it"
+    umount "$2" 2>/dev/null || umount -l "$2"
+    rmdir "$2" 2>/dev/null || true
 }
 
 writable() {
@@ -65,6 +88,7 @@ if ! is_true "$(setting network.roms.enabled true)"; then
 fi
 
 [[ -f "${CONFIG}" ]] || { log "no config at ${CONFIG}"; exit 0; }
+[[ -s "${USERDATA_ID}" ]] || cat /proc/sys/kernel/random/uuid > "${USERDATA_ID}"
 
 mkdir -p "${MEDIA}"
 changed=0
@@ -85,8 +109,14 @@ while IFS= read -r line; do
             log "already mounted: ${share}"
             continue
         fi
+        if own_host "${share%%:*}"; then
+            log "${share} is on this machine; not merging it"
+            rmdir "${mnt}" 2>/dev/null || true
+            continue
+        fi
         nfs_options="noatime,soft,timeo=30,retry=0"
         if mount -t nfs -o "ro,${nfs_options}" "${share}" "${mnt}"; then
+            own_userdata "${mnt}" && { skip_own_share "${share}" "${mnt}"; continue; }
             log "mounted NFS ${share} at ${mnt}"
             changed=1
             [[ "${saves_mode}" == rw ]] && mount_writable_saves nfs "${share%/}" "${mnt}" "rw,${nfs_options}"
@@ -104,10 +134,16 @@ while IFS= read -r line; do
             log "already mounted: //${share_path}"
             continue
         fi
+        if own_host "${share_path%%/*}"; then
+            log "//${share_path} is on this machine; not merging it"
+            rmdir "${mnt}" 2>/dev/null || true
+            continue
+        fi
         cifs_options="noatime,soft,vers=3.0,uid=1000,gid=1000"
         [[ -n "${mount_options}" ]] && cifs_options="${cifs_options},${mount_options}"
         [[ "${cifs_options}" != *username=* && "${cifs_options}" != *credentials=* ]] && cifs_options="${cifs_options},guest"
         if mount -t cifs "//${share_path}" "${mnt}" -o "ro,${cifs_options}"; then
+            own_userdata "${mnt}" && { skip_own_share "//${share_path}" "${mnt}"; continue; }
             log "mounted CIFS //${share_path} at ${mnt}"
             changed=1
             [[ "${saves_mode}" == rw ]] && mount_writable_saves cifs "//${share_path%/}" "${mnt}" "rw,${cifs_options}"

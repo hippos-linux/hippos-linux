@@ -46,6 +46,12 @@ class Candidate:
     has_roms: bool | None = None
 
     @property
+    def host(self) -> str:
+        if self.uri.startswith("cifs://"):
+            return self.uri.removeprefix("cifs://").split("/", 1)[0]
+        return self.uri.removeprefix("nfs:").split(":", 1)[0]
+
+    @property
     def ident(self) -> str:
         return hashlib.sha1(self.uri.encode("utf-8")).hexdigest()[:12]
 
@@ -135,11 +141,21 @@ def local_addresses() -> set[str]:
             addrs.add(parts[3].split("/", 1)[0])
     return addrs
 
+def host_addresses(host: str) -> set[str]:
+    try:
+        return {str(ipaddress.ip_address(host))}
+    except ValueError:
+        pass
+    try:
+        return {info[4][0] for info in socket.getaddrinfo(host, None)}
+    except OSError:
+        return set()
+
 def lan_host(host: str, self_addrs: set[str]) -> bool:
     try:
         addr = ipaddress.ip_address(host)
     except ValueError:
-        return True
+        return not host_addresses(host) & self_addrs
     return addr.version == 4 and str(addr) not in self_addrs
 
 def avahi_hosts(service: str) -> set[str]:
@@ -272,7 +288,8 @@ def read_candidates() -> list[Candidate]:
         _, likely, uri, name, source, *comment = parts
         has_roms = None if likely == "?" else likely == "1"
         candidates.append(Candidate(uri, name, source, "\t".join(comment), has_roms))
-    return candidates
+    self_addrs = local_addresses()
+    return [candidate for candidate in candidates if not host_addresses(candidate.host) & self_addrs]
 
 def cmd_discover() -> int:
     if not is_true(setting("network.roms.discovery.enabled", "true")):

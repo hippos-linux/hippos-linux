@@ -11,6 +11,7 @@ import re
 import shutil
 import sqlite3
 import stat
+import socket
 import subprocess
 import sys
 import time
@@ -1028,8 +1029,14 @@ def has_child_partitions(devname: str) -> bool:
     names = run_text(["lsblk", "-lnro", "NAME", f"/dev/{devname}"]).splitlines()
     return len([name for name in names if name.strip()]) > 1
 
+def readable_dir(path: Path) -> bool:
+    try:
+        return path.is_dir()
+    except OSError:
+        return False
+
 def is_rom_root(root: Path) -> bool:
-    if not root.is_dir():
+    if not readable_dir(root):
         return False
     systems = {
         "3do", "arcade", "atomiswave", "dreamcast", "fbneo", "gamecube", "gba", "gbc",
@@ -1041,7 +1048,7 @@ def is_rom_root(root: Path) -> bool:
 
 def rom_branch_for_mount(mount_path: Path) -> Optional[Path]:
     for candidate in (mount_path / "roms", mount_path / "userdata" / "roms", mount_path):
-        if candidate.is_dir() and (candidate.name == "roms" or is_rom_root(candidate)):
+        if readable_dir(candidate) and (candidate.name == "roms" or is_rom_root(candidate)):
             return candidate
     return None
 
@@ -1324,10 +1331,26 @@ def write_credentials(source: str, username: str, password: str) -> Path:
     os.chown(path, 0, 0)
     return path
 
+def network_host(source: str) -> str:
+    share = network_share(source)
+    return share.removeprefix("cifs://").split("/", 1)[0] if share.startswith("cifs://") else share.removeprefix("nfs:").split(":", 1)[0]
+
+def is_own_host(host: str) -> bool:
+    try:
+        addresses = {info[4][0] for info in socket.getaddrinfo(host, None)}
+    except OSError:
+        return False
+    local = {line.split()[3].split("/", 1)[0] for line in run_text(["ip", "-o", "addr", "show"]).splitlines()
+             if len(line.split()) > 3}
+    return bool(addresses & local)
+
 def cmd_add_network(address: str, credentials_stdin: bool) -> int:
     source = normalize_network_source(address)
     if source is None:
         log(f"not a network share address: {address}")
+        return 1
+    if is_own_host(network_host(source)):
+        log(f"{address} is this machine's own share; not adding it")
         return 1
     if credentials_stdin:
         if not source.startswith("cifs://"):
