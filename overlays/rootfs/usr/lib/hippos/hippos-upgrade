@@ -931,8 +931,6 @@ def cmd_apply():
             if result.returncode != 0:
                 log(f"WARNING: failed to prune {name} (exit {result.returncode}) "
                     f"— it will be retried on the next update")
-        if stale:
-            subprocess.run(["btrfs", "subvolume", "sync", BTRFS_MNT], check=False)
         if plan.prune and efi_partition_mounted():
             write_boot_config(running, [running], uuid, partuuid)
             log("Boot configuration updated after pruning")
@@ -940,6 +938,12 @@ def cmd_apply():
         shortfall = update_space_shortfall(
             shutil.disk_usage(BTRFS_MNT).free, payload, os.path.exists(archive),
         )
+        if shortfall and stale:
+            log("Waiting for the pruned deployments' space to be freed...")
+            subprocess.run(["btrfs", "subvolume", "sync", BTRFS_MNT], check=False)
+            shortfall = update_space_shortfall(
+                shutil.disk_usage(BTRFS_MNT).free, payload, os.path.exists(archive),
+            )
         if shortfall:
             shortfall_mb = (shortfall + 1024 * 1024 - 1) // (1024 * 1024)
             die(f"Not enough free space for this update — free at least "
