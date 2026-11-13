@@ -353,7 +353,7 @@ capture "hippos-storage-journal.txt" \
         --no-pager
 
 capture_shell "network-shares.txt" \
-    'echo "# discovered: id, kind (games = games found, prompts in ES), uri, name, source"; /usr/lib/hippos/hippos-network-roms-discover list; echo "# added"; cut -d" " -f1 /userdata/system/configs/hippos/roms-sources.conf 2>/dev/null'
+    'echo "# discovered: id, kind (games = games found, prompts in ES), uri, name, source, rom/bios/save files, what it matched"; /usr/lib/hippos/hippos-network-roms-discover list; echo "# added"; cut -d" " -f1 /userdata/system/configs/hippos/roms-sources.conf 2>/dev/null'
 
 capture "hippos-firstboot-flatpak.txt" \
     systemctl status hippos-firstboot-flatpak.service --no-pager -l

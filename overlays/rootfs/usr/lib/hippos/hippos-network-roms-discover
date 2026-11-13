@@ -49,6 +49,7 @@ class Candidate:
     comment: str = ""
     has_roms: bool | None = None
     file_counts: tuple[int, int, int] | None = None
+    matched: str = ""
 
     @property
     def host(self) -> str:
@@ -211,21 +212,25 @@ def smb_folders(host: str, share: str, path: str = "") -> set[str] | None:
     files = {m.group(1) for m in re.finditer(r"^\s{2}(.+?)\s+[A-Z]*\s+\d+\s", output, re.M)}
     return folders | ({"gamelist.xml"} & files)
 
-def smb_userdata_root(candidate: Candidate) -> tuple[bool | None, str | None]:
+def smb_userdata_root(candidate: Candidate) -> tuple[bool | None, str | None, str]:
     host, _, share = candidate.uri.removeprefix("cifs://").partition("/")
     top = smb_folders(host, share)
     if top is None:
-        return None, None
+        return None, None, "could not list the share"
     lowered = {name.lower(): name for name in top}
     if "roms" in lowered:
-        return True, ""
-    if len(lowered.keys() & ROM_SYSTEM_FOLDERS) >= MIN_SYSTEM_FOLDERS or "gamelist.xml" in lowered:
-        return True, None
+        return True, "", f"{lowered['roms']}/ folder"
+    systems = sorted(lowered[name] for name in lowered.keys() & ROM_SYSTEM_FOLDERS)
+    if len(systems) >= MIN_SYSTEM_FOLDERS:
+        return True, None, f"system folders: {', '.join(systems)}"
+    if "gamelist.xml" in lowered:
+        return True, None, "gamelist.xml"
     for folder in sorted(top)[:MAX_FOLDERS_CHECKED]:
         inner = smb_folders(host, share, folder)
-        if inner and "roms" in {name.lower() for name in inner}:
-            return True, folder
-    return False, None
+        roms = next((name for name in inner or () if name.lower() == "roms"), None)
+        if roms:
+            return True, folder, f"{folder}/{roms}/ folder"
+    return False, None, f"no games among {len(top)} folders" + (f" (system folder: {systems[0]})" if systems else "")
 
 def smb_count_files(host: str, share: str, path: str, games_only: bool) -> int | None:
     listing = run(["smbclient", f"//{host}/{share}", "-N", "-t", "10", "-c", f'recurse ON; ls "{path}\\*"'],
@@ -256,11 +261,11 @@ def smb_file_counts(candidate: Candidate, root: str | None) -> tuple[int, int, i
     return None if None in counts else counts
 
 def smb_inspect(candidate: Candidate, known: dict[str, tuple[int, int, int]], added: set[str]) -> Candidate:
-    has_roms, root = smb_userdata_root(candidate)
+    has_roms, root, matched = smb_userdata_root(candidate)
     counts = None
     if has_roms:
         counts = known.get(candidate.uri) or (None if candidate.uri in added else smb_file_counts(candidate, root))
-    return replace(candidate, has_roms=bool(has_roms), file_counts=counts)
+    return replace(candidate, has_roms=has_roms, file_counts=counts, matched=matched)
 
 def discover_smb(hosts: set[str]) -> list[Candidate]:
     candidates: list[Candidate] = []
@@ -301,7 +306,7 @@ def unique(candidates: list[Candidate]) -> list[Candidate]:
 def write_candidates(candidates: list[Candidate]) -> None:
     HIPPOS_CONFIG.mkdir(parents=True, exist_ok=True)
     lines = [
-        "# id\tlikely\turi\tname\tsource\tgames,bios,saves files\tcomment\n",
+        "# id\tlikely\turi\tname\tsource\tgames,bios,saves files\tmatched\tcomment\n",
     ]
     for candidate in candidates:
         lines.append(
@@ -313,6 +318,7 @@ def write_candidates(candidates: list[Candidate]) -> None:
                     candidate.name,
                     candidate.source,
                     format_counts(candidate),
+                    candidate.matched,
                     candidate.comment,
                 ]
             )
@@ -321,6 +327,9 @@ def write_candidates(candidates: list[Candidate]) -> None:
     tmp = DISCOVERED.with_suffix(".tmp")
     tmp.write_text("".join(lines), encoding="utf-8")
     tmp.replace(DISCOVERED)
+
+def name_match(candidate: Candidate) -> str:
+    return "name only, not looked into" if candidate.likely and candidate.has_roms is None else ""
 
 def format_counts(candidate: Candidate) -> str:
     return ",".join(map(str, candidate.file_counts)) if candidate.file_counts else ""
@@ -338,7 +347,7 @@ def added_sources() -> list[str]:
 def print_candidates(candidates: list[Candidate]) -> None:
     for candidate in candidates:
         print("\t".join([candidate.ident, candidate_kind(candidate), candidate.uri, candidate.name,
-                         candidate.source, format_counts(candidate)]))
+                         candidate.source, format_counts(candidate), candidate.matched or name_match(candidate)]))
 
 def read_candidates() -> list[Candidate]:
     candidates: list[Candidate] = []
@@ -348,11 +357,11 @@ def read_candidates() -> list[Candidate]:
         if not raw or raw.startswith("#"):
             continue
         parts = raw.split("\t")
-        if len(parts) < 7:
+        if len(parts) < 8:
             continue
-        _, likely, uri, name, source, counts, *comment = parts
+        _, likely, uri, name, source, counts, matched, *comment = parts
         has_roms = None if likely == "?" else likely == "1"
-        candidates.append(Candidate(uri, name, source, "\t".join(comment), has_roms, parse_counts(counts)))
+        candidates.append(Candidate(uri, name, source, "\t".join(comment), has_roms, parse_counts(counts), matched))
     self_addrs = local_addresses()
     return [candidate for candidate in candidates if not host_addresses(candidate.host) & self_addrs]
 
