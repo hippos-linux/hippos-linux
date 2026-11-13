@@ -25,7 +25,6 @@ LIKELY_NAMES = {
     "hippos",
     "rom",
     "roms",
-    "share",
     "userdata",
 }
 
@@ -36,6 +35,7 @@ ROM_SYSTEM_FOLDERS = {
     "sega32x", "snes", "switch", "tg16", "wii", "wiiu", "xbox", "xbox360",
 }
 MAX_FOLDERS_CHECKED = 40
+MIN_SYSTEM_FOLDERS = 2
 
 @dataclass(frozen=True)
 class Candidate:
@@ -58,6 +58,10 @@ class Candidate:
     @property
     def needs_signin(self) -> bool:
         return self.uri.startswith("cifs://") and "/" not in self.uri.removeprefix("cifs://")
+
+    @property
+    def games_found(self) -> bool:
+        return self.has_roms is True
 
     @property
     def likely(self) -> bool:
@@ -208,7 +212,7 @@ def smb_has_roms(candidate: Candidate) -> bool | None:
     if top is None:
         return None
     lowered = {name.lower(): name for name in top}
-    if "roms" in lowered or lowered.keys() & ROM_SYSTEM_FOLDERS or "gamelist.xml" in lowered:
+    if "roms" in lowered or len(lowered.keys() & ROM_SYSTEM_FOLDERS) >= MIN_SYSTEM_FOLDERS or "gamelist.xml" in lowered:
         return True
     for folder in sorted(top)[:MAX_FOLDERS_CHECKED]:
         inner = smb_folders(host, share, folder)
@@ -301,7 +305,7 @@ def cmd_discover() -> int:
     write_candidates(candidates)
     if is_true(setting("network.roms.discovery.auto_mount", "false")):
         for candidate in candidates:
-            if candidate.likely and not candidate.needs_signin:
+            if candidate.games_found:
                 append_source(candidate.uri)
         subprocess.run(["systemctl", "start", "--no-block", "hippos-network-roms.service"], check=False)
     else:
@@ -323,6 +327,8 @@ def cmd_discover() -> int:
 def candidate_kind(candidate: Candidate) -> str:
     if candidate.needs_signin:
         return "signin"
+    if candidate.games_found:
+        return "games"
     return "likely" if candidate.likely else "other"
 
 def cmd_shares(host: str) -> int:
