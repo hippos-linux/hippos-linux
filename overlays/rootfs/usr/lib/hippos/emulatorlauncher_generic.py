@@ -427,6 +427,7 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
     cfg.set('screenshot_directory',     f'"{SCREENSHOTS}"')
     cfg.set('system_directory',         f'"{BIOS}"')
     cfg.set('core_options_path',        f'"{RA_CORES_CFG}"')
+    cfg.set('global_core_options',      '"true"')
     cfg.set('assets_directory',         '"/usr/share/libretro/assets"')
     cfg.set('video_shader_dir',         f'"{USER_SHADERS}"')
     cfg.set('cheat_database_path',      f'"{CHEATS}"')
@@ -667,9 +668,9 @@ def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> N
         return
 
     existing: dict[str, str] = {}
-    if RA_CORES_CFG.exists():
+    for options_file in (*sorted((RA_CONFIG_DIR / 'config').glob('*/*.opt')), RA_CORES_CFG):
         try:
-            for line in RA_CORES_CFG.read_text().splitlines():
+            for line in options_file.read_text().splitlines():
                 line = line.strip()
                 if '=' in line and not line.startswith('#'):
                     k, _, v = line.partition('=')
@@ -677,9 +678,7 @@ def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> N
         except OSError:
             pass
 
-    for k, v in opts.items():
-        if k not in existing:
-            existing[k] = v
+    existing.update(opts)
 
     lines = [f'{k} = "{v}"' for k, v in sorted(existing.items())]
     RA_CORES_CFG.write_text('\n'.join(lines) + '\n')
