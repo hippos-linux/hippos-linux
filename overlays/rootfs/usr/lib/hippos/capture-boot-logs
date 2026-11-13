@@ -158,11 +158,18 @@ for launch_log in es_launch_stdout.log es_launch_stderr.log retroarch.log; do
     fi
 done
 
+for es_log in /userdata/system/configs/emulationstation/es_log*.txt; do
+    [[ -f "${es_log}" ]] && install -m 0644 "${es_log}" "${OUT_DIR}/$(basename "${es_log}")" || true
+done
+
 capture_shell "emulator-packages.txt" \
     'ls -la /userdata/emulators; echo; echo "retroarch cores: $(find /userdata/emulators/retroarch/cores -name "*.so" 2>/dev/null | wc -l)"'
 
 capture_shell "roms-ownership.txt" \
     'ls -la /userdata/.roms-rw; echo; find /userdata/.roms-rw -mindepth 2 -maxdepth 2 -name gamelist.xml -exec ls -la {} +'
+
+capture_shell "gamelist-recovery.txt" \
+    'find /userdata/system/configs/emulationstation/recovery -type f -printf "%TY-%Tm-%Td %TH:%TM %s %p\n" 2>/dev/null | sort | tail -200'
 
 capture "boot-history.txt" \
     journalctl --list-boots --no-pager
