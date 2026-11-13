@@ -55,6 +55,7 @@ end_mode() {
     end_requested=1
     if [[ "${running_mode}" == es ]] && curl -sf --connect-timeout 2 --max-time 5 -o /dev/null http://127.0.0.1:1234/quit; then
         ( sleep "${ES_QUIT_WAIT_S}"; kill -0 "${mode_pid}" 2>/dev/null && signal_mode TERM ) &
+        disown
         return
     fi
     signal_mode TERM
@@ -84,8 +85,7 @@ if [[ -n "${HIPPOS_START_MODE:-}" ]]; then
 fi
 hippos-settings set system.session "$(hippos-settings get system.boot_session 2>/dev/null || echo es)"
 
-es_scripts="/userdata/system/configs/emulationstation/scripts"
-rm -f "${es_scripts}/reboot/reboot" "${es_scripts}/shutdown/shutdown" /tmp/reboot.please /tmp/shutdown.please
+rm -f /tmp/reboot.please /tmp/shutdown.please
 
 while [[ ! -f /run/hippos/quit-action ]] && (( ! logout_requested )); do
     if [[ -z "${xorg_pid}" ]] || ! kill -0 "${xorg_pid}" 2>/dev/null; then

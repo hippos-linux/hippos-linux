@@ -53,4 +53,4 @@ xset -dpms 2>/dev/null || true
 xset s off 2>/dev/null || true
 
 "$SESSION_CMD" || exit
-hippos-settings set system.session es
+/usr/lib/hippos/hippos logout

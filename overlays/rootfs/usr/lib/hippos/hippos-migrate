@@ -108,6 +108,8 @@ if version_lt "$APPLIED" "0.6.13"; then
     python3 -c 'import sys; sys.path.insert(0, "/usr/lib/hippos"); import hippos_linux_games; [print(f"[hippos-migrate] moved {name} to Linux Games") for name in hippos_linux_games.move_native_launchers_from_ports()]'
     log "0.6.13: saves move to the same folders as Batocera (saves/<system>, saves/duckstation, saves/dolphin-emu...)"
     python3 -c 'import logging, sys; sys.path.insert(0, "/usr/lib/hippos"); logging.basicConfig(level=logging.INFO, format="[hippos-migrate] %(message)s"); import hippos_save_migration; hippos_save_migration.migrate()'
+    log "0.6.13: ES reboots and shuts down itself after saving; remove the scripts that did it before saving"
+    rm -f /userdata/system/configs/emulationstation/scripts/reboot/reboot /userdata/system/configs/emulationstation/scripts/shutdown/shutdown
 fi
 
 HIPPOS_CONFIG=/userdata/system/configs/hippos
