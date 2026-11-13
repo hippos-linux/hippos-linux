@@ -20,6 +20,7 @@ class DesktopNotifier:
     def __init__(self, enabled: bool | None = None) -> None:
         self.enabled = _desktop_session_active() if enabled is None else enabled
         self.notification_id = ''
+        self.task = ''
         self.last_progress = -PROGRESS_STEP
 
     def _as_session_user(self, *command: str) -> list[str]:
@@ -42,10 +43,15 @@ class DesktopNotifier:
         if result.stdout.strip().isdigit():
             self.notification_id = result.stdout.strip()
 
-    def progress(self, summary: str, percent: int) -> None:
-        if percent - self.last_progress >= PROGRESS_STEP or percent == 100:
+    def begin(self, task: str, body: str = '') -> None:
+        self.task = task
+        self.last_progress = -PROGRESS_STEP
+        self.show(task, body, 0)
+
+    def progress(self, percent: int) -> None:
+        if self.task and (percent - self.last_progress >= PROGRESS_STEP or percent == 100):
             self.last_progress = percent
-            self.show(summary, f'{percent}%', percent)
+            self.show(self.task, f'{percent}%', percent)
 
     def ask(self, summary: str, body: str, actions: dict[str, str]) -> None:
         if not self.enabled:

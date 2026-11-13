@@ -26,8 +26,6 @@ UPGRADE = '/usr/lib/hippos/hippos-upgrade'
 SHUTDOWN = '/usr/lib/hippos/hippos-shutdown'
 PROGRESS = re.compile(r'(\d+)%')
 LOG_PREFIX = '[hippos-upgrade] '
-INSTALL_ORDER = ('emulator', 'frontend', 'patch', 'kernel', 'system')
-INCLUDED_IN_SYSTEM = ('frontend', 'patch', 'kernel')
 
 
 def styled(widget: Gtk.Widget, *classes: str) -> Gtk.Widget:
@@ -49,13 +47,8 @@ class UpdateRow(Gtk.ListBoxRow):
         styled(self, 'row')
         line = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         line.pack_start(label(hippos_updates.title(first)), True, True, 0)
-        if self.kind == 'patch':
-            versions = f"{len(updates)} for HippOS {first['available']}"
-        else:
-            versions = (f"{first['available']} · new build" if first['installed'] == first['available']
-                        else f"{first['installed']} → {first['available']}" if first['installed'] else first['available'])
-        self.versions = versions
-        self.value = styled(Gtk.Label(label=versions), 'value')
+        self.versions = hippos_updates.versions(updates)
+        self.value = styled(Gtk.Label(label=self.versions), 'value')
         line.pack_start(self.value, False, False, 0)
         self.switch = Gtk.Switch(valign=Gtk.Align.CENTER, active=True)
         self.switch.connect('notify::active', lambda *_: on_toggle())
@@ -135,11 +128,7 @@ class UpdatesWindow(Gtk.Window):
         if updates is None:
             self.subtitle.set_text("COULDN'T REACH THE UPDATE SERVER")
             return
-        offered = [update for update in updates if hippos_updates.is_offered(update)]
-        groups: dict[str, list[dict]] = {}
-        for update in sorted(offered, key=lambda u: INSTALL_ORDER.index(u['kind']), reverse=True):
-            groups.setdefault('patch' if update['kind'] == 'patch' else f"{update['kind']}:{update['name']}", []).append(update)
-        for group in groups.values():
+        for group in hippos_updates.offered(updates):
             row = UpdateRow(group, self.refresh_selection)
             self.rows.append(row)
             self.list.add(row)
@@ -152,12 +141,12 @@ class UpdatesWindow(Gtk.Window):
     def refresh_selection(self) -> None:
         system = next((row for row in self.rows if row.kind == 'system' and row.switch.get_active()), None)
         for row in self.rows:
-            if row.kind in INCLUDED_IN_SYSTEM:
+            if row.kind in hippos_updates.INCLUDED_IN_SYSTEM:
                 row.include_in(system.updates[0]['available'] if system else None)
         self.install_button.set_sensitive(any(row.selected for row in self.rows))
 
     def install_selected(self) -> None:
-        chosen = sorted((row for row in self.rows if row.selected), key=lambda row: INSTALL_ORDER.index(row.kind))
+        chosen = sorted((row for row in self.rows if row.selected), key=lambda row: hippos_updates.INSTALL_ORDER.index(row.kind))
         commands = [command for row in chosen for command in row.commands()]
         needs_restart = any(row.needs_restart for row in chosen)
         for widget in (self.install_button, self.list):

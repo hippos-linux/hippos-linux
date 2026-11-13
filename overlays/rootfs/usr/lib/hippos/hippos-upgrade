@@ -34,7 +34,8 @@ USER_APT_SOURCES  = ("etc/apt", "usr/share/keyrings")
 STAGING_ROOTFS    = "@rootfs.new"
 UPDATE_PENDING    = "/run/hippos-update-pending"
 NOTIFIED_UPDATES  = "/var/lib/hippos/update-notified"
-UPDATES_WINDOW    = "/usr/lib/hippos/hippos-updates"
+UPGRADE_COMMAND   = "/usr/lib/hippos/hippos-upgrade"
+NOTIFYING_CMDS    = {"apply", "notify-available", "update-emulator", "update-frontend", "update-kernel", "apply-patches"}
 LOCK_FILE         = "/run/lock/hippos-upgrade.lock"
 KERNEL_SNAPSHOT_PREFIX = "@rootfs-kernel-"
 LOG_FILE          = "/userdata/system/logs/upgrade.log"
@@ -805,7 +806,7 @@ def sha256_file(path):
             h.update(chunk)
     return h.hexdigest()
 
-def fetch_archive(url, archive, sha256="", timeout=None, on_progress=None):
+def fetch_archive(url, archive, sha256="", timeout=None):
     if os.path.exists(archive):
         if not sha256 or sha256_file(archive) == sha256:
             return
@@ -824,8 +825,7 @@ def fetch_archive(url, archive, sha256="", timeout=None, on_progress=None):
                     done += len(chunk)
                     if total:
                         log(f"Downloading... {done * 100 // total}%")
-                        if on_progress:
-                            on_progress(done * 100 // total)
+                        notifier.progress(done * 100 // total)
         except OSError as e:
             die(f"Download interrupted ({e}) — check your connection and free space, then retry")
 
@@ -915,23 +915,21 @@ def cmd_notify_available():
     manifest = fetch_manifest(get_channel())
     if not manifest:
         return
-    offered = [update for update in (asdict(u) for u in available_updates(manifest)) if hippos_updates.is_offered(update)]
-    key = hippos_updates.notification_key(offered)
+    offered = hippos_updates.worth_announcing(hippos_updates.offered([asdict(u) for u in available_updates(manifest)]))
     try:
         with open(NOTIFIED_UPDATES) as f:
-            already_notified = f.read() == key
+            notified = set(f.read().splitlines())
     except FileNotFoundError:
-        already_notified = False
-    if not offered or already_notified:
-        return
-    notifier.ask(hippos_updates.headline(offered), hippos_updates.summary(offered), {
-        "Update all": f"env DISPLAY=:0 {UPDATES_WINDOW} --install-all",
-        "Show updates": f"env DISPLAY=:0 {UPDATES_WINDOW}",
-    })
+        notified = set()
+    for group in offered:
+        if hippos_updates.notification_key(group) in notified:
+            continue
+        command = shlex.join(["sudo", UPGRADE_COMMAND, *group[0]["command"]])
+        notifier.ask(hippos_updates.available_headline(group), hippos_updates.versions(group), {"Update": command})
+        log(f"Told the desktop session about {hippos_updates.title(group[0])}")
     os.makedirs(os.path.dirname(NOTIFIED_UPDATES), exist_ok=True)
     with open(NOTIFIED_UPDATES, "w") as f:
-        f.write(key)
-    log(f"Told the desktop session about: {hippos_updates.summary(offered)}")
+        f.write("".join(hippos_updates.notification_key(group) + "\n" for group in offered))
 
 def cmd_list_deployments():
     cur = current_subvol()
@@ -1121,9 +1119,8 @@ def cmd_apply():
             die(f"Not enough free space for this update — free at least "
                 f"{shortfall_mb} MB under /userdata (e.g. ROMs or media) and retry")
 
-        notifier.show(f"Downloading HippOS {remote}", "You can keep using the desktop.", 0)
-        fetch_archive(url, archive, sha256,
-                      on_progress=lambda percent: notifier.progress(f"Downloading HippOS {remote}", percent))
+        notifier.begin(f"Downloading HippOS {remote}", "You can keep using the desktop.")
+        fetch_archive(url, archive, sha256)
 
         log(f"Creating {STAGING_ROOTFS}...")
         subprocess.run(["btrfs", "subvolume", "create", staging_path], check=True)
@@ -1197,6 +1194,7 @@ def cmd_update_kernel():
         sys.exit(0)
 
     log(f"Updating kernel: {installed or 'not installed'} → {remote}")
+    notifier.begin("Updating the Linux kernel", remote)
 
     os.makedirs(CACHE_DIR, exist_ok=True)
     deb = os.path.join(CACHE_DIR, f"linux-image-{remote}_{_DEB_ARCH}.deb")
@@ -1264,6 +1262,7 @@ def cmd_update_kernel():
         pass
 
     log(f"Kernel updated to {remote}. Reboot to apply.")
+    notifier.offer_restart("Linux kernel updated", "Restart to start using it.")
 
 def installed_emulator_version(name):
     vf = os.path.join(EMULATORS_DIR, name, "version")
@@ -1316,9 +1315,11 @@ def cmd_update_emulator(name, force=False):
     installed = installed_emulator_version(name)
     if emulator_up_to_date(name, info) and not force:
         log(f"{name} is already at {remote}")
+        notifier.show(f"{name} is up to date", remote)
         sys.exit(0)
 
     log(f"{'Force-reinstalling' if force else 'Updating'} {name}: {installed or 'not installed'} → {remote}")
+    notifier.begin(f"Updating {name}", f"{installed or 'not installed'} → {remote}")
 
     os.makedirs(CACHE_DIR, exist_ok=True)
     archive = os.path.join(CACHE_DIR, f"hippos-emulator-{name}-{remote}.tar.zst")
@@ -1353,6 +1354,7 @@ def cmd_update_emulator(name, force=False):
         pass
 
     log(f"{name} updated to {remote}")
+    notifier.show(f"{name} updated", remote)
 
 def cmd_update_all_emulators():
     manifest = fetch_manifest(get_channel())
@@ -1388,6 +1390,7 @@ def cmd_update_frontend(name):
         sys.exit(0)
 
     log(f"Updating frontend {name}: {installed or 'not installed'} → {remote}")
+    notifier.begin(f"Updating {hippos_updates.FRONTEND_NAMES.get(name, name)}", remote)
 
     os.makedirs(CACHE_DIR, exist_ok=True)
     archive = os.path.join(CACHE_DIR, f"hippos-frontend-{name}-{remote}.tar.zst")
@@ -1407,6 +1410,7 @@ def cmd_update_frontend(name):
 
     log(f"Frontend {name} updated to {remote}")
     log("Restart EmulationStation to apply the update.")
+    notifier.show(f"{hippos_updates.FRONTEND_NAMES.get(name, name)} updated", "It's used the next time you switch to EmulationStation.")
 
 def applied_patch_ids():
     try:
@@ -1434,6 +1438,7 @@ def cmd_apply_patches():
         log(f"No patches for {current_version()} in manifest")
         return
     applied = applied_patch_ids()
+    notifier.begin("Installing fixes", f"For HippOS {current_version()}")
     for p in patches:
         pid  = p.get("id", "")
         dest = p.get("dest", "")
@@ -1468,6 +1473,7 @@ def cmd_apply_patches():
             os.chmod(dest, orig_mode)
         mark_patch_applied(pid)
         log(f"Patch {pid} applied")
+    notifier.show("Fixes installed", f"For HippOS {current_version()}")
 
 def cmd_update_grub():
     try:
@@ -1501,7 +1507,7 @@ if __name__ == "__main__":
     if cmd not in READONLY_CMDS:
         _require_root()
         _open_log()
-        if cmd in ("apply", "notify-available") and "--no-notify" not in sys.argv:
+        if cmd in NOTIFYING_CMDS and "--no-notify" not in sys.argv:
             notifier = DesktopNotifier()
         os.makedirs(os.path.dirname(LOCK_FILE), exist_ok=True)
         _lock = open(LOCK_FILE, "w")
