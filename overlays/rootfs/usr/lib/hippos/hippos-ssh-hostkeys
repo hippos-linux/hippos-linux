@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+KEY_DIR=/userdata/system/configs/ssh
+
+mkdir -p "${KEY_DIR}"
+chmod 700 "${KEY_DIR}"
+for type in ed25519 ecdsa rsa; do
+    key="${KEY_DIR}/ssh_host_${type}_key"
+    [[ -s "${key}" ]] && continue
+    if [[ -s "/etc/ssh/ssh_host_${type}_key" ]]; then
+        cp "/etc/ssh/ssh_host_${type}_key" "${key}"
+        cp "/etc/ssh/ssh_host_${type}_key.pub" "${key}.pub"
+    else
+        ssh-keygen -q -t "${type}" -N "" -f "${key}"
+    fi
+    chmod 600 "${key}"
+    chmod 644 "${key}.pub"
+done
