@@ -28,6 +28,7 @@ dbus-user-session
 
 # XDG integration
 xdg-utils
+libnotify-bin
 xdg-user-dirs
 xdg-desktop-portal
 xdg-desktop-portal-gtk

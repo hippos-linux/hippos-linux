@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=HippOS Update
+GenericName=System Update
+Comment=Download and install the latest HippOS version
+Exec=/usr/lib/hippos/hippos-upgrade apply
+Icon=system-software-update
+Terminal=false
+Categories=System;Settings;

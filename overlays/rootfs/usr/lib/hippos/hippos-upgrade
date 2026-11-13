@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from hippos_apt import install_packages, recorded_user_packages
+from hippos_desktop_notify import DesktopNotifier
 
 VERSION_FILE      = "/usr/share/hippos/version"
 BUILD_INFO_FILE   = "/etc/hippos-version"
@@ -43,6 +44,7 @@ MANIFEST_URLS = [
 ]
 
 _log_fh = None
+notifier = DesktopNotifier(enabled=False)
 
 def _open_log():
     global _log_fh
@@ -66,6 +68,7 @@ def log(msg):
 
 def die(msg):
     log(f"ERROR: {msg}")
+    notifier.show("HippOS update failed", f"{msg}. Details are in {LOG_FILE}.")
     sys.exit(1)
 
 def _log_uncaught_exception(exc_type, exc_value, exc_tb):
@@ -799,7 +802,7 @@ def sha256_file(path):
             h.update(chunk)
     return h.hexdigest()
 
-def fetch_archive(url, archive, sha256="", timeout=None):
+def fetch_archive(url, archive, sha256="", timeout=None, on_progress=None):
     if os.path.exists(archive):
         if not sha256 or sha256_file(archive) == sha256:
             return
@@ -818,6 +821,8 @@ def fetch_archive(url, archive, sha256="", timeout=None):
                     done += len(chunk)
                     if total:
                         log(f"Downloading... {done * 100 // total}%")
+                        if on_progress:
+                            on_progress(done * 100 // total)
         except OSError as e:
             die(f"Download interrupted ({e}) — check your connection and free space, then retry")
 
@@ -947,6 +952,7 @@ def layer_user_packages(staging_path):
     if not packages:
         return
     log(f"Installing your apt packages into the new system: {' '.join(packages)}")
+    notifier.show("Installing your apps into the new system", ", ".join(packages))
     borrowed = [path for rel_dir in USER_APT_SOURCES for path in borrow_upper_files(staging_path, rel_dir)]
     failed = packages
     try:
@@ -968,6 +974,7 @@ def cmd_apply():
     channel = get_channel()
     log(f"Current version: {cur}  channel: {channel}")
     log("Fetching manifest...")
+    notifier.show("Checking for HippOS updates", f"Installed: {cur}")
 
     manifest = fetch_manifest(channel)
     if not manifest:
@@ -976,6 +983,7 @@ def cmd_apply():
     remote = manifest.get("version", "0.0.0")
     if ver_tuple(remote) <= ver_tuple(cur):
         log(f"Already up to date ({cur})")
+        notifier.show("HippOS is up to date", f"Version {cur} is the newest.")
         sys.exit(0)
 
     log(f"New version: {remote}")
@@ -1029,12 +1037,15 @@ def cmd_apply():
             die(f"Not enough free space for this update — free at least "
                 f"{shortfall_mb} MB under /userdata (e.g. ROMs or media) and retry")
 
-        fetch_archive(url, archive, sha256)
+        notifier.show(f"Downloading HippOS {remote}", "You can keep using the desktop.", 0)
+        fetch_archive(url, archive, sha256,
+                      on_progress=lambda percent: notifier.progress(f"Downloading HippOS {remote}", percent))
 
         log(f"Creating {STAGING_ROOTFS}...")
         subprocess.run(["btrfs", "subvolume", "create", staging_path], check=True)
 
         log(f"Extracting rootfs...")
+        notifier.show(f"Installing HippOS {remote}", "Unpacking the new system.")
         subprocess.run(
             ["tar", "--xattrs", "--acls", "--numeric-owner",
              "-I", "zstd -d", "-xf", archive, "-C", staging_path],
@@ -1065,6 +1076,7 @@ def cmd_apply():
         pass
 
     log("Update complete. Reboot to apply the new version.")
+    notifier.offer_restart(f"HippOS {remote} is ready", "Restart to start using it.")
 
 EMULATORS_DIR = "/userdata/emulators"
 FRONTEND_INSTALL_ROOT = "/"
@@ -1460,6 +1472,8 @@ if __name__ == "__main__":
     if cmd not in READONLY_CMDS:
         _require_root()
         _open_log()
+        if cmd == "apply":
+            notifier = DesktopNotifier()
         os.makedirs(os.path.dirname(LOCK_FILE), exist_ok=True)
         _lock = open(LOCK_FILE, "w")
         fcntl.flock(_lock, fcntl.LOCK_EX)
