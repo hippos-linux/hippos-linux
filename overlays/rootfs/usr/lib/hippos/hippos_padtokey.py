@@ -22,6 +22,7 @@ MAPS_FILE   = Path('/run/hippos/padtokey.json')
 LAUNCH_FILE = Path('/run/hippos/padtokey-launch.json')
 POINTER_MAP = SYSTEM_MAPS / 'controller-as-mouse.keys'
 HOTKEYS_BIN = Path('/usr/lib/hippos/hippos-hotkeys')
+NATIVE_LINUX_APPS = ('webapps', ('.flatpak', '.sh'))
 
 DEFAULT_MOUSE_LEVEL = 5
 MOUSE_SPEED_AT_DEFAULT_LEVEL = 8.0
@@ -55,7 +56,8 @@ def game_keys_file(rom: Path) -> Path:
 def find_keys_files(system: str, emulator: str, rom: Path, default_maps: bool, pointer: bool = False) -> list[Path]:
     game_map = game_keys_file(rom)
     files = [game_map] if game_map.exists() else []
-    defaults = default_keys_files(system, emulator) if default_maps else []
+    native_app = system == NATIVE_LINUX_APPS[0] and rom.suffix in NATIVE_LINUX_APPS[1]
+    defaults = default_keys_files(system, emulator) if default_maps and not native_app else []
     if pointer and not defaults:
         defaults = [POINTER_MAP]
     return files + defaults

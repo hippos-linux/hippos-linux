@@ -39,6 +39,16 @@ class FindKeysFilesTests(unittest.TestCase):
         game_map.write_text('{}')
         self.assertEqual(padtokey.find_keys_files('linux', 'sh', self.rom, False), [game_map])
 
+    def test_native_linux_apps_keep_their_own_controller_support(self):
+        (self.system_maps / 'webapps.keys').write_text('{}')
+        app = self.root / 'Emby.flatpak'
+        app.write_text('media.emby.EmbyTheater')
+        page = self.root / 'YouTube.webapp'
+        page.write_text('')
+        self.assertEqual(padtokey.find_keys_files('webapps', 'webapp', app, True), [])
+        self.assertEqual(padtokey.find_keys_files('webapps', 'webapp', app, True, pointer=True), [padtokey.POINTER_MAP])
+        self.assertEqual(padtokey.find_keys_files('webapps', 'webapp', page, True), [self.system_maps / 'webapps.keys'])
+
 
 if __name__ == '__main__':
     unittest.main()

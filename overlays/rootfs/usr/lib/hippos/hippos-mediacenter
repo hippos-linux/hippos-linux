@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Usage: hippos-mediacenter list [--machine] | current | select <id> | install <id> | uninstall <id> | launch
+"""Usage: hippos-mediacenter list [--machine] | current | select <id> | install <id> | uninstall <id> | launcher | launch
 
 Chooses the media center started from EmulationStation's main menu. Only the
 apps available for this machine are listed. install and uninstall go through
-the Content Downloader, so installed apps also appear in Linux Apps.
+the Content Downloader, so installed apps also appear in Linux Apps. launcher
+prints the selected app's Linux Apps entry, which EmulationStation starts like a game.
 """
 
 from __future__ import annotations
 
 import platform
 import re
+from pathlib import Path
 import shutil
 import subprocess
 import sys
@@ -20,6 +22,7 @@ sys.path.insert(0, '/usr/lib/hippos')
 import hippos_flatpak_apps  # noqa: E402
 
 SETTING = 'mediacenter.app'
+LINUX_APPS = Path('/userdata/roms/webapps')
 ARCH = platform.machine()
 PROGRESS = re.compile(r'(\d+)%')
 
@@ -39,6 +42,13 @@ class MediaCenter:
         if self.flatpak_id:
             return hippos_flatpak_apps.installed(self.flatpak_id)
         return shutil.which(self.program) is not None
+
+    def linux_apps_entry(self) -> Path | None:
+        if self.flatpak_id:
+            return next((entry for entry in sorted(LINUX_APPS.glob('*.flatpak'))
+                         if entry.read_text(encoding='utf-8').strip() == self.flatpak_id), None)
+        entry = LINUX_APPS / f'{self.catalog_id}.sh'
+        return entry if entry.is_file() else None
 
     def command(self) -> list[str]:
         if self.flatpak_id:
@@ -119,6 +129,12 @@ def main(argv: list[str]) -> int:
             return status or 1
         case ['uninstall', center_id] if find(center_id):
             return run_store('remove', find(center_id))
+        case ['launcher']:
+            center = selected()
+            entry = center.linux_apps_entry() if center is not None else None
+            if entry is not None:
+                print(entry)
+            return 0
         case ['launch']:
             center = selected()
             if center is None:
