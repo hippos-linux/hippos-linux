@@ -46,8 +46,10 @@ _DEB_ARCH = {'x86_64': 'amd64', 'aarch64': 'arm64'}.get(platform.machine(), plat
 MANIFEST_URLS = [
     f"https://hippos-linux.org/api/update/manifest-{_DEB_ARCH}.json",
 ]
+DEV_MANIFEST_URL = f"https://hippos-linux.org/api/update/manifest-{_DEB_ARCH}-dev.json"
 
 _log_fh = None
+_log_stream = sys.stdout
 notifier = DesktopNotifier(enabled=False)
 
 def _open_log():
@@ -62,7 +64,7 @@ def _open_log():
 
 def log(msg):
     line = f"[hippos-upgrade] {msg}"
-    print(line, flush=True)
+    print(line, file=_log_stream, flush=True)
     if _log_fh:
         try:
             _log_fh.write(line + "\n")
@@ -130,10 +132,11 @@ def _make_request(url: str) -> urllib.request.Request:
     return urllib.request.Request(url, headers=headers)
 
 def fetch_manifest(channel):
-    if channel == "dev":
-        urls = [f"https://hippos-linux.org/api/update/manifest-{_DEB_ARCH}-dev.json"]
-    else:
-        urls = MANIFEST_URLS[:]
+    sources = [[DEV_MANIFEST_URL], MANIFEST_URLS] if channel == "dev" else [MANIFEST_URLS]
+    manifests = [manifest for manifest in map(_fetch_first_manifest, sources) if manifest]
+    return max(manifests, key=lambda m: ver_tuple(m.get("version", "0.0.0")), default=None)
+
+def _fetch_first_manifest(urls):
     for url in urls:
         try:
             req = _make_request(url)
@@ -1504,7 +1507,9 @@ if __name__ == "__main__":
 
     READONLY_CMDS = {"check", "list-available", "list-emulator-updates",
                      "list-frontend-updates", "list-kernel-update", "list-patches"}
-    if cmd not in READONLY_CMDS:
+    if cmd in READONLY_CMDS:
+        _log_stream = sys.stderr
+    else:
         _require_root()
         _open_log()
         if cmd in NOTIFYING_CMDS and "--no-notify" not in sys.argv:
