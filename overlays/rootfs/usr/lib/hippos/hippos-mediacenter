@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+"""Usage: hippos-mediacenter list [--machine] | current | select <id> | install <id> | uninstall <id> | launch
+
+Chooses the media center started from EmulationStation's main menu. Only the
+apps available for this machine are listed. install and uninstall go through
+the Content Downloader, so installed apps also appear in Linux Apps.
+"""
+
+from __future__ import annotations
+
+import platform
+import re
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass
+
+sys.path.insert(0, '/usr/lib/hippos')
+
+import hippos_flatpak_apps  # noqa: E402
+
+SETTING = 'mediacenter.app'
+ARCH = platform.machine()
+PROGRESS = re.compile(r'(\d+)%')
+
+
+@dataclass(frozen=True)
+class MediaCenter:
+    id: str
+    label: str
+    catalog_id: str
+    arches: tuple[str, ...]
+    note: str
+    program: str = ''
+    flatpak_id: str = ''
+    launcher: str = ''
+
+    def installed(self) -> bool:
+        if self.flatpak_id:
+            return hippos_flatpak_apps.installed(self.flatpak_id)
+        return shutil.which(self.program) is not None
+
+    def command(self) -> list[str]:
+        if self.flatpak_id:
+            return ['flatpak', 'run', self.flatpak_id]
+        return [self.launcher or self.program]
+
+
+MEDIA_CENTERS = (
+    MediaCenter('kodi', 'Kodi', 'app-kodi', ('x86_64', 'aarch64'),
+                'Plays your own files, streams and add-ons · Debian package',
+                program='kodi', launcher='/usr/lib/hippos/hippos-kodi'),
+    MediaCenter('jellyfin', 'Jellyfin', 'app-jellyfin', ('x86_64', 'aarch64'),
+                'For a Jellyfin server · from Flathub', flatpak_id='org.jellyfin.JellyfinDesktop'),
+    MediaCenter('emby', 'Emby Theater', 'app-emby-theater', ('x86_64', 'aarch64'),
+                "For an Emby server · Emby's own package", program='emby-theater'),
+    MediaCenter('plex', 'Plex HTPC', 'app-plex-htpc', ('x86_64',),
+                'For a Plex server, made for TVs · from Flathub', flatpak_id='tv.plex.PlexHTPC'),
+)
+
+
+def available() -> list[MediaCenter]:
+    return [center for center in MEDIA_CENTERS if ARCH in center.arches]
+
+
+def find(center_id: str) -> MediaCenter | None:
+    return next((center for center in available() if center.id == center_id), None)
+
+
+def selected() -> MediaCenter | None:
+    value = subprocess.run(['hippos-settings', 'get', SETTING], capture_output=True, text=True).stdout.strip()
+    center = find(value) or next((center for center in available() if center.installed()), None)
+    return center if center is not None and center.installed() else None
+
+
+def run_store(action: str, center: MediaCenter) -> int:
+    process = subprocess.Popen(['hippos-store', action, center.catalog_id], stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, text=True)
+    for line in process.stdout:
+        line = line.strip()
+        match = PROGRESS.search(line)
+        print(f"{line} >>> {match.group(1)}%" if match else line, flush=True)
+    return process.wait()
+
+
+def cmd_list(machine: bool) -> int:
+    current = selected()
+    for center in available():
+        installed = center.installed()
+        is_current = current is not None and center.id == current.id
+        if machine:
+            print('|'.join((center.id, center.label, str(int(installed)), str(int(is_current)),
+                            str(int(installed and not is_current)), center.note)))
+        else:
+            status = 'selected' if is_current else 'installed' if installed else 'available'
+            print(f'{center.id:<10} {center.label:<14} {status}')
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    match argv:
+        case ['list', *flags]:
+            return cmd_list('--machine' in flags)
+        case ['current']:
+            center = selected()
+            if center is not None:
+                print(f'{center.id}|{center.label}')
+            return 0
+        case ['select', center_id] if find(center_id):
+            return subprocess.run(['hippos-settings', 'set', SETTING, center_id]).returncode
+        case ['install', center_id] if find(center_id):
+            center = find(center_id)
+            if center.installed():
+                return 0
+            status = run_store('install', center)
+            if status == 0 and center.installed():
+                subprocess.run(['hippos-settings', 'set', SETTING, center.id])
+                return 0
+            return status or 1
+        case ['uninstall', center_id] if find(center_id):
+            return run_store('remove', find(center_id))
+        case ['launch']:
+            center = selected()
+            if center is None:
+                print('hippos-mediacenter: no media center is installed', file=sys.stderr)
+                return 1
+            return subprocess.run(center.command()).returncode
+    print(__doc__, file=sys.stderr)
+    return 2
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

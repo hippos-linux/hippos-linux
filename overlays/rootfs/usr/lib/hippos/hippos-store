@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import hashlib
 import json
 import os
 import platform
@@ -184,6 +185,8 @@ def catalog_section(pkg):
 
 def for_this_machine(pkg):
     arch = pkg.get("arch", "")
+    if pkg.get("type") == "deb" and DEB_ARCH not in pkg.get("deb", {}):
+        return False
     return not arch or arch == DEB_ARCH
 
 def system_full_names():
@@ -438,6 +441,39 @@ def _install_apt(pkg):
     elif launcher_cmd:
         add_catalog_game(pkg)
 
+def _sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        while chunk := handle.read(1 << 20):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+def _install_deb(pkg):
+    release = pkg.get("deb", {}).get(DEB_ARCH)
+    if not release:
+        print(f"ERROR: {pkg['name']} has no package for {DEB_ARCH}", flush=True)
+        sys.exit(1)
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    deb = os.path.join(CACHE_DIR, os.path.basename(release["url"]))
+    _download(release["url"], deb, pkg["name"])
+    if _sha256(deb) != release["sha256"]:
+        os.remove(deb)
+        print(f"ERROR: {pkg['name']} download is corrupt (checksum mismatch)", flush=True)
+        sys.exit(1)
+    print(f"Installing {pkg['name']}...", flush=True)
+    apt_pkgs = pkg.get("apt_packages", [])
+    env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive"}
+    subprocess.call(["sudo", "-n", "apt-get", "update", "-qq"], env=env)
+    set_claimed(apt_pkgs, True)
+    ret = subprocess.call(["sudo", "-n", "apt-get", "install", "-y", "--no-install-recommends", deb], env=env)
+    os.remove(deb)
+    if ret != 0:
+        set_claimed(apt_pkgs, False)
+        print(f"ERROR: package install failed (exit {ret})", flush=True)
+        sys.exit(1)
+    if pkg.get("launcher_command"):
+        add_catalog_game(pkg)
+
 def _install_with_installer(pkg):
     print(f"Installing {pkg['name']}...", flush=True)
     ret = hippos_content_installers.run(pkg.get("installer", ""), "install")
@@ -479,6 +515,8 @@ def cmd_install(name):
 
     if pkg.get("type") == "apt":
         _install_apt(pkg)
+    elif pkg.get("type") == "deb":
+        _install_deb(pkg)
     elif pkg.get("type") == "installer":
         _install_with_installer(pkg)
     elif pkg.get("type") == "flatpak":
@@ -532,7 +570,7 @@ def cmd_remove(name):
         remove_catalog_game(pkg)
     elif pkg.get("type") == "flatpak":
         hippos_flatpak_apps.remove(pkg.get("flatpak_id", ""))
-    elif pkg.get("type") == "apt":
+    elif pkg.get("type") in ("apt", "deb"):
         subprocess.call(["sudo", "-n", "apt-get", "remove", "-y"] + pkg.get("apt_packages", []))
         set_claimed(pkg.get("apt_packages", []), False)
         if pkg.get("scummvm_id"):
