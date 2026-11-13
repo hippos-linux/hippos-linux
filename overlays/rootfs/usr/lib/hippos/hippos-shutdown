@@ -1,10 +1,28 @@
 #!/usr/bin/env bash
+# Usage: hippos-shutdown [shutdown | reboot | suspend | hibernate | hybrid]
+#        hippos-shutdown --now shutdown | reboot    power off or reboot without asking EmulationStation first
 
 [[ "${EUID}" -ne 0 ]] && exec sudo "$0" "$@"
 
+ES_API=http://127.0.0.1:1234
+
 mkdir -p /run/hippos
 
+ask_es=1
+if [[ "${1:-}" == --now ]]; then
+    ask_es=0
+    shift
+fi
+
 ACTION="${1:-}"
+
+through_es() {
+    (( ask_es )) && pidof -q emulationstation || return 1
+    if [[ "$(curl -s --connect-timeout 2 --max-time 5 -o /dev/null -w '%{http_code}' "${ES_API}/runningGame")" == 200 ]]; then
+        /usr/lib/hippos/hippos-close-game
+    fi
+    curl -sf --connect-timeout 2 --max-time 5 -o /dev/null "${ES_API}/$1"
+}
 
 if [[ -z "${ACTION}" ]]; then
     ACTION="$(hippos-settings get system.suspendmode 2>/dev/null || true)"
@@ -13,10 +31,12 @@ fi
 
 case "${ACTION}" in
     shutdown|poweroff|gui)
+        through_es shutdown && exit 0
         echo "poweroff" > /run/hippos/quit-action
         systemctl poweroff
         ;;
     reboot|restart)
+        through_es restart && exit 0
         echo "reboot" > /run/hippos/quit-action
         systemctl reboot
         ;;

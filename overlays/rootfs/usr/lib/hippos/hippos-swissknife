@@ -65,9 +65,9 @@ case "${1,,}" in
 
         ES_PID=$(check_esrun)
         if [[ "${1,,}" == "--shutdown" && ${ES_PID} -ne 0 ]]; then
-            systemctl poweroff; ret=11
+            /usr/lib/hippos/hippos-shutdown shutdown; ret=11
         elif [[ "${1,,}" == "--reboot" && ${ES_PID} -ne 0 ]]; then
-            systemctl reboot; ret=10
+            /usr/lib/hippos/hippos-shutdown reboot; ret=10
         fi
     ;;
 

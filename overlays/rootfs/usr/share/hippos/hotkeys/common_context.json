@@ -6,7 +6,7 @@
   "brightness-up":    "brightnessctl set +10%",
   "brightness-down":  "brightnessctl set 10%-",
   "brightness-cycle": "brightnessctl set +10%",
-  "power":            "systemctl poweroff",
+  "power":            "/usr/lib/hippos/hippos-shutdown shutdown",
   "swap_screen":      "hippos-swap-screen",
   "onscreen-keyboard": "/usr/lib/hippos/hippos-osk --toggle",
   "controlcenter":    "/usr/lib/hippos/hippos-quickmenu",

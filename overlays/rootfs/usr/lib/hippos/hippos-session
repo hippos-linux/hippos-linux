@@ -79,10 +79,7 @@ fi
 hippos-settings set system.session "$(hippos-settings get system.boot_session 2>/dev/null || echo es)"
 
 es_scripts="/userdata/system/configs/emulationstation/scripts"
-mkdir -p "${es_scripts}/reboot" "${es_scripts}/shutdown"
-printf '#!/bin/sh\nexec hippos-shutdown reboot\n'   > "${es_scripts}/reboot/reboot"
-printf '#!/bin/sh\nexec hippos-shutdown shutdown\n' > "${es_scripts}/shutdown/shutdown"
-chmod 0755 "${es_scripts}/reboot/reboot" "${es_scripts}/shutdown/shutdown"
+rm -f "${es_scripts}/reboot/reboot" "${es_scripts}/shutdown/shutdown" /tmp/reboot.please /tmp/shutdown.please
 
 while [[ ! -f /run/hippos/quit-action ]] && (( ! logout_requested )); do
     if [[ -z "${xorg_pid}" ]] || ! kill -0 "${xorg_pid}" 2>/dev/null; then
@@ -98,6 +95,11 @@ while [[ ! -f /run/hippos/quit-action ]] && (( ! logout_requested )); do
     while kill -0 "${mode_pid}" 2>/dev/null; do wait "${mode_pid}"; done
     wait "${mode_pid}"; status=$?
     echo "hippos-session: ${mode} ended (${status})"
+    if [[ -e /tmp/reboot.please ]]; then
+        echo reboot > /run/hippos/quit-action
+    elif [[ -e /tmp/shutdown.please ]]; then
+        echo poweroff > /run/hippos/quit-action
+    fi
 
     signal_mode KILL
     stop_desktop_units
@@ -110,3 +112,6 @@ done
 
 kill "${xorg_pid}" 2>/dev/null
 wait "${xorg_pid}" 2>/dev/null
+if [[ -f /run/hippos/quit-action ]]; then
+    /usr/lib/hippos/hippos-shutdown --now "$(cat /run/hippos/quit-action)"
+fi
