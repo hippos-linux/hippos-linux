@@ -10,7 +10,9 @@ machine.
 import importlib.machinery
 import importlib.util
 import sys
+import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 LIB = Path(__file__).resolve().parent.parent / "overlays" / "rootfs" / "usr" / "lib" / "hippos"
@@ -304,3 +306,13 @@ class FirmwareBootTests(unittest.TestCase):
         self.assertEqual(self._read("fixup4.dat"), "@rootfs-0.6.10-fixup4")
         self.assertFalse((self.efi / "start.elf").exists())
         self.assertFalse((self.efi / "try" / "start4.elf").exists())
+
+
+class PruneOverlayBackupsTests(unittest.TestCase):
+    def test_only_the_running_deployments_backup_is_kept(self):
+        with tempfile.TemporaryDirectory() as backups:
+            for name in ("overlay-old1", "overlay-current", "overlay-old2", "saves"):
+                (Path(backups) / name / "usr").mkdir(parents=True)
+            with mock.patch.object(hu, "OVERLAY_BACKUPS", backups), mock.patch.object(hu, "log"):
+                hu.prune_overlay_backups("current")
+            self.assertEqual(sorted(p.name for p in Path(backups).iterdir()), ["overlay-current", "saves"])
