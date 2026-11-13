@@ -113,13 +113,63 @@ merge_accounts() {
     merge_secrets gshadow group
 }
 
+upper_entry() {
+    case "$1" in
+        /bin/*|/sbin/*|/lib/*|/lib32/*|/lib64/*|/libx32/*) echo "${UPPER}/usr$1" ;;
+        *) echo "${UPPER}$1" ;;
+    esac
+}
+
+system_path() {
+    case "$1" in
+        /usr/local/*) return 1 ;;
+        /usr/*|/opt/*|/bin/*|/sbin/*|/lib/*|/lib32/*|/lib64/*|/libx32/*) return 0 ;;
+    esac
+    return 1
+}
+
+remove_package_files() {
+    cat "${UPPER}"/var/lib/dpkg/info/*.md5sums 2>/dev/null | while IFS=' ' read -r _sum _path; do
+        system_path "/${_path}" || continue
+        _entry="$(upper_entry "/${_path}")"
+        [ -f "${_entry}" ] && [ ! -L "${_entry}" ] || continue
+        [ "$(md5sum < "${_entry}")" = "${_sum}  -" ] && rm -f "${_entry}"
+    done
+    cat "${UPPER}"/var/lib/dpkg/info/*.list 2>/dev/null | while IFS= read -r _path; do
+        system_path "${_path}" || continue
+        _entry="$(upper_entry "${_path}")"
+        [ -L "${_entry}" ] && rm -f "${_entry}"
+    done
+    return 0
+}
+
+move_shadowing_files() {
+    [ -d "${UPPER}/usr" ] || return 0
+    _backup="system/backups/overlay-${DEPLOYMENT}"
+    find "${UPPER}/usr" -path "${UPPER}/usr/local" -prune -o ! -type d -print | while IFS= read -r _entry; do
+        _rel="${_entry#"${UPPER}"}"
+        if [ -c "${_entry}" ]; then
+            rm -f "${_entry}"
+        elif [ -f "${_entry}" ] && [ ! -L "${_entry}" ] && cmp -s "${_entry}" "${LOWER}${_rel}"; then
+            rm -f "${_entry}"
+        elif [ -e "${LOWER}${_rel}" ] || [ -L "${LOWER}${_rel}" ]; then
+            mkdir -p "${BTRFS_MNT}/@userdata/${_backup}${_rel%/*}"
+            mv -f "${_entry}" "${BTRFS_MNT}/@userdata/${_backup}${_rel}" && kmsg "${_rel} moved to /userdata/${_backup}"
+        fi
+    done
+    find "${UPPER}/usr" -depth -mindepth 1 -type d ! -path "${UPPER}/usr/local" ! -path "${UPPER}/usr/local/*" \
+        -exec rmdir {} \; 2>/dev/null
+    return 0
+}
+
+LOWER="${BTRFS_MNT}/${ROOT_SUBVOL}"
 DEPLOYMENT_MARKER="${BTRFS_MNT}/@overlay/deployment"
-DEPLOYMENT="$(sed -n 's/^BUILD_ID=//p' "${BTRFS_MNT}/${ROOT_SUBVOL}/etc/hippos-version" 2>/dev/null)"
+DEPLOYMENT="$(sed -n 's/^BUILD_ID=//p' "${LOWER}/etc/hippos-version" 2>/dev/null)"
 UPPER_STATUS="${UPPER}/var/lib/dpkg/status"
 STALE=""
 if [ -f "${DEPLOYMENT_MARKER}" ]; then
     [ "$(cat "${DEPLOYMENT_MARKER}")" != "${DEPLOYMENT}" ] && STALE="deployment changed to ${DEPLOYMENT}"
-elif [ -f "${UPPER_STATUS}" ] && [ "${UPPER_STATUS}" -ot "${BTRFS_MNT}/${ROOT_SUBVOL}/var/lib/dpkg/status" ]; then
+elif [ -f "${UPPER_STATUS}" ] && [ "${UPPER_STATUS}" -ot "${LOWER}/var/lib/dpkg/status" ]; then
     STALE="dpkg status predates ${ROOT_SUBVOL}"
 fi
 if [ -n "${STALE}" ]; then
@@ -128,25 +178,8 @@ if [ -n "${STALE}" ]; then
     [ -f "${UPPER_STATUS}" ] && cp "${UPPER_STATUS}" "${UPPER}/var/lib/hippos/pre-update-dpkg-status"
     [ -f "${UPPER}/var/lib/apt/extended_states" ] && \
         cp "${UPPER}/var/lib/apt/extended_states" "${UPPER}/var/lib/hippos/pre-update-apt-extended-states"
-    _KEYRINGS_KEEP="${UPPER}/var/lib/hippos/keyrings.keep"
-    if [ -d "${UPPER}/usr/share/keyrings" ]; then
-        rm -rf "${_KEYRINGS_KEEP}"
-        mv "${UPPER}/usr/share/keyrings" "${_KEYRINGS_KEEP}"
-    fi
-    for _entry in "${UPPER}/usr/"* "${UPPER}/usr/".[!.]*; do
-        [ -e "${_entry}" ] || [ -L "${_entry}" ] || continue
-        [ "${_entry}" = "${UPPER}/usr/local" ] && continue
-        rm -rf "${_entry}"
-    done
-    if [ -d "${_KEYRINGS_KEEP}" ]; then
-        mkdir -p "${UPPER}/usr/share/keyrings"
-        for _key in "${_KEYRINGS_KEEP}"/*; do
-            [ -f "${_key}" ] || continue
-            [ -e "${BTRFS_MNT}/${ROOT_SUBVOL}/usr/share/keyrings/${_key##*/}" ] && continue
-            mv "${_key}" "${UPPER}/usr/share/keyrings/"
-        done
-        rm -rf "${_KEYRINGS_KEEP}"
-    fi
+    remove_package_files
+    move_shadowing_files
     rm -rf "${UPPER}/var/lib/dpkg" "${UPPER}/var/lib/apt" "${UPPER}/var/cache/apt" \
            "${UPPER}/etc/ld.so.cache" "${UPPER}/etc/alternatives"
     : > "${UPPER}/var/lib/hippos/apt-restore-pending"

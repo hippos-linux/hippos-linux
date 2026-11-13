@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -8,6 +9,10 @@ USER_PACKAGES = Path('/userdata/system/apt-packages.list')
 RESTORE_PENDING = Path('/var/lib/hippos/apt-restore-pending')
 PRE_UPDATE_STATUS = Path('/var/lib/hippos/pre-update-dpkg-status')
 PRE_UPDATE_EXTENDED_STATES = Path('/var/lib/hippos/pre-update-apt-extended-states')
+
+_APT = ['apt-get', '-o', 'DPkg::Lock::Timeout=300']
+_APT_INSTALL = [*_APT, 'install', '-y', '-o', 'Dpkg::Options::=--force-confold']
+_APT_ENV = {**os.environ, 'DEBIAN_FRONTEND': 'noninteractive'}
 
 def image_packages() -> frozenset[str] | None:
     try:
@@ -71,3 +76,24 @@ def owning_package(path: Path) -> str | None:
     if result.returncode != 0 or ':' not in result.stdout:
         return None
     return result.stdout.split(':', 1)[0].split(',')[0].strip()
+
+def missing_packages(packages: list[str]) -> list[str]:
+    result = subprocess.run(
+        ['dpkg-query', '-W', '-f', '${Package}:${Architecture} ${db:Status-Status}\\n', *packages],
+        capture_output=True, text=True, check=False,
+    )
+    installed = set()
+    for line in result.stdout.splitlines():
+        name, _, status = line.partition(' ')
+        if status == 'installed':
+            installed.update((name.partition(':')[0], name))
+    return [p for p in packages if p not in installed]
+
+def install_packages(packages: list[str], root: str | None = None) -> tuple[bool, list[str]]:
+    prefix = ['chroot', root] if root else []
+    updated = subprocess.run([*prefix, *_APT, 'update'], env=_APT_ENV).returncode == 0
+    if subprocess.run([*prefix, *_APT_INSTALL, *packages], env=_APT_ENV).returncode == 0:
+        return updated, []
+    failed = [p for p in packages
+              if subprocess.run([*prefix, *_APT_INSTALL, p], env=_APT_ENV).returncode != 0]
+    return updated, failed

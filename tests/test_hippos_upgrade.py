@@ -9,13 +9,13 @@ machine.
 
 import importlib.machinery
 import importlib.util
+import sys
 import unittest
 from pathlib import Path
 
-SCRIPT_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "overlays" / "rootfs" / "usr" / "lib" / "hippos" / "hippos-upgrade"
-)
+LIB = Path(__file__).resolve().parent.parent / "overlays" / "rootfs" / "usr" / "lib" / "hippos"
+sys.path.insert(0, str(LIB))
+SCRIPT_PATH = LIB / "hippos-upgrade"
 
 
 def _load_hippos_upgrade():

@@ -2,12 +2,11 @@
 """hippos-apt-packages — keep the user's apt installs across OS updates.
 
   hippos-apt-packages record   apt hook: write /userdata/system/apt-packages.list
-  hippos-apt-packages boot     hippos-apt-restore.service: reinstall the list after
-                               an OS update cleared package state, then record
+  hippos-apt-packages boot     hippos-apt-restore.service: install whatever the OS update
+                               could not put into the new system, then record
 """
 from __future__ import annotations
 
-import subprocess
 import sys
 
 from hippos_apt import (
@@ -16,16 +15,12 @@ from hippos_apt import (
     RESTORE_PENDING,
     USER_PACKAGES,
     image_packages,
+    install_packages,
     installed_user_packages,
+    missing_packages,
     pre_update_user_packages,
     recorded_user_packages,
 )
-
-_APT = ['apt-get', '-o', 'DPkg::Lock::Timeout=300']
-_APT_INSTALL = [
-    *_APT, 'install', '-y',
-    '-o', 'Dpkg::Options::=--force-confold',
-]
 
 def record() -> int:
     image = image_packages()
@@ -45,16 +40,15 @@ def restore() -> int:
         image = image_packages()
         if image is not None:
             packages = pre_update_user_packages(image)
+    packages = missing_packages(packages)
     if packages:
         print(f'Reinstalling {len(packages)} apt package(s): {" ".join(packages)}', flush=True)
-        updated = subprocess.run([*_APT, 'update']).returncode == 0
-        if subprocess.run(_APT_INSTALL + packages).returncode != 0:
-            missing = [p for p in packages if subprocess.run(_APT_INSTALL + [p]).returncode != 0]
-            if not updated and len(missing) == len(packages):
-                print('apt-get update failed and nothing installed; will retry on next boot', file=sys.stderr)
-                return 1
-            if missing:
-                print(f'No longer installable, dropped: {" ".join(missing)}', file=sys.stderr)
+        updated, failed = install_packages(packages)
+        if not updated and len(failed) == len(packages):
+            print('apt-get update failed and nothing installed; will retry on next boot', file=sys.stderr)
+            return 1
+        if failed:
+            print(f'No longer installable, dropped: {" ".join(failed)}', file=sys.stderr)
     RESTORE_PENDING.unlink(missing_ok=True)
     PRE_UPDATE_STATUS.unlink(missing_ok=True)
     PRE_UPDATE_EXTENDED_STATES.unlink(missing_ok=True)

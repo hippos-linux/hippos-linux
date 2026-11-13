@@ -14,14 +14,19 @@ import sys
 import traceback
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
+
+from hippos_apt import install_packages, recorded_user_packages
 
 VERSION_FILE      = "/usr/share/hippos/version"
 SYSCONF           = "/userdata/system/hippos.conf"
 CACHE_DIR         = "/userdata/system/cache/update"
 BTRFS_MNT         = "/tmp/hippos-btrfs-update"
 BARE_ROOTFS       = "@rootfs"
+OVERLAY_UPPER     = "@overlay/upper"
+USER_APT_SOURCES  = ("etc/apt", "usr/share/keyrings")
 STAGING_ROOTFS    = "@rootfs.new"
 UPDATE_PENDING    = "/run/hippos-update-pending"
 LOCK_FILE         = "/run/lock/hippos-upgrade.lock"
@@ -159,6 +164,20 @@ def mount_toplevel():
 
 def umount_toplevel():
     subprocess.run(["umount", "-l", BTRFS_MNT], check=False)
+
+@contextmanager
+def chroot_mounts(root):
+    mounted = []
+    try:
+        for fs in ("proc", "sys", "dev", "dev/pts", "run"):
+            target = os.path.join(root, fs)
+            os.makedirs(target, exist_ok=True)
+            subprocess.run(["mount", "--bind", f"/{fs}", target], check=True)
+            mounted.append(target)
+        yield
+    finally:
+        for target in reversed(mounted):
+            subprocess.run(["umount", "-l", target], check=False)
 
 def _deployment_sort_key(name):
     if name.startswith(KERNEL_SNAPSHOT_PREFIX):
@@ -883,6 +902,51 @@ def remove_stale_archives(keep_archive):
             log(f"Removing stale update download {name}")
             os.remove(path)
 
+def borrow_upper_files(staging_path, rel_dir):
+    upper_dir = os.path.join(BTRFS_MNT, OVERLAY_UPPER, rel_dir)
+    borrowed = []
+    for dirpath, _, filenames in os.walk(upper_dir):
+        for name in filenames:
+            source = os.path.join(dirpath, name)
+            if not (os.path.islink(source) or os.path.isfile(source)):
+                continue
+            target = os.path.join(staging_path, rel_dir, os.path.relpath(source, upper_dir))
+            if os.path.lexists(target):
+                continue
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            shutil.copy2(source, target, follow_symlinks=False)
+            borrowed.append(target)
+    return borrowed
+
+def return_borrowed_files(staging_path, borrowed):
+    for target in borrowed:
+        owned = subprocess.run(
+            ["chroot", staging_path, "dpkg-query", "-S", "/" + os.path.relpath(target, staging_path)],
+            capture_output=True, check=False,
+        ).returncode == 0
+        if not owned and os.path.lexists(target):
+            os.remove(target)
+
+def layer_user_packages(staging_path):
+    packages = recorded_user_packages()
+    if not packages:
+        return
+    log(f"Installing your apt packages into the new system: {' '.join(packages)}")
+    borrowed = [path for rel_dir in USER_APT_SOURCES for path in borrow_upper_files(staging_path, rel_dir)]
+    failed = packages
+    try:
+        with chroot_mounts(staging_path):
+            _, failed = install_packages(packages, root=staging_path)
+            subprocess.run(["chroot", staging_path, "apt-get", "clean"], check=False)
+    except subprocess.CalledProcessError as error:
+        log(f"WARNING: could not prepare the new system for apt: {error}")
+    finally:
+        return_borrowed_files(staging_path, borrowed)
+        shutil.rmtree(os.path.join(staging_path, "var", "lib", "apt", "lists"), ignore_errors=True)
+        os.makedirs(os.path.join(staging_path, "var", "lib", "apt", "lists", "partial"), exist_ok=True)
+    if failed:
+        log(f"WARNING: not installed into the new system, retried after reboot: {' '.join(failed)}")
+
 def cmd_apply():
     require_no_pending_update()
     cur = current_version()
@@ -963,6 +1027,8 @@ def cmd_apply():
 
         shutil.copy2("/etc/fstab", os.path.join(staging_path, "etc", "fstab"))
         log("fstab preserved from running system")
+
+        layer_user_packages(staging_path)
 
         if plan.retire_running_as:
             log(f"Renaming {BARE_ROOTFS} → {plan.retire_running_as}...")
@@ -1055,30 +1121,22 @@ def cmd_update_kernel():
         log("Installing kernel deb...")
         deb_in_chroot = f"/tmp/kernel-install.deb"
         subprocess.run(["cp", deb, os.path.join(subvol_path, "tmp", "kernel-install.deb")], check=True)
-        for fs in ("proc", "sys", "dev", "dev/pts", "run"):
-            target = os.path.join(subvol_path, fs)
-            os.makedirs(target, exist_ok=True)
-            subprocess.run(["mount", "--bind", f"/{fs}", target], check=True)
         try:
-            subprocess.run(
-                ["chroot", subvol_path, "dpkg", "-i", "--force-confold", deb_in_chroot],
-                check=True,
-            )
-            log("Regenerating module dependencies and initramfs...")
-            subprocess.run(["chroot", subvol_path, "depmod", "-a", remote], check=True)
-            if subprocess.run(
-                ["chroot", subvol_path, "update-initramfs", "-c", "-k", remote],
-            ).returncode != 0:
+            with chroot_mounts(subvol_path):
                 subprocess.run(
-                    ["chroot", subvol_path, "update-initramfs", "-u", "-k", remote],
+                    ["chroot", subvol_path, "dpkg", "-i", "--force-confold", deb_in_chroot],
                     check=True,
                 )
+                log("Regenerating module dependencies and initramfs...")
+                subprocess.run(["chroot", subvol_path, "depmod", "-a", remote], check=True)
+                if subprocess.run(
+                    ["chroot", subvol_path, "update-initramfs", "-c", "-k", remote],
+                ).returncode != 0:
+                    subprocess.run(
+                        ["chroot", subvol_path, "update-initramfs", "-u", "-k", remote],
+                        check=True,
+                    )
         finally:
-            for fs in reversed(("proc", "sys", "dev/pts", "dev", "run")):
-                subprocess.run(
-                    ["umount", "-l", os.path.join(subvol_path, fs)],
-                    check=False,
-                )
             try:
                 os.remove(os.path.join(subvol_path, "tmp", "kernel-install.deb"))
             except Exception:

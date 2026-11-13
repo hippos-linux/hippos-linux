@@ -4,7 +4,6 @@ After=network.target local-fs.target hippos-apt-update.service
 
 [Service]
 Type=simple
-Environment=DEBIAN_FRONTEND=noninteractive
 ExecStart=/usr/lib/hippos/hippos-apt-packages boot
 StandardOutput=journal
 StandardError=journal
