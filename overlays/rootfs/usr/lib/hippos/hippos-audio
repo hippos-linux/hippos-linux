@@ -5,16 +5,32 @@ export PIPEWIRE_RUNTIME_DIR="${XDG_RUNTIME_DIR}"
 export PULSE_SERVER="${PULSE_SERVER:-unix:${XDG_RUNTIME_DIR}/pulse/native}"
 
 _default_sink() { LC_ALL=C pactl get-default-sink 2>/dev/null || true; }
+_sinks()        {
+    LC_ALL=C pactl list sinks 2>/dev/null | awk '
+        /^Sink #/                 { name="" }
+        /[[:space:]]Name:/         { name=$2 }
+        /Description:/ && name    { sub(/.*Description: /,""); printf "%s\t%s\n", name, ($0?$0:name) }
+    '
+}
+_name_from_id() {
+    local name="${1#alsa_output.}"
+    name="${name#*-}"
+    name="${name%.*}"
+    name="${name%-[0-9][0-9]}"
+    echo "${name//_/ }"
+}
 _volume_pct()   { LC_ALL=C pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null | grep -oE '[0-9]+%' | head -1 | tr -d '%'; }
 
 case "${1:-}" in
     list)
         printf 'auto\tauto\n'
-        LC_ALL=C pactl list sinks 2>/dev/null | awk '
-            /^Sink #/                 { name="" }
-            /[[:space:]]Name:/         { name=$2 }
-            /Description:/ && name    { sub(/.*Description: /,""); printf "%s\t%s\n", name, ($0?$0:name) }
-        '
+        sinks="$(_sinks)"
+        [[ -n "${sinks}" ]] && printf '%s\n' "${sinks}"
+        saved="$(hippos-settings get audio.device 2>/dev/null)"
+        if [[ -n "${saved}" && "${saved}" != auto ]] && ! cut -f1 <<< "${sinks}" | grep -qxF "${saved}"; then
+            label="$(hippos-settings get audio.device.name 2>/dev/null)"
+            printf '%s\t%s (not connected)\n' "${saved}" "${label:-$(_name_from_id "${saved}")}"
+        fi
         ;;
     get)
         hippos-settings get audio.device 2>/dev/null || _default_sink
@@ -27,6 +43,8 @@ case "${1:-}" in
         fi
         LC_ALL=C pactl set-default-sink "$DEV" || exit 1
         hippos-settings set audio.device "$DEV" 2>/dev/null || true
+        label="$(_sinks | awk -F '\t' -v d="$DEV" '$1 == d { print $2 }')"
+        [[ -n "${label}" ]] && hippos-settings set audio.device.name "${label}" 2>/dev/null || true
         ;;
     list-profiles)
         printf 'auto\tauto\n'
