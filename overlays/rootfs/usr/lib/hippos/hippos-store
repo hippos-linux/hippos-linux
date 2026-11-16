@@ -392,13 +392,18 @@ def _install_archive(pkg):
     dest = game_dir(pkg)
     if os.path.isdir(dest):
         shutil.rmtree(dest)
-    strip = pkg.get("strip_components", 0)
-    if archive.endswith(".zip"):
-        _extract_zip(archive, dest, strip)
-    else:
-        _extract_tarball(archive, dest, strip, "")
-    os.remove(archive)
     command = shlex.split(pkg["launcher_command"])
+    strip = pkg.get("strip_components", 0)
+    if archive.endswith(".AppImage"):
+        os.makedirs(dest)
+        shutil.move(archive, os.path.join(dest, command[0]))
+        os.chmod(os.path.join(dest, command[0]), 0o755)
+    else:
+        if archive.endswith(".zip"):
+            _extract_zip(archive, dest, strip)
+        else:
+            _extract_tarball(archive, dest, strip, "")
+        os.remove(archive)
     add_catalog_game({**pkg, "launcher_command": shlex.join(["env", "-C", dest, "./" + command[0], *command[1:]])})
 
 def _install_wine_runner(pkg):

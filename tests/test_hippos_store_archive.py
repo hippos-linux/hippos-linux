@@ -85,6 +85,19 @@ class InstallArchiveTests(unittest.TestCase):
         self.assertEqual(command, f'env -C {self.tmp}/games/port-game ./Game --fullscreen')
         self.assertTrue(os.access(self.tmp / 'games' / 'port-game' / 'Game', os.X_OK))
 
+    def test_appimage_is_kept_as_the_launcher_binary(self):
+        image = self.tmp / 'Tool.AppImage'
+        image.write_bytes(b'\x7fELF')
+        pkg = {'id': 'app-tool', 'name': 'Tool', 'category': 'apps', 'type': 'archive',
+               'archive': {'amd64': {'url': 'https://example.org/Tool-1.0.AppImage',
+                                     'sha256': hashlib.sha256(image.read_bytes()).hexdigest()}},
+               'launcher_command': 'tool --no-sandbox'}
+        with mock.patch.object(store, '_download', lambda url, dest, label: Path(dest).write_bytes(image.read_bytes())), \
+                mock.patch.object(store, 'add_catalog_game') as add:
+            store._install_archive(pkg)
+        self.assertTrue(os.access(self.tmp / 'games' / 'app-tool' / 'tool', os.X_OK))
+        self.assertEqual(add.call_args.args[0]['launcher_command'], f'env -C {self.tmp}/games/app-tool ./tool --no-sandbox')
+
     def test_bad_checksum_installs_nothing(self):
         with mock.patch.object(store, 'add_catalog_game') as add, self.assertRaises(SystemExit):
             store._install_archive(self._pkg('0' * 64))
