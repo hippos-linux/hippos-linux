@@ -136,7 +136,7 @@ _emulator_defaults:
   pcw:           { emulator: mame,               core: mame               }
   pdp1:          { emulator: mame,               core: mame               }
   pet:           { emulator: vice,               core: xpet               }
-  pico:          { emulator: retroarch,          core: genesis_plus_gx    }
+  pico:          { emulator: retroarch,          core: picodrive          }
   pico8:         { emulator: lexaloffle-pico8,   core: pico8              }
   pokemini:      { emulator: retroarch,          core: pokemini           }
   ports:         { emulator: sh,                 core: sh, options: { bezel: none, padtokey: '0' } }
@@ -223,7 +223,7 @@ _emulator_defaults:
   gb2players:    { emulator: retroarch,          core: tgbdual          }
   gbc2players:   { emulator: retroarch,          core: tgbdual          }
   gx4000:        { emulator: retroarch,          core: cap32            }
-  cassettevision: { emulator: retroarch,          core: mame             }
+  cassettevision: { emulator: retroarch,         core: pd777            }
   flatpak:       { emulator: flatpak,            core: flatpak, options: { hud_support: false, onscreen_keyboard: '1' } }
   desktopshortcuts: { emulator: desktopshortcuts, core: desktopshortcuts, options: { onscreen_keyboard: '1' } }
   webapps:       { emulator: webapp,             core: webapp, options: { onscreen_keyboard: '1' } }
@@ -249,7 +249,7 @@ _emulator_defaults:
   native32:      { emulator: retroarch,          core: native32emu        }
   ti83:          { emulator: retroarch,          core: numero             }
   palm:          { emulator: retroarch,          core: mu                 }
-  j2me:          { emulator: retroarch,          core: squirreljme        }
+  j2me:          { emulator: retroarch,          core: freej2me_plus      }
   zmachine:      { emulator: retroarch,          core: mojozork           }
   bbk:           { emulator: retroarch,          core: bbkemu             }
   gam4980:       { emulator: retroarch,          core: gam4980            }
@@ -273,6 +273,7 @@ _emulator_defaults:
 _emulator_defaults_arm64:
   nds:           { emulator: drastic,            core: drastic            }
   ps2:           { emulator: armsx2,             core: armsx2, options: { fullboot: true } }
+  saturn:        { emulator: retroarch,          core: yabasanshiro       }
 
 3ds:
   extensions:

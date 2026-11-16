@@ -570,8 +570,8 @@ _Generated from installed emulators and RetroArch cores in artifacts/_
 - [ ] vice / xpet *(default)*
 
 ## Sega Pico
-- [ ] libretro / genesis_plus_gx *(default)*
-- [ ] libretro / picodrive
+- [ ] libretro / genesis_plus_gx
+- [ ] libretro / picodrive *(default)*
 
 ## Pico-8
 - [ ] libretro / retro8
@@ -886,8 +886,8 @@ _Generated from installed emulators and RetroArch cores in artifacts/_
 - [ ] libretro / pocketcdg *(default)*
 
 ## Java ME
-- [ ] libretro / squirreljme *(default)*
-- [ ] libretro / freej2me_plus
+- [ ] libretro / squirreljme
+- [ ] libretro / freej2me_plus *(default)*
 
 ## Tamagotchi
 - [ ] libretro / tamalibretro *(default)*
