@@ -58,8 +58,8 @@ _Generated from installed emulators and RetroArch cores in artifacts/_
 - [ ] mame / mess *(default)*
 
 ## Apple II
-- [ ] applewin / applewin
-- [ ] gsplus / gsplus *(default)*
+- [ ] applewin / applewin *(default)*
+- [ ] gsplus / gsplus
 - [ ] mame / mess
 
 ## Apple IIGS
@@ -169,8 +169,8 @@ _Generated from installed emulators and RetroArch cores in artifacts/_
 
 ## ColecoVision
 - [ ] clk / clk
-- [ ] libretro / bluemsx *(default)*
-- [ ] libretro / gearcoleco
+- [ ] libretro / bluemsx
+- [ ] libretro / gearcoleco *(default)*
 - [ ] libretro / jollycv
 - [ ] openmsx / openmsx
 
@@ -223,8 +223,8 @@ _Generated from installed emulators and RetroArch cores in artifacts/_
 - [ ] mame / mess *(default)*
 
 ## Enterprise
-- [ ] clk / clk *(default)*
-- [ ] libretro / ep128emu_core
+- [ ] clk / clk
+- [ ] libretro / ep128emu_core *(default)*
 - [ ] mame / mess
 
 ## Final Burn Neo

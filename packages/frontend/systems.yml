@@ -11,11 +11,11 @@ _emulator_defaults:
   amiga1200:     { emulator: amiberry,           core: A1200              }
   amigacd32:     { emulator: amiberry,           core: CD32               }
   amigacdtv:     { emulator: amiberry,           core: CDTV               }
-  amstradcpc:    { emulator: clk,                core: clk                }
+  amstradcpc:    { emulator: retroarch,          core: cap32              }
   androidapps:   { emulator: waydroid,           core: waydroid           }
   androidgames:  { emulator: waydroid,           core: waydroid           }
   apfm1000:      { emulator: mame,               core: mame               }
-  apple2:        { emulator: gsplus,              core: gsplus             }
+  apple2:        { emulator: applewin,           core: applewin           }
   apple2gs:      { emulator: gsplus,             core: gsplus             }
   arcadia:       { emulator: mame,               core: mame               }
   archimedes:    { emulator: clk,                core: clk                }
@@ -44,7 +44,7 @@ _emulator_defaults:
   channelf:      { emulator: retroarch,          core: freechaf           }
   chihiro:       { emulator: xemu-chihiro,       core: xemu-chihiro       }
   coco:          { emulator: xroar,              core: xroar              }
-  colecovision:  { emulator: openmsx,            core: openmsx            }
+  colecovision:  { emulator: retroarch,          core: gearcoleco         }
   commanderx16:  { emulator: x16emu,             core: x16emu             }
   cplus4:        { emulator: vice,               core: xplus4             }
   crvision:      { emulator: mame,               core: mame               }
@@ -58,7 +58,7 @@ _emulator_defaults:
   easyrpg:       { emulator: easyrpg,            core: easyrpg            }
   ecwolf:        { emulator: retroarch,          core: ecwolf             }
   electron:      { emulator: clk,                core: clk                }
-  enterprise:    { emulator: clk,                core: clk                }
+  enterprise:    { emulator: retroarch,          core: ep128emu_core      }
   fbneo:         { emulator: retroarch,          core: fbneo              }
   fds:           { emulator: retroarch,          core: fceumm             }
   flash:         { emulator: ruffle,             core: ruffle, options: { hud_support: false } }
