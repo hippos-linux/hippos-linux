@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import platform
+import shlex
 import shutil
 import subprocess
 import sys
@@ -12,6 +13,7 @@ import tempfile
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
+import zipfile
 
 import hippos_content_installers
 import hippos_flatpak_apps
@@ -38,6 +40,7 @@ CACHE_DIR      = os.path.join(STATE_DIR, "cache")
 WINE_CACHE     = os.path.join(STATE_DIR, "wine-runners.json")
 WINE_CACHE_TTL = 3600
 WINE_RUNNERS_DIR = "/userdata/system/wine-runners"
+GAMES_DIR      = "/userdata/system/linux-games"
 
 INSTALL_ROOTS = {
     "shaders":   "/userdata/shaders",
@@ -188,6 +191,8 @@ def catalog_section(pkg):
 def for_this_machine(pkg):
     arch = pkg.get("arch", "")
     if pkg.get("type") == "deb" and DEB_ARCH not in pkg.get("deb", {}):
+        return False
+    if pkg.get("type") == "archive" and DEB_ARCH not in pkg.get("archive", {}):
         return False
     return not arch or arch == DEB_ARCH
 
@@ -346,6 +351,55 @@ def _extract_tarball(archive, dest, strip_components, source_subdir):
                 shutil.copytree(s, d)
             else:
                 shutil.copy2(s, d)
+
+def _extract_zip(archive, dest, strip_components):
+    print("Extracting...", flush=True)
+    os.makedirs(dest, exist_ok=True)
+    root = os.path.realpath(dest)
+    with zipfile.ZipFile(archive) as zf:
+        for info in zf.infolist():
+            parts = [part for part in info.filename.split("/") if part]
+            if len(parts) <= strip_components:
+                continue
+            target = os.path.realpath(os.path.join(dest, *parts[strip_components:]))
+            if os.path.commonpath([root, target]) != root:
+                continue
+            if info.is_dir():
+                os.makedirs(target, exist_ok=True)
+                continue
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with zf.open(info) as src, open(target, "wb") as out:
+                shutil.copyfileobj(src, out)
+            mode = (info.external_attr >> 16) & 0o777
+            if mode:
+                os.chmod(target, mode)
+
+def game_dir(pkg):
+    return os.path.join(GAMES_DIR, pkg["id"])
+
+def _install_archive(pkg):
+    release = pkg.get("archive", {}).get(DEB_ARCH)
+    if not release:
+        print(f"ERROR: {pkg['name']} has no download for {DEB_ARCH}", flush=True)
+        sys.exit(1)
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    archive = os.path.join(CACHE_DIR, os.path.basename(release["url"]))
+    _download(release["url"], archive, pkg["name"])
+    if _sha256(archive) != release["sha256"]:
+        os.remove(archive)
+        print(f"ERROR: {pkg['name']} download is corrupt (checksum mismatch)", flush=True)
+        sys.exit(1)
+    dest = game_dir(pkg)
+    if os.path.isdir(dest):
+        shutil.rmtree(dest)
+    strip = pkg.get("strip_components", 0)
+    if archive.endswith(".zip"):
+        _extract_zip(archive, dest, strip)
+    else:
+        _extract_tarball(archive, dest, strip, "")
+    os.remove(archive)
+    command = shlex.split(pkg["launcher_command"])
+    add_catalog_game({**pkg, "launcher_command": shlex.join(["env", "-C", dest, "./" + command[0], *command[1:]])})
 
 def _install_wine_runner(pkg):
     dest = _runner_install_dir(pkg["id"])
@@ -521,6 +575,8 @@ def cmd_install(name):
         _install_deb(pkg)
     elif pkg.get("type") == "installer":
         _install_with_installer(pkg)
+    elif pkg.get("type") == "archive":
+        _install_archive(pkg)
     elif pkg.get("type") == "flatpak":
         print(f"Installing {pkg['name']} from Flathub...", flush=True)
         if hippos_flatpak_apps.install(pkg.get("flatpak_id", ""), pkg.get("category") != "apps") != 0:
@@ -572,6 +628,11 @@ def cmd_remove(name):
         remove_catalog_game(pkg)
     elif pkg.get("type") == "flatpak":
         hippos_flatpak_apps.remove(pkg.get("flatpak_id", ""))
+    elif pkg.get("type") == "archive":
+        if os.path.isdir(game_dir(pkg)):
+            print(f"Removing {game_dir(pkg)}...", flush=True)
+            shutil.rmtree(game_dir(pkg))
+        remove_catalog_game(pkg)
     elif pkg.get("type") in ("apt", "deb"):
         subprocess.call(["sudo", "-n", "apt-get", "remove", "-y"] + pkg.get("apt_packages", []))
         set_claimed(pkg.get("apt_packages", []), False)
