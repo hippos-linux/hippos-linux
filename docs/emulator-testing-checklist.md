@@ -887,6 +887,7 @@ _Generated from installed emulators and RetroArch cores in artifacts/_
 
 ## Java ME
 - [ ] libretro / squirreljme *(default)*
+- [ ] libretro / freej2me_plus
 
 ## Tamagotchi
 - [ ] libretro / tamalibretro *(default)*
