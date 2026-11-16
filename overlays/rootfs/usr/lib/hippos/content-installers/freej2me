@@ -1,0 +1,32 @@
+#!/bin/bash
+set -euo pipefail
+
+RELEASE_URL="https://github.com/TASEmulators/freej2me-plus/releases/download/1.53/freej2me_plus-v1.53.zip"
+RELEASE_SHA256="f2c647c3a62a55d904115fc7ec28103ed3bc3f438cac1de8d90e2cfd4c054f25"
+JAR="/userdata/bios/freej2me_plus-lr.jar"
+
+install_freej2me() {
+    local tmp
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "${tmp}"' RETURN
+
+    apt-get update -qq
+    apt-get install -y --no-install-recommends default-jre-headless
+
+    curl -fsSL "${RELEASE_URL}" -o "${tmp}/freej2me.zip"
+    echo "${RELEASE_SHA256}  ${tmp}/freej2me.zip" | sha256sum -c --quiet
+    unzip -q -j "${tmp}/freej2me.zip" freej2me_plus-lr.jar -d "${tmp}"
+
+    install -Dm644 "${tmp}/freej2me_plus-lr.jar" "${JAR}"
+    chown hippos:users "${JAR}"
+}
+
+remove_freej2me() {
+    rm -f "${JAR}"
+}
+
+case "${1:-install}" in
+    install) install_freej2me ;;
+    remove)  remove_freej2me ;;
+    *) echo "usage: freej2me install|remove" >&2; exit 2 ;;
+esac

@@ -768,6 +768,7 @@ systems:
   - name: j2me
     as_core:
       - squirreljme
+      - freej2me_plus
   - name: zmachine
     as_core:
       - mojozork

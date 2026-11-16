@@ -173,6 +173,7 @@ CATALOG_TABS = {
     "apps":    "Apps",
     "shaders": "Shaders",
     "cheats":  "Cheats",
+    "emulators": "Emulators",
 }
 
 def catalog_section(pkg):
