@@ -2383,6 +2383,7 @@ desktopshortcuts:
 linux:
   extensions:
   - sh
+  - flatpak
   force: true
   hardware: os
   manufacturer: Various

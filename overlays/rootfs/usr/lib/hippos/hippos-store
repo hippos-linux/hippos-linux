@@ -173,6 +173,8 @@ CATALOG_TABS = {
 }
 
 def catalog_section(pkg):
+    if pkg.get("section"):
+        return pkg["section"]
     if pkg.get("category") in ("apps", "webapps"):
         return "Apps"
     if pkg.get("type") == "installer":
@@ -521,7 +523,7 @@ def cmd_install(name):
         _install_with_installer(pkg)
     elif pkg.get("type") == "flatpak":
         print(f"Installing {pkg['name']} from Flathub...", flush=True)
-        if hippos_flatpak_apps.install(pkg.get("flatpak_id", "")) != 0:
+        if hippos_flatpak_apps.install(pkg.get("flatpak_id", ""), pkg.get("category") != "apps") != 0:
             print("ERROR: Flathub install failed", flush=True)
             sys.exit(1)
     elif pkg.get("type") == "webapp":

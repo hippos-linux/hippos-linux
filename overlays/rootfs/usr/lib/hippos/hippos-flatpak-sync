@@ -7,7 +7,7 @@ from pathlib import Path
 
 import hippos_quiver
 from hippos_appstream import read_app_details
-from hippos_flatpak_apps import claimed_apps
+from hippos_flatpak_apps import claimed_apps, claimed_games
 from hippos_launcher_sync import GameMetadata, reload_es, sync_gamelist, sync_launchers
 
 USERDATA   = Path('/userdata')
@@ -15,6 +15,8 @@ ROMS_DIR   = USERDATA / 'roms' / 'flatpak'
 STATE_FILE = USERDATA / 'system' / 'flatpak-launchers.json'
 APPS_DIR   = USERDATA / 'roms' / 'webapps'
 APPS_STATE_FILE = USERDATA / 'system' / 'linux-apps-flatpak-launchers.json'
+GAMES_DIR  = USERDATA / 'roms' / 'linux'
+GAMES_STATE_FILE = USERDATA / 'system' / 'linux-games-flatpak-launchers.json'
 NO_ICON_APPS = frozenset({hippos_quiver.APP_ID})
 
 def log(message: str) -> None:
@@ -53,11 +55,14 @@ def sync_folder(roms_dir: Path, state_file: Path, apps: dict[str, str]) -> bool:
 
 def sync() -> int:
     apps = installed_apps()
-    claimed = claimed_apps()
+    games = claimed_games()
+    claimed = claimed_apps() - games
+    linux_games = {app_id: name for app_id, name in apps.items() if app_id in games}
     linux_apps = {app_id: name for app_id, name in apps.items() if app_id in claimed}
-    flatpak_apps = {app_id: name for app_id, name in apps.items() if app_id not in claimed}
+    flatpak_apps = {app_id: name for app_id, name in apps.items() if app_id not in claimed | games}
     changed = sync_folder(ROMS_DIR, STATE_FILE, flatpak_apps)
     changed |= sync_folder(APPS_DIR, APPS_STATE_FILE, linux_apps)
+    changed |= sync_folder(GAMES_DIR, GAMES_STATE_FILE, linux_games)
     if changed:
         reload_es()
     return 0

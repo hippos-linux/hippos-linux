@@ -247,7 +247,7 @@ def cmd_install(args: list[str]) -> int:
 
     if pkg_type == 'flatpak':
         print(f"Installing {pkg.get('name', pkg_id)} from Flathub...")
-        ret = hippos_flatpak_apps.install(pkg.get('flatpak_id', ''))
+        ret = hippos_flatpak_apps.install(pkg.get('flatpak_id', ''), pkg.get('category') != 'apps')
         if ret != 0:
             print(f'Install failed (exit {ret})', file=sys.stderr)
             return ret

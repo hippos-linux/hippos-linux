@@ -28,11 +28,13 @@ class AppIdTests(unittest.TestCase):
 
 class ClaimTests(unittest.TestCase):
     def setUp(self):
-        self.saved = flatpak_apps.CLAIMS
-        flatpak_apps.CLAIMS = Path(tempfile.mkdtemp()) / 'claims'
+        self.saved = flatpak_apps.CLAIMS, flatpak_apps.GAME_CLAIMS
+        folder = Path(tempfile.mkdtemp())
+        flatpak_apps.CLAIMS = folder / 'claims'
+        flatpak_apps.GAME_CLAIMS = folder / 'game-claims'
 
     def tearDown(self):
-        flatpak_apps.CLAIMS = self.saved
+        flatpak_apps.CLAIMS, flatpak_apps.GAME_CLAIMS = self.saved
 
     def test_install_claims_the_app_and_a_failed_install_releases_it(self):
         with mock.patch.object(flatpak_apps.subprocess, 'run') as run:
@@ -42,6 +44,28 @@ class ClaimTests(unittest.TestCase):
             run.return_value.returncode = 1
             flatpak_apps.install('com.c.d')
         self.assertEqual(flatpak_apps.claimed_apps(), {'com.a.b'})
+
+    def test_games_are_claimed_apart_from_apps(self):
+        with mock.patch.object(flatpak_apps.subprocess, 'run') as run:
+            run.return_value.returncode = 0
+            flatpak_apps.install('com.a.b', game=True)
+        self.assertEqual(flatpak_apps.claimed_games(), {'com.a.b'})
+        self.assertEqual(flatpak_apps.claimed_apps(), set())
+
+    def test_installing_as_the_other_kind_moves_the_claim(self):
+        flatpak_apps._set_claimed('com.a.b', True)
+        with mock.patch.object(flatpak_apps.subprocess, 'run') as run:
+            run.return_value.returncode = 0
+            flatpak_apps.install('com.a.b', game=True)
+        self.assertEqual(flatpak_apps.claimed_games(), {'com.a.b'})
+        self.assertEqual(flatpak_apps.claimed_apps(), set())
+
+    def test_remove_releases_a_game_claim(self):
+        flatpak_apps._set_claimed('com.a.b', True, True)
+        with mock.patch.object(flatpak_apps.subprocess, 'run') as run:
+            run.return_value.returncode = 1
+            flatpak_apps.remove('com.a.b')
+        self.assertEqual(flatpak_apps.claimed_games(), set())
 
     def test_remove_releases_the_claim_once_uninstalled(self):
         flatpak_apps._set_claimed('com.a.b', True)

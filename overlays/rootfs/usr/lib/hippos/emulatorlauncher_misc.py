@@ -192,6 +192,8 @@ def launch_simcoupe(ctx: LaunchContext) -> int:
     return result.returncode
 
 def launch_sh(ctx: LaunchContext) -> int:
+    if ctx.rom.suffix == '.flatpak':
+        return launch_flatpak(ctx)
     rom = ctx.rom
     script = (rom / 'run.sh') if rom.is_dir() and (rom / 'run.sh').exists() else rom
     if not script.exists():
