@@ -4,7 +4,7 @@ import json
 import os
 import shlex
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from shutil import which
 
@@ -497,6 +497,10 @@ def launch_lexaloffle(ctx: LaunchContext) -> int:
         ld_lib = BIOS / 'voxatron'
 
     if not bin_path.exists():
+        if system == 'pico8':
+            from emulatorlauncher_generic import launch_libretro
+            _log.info("PICO-8 not found at %s; using the retro8 core", bin_path)
+            return launch_libretro(replace(ctx, emulator='retroarch', core='retro8'))
         _log.error("Lexaloffle binary not found at %s (user must provide)", bin_path)
         return 1
 
