@@ -19,6 +19,7 @@ from emulatorlauncher_shared import (
     _log,
     _pick_es_profile,
     _run_game_command,
+    _dos_folder_program,
 )
 
 from HipposPaths import BIOS, CACHE, CONFIGS, SAVES, SCREENSHOTS
@@ -35,23 +36,23 @@ def launch_dosbox_staging(ctx: LaunchContext) -> int:
         return 1
 
     cmd: list[str] = [str(bin_path), '--fullscreen']
+    drive = rom if rom.is_dir() else rom.parent
 
     for cfg_name in ('dosbox.cfg', 'dosbox.conf'):
-        cfg_file = rom.parent / cfg_name
+        cfg_file = drive / cfg_name
         if cfg_file.exists():
             cmd += ['--conf', str(cfg_file)]
             break
 
     cmd += [
-        '--working-dir', str(rom.parent),
-        '-c', f'mount c "{rom.parent}"',
+        '--working-dir', str(drive),
+        '-c', f'mount c "{drive}"',
         '-c', 'c:',
     ]
 
     if rom.is_dir():
-        bat = rom / 'dosbox.bat'
-        exe = next(rom.glob('*.bat'), None) or next(rom.glob('*.exe'), None)
-        cmd += ['-c', str(bat.name if bat.exists() else (exe.name if exe else 'dosbox.bat'))]
+        program = _dos_folder_program(rom)
+        cmd += ['-c', program.name if program else 'dosbox.bat']
     else:
         cmd += ['-c', str(rom.name)]
 

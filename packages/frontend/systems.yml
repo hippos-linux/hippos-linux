@@ -51,7 +51,7 @@ _emulator_defaults:
   ctvboy:        { emulator: mame,               core: mame               }
   daphne:        { emulator: hypseus-singe,      core: hypseus-singe, options: { hud_support: false } }
   dice:          { emulator: retroarch,          core: dice               }
-  dos:           { emulator: dosbox-staging,     core: dosbox_staging, options: { padtokey: '0' } }
+  dos:           { emulator: retroarch,          core: dosbox_pure,    options: { padtokey: '0' } }
   win98:         { emulator: retroarch,          core: dosbox_pure, options: { padtokey: '0' } }
   dragon64:      { emulator: xroar,              core: xroar              }
   dreamcast:     { emulator: flycast,            core: flycast            }

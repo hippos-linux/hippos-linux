@@ -1025,3 +1025,15 @@ def _ra_btn_map_for_ctx(profile: 'ESControllerProfile', system: str, core: str, 
         btn_map['pagedown'] = 'l'
 
     return btn_map
+
+
+def _dos_folder_program(folder: Path) -> Optional[Path]:
+    bat = folder / 'dosbox.bat'
+    if bat.is_file():
+        return bat
+    files = sorted((path for path in folder.iterdir() if path.is_file()), key=lambda path: path.name.lower())
+    for suffix in ('.bat', '.exe', '.com'):
+        for path in files:
+            if path.suffix.lower() == suffix:
+                return path
+    return None
