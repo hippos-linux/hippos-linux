@@ -1,72 +1,108 @@
+<div align="center">
+
 # HippOS
 
-**A console-style gaming OS for x86 PCs and Raspberry Pi.**
-Boot straight into your game library — no desktop, no setup, no fuss.
+### A gaming OS that boots straight into your library
 
-[hippos-linux.org](https://hippos-linux.org) · [Releases](https://hippos-linux.org) · [Issues](https://github.com/hippos-linux/hippos-linux/issues)
+**[Download](https://hippos-linux.org) · [Website](https://hippos-linux.org) · [Issues](https://github.com/hippos-linux/hippos-linux/issues)**
 
----
-
-HippOS turns any x86-64 PC or Raspberry Pi 4/5 into a dedicated gaming appliance. It boots directly into EmulationStation, keeps your games and saves on a persistent subvolume that survives OS updates, and ships 85+ emulators built from source covering 280+ systems — all controller-driven from the couch.
+</div>
 
 ---
 
-## Features
-
-**Gaming first**
-- Boots directly into EmulationStation — no desktop, no login screen
-- Controller-first navigation with automatic button layout detection
-- In-game quick menu (Hotkey+A): save states, on-screen keyboard, brightness, volume, CPU/GPU stats, pad-to-keyboard key editor
-- Scraper, game metadata, and boxart built in
-
-**Library**
-- 280+ systems covered — retro consoles, handhelds, computers, arcade, Windows PC arcade cabinets
-- AppImage drop-zone: drop `.AppImage` files into `/roms/appimages`, launchers appear in Linux Games or Linux Apps automatically
-- Flatpak support with the Content Downloader
-- Steam, Heroic, Lutris, and Waydroid available via the Apps tab
-- Native Linux games and web apps alongside emulated content
-
-**Updates**
-- OTA updates swap the `@rootfs` btrfs subvolume with automatic rollback support
-- Games, saves, settings, and manually installed apt packages survive every update
-- Live update progress and notifications in the UI
-
-**Media**
-- Media center mode: Kodi, Jellyfin, Emby Theater, or Plex HTPC — installed on demand, controller-driven
-- Desktop mode available when needed
-
-**Hardware**
-- x86-64 PC with UEFI firmware
-- Raspberry Pi 4 and Pi 5
-- AMD and Intel integrated graphics are primary targets on x86
-- NVIDIA support via Debian Trixie driver availability
-- Handheld PC controls via InputPlumber
+HippOS is a Debian-based gaming OS for x86 PCs and Raspberry Pi 4/5. Power it on and you're in EmulationStation — no desktop, no login screen, no configuration required. Your games, saves, and settings live on a separate persistent partition and survive every OS update.
 
 ---
 
-## Emulators
+## Platforms
 
-85+ emulators built from source, including:
+| Platform | Support |
+|---|---|
+| x86-64 PC (AMD / Intel GPU) | Full |
+| x86-64 PC (NVIDIA) | Via Debian Trixie drivers |
+| Raspberry Pi 5 | Full |
+| Raspberry Pi 4 | Full |
+| Handheld PCs | Full (InputPlumber for built-in controls) |
 
-| Category | Emulators |
+---
+
+## What's included
+
+### 280+ systems
+
+78 consoles · 73 computers · 41 portables · 39 arcade platforms · game engines · ports · and more.
+
+Covering everything from Atari 2600 to PS4, Commodore 64 to Amiga, Game Boy to PS Vita, MAME arcade to Windows PC arcade cabinets (TypeX, RingEdge, Nesica, Lindbergh, and 15 more via WindowsArcadeLoader).
+
+### 85+ emulators built from source
+
+| Platform | Emulators |
 |---|---|
 | Multi-system | RetroArch (100+ cores), MAME |
 | PlayStation | DuckStation, PCSX2, RPCS3, shadPS4 |
 | Nintendo | Dolphin, Ryujinx, Cemu, melonDS, mupen64plus, NanoBoyAdvance |
-| Xbox | xemu, Xenia / Xenia Canary |
+| Xbox | xemu (+ Chihiro), Xenia, Xenia Canary |
 | Sega | Flycast, Redream, Supermodel, Model 2 Emulator |
-| Arcade PC | WindowsArcadeLoader (TypeX, RingEdge, Nesica, and 15 more) |
+| Windows Arcade PC | WindowsArcadeLoader (TypeX, RingEdge, Nesica, Lindbergh, and more) |
 | Computers | VICE, openMSX, FS-UAE, Hatari, BasiliskII, GSplus, AppleWin |
 | Handhelds | PPSSPP, DraStic, EKA2L1, Vita3K |
-| Other | ScummVM, BigPEmu, xroar, x16emu, EasyRPG, ikemen, and more |
+| Other | ScummVM, BigPEmu, xroar, x16emu, EasyRPG, IKEMEN GO, and more |
+
+### App support
+
+- **Linux Games** — native games installed via Discover, apt, or the Content Downloader
+- **Linux Apps** — Flatpak apps, web apps (Netflix, YouTube, Spotify, etc.), and desktop shortcuts
+- **AppImage drop-zone** — drop any `.AppImage` into `/roms/appimages`, a launcher appears automatically in Linux Games or Linux Apps based on its category
+- **Steam, Heroic, Lutris, Waydroid** — available from the Apps tab
+- **Windows 98** — runs in DOSBox Pure, per-game save state
+- **Wine + box64** on Raspberry Pi
+
+### In-game quick menu
+
+Press **Hotkey+A** in any game to open the quick menu:
+
+- Save and load states
+- Controller-as-mouse toggle
+- On-screen keyboard
+- Brightness, volume, and power mode
+- CPU/GPU stats
+- Per-game pad-to-keyboard key editor
+
+### Media centers
+
+Install **Kodi, Jellyfin, Emby Theater, or Plex HTPC** directly from the main menu. Controller-driven, with on-screen keyboard and controller-as-mouse.
+
+### OTA updates
+
+- Updates swap the `@rootfs` btrfs subvolume with automatic rollback support
+- Games, saves, and settings on `@userdata` are never touched
+- apt packages you installed survive updates — reinstalled automatically
+- Files you added to the system are kept; changed system files are backed up instead of overwritten
+- Live update progress and notifications in the UI
+
+### Controllers
+
+- Automatic button layout detection — face buttons show as your controller's icons
+- Xbox One/Series, DualShock, DualSense, Switch Pro, Steam Controller 2 — all supported
+- Xbox controllers work over Bluetooth
+- Light guns: AimTrak, GunCon 2/3, GUN4IR, OpenFIRE, Sinden, and more
+- Racing wheels: force feedback for Logitech and Thrustmaster
+- Per-game TDP and power profiles
+
+### Storage and network
+
+- SMB and NFS shares discovered and merged into your library in one press
+- Saves written back to network shares where permitted
+- External USB drives pooled into your library on plug-in
+- btrfs `@userdata` subvolume — persistent, update-safe, easy to back up
 
 ---
 
 ## Installing
 
-1. Download the latest image from [hippos-linux.org](https://hippos-linux.org)
+1. Download the latest image from **[hippos-linux.org](https://hippos-linux.org)**
 2. Flash the `.img.zst` to a USB drive or install to an internal disk
-3. Boot — that's it
+3. Boot
 
 ---
 
@@ -74,11 +110,11 @@ HippOS turns any x86-64 PC or Raspberry Pi 4/5 into a dedicated gaming appliance
 
 ```
 overlays/       Files copied verbatim into the rootfs at build time
-packages/       Per-emulator build scripts and system definitions
-  emulators/    One directory per emulator with build.sh and .emulator.yml
-  frontend/     EmulationStation config: systems.yml, themes
+packages/
+  emulators/    Per-emulator build scripts and .emulator.yml definitions (85+)
+  frontend/     systems.yml, theme config
 src/            EmulationStation frontend source, website
-catalog/        Content store package catalog
+catalog/        Content Downloader package catalog
 tools/          Build and development utilities
 themes/         ES theme submodules
 tests/          Integration and unit tests
@@ -90,7 +126,7 @@ release-notes/  Per-version changelogs
 
 ## Building
 
-Each emulator is built independently via its `packages/emulators/<name>/build.sh`. Build scripts run in Docker (Ubuntu 24.04) and produce artifacts under `artifacts/`.
+Emulators build independently inside Docker (Ubuntu 24.04), producing artifacts under `artifacts/`:
 
 ```sh
 ./packages/emulators/dolphin-emu/build.sh
