@@ -1,13 +1,13 @@
 # HippOS
 
-**A console-style gaming OS for x86 PCs.**
+**A console-style gaming OS for x86 PCs and Raspberry Pi.**
 Boot straight into your game library — no desktop, no setup, no fuss.
 
 [hippos-linux.org](https://hippos-linux.org) · [Releases](https://hippos-linux.org) · [Issues](https://github.com/hippos-linux/hippos-linux/issues)
 
 ---
 
-HippOS turns any x86-64 PC into a dedicated gaming appliance. It boots directly into EmulationStation, keeps your games and saves on a persistent subvolume that survives OS updates, and ships 85+ emulators built from source covering 280+ systems — all controller-driven from the couch.
+HippOS turns any x86-64 PC or Raspberry Pi 4/5 into a dedicated gaming appliance. It boots directly into EmulationStation, keeps your games and saves on a persistent subvolume that survives OS updates, and ships 85+ emulators built from source covering 280+ systems — all controller-driven from the couch.
 
 ---
 
@@ -37,7 +37,8 @@ HippOS turns any x86-64 PC into a dedicated gaming appliance. It boots directly 
 
 **Hardware**
 - x86-64 PC with UEFI firmware
-- AMD and Intel integrated graphics are primary targets
+- Raspberry Pi 4 and Pi 5
+- AMD and Intel integrated graphics are primary targets on x86
 - NVIDIA support via Debian Trixie driver availability
 - Handheld PC controls via InputPlumber
 
