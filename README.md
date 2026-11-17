@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/hippos-linux/hippos-linux/main/overlays/rootfs/usr/share/lxqt/graphics/hippos_logo.svg" width="128" alt="HippOS" /><br>
+  <img src="https://raw.githubusercontent.com/hippos-linux/hippos-linux/main/overlays/rootfs/usr/share/icons/hicolor/128x128/apps/distributor-logo.png" width="128" alt="HippOS" /><br>
   <h1>HippOS</h1>
   <p><strong>A gaming OS that boots straight into your library.</strong></p>
 </div>
