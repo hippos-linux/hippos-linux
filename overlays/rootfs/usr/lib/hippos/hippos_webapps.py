@@ -14,7 +14,7 @@ from pathlib import Path
 from hippos_launcher_sync import GameMetadata, reload_es, safe_filename, sync_gamelist, sync_launchers
 
 USERDATA        = Path('/userdata')
-WEBAPPS_DIR     = USERDATA / 'roms' / 'webapps'
+WEBAPPS_DIR     = USERDATA / 'roms' / 'linuxapps'
 WEBAPPS_LIST    = USERDATA / 'system' / 'webapps.json'
 STATE_FILE      = USERDATA / 'system' / 'webapps-launchers.json'
 WEBAPP_PROFILES = USERDATA / 'system' / 'webapps' / 'profiles'

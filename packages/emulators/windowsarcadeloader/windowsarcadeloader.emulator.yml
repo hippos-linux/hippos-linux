@@ -1,0 +1,23 @@
+requireArtifact: windowsarcadeloader
+arch: [amd64]
+features: []
+systems:
+  - adrenaline
+  - alls
+  - apm3
+  - arcadepc
+  - europar
+  - globalvr
+  - konami
+  - namcoes3
+  - nesica
+  - nesica2
+  - rawthrills
+  - ringedge
+  - ringedge2
+  - seganu
+  - segashell
+  - tsunami
+  - typex
+  - unis
+  - wahlap

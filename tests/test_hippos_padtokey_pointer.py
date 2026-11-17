@@ -16,7 +16,7 @@ class FindKeysFilesTests(unittest.TestCase):
         self.system_maps.mkdir()
         self.user_maps.mkdir()
         (self.system_maps / 'controller-as-mouse.keys').write_text('{}')
-        (self.system_maps / 'linux.keys').write_text('{}')
+        (self.system_maps / 'linuxgames.keys').write_text('{}')
         self.rom = self.root / 'game.sfc'
         self.rom.write_text('')
         self.saved = padtokey.SYSTEM_MAPS, padtokey.USER_MAPS, padtokey.POINTER_MAP
@@ -27,7 +27,7 @@ class FindKeysFilesTests(unittest.TestCase):
         padtokey.SYSTEM_MAPS, padtokey.USER_MAPS, padtokey.POINTER_MAP = self.saved
 
     def test_system_map_is_used_when_defaults_are_on(self):
-        self.assertEqual(padtokey.find_keys_files('linux', 'sh', self.rom, True), [self.system_maps / 'linux.keys'])
+        self.assertEqual(padtokey.find_keys_files('linuxgames', 'sh', self.rom, True), [self.system_maps / 'linuxgames.keys'])
 
     def test_pointer_falls_back_to_shared_map_for_systems_without_one(self):
         self.assertEqual(padtokey.find_keys_files('snes', 'retroarch', self.rom, True), [])
@@ -37,17 +37,17 @@ class FindKeysFilesTests(unittest.TestCase):
     def test_pointer_off_keeps_only_the_game_map(self):
         game_map = self.root / 'game.sfc.keys'
         game_map.write_text('{}')
-        self.assertEqual(padtokey.find_keys_files('linux', 'sh', self.rom, False), [game_map])
+        self.assertEqual(padtokey.find_keys_files('linuxgames', 'sh', self.rom, False), [game_map])
 
     def test_native_linux_apps_keep_their_own_controller_support(self):
-        (self.system_maps / 'webapps.keys').write_text('{}')
+        (self.system_maps / 'linuxapps.keys').write_text('{}')
         app = self.root / 'Emby.flatpak'
         app.write_text('media.emby.EmbyTheater')
         page = self.root / 'YouTube.webapp'
         page.write_text('')
-        self.assertEqual(padtokey.find_keys_files('webapps', 'webapp', app, True), [])
-        self.assertEqual(padtokey.find_keys_files('webapps', 'webapp', app, True, pointer=True), [padtokey.POINTER_MAP])
-        self.assertEqual(padtokey.find_keys_files('webapps', 'webapp', page, True), [self.system_maps / 'webapps.keys'])
+        self.assertEqual(padtokey.find_keys_files('linuxapps', 'webapp', app, True), [])
+        self.assertEqual(padtokey.find_keys_files('linuxapps', 'webapp', app, True, pointer=True), [padtokey.POINTER_MAP])
+        self.assertEqual(padtokey.find_keys_files('linuxapps', 'webapp', page, True), [self.system_maps / 'linuxapps.keys'])
 
 
 if __name__ == '__main__':

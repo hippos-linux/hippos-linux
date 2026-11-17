@@ -140,7 +140,7 @@ _emulator_defaults:
   pico8:         { emulator: lexaloffle-pico8,   core: pico8              }
   pokemini:      { emulator: retroarch,          core: pokemini           }
   ports:         { emulator: sh,                 core: sh, options: { bezel: none, padtokey: '0' } }
-  linux:         { emulator: sh,                 core: sh, options: { bezel: none, padtokey: '0' } }
+  linuxgames:    { emulator: sh,                 core: sh, options: { bezel: none, padtokey: '0' } }
   prboom:        { emulator: retroarch,          core: prboom             }
   ps2:           { emulator: pcsx2,              core: pcsx2, options: { fullboot: true } }
   ps3:           { emulator: rpcs3,              core: rpcs3, options: { hud_support: false } }
@@ -226,7 +226,7 @@ _emulator_defaults:
   cassettevision: { emulator: retroarch,         core: pd777            }
   flatpak:       { emulator: flatpak,            core: flatpak, options: { hud_support: false, onscreen_keyboard: '1' } }
   desktopshortcuts: { emulator: desktopshortcuts, core: desktopshortcuts, options: { onscreen_keyboard: '1' } }
-  webapps:       { emulator: webapp,             core: webapp, options: { onscreen_keyboard: '1' } }
+  linuxapps:     { emulator: webapp,             core: webapp, options: { onscreen_keyboard: '1' } }
   chip8:         { emulator: retroarch,          core: jaxe               }
   pocketstation: { emulator: retroarch,          core: pokket             }
   tamagotchi:    { emulator: retroarch,          core: tamalibretro       }
@@ -268,6 +268,25 @@ _emulator_defaults:
   craft:         { emulator: retroarch,          core: craft              }
   anarch:        { emulator: retroarch,          core: anarch             }
   thepowdertoy:  { emulator: retroarch,          core: thepowdertoy       }
+  adrenaline:    { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  alls:          { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  apm3:          { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  arcadepc:      { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  europar:       { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  globalvr:      { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  konami:        { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  namcoes3:      { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  nesica:        { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  nesica2:       { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  rawthrills:    { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  ringedge:      { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  ringedge2:     { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  seganu:        { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  segashell:     { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  tsunami:       { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  typex:         { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  unis:          { emulator: windowsarcadeloader, core: windowsarcadeloader }
+  wahlap:        { emulator: windowsarcadeloader, core: windowsarcadeloader }
 
 # Overrides _emulator_defaults on that architecture only.
 _emulator_defaults_arm64:
@@ -329,6 +348,24 @@ adam:
   manufacturer: Coleco
   name: ADAM
   release: 1983
+adrenaline:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Adrenaline Amusements
+  name: Adrenaline Amusements
+  platform: adrenaline, arcade
+  release: 2010
+alls:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Sega
+  name: Sega ALL.Net P-ras MULTI
+  platform: alls, arcade
+  release: 2016
 advision:
   extensions:
   - bin
@@ -475,6 +512,24 @@ apple2gs:
   manufacturer: Apple
   name: Apple IIGS
   release: 1986
+apm3:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Andamiro
+  name: Andamiro PM3
+  platform: apm3, arcade
+  release: 2010
+arcadepc:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Various
+  name: Windows Arcade PC
+  platform: arcadepc, arcade
+  release: 2000
 arcadia:
   extensions:
   - bin
@@ -1012,6 +1067,15 @@ enterprise:
   manufacturer: Enterprise Computers
   name: Enterprise
   release: 1985
+europar:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Various
+  name: EuroPAR
+  platform: europar, arcade
+  release: 2005
 fbneo:
   extensions:
   - zip
@@ -1192,6 +1256,15 @@ gbc:
   manufacturer: Nintendo
   name: Game Boy Color
   release: 1998
+globalvr:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Global VR
+  name: Global VR
+  platform: globalvr, arcade
+  release: 2004
 gmaster:
   extensions:
   - bin
@@ -1265,6 +1338,15 @@ jaguarcd:
   platform: jaguar
   release: 1995
   theme: atarijaguarcd
+konami:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Konami
+  name: Konami Arcade PC
+  platform: konami, arcade
+  release: 2007
 laser310:
   extensions:
   - vz
@@ -1618,6 +1700,33 @@ naomi2:
   name: Naomi 2
   platform: naomi2, arcade
   release: 2000
+namcoes3:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Bandai Namco
+  name: Namco System ES3
+  platform: namcoes3, arcade
+  release: 2010
+nesica:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Taito
+  name: NESiCAxLive
+  platform: nesica, arcade
+  release: 2010
+nesica2:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Taito
+  name: NESiCAxLive 2
+  platform: nesica2, arcade
+  release: 2015
 nds:
   extensions:
   - nds
@@ -1918,6 +2027,33 @@ pyxel:
   manufacturer: Fantasy
   name: pyxel
   release: 2021
+rawthrills:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Raw Thrills
+  name: Raw Thrills
+  platform: rawthrills, arcade
+  release: 2004
+ringedge:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Sega
+  name: Sega RingEdge
+  platform: ringedge, arcade
+  release: 2009
+ringedge2:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Sega
+  name: Sega RingEdge 2
+  platform: ringedge2, arcade
+  release: 2011
 rx78:
   extensions:
   - bin
@@ -1989,6 +2125,24 @@ segaai:
   manufacturer: Sega
   name: Sega AI Computer
   release: 1986
+seganu:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Sega
+  name: Sega Nu
+  platform: seganu, arcade
+  release: 2013
+segashell:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Sega
+  name: Sega System Shell
+  platform: segashell, arcade
+  release: 2016
 sg1000:
   extensions:
   - bin
@@ -2158,6 +2312,15 @@ trs80:
   manufacturer: Tandy Radio Shack
   name: TRS-80
   release: 1977
+tsunami:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Tsunami Visual Technologies
+  name: Tsunami
+  platform: tsunami, arcade
+  release: 2003
 tutor:
   extensions:
   - bin
@@ -2187,6 +2350,24 @@ tvgames:
   manufacturer: Various
   name: Plug and Play TV Games
   release: 2002
+typex:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Taito
+  name: Taito Type X
+  platform: typex, arcade
+  release: 2004
+unis:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: UNIS Technology
+  name: UNIS Technology
+  platform: unis, arcade
+  release: 2010
 uzebox:
   extensions:
   - uze
@@ -2266,6 +2447,15 @@ vsmile:
   manufacturer: VTech
   name: V.Smile
   release: 2005
+wahlap:
+  extensions:
+  - exe
+  - squashfs
+  hardware: arcade
+  manufacturer: Wahlap
+  name: Wahlap
+  platform: wahlap, arcade
+  release: 2015
 wii:
   extensions:
   - gcm
@@ -2381,7 +2571,7 @@ desktopshortcuts:
   hardware: os
   manufacturer: Various
   name: Desktop Shortcuts
-linux:
+linuxgames:
   extensions:
   - sh
   - flatpak
@@ -2742,7 +2932,7 @@ wasm4:
   manufacturer: Bruno Garcia
   name: WASM-4
   release: 2021
-webapps:
+linuxapps:
   extensions:
   - webapp
   - flatpak

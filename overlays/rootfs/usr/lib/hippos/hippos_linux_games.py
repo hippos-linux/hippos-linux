@@ -19,8 +19,8 @@ from hippos_launcher_sync import GameMetadata, launchers_with, reload_es, update
 _APPLICATIONS = Path('/usr/share/applications')
 _SYSTEM_PATH = '/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games'
 
-LINUX_GAMES_DIR = Path('/userdata/roms/linux')
-LINUX_APPS_DIR = Path('/userdata/roms/webapps')
+LINUX_GAMES_DIR = Path('/userdata/roms/linuxgames')
+LINUX_APPS_DIR = Path('/userdata/roms/linuxapps')
 PORTS_DIR = Path('/userdata/roms/ports')
 CATALOG_STATES = (Path('/userdata/system/hippos-store/installed.json'), Path('/userdata/system/content-cache/installed.json'))
 GAMELIST_MEDIA = ('image', 'thumbnail', 'marquee', 'video', 'fanart', 'manual')

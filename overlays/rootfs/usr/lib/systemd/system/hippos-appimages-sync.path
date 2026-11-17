@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch for AppImage drops
+After=local-fs.target userdata.mount
+
+[Path]
+PathChanged=/userdata/roms/appimages
+Unit=hippos-appimages-sync.service
+
+[Install]
+WantedBy=multi-user.target

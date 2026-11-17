@@ -13,9 +13,9 @@ from hippos_launcher_sync import GameMetadata, reload_es, sync_gamelist, sync_la
 USERDATA   = Path('/userdata')
 ROMS_DIR   = USERDATA / 'roms' / 'flatpak'
 STATE_FILE = USERDATA / 'system' / 'flatpak-launchers.json'
-APPS_DIR   = USERDATA / 'roms' / 'webapps'
+APPS_DIR   = USERDATA / 'roms' / 'linuxapps'
 APPS_STATE_FILE = USERDATA / 'system' / 'linux-apps-flatpak-launchers.json'
-GAMES_DIR  = USERDATA / 'roms' / 'linux'
+GAMES_DIR  = USERDATA / 'roms' / 'linuxgames'
 GAMES_STATE_FILE = USERDATA / 'system' / 'linux-games-flatpak-launchers.json'
 NO_ICON_APPS = frozenset({hippos_quiver.APP_ID})
 
