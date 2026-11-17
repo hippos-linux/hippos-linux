@@ -38,7 +38,7 @@ HippOS is a Debian-based gaming OS for x86 PCs and Raspberry Pi 4/5. Power it on
 
 It ships 85+ emulators built from source, covering 280+ systems — from Atari 2600 to PS4, arcade cabinets to Windows PC arcade hardware — all navigated with a controller from the couch.
 
-Visit **[hippos-linux.org](https://hippos-linux.org)** for downloads and release notes.
+Visit **[hippos-linux.org](https://hippos-linux.org)** for downloads and release notes, and **[wiki.hippos-linux.org](https://wiki.hippos-linux.org)** for documentation.
 
 ---
 
@@ -131,7 +131,7 @@ Install **Kodi, Jellyfin, Emby Theater, or Plex HTPC** directly from the main me
 | Other | ScummVM, BigPEmu, xroar, x16emu, EasyRPG, IKEMEN GO, TIC-80, Quiver, vpinball, and more |
 
 > [!NOTE]
-> Many emulators require BIOS files placed in `/userdata/bios/`. Refer to the documentation on [hippos-linux.org](https://hippos-linux.org) for per-system BIOS requirements.
+> Many emulators require BIOS files placed in `/userdata/bios/`. Refer to the [wiki](https://wiki.hippos-linux.org) for per-system BIOS requirements.
 
 ---
 
@@ -149,7 +149,8 @@ Install **Kodi, Jellyfin, Emby Theater, or Plex HTPC** directly from the main me
 ## ❓ Support
 
 - **Bug reports and feature requests**: [GitHub Issues](https://github.com/hippos-linux/hippos-linux/issues)
-- **Downloads and documentation**: [hippos-linux.org](https://hippos-linux.org)
+- **Downloads**: [hippos-linux.org](https://hippos-linux.org)
+- **Documentation**: [wiki.hippos-linux.org](https://wiki.hippos-linux.org)
 
 ---
 
