@@ -123,7 +123,7 @@ Install **Kodi, Jellyfin, Emby Theater, or Plex HTPC** directly from the main me
 | Multi-system | RetroArch (100+ cores), MAME |
 | PlayStation | DuckStation, PCSX2, RPCS3, shadPS4 |
 | Nintendo | Dolphin, Ryujinx, Cemu, melonDS, mupen64plus, NanoBoyAdvance |
-| Xbox | xemu (+ Chihiro), Xenia, Xenia Canary |
+| Xbox | xemu (+ Chihiro), Xenia, Xenia Canary, Xenia Edge |
 | Sega | Flycast, Redream, Supermodel, Model 2 Emulator |
 | Windows Arcade PC | WindowsArcadeLoader — TypeX, RingEdge, RingEdge 2, Nesica, Nesica 2, Lindbergh, Namco ES3, Konami, Wahlap, Raw Thrills, Global VR, Sega NU, Sega Shell, Adrenaline, ALLS, APM3, Europar, Tsunami, UNIS |
 | Computers | VICE, openMSX, FS-UAE, Hatari, BasiliskII, GSplus, AppleWin, SAM Coupé |
