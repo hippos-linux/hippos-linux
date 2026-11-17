@@ -1,12 +1,10 @@
 <div align="center">
-  <img src="overlays/rootfs/usr/share/lxqt/graphics/hippos_logo.svg" alt="HippOS" width="128" />
   <h1>HippOS</h1>
   <p><strong>A gaming OS that boots straight into your library.</strong></p>
 </div>
 
 <div align="center">
-  <a href="https://github.com/hippos-linux/hippos-linux/releases/latest"><img src="https://img.shields.io/github/v/release/hippos-linux/hippos-linux?style=for-the-badge&logo=github&label=latest" alt="Latest release" /></a>
-  <a href="https://github.com/hippos-linux/hippos-linux/releases"><img src="https://img.shields.io/github/downloads/hippos-linux/hippos-linux/total?style=for-the-badge&logo=github" alt="Downloads" /></a>
+  <a href="https://hippos-linux.org"><img src="https://img.shields.io/badge/download-hippos--linux.org-blue?style=for-the-badge" alt="Download" /></a>
   <a href="https://github.com/hippos-linux/hippos-linux/stargazers"><img src="https://img.shields.io/github/stars/hippos-linux/hippos-linux?style=for-the-badge&logo=github" alt="Stars" /></a>
   <a href="https://github.com/hippos-linux/hippos-linux/issues"><img src="https://img.shields.io/github/issues/hippos-linux/hippos-linux?style=for-the-badge&logo=github" alt="Issues" /></a>
 </div>
@@ -29,7 +27,7 @@ Visit **[hippos-linux.org](https://hippos-linux.org)** for downloads and release
 |---|---|
 | x86-64 (AMD GPU) | ✅ Full |
 | x86-64 (Intel GPU) | ✅ Full |
-| x86-64 (NVIDIA GPU) | ✅ Via Debian Trixie drivers |
+| x86-64 (NVIDIA GPU) | ✅ Drivers built from source |
 | Raspberry Pi 5 | ✅ Full |
 | Raspberry Pi 4 | ✅ Full |
 | Handheld PC | ✅ Full (InputPlumber for built-in controls) |
