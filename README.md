@@ -4,26 +4,6 @@
 </div>
 
 <div align="center">
-  <a href="https://www.star-history.com/?repos=hippos-linux%2Fhippos-linux&type=date"><picture><source
-    media="(prefers-color-scheme: dark)"
-    srcset="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=rank&theme=dark"
-  /><source
-    media="(prefers-color-scheme: light)"
-    srcset="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=rank"
-  /><img
-    alt="Star History Rank"
-    src="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=rank"
-  /></picture></a>
-  <a href="https://www.star-history.com/?repos=hippos-linux%2Fhippos-linux&type=date"><picture><source
-    media="(prefers-color-scheme: dark)"
-    srcset="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=trending&theme=dark"
-  /><source
-    media="(prefers-color-scheme: light)"
-    srcset="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=trending"
-  /><img
-    alt="GitHub Trending"
-    src="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=trending"
-  /></picture></a><br><br>
   <a href="https://hippos-linux.org"><img src="https://img.shields.io/badge/download-hippos--linux.org-blue?style=for-the-badge" alt="Download" /></a>
   <a href="https://github.com/hippos-linux/hippos-linux/stargazers"><img src="https://img.shields.io/github/stars/hippos-linux/hippos-linux?style=for-the-badge&logo=github" alt="Stars" /></a>
   <a href="https://github.com/hippos-linux/hippos-linux/commits/main"><img src="https://img.shields.io/github/last-commit/hippos-linux/hippos-linux?style=for-the-badge&logo=github" alt="Last commit" /></a>
