@@ -42,6 +42,9 @@ roms/
 # Upload script (contains credentials)
 scripts/upload-image.sh
 
+# Local setup script (developer-specific)
+/setup.sh
+
 # Local environment/editor state
 .env
 github-token.txt

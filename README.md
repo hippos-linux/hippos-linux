@@ -161,6 +161,16 @@ Install **Kodi, Jellyfin, Emby Theater, or Plex HTPC** directly from the main me
 
 ---
 
+## 💖 Supporters
+
+HippOS is free and open source. If you find it useful, consider supporting development.
+
+<p align="center">
+  <a href="https://github.com/sponsors/hippos-linux"><img src="https://img.shields.io/badge/sponsor-hippos--linux-ea4aaa?style=for-the-badge&logo=github-sponsors" alt="Sponsor on GitHub" /></a>
+</p>
+
+---
+
 ## 👥 Contributors
 
 <p align="center">
