@@ -4,8 +4,29 @@
 </div>
 
 <div align="center">
+  <a href="https://www.star-history.com/?repos=hippos-linux%2Fhippos-linux&type=date"><picture><source
+    media="(prefers-color-scheme: dark)"
+    srcset="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=rank&theme=dark"
+  /><source
+    media="(prefers-color-scheme: light)"
+    srcset="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=rank"
+  /><img
+    alt="Star History Rank"
+    src="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=rank"
+  /></picture></a>
+  <a href="https://www.star-history.com/?repos=hippos-linux%2Fhippos-linux&type=date"><picture><source
+    media="(prefers-color-scheme: dark)"
+    srcset="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=trending&theme=dark"
+  /><source
+    media="(prefers-color-scheme: light)"
+    srcset="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=trending"
+  /><img
+    alt="GitHub Trending"
+    src="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=trending"
+  /></picture></a><br><br>
   <a href="https://hippos-linux.org"><img src="https://img.shields.io/badge/download-hippos--linux.org-blue?style=for-the-badge" alt="Download" /></a>
   <a href="https://github.com/hippos-linux/hippos-linux/stargazers"><img src="https://img.shields.io/github/stars/hippos-linux/hippos-linux?style=for-the-badge&logo=github" alt="Stars" /></a>
+  <a href="https://github.com/hippos-linux/hippos-linux/commits/main"><img src="https://img.shields.io/github/last-commit/hippos-linux/hippos-linux?style=for-the-badge&logo=github" alt="Last commit" /></a>
   <a href="https://github.com/hippos-linux/hippos-linux/issues"><img src="https://img.shields.io/github/issues/hippos-linux/hippos-linux?style=for-the-badge&logo=github" alt="Issues" /></a>
 </div>
 
@@ -32,6 +53,9 @@ Visit **[hippos-linux.org](https://hippos-linux.org)** for downloads and release
 | Raspberry Pi 4 | ✅ Full |
 | Handheld PC | ✅ Full (InputPlumber for built-in controls) |
 
+> [!NOTE]
+> Xbox, Xbox 360, and PS3 emulation are not available on Raspberry Pi. The Pi 5 does not have sufficient GPU resources for these.
+
 ---
 
 ## 🎮 Features
@@ -57,6 +81,9 @@ Visit **[hippos-linux.org](https://hippos-linux.org)** for downloads and release
 
 Install **Kodi, Jellyfin, Emby Theater, or Plex HTPC** directly from the main menu. Installed on demand, controller-driven with on-screen keyboard and controller-as-mouse.
 
+> [!NOTE]
+> Plex HTPC is available on x86 PC only.
+
 ### Controllers
 
 | Feature | Support |
@@ -75,7 +102,7 @@ Install **Kodi, Jellyfin, Emby Theater, or Plex HTPC** directly from the main me
 
 - OTA updates swap the `@rootfs` btrfs subvolume with automatic rollback support
 - Games, saves, settings, and manually installed apt packages survive every update
-- Files you added are kept; changed system files are backed up instead of overwritten
+- Files you added are kept; changed system files are backed up to `/userdata/system/backups` instead of being overwritten
 - Live update progress and notifications in the UI
 
 ### Storage and Networking
@@ -103,9 +130,15 @@ Install **Kodi, Jellyfin, Emby Theater, or Plex HTPC** directly from the main me
 | Handhelds | PPSSPP, DraStic, EKA2L1, Vita3K |
 | Other | ScummVM, BigPEmu, xroar, x16emu, EasyRPG, IKEMEN GO, TIC-80, Quiver, vpinball, and more |
 
+> [!NOTE]
+> Many emulators require BIOS files placed in `/userdata/bios/`. Refer to the documentation on [hippos-linux.org](https://hippos-linux.org) for per-system BIOS requirements.
+
 ---
 
 ## 📦 Installing
+
+> [!WARNING]
+> Flashing an image will erase all data on the target drive. Back up anything important before proceeding.
 
 1. Download the latest image from **[hippos-linux.org](https://hippos-linux.org)**
 2. Flash the `.img.zst` to a USB drive or install to an internal disk
@@ -113,33 +146,10 @@ Install **Kodi, Jellyfin, Emby Theater, or Plex HTPC** directly from the main me
 
 ---
 
-## 🗂️ Repository Layout
+## ❓ Support
 
-```
-overlays/       Files copied verbatim into the rootfs at build time
-packages/
-  emulators/    Per-emulator build scripts and .emulator.yml definitions (85+)
-  frontend/     systems.yml, theme config
-src/            EmulationStation frontend source, website
-catalog/        Content Downloader package catalog
-tools/          Build and development utilities
-themes/         ES theme submodules
-tests/          Integration and unit tests
-docs/           Build and runtime notes
-release-notes/  Per-version changelogs
-```
-
----
-
-## 🔨 Building
-
-Emulators build independently inside Docker (Ubuntu 24.04), producing artifacts under `artifacts/`:
-
-```sh
-./packages/emulators/dolphin-emu/build.sh
-```
-
-The full OS image is assembled from the rootfs overlay, built emulator artifacts, and the EmulationStation frontend.
+- **Bug reports and feature requests**: [GitHub Issues](https://github.com/hippos-linux/hippos-linux/issues)
+- **Downloads and documentation**: [hippos-linux.org](https://hippos-linux.org)
 
 ---
 
@@ -148,6 +158,14 @@ The full OS image is assembled from the rootfs overlay, built emulator artifacts
 - [EmulationStation (Batocera fork)](https://github.com/batocera-linux/batocera-emulationstation) — frontend base (GPLv2), heavily modified for HippOS
 - [Batocera Linux](https://batocera.org) — inspiration and reference
 - All emulator authors and communities
+
+---
+
+## 👥 Contributors
+
+<p align="center">
+  <img src="https://contrib.rocks/image?repo=hippos-linux/hippos-linux" alt="Contributors" />
+</p>
 
 ---
 
