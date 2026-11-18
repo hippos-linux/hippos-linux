@@ -32,6 +32,7 @@ from emulatorlauncher_shared import (
     ControllerInfo,
     ESControllerProfile,
     LaunchContext,
+    EmulatorNotInstalled,
     _HUD_CONFIG_PATH,
     _conf_bool,
     _get_yaml_system_options,
@@ -430,6 +431,9 @@ def main() -> int:
     logging.getLogger().addHandler(last_error)
     try:
         code = _launch(_build_parser().parse_args())
+    except EmulatorNotInstalled as exc:
+        _log.error("%s", exc)
+        code = 1
     except Exception as exc:
         _log.exception("Launch failed: %s", exc)
         code = 1

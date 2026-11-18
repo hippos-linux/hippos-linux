@@ -5,11 +5,11 @@ from pathlib import Path
 from emulatorlauncher_shared import (
     LaunchContext,
     _build_game_env,
-    _find_emulator_bin,
     _load_effective_hippos_conf,
     _log,
     _run_game_command,
     generate_sdl_game_controller_config,
+    _require_emulator_bin,
 )
 from emulatorlauncher_registry import Emulator, register
 
@@ -43,9 +43,7 @@ def _prepare_root() -> None:
     (WAL_ROOT / 'launcher.yaml').write_text(WAL_MACHINE_SETTINGS, encoding='utf-8')
 
 def launch_windowsarcadeloader(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('windowsarcadeloader')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('windowsarcadeloader')
     if not (WINE_RUNNERS_DIR / WAL_RUNNER / 'bin' / 'wine').is_file():
         _log.error("Windows Arcade Loader: Wine runner missing: %s", WINE_RUNNERS_DIR / WAL_RUNNER)
         return 1

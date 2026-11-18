@@ -6,11 +6,11 @@ from emulatorlauncher_shared import (
     ESBinding,
     LaunchContext,
     _build_game_env,
-    _find_emulator_bin,
     _load_effective_hippos_conf,
     _load_es_input_configs,
     _pick_es_profile,
     _run_game_command,
+    _require_emulator_bin,
 )
 
 from HipposPaths import CONFIGS, SAVES
@@ -137,9 +137,7 @@ def _write_ares_settings(settings_file: Path, ctx: LaunchContext) -> None:
     settings_file.write_text('\n'.join(bml_parts) + '\n', encoding='utf-8')
 
 def launch_ares(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('ares')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('ares')
 
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
 

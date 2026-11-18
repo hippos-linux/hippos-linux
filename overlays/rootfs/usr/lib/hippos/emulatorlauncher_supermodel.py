@@ -7,10 +7,10 @@ from emulatorlauncher_shared import (
     LaunchContext,
     _build_game_env,
     _display_resolution_from_conf,
-    _find_emulator_bin,
     _load_effective_hippos_conf,
     _new_ini_parser,
     _run_game_command,
+    _require_emulator_bin,
 )
 from emulatorlauncher_registry import Emulator, register
 
@@ -100,9 +100,7 @@ SUPERMODEL_VARIANTS = ('supermodel', 'supermodel-es', 'supermodel-legacy')
 
 def launch_supermodel(ctx: LaunchContext) -> int:
     variant = ctx.emulator if ctx.emulator in SUPERMODEL_VARIANTS else 'supermodel'
-    bin_path = _find_emulator_bin(variant)
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin(variant)
 
     share = bin_path.parent.parent / 'share'
     run_dir = _prepare_run_dir(variant, share)

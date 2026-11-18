@@ -10,11 +10,11 @@ from emulatorlauncher_shared import (
     LaunchContext,
     _build_game_env,
     _display_resolution_from_conf,
-    _find_emulator_bin,
     _load_effective_hippos_conf,
     _new_ini_parser,
     _run_game_command,
     _sync_tree,
+    _require_emulator_bin,
 )
 
 from HipposPaths import CONFIGS, USERDATA
@@ -152,9 +152,7 @@ def _write_model2_config(ctx: LaunchContext, runtime_emu: Path) -> Path:
     return config_path
 
 def launch_model2emu(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('model2emu')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('model2emu')
 
     runtime_emu = _ensure_model2_runtime_root(bin_path)
     config_path = _write_model2_config(ctx, runtime_emu)

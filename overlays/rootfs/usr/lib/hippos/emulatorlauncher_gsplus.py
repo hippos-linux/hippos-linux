@@ -4,11 +4,11 @@ from emulatorlauncher_shared import (
     _game_value,
     LaunchContext,
     _build_game_env,
-    _find_emulator_bin,
     _load_hippos_conf,
     _run_game_command,
     _write_unix_settings_file,
     generate_sdl_game_controller_config,
+    _require_emulator_bin,
 )
 
 from HipposPaths import BIOS, CONFIGS
@@ -101,9 +101,7 @@ def write_gsplus_config(ctx: LaunchContext) -> None:
     _write_unix_settings_file(GSPLUS_CONFIG_FILE, items)
 
 def launch_gsplus(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('GSplus', 'gsplus')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('GSplus', 'gsplus')
 
     write_gsplus_config(ctx)
     conf = _load_hippos_conf()

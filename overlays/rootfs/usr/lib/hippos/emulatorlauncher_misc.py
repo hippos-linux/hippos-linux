@@ -18,13 +18,14 @@ from emulatorlauncher_shared import (
     _conf_bool,
     _conf_value,
     _find_emulator_bin,
-    _find_emulator_bin_in_package,
     _load_es_input_configs,
     _load_hippos_conf,
     _log,
     _pick_es_profile,
     _run_game_command,
     generate_sdl_game_controller_config,
+    _require_emulator_bin,
+    _require_emulator_bin_in_package,
 )
 
 from HipposPaths import BIOS, CONFIGS, SAVES, USERDATA
@@ -167,9 +168,7 @@ def _configure_vice_joysticks(ctx: LaunchContext, binary: str) -> list[str]:
 
 def launch_vice(ctx: LaunchContext) -> int:
     binary = ctx.core or 'x64'
-    bin_path = _find_emulator_bin_in_package('vice', binary)
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin_in_package('vice', binary)
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
     conf = _load_hippos_conf()
     cmd = [str(bin_path), *_configure_vice_joysticks(ctx, binary)]
@@ -182,9 +181,7 @@ def launch_vice(ctx: LaunchContext) -> int:
     return result.returncode
 
 def launch_simcoupe(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin_in_package('samcoupe', 'samcoupe', 'simcoupe')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin_in_package('samcoupe', 'samcoupe', 'simcoupe')
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
     conf = _load_hippos_conf()
     cmd = [str(bin_path), 'autoboot', '-disk1', str(ctx.rom)]
@@ -357,9 +354,7 @@ def launch_pygame(ctx: LaunchContext) -> int:
     return result.returncode
 
 def launch_ruffle(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('ruffle')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('ruffle')
     conf = _load_hippos_conf()
     cmd = [str(bin_path), str(ctx.rom)]
     env = _build_game_env(conf, ctx)
@@ -367,9 +362,7 @@ def launch_ruffle(ctx: LaunchContext) -> int:
     return result.returncode
 
 def launch_lightspark(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('lightspark')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('lightspark')
     conf = _load_hippos_conf()
     cmd = [str(bin_path), '-fs', '-s', 'local-with-networking', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
@@ -377,9 +370,7 @@ def launch_lightspark(ctx: LaunchContext) -> int:
     return result.returncode
 
 def launch_pyxel(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('pyxel')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('pyxel')
     conf = _load_hippos_conf()
     cmd = [str(bin_path), 'play' if ctx.rom.suffix == '.pyxapp' else 'run', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
@@ -397,9 +388,7 @@ def _clk_media(rom: Path) -> Path:
         return extract_dir / sorted(archive.namelist())[0]
 
 def launch_clk(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('clksignal', 'clk')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('clksignal', 'clk')
     if ctx.rom.is_dir():
         return 1
     conf = _load_hippos_conf()
@@ -415,9 +404,7 @@ def launch_clk(ctx: LaunchContext) -> int:
     return result.returncode
 
 def launch_tsugaru(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('Tsugaru_CUI', 'tsugaru')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('Tsugaru_CUI', 'tsugaru')
     conf = _load_hippos_conf()
     cmd: list[str] = [str(bin_path), str(BIOS / 'fmtowns'), '-FULLSCREEN', '-NOHIGHRESPCM', '-NOWAITBOOT', '-AUTOSCALE', '-MAINTAINASPECT', '-HIGHRES', '-GAMEPORT0', 'KEY', '-KEYBOARD', 'DIRECT', '-PAUSEKEY', 'F10']
     if (cdrom_speed := _game_value(conf, ctx, 'cdrom_speed', 'auto')) != 'auto':
@@ -433,9 +420,7 @@ def launch_tsugaru(ctx: LaunchContext) -> int:
     return result.returncode
 
 def launch_x16emu(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('x16emu')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('x16emu')
     conf = _load_hippos_conf()
     romdir = ctx.rom.parent
     cmd: list[str] = [

@@ -11,7 +11,6 @@ from emulatorlauncher_shared import (
     WINE_NO_INSTALLER_PROMPTS,
     LaunchContext,
     _build_game_env,
-    _find_emulator_bin,
     _load_effective_hippos_conf,
     _probe_vulkan_version,
     _read_toml,
@@ -19,6 +18,7 @@ from emulatorlauncher_shared import (
     _sync_tree,
     _write_toml,
     configure_emulator,
+    _require_emulator_bin,
 )
 from emulatorlauncher_registry import Emulator, register
 
@@ -171,9 +171,7 @@ def _write_xenia_config(ctx: LaunchContext) -> tuple[Path, Path, Path]:
     return runtime_dir, prefix_dir, config_dir
 
 def launch_xenia(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin(ctx.emulator)
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin(ctx.emulator)
 
     rom = ctx.rom
     if rom.suffix == '.xbox360':

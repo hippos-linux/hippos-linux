@@ -11,7 +11,6 @@ from emulatorlauncher_shared import (
     _conf_bool,
     _conf_int,
     _conf_value,
-    _find_emulator_bin,
     _game_setting,
     _load_es_input_configs,
     _load_hippos_conf,
@@ -23,6 +22,7 @@ from emulatorlauncher_shared import (
     _ra_type_suffix,
     _run_game_command,
     _dos_folder_program,
+    _require_emulator_bin,
 )
 
 from libretro_cores import core_file_names
@@ -75,13 +75,7 @@ def launch_libretro(ctx: LaunchContext) -> int:
     return result.returncode
 
 def launch_standalone(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin(ctx.emulator)
-    if bin_path is None:
-        _log.error(
-            "Emulator '%s' not installed. Expected binary in %s/%s or system PATH",
-            ctx.emulator, EMULATORS_ROOT, ctx.emulator,
-        )
-        return 1
+    bin_path = _require_emulator_bin(ctx.emulator)
 
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
 

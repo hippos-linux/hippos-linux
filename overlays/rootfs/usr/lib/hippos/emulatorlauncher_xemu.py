@@ -12,10 +12,10 @@ from emulatorlauncher_shared import (
     _build_game_env,
     _conf_value,
     _display_resolution_from_conf,
-    _find_emulator_bin,
     _load_hippos_conf,
     _new_ini_parser,
     _run_game_command,
+    _require_emulator_bin,
 )
 
 from HipposPaths import BIOS, CONFIGS, SAVES
@@ -154,9 +154,7 @@ def write_xemu_chihiro_config(ctx: LaunchContext) -> None:
         parser.write(fh)
 
 def launch_xemu(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('xemu')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('xemu')
     write_xemu_config(ctx)
     conf = _load_hippos_conf()
     cmd = [str(bin_path), '-config_path', str(XEMU_CONFIG_FILE)]
@@ -168,9 +166,7 @@ def launch_xemu(ctx: LaunchContext) -> int:
     return result.returncode
 
 def launch_xemu_chihiro(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('xemu-chihiro')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('xemu-chihiro')
     write_xemu_chihiro_config(ctx)
     conf = _load_hippos_conf()
     cmd = [str(bin_path), '-config_path', str(CHIHIRO_CONFIG_FILE)]

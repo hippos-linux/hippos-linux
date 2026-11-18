@@ -8,12 +8,12 @@ from emulatorlauncher_shared import (
     _game_value,
     LaunchContext,
     _build_game_env,
-    _find_emulator_bin,
     _load_effective_hippos_conf,
     _load_es_input_configs,
     _pick_es_profile,
     _run_game_command,
     configure_emulator,
+    _require_emulator_bin,
 )
 
 from HipposPaths import CACHE, CONFIGS, SAVES
@@ -169,9 +169,7 @@ def write_play_config(ctx: LaunchContext) -> None:
     ET.ElementTree(input_config).write(PLAY_INPUT_FILE, encoding='utf-8')
 
 def launch_play(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('play')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('play')
 
     write_play_config(ctx)
     conf = _load_effective_hippos_conf()

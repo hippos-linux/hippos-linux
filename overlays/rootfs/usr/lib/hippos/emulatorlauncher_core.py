@@ -29,6 +29,7 @@ from emulatorlauncher_shared import (
     _pick_es_profile,
     _run_game_command,
     generate_sdl_game_controller_config,
+    _require_emulator_bin,
 )
 
 from HipposPaths import BIOS, CONFIGS, EMULATORLAUNCHER_DATA_DIR, SAVES, SCREENSHOTS, USERDATA
@@ -128,9 +129,7 @@ def _mess_args(system: str, rom: Path) -> list[str] | None:
     return args
 
 def launch_mame(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('mame')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('mame')
 
     conf = _load_hippos_conf()
     _write_mame_config(conf)
@@ -245,9 +244,7 @@ def _write_dolphin_config(ctx: LaunchContext) -> None:
         _write_dolphin_wii_controller_configs(ctx, profiles)
 
 def launch_dolphin(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('dolphin-emu') or _find_emulator_bin('dolphin')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('dolphin-emu', 'dolphin')
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
     _write_dolphin_config(ctx)
     conf = _load_hippos_conf()

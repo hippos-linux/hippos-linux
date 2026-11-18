@@ -55,6 +55,16 @@ class ExitCodeTests(unittest.TestCase):
         self.assertEqual(self.run_main(launch), impl.EXIT_LAUNCH_FAILED)
         self.assertEqual(self.error_file.read_text(), "Launch failed: bad config value")
 
+    def test_missing_emulator_binary_names_the_package(self):
+        def launch(args):
+            with mock.patch.object(shared, '_find_emulator_bin', return_value=None):
+                shared._require_emulator_bin('catacombgl', 'CatacombGL')
+        self.assertEqual(self.run_main(launch), impl.EXIT_LAUNCH_FAILED)
+        self.assertEqual(
+            self.error_file.read_text(),
+            f"Emulator 'catacombgl' not installed. Expected binary in {shared.EMULATORS_ROOT}/catacombgl or system PATH",
+        )
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -6,10 +6,10 @@ from emulatorlauncher_shared import (
     LaunchContext,
     _build_game_env,
     _ensure_section,
-    _find_emulator_bin,
     _load_hippos_conf,
     _new_ini_parser,
     _run_game_command,
+    _require_emulator_bin,
 )
 
 from HipposPaths import CONFIGS, SAVES
@@ -17,9 +17,7 @@ from emulatorlauncher_registry import Emulator, register
 
 def launch_eduke32(ctx: LaunchContext) -> int:
     core = ctx.core or ctx.emulator
-    bin_path = _find_emulator_bin(core, ctx.emulator)
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin(core, ctx.emulator)
 
     cfg_dir = CONFIGS / core
     cfg_dir.mkdir(parents=True, exist_ok=True)
@@ -45,9 +43,7 @@ def launch_eduke32(ctx: LaunchContext) -> int:
     return _run_game_command(ctx, cmd, env).returncode
 
 def launch_theforceengine(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('theforceengine')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('theforceengine')
 
     cfg_dir = CONFIGS / 'theforceengine'
     cfg_dir.mkdir(parents=True, exist_ok=True)
@@ -78,9 +74,7 @@ def launch_theforceengine(ctx: LaunchContext) -> int:
     return _run_game_command(ctx, cmd, env).returncode
 
 def launch_tr2x(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('tr2x')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('tr2x')
 
     rom_dir = ctx.rom if ctx.rom.is_dir() else ctx.rom.parent
     rom_dir.mkdir(parents=True, exist_ok=True)
@@ -105,9 +99,7 @@ def launch_tr2x(ctx: LaunchContext) -> int:
     return _run_game_command(ctx, cmd, env, cwd=rom_dir).returncode
 
 def launch_sonic_mania(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('sonic-mania')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('sonic-mania')
 
     rom_dir = ctx.rom if ctx.rom.is_dir() else ctx.rom.parent
     rom_dir.mkdir(parents=True, exist_ok=True)
@@ -137,9 +129,7 @@ def launch_sonic_mania(ctx: LaunchContext) -> int:
 def launch_sonicretro(ctx: LaunchContext) -> int:
     rom_dir = ctx.rom if ctx.rom.is_dir() else ctx.rom.parent
     emu_name = 'soniccd' if rom_dir.name.lower().endswith('.scd') else 'sonic2013'
-    bin_path = _find_emulator_bin(emu_name)
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin(emu_name)
 
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
 
@@ -158,9 +148,7 @@ def launch_sonicretro(ctx: LaunchContext) -> int:
     return _run_game_command(ctx, cmd, env, cwd=rom_dir).returncode
 
 def launch_sonic3air(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('sonic3-air')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('sonic3-air')
 
     cfg_dir = CONFIGS / 'Sonic3AIR'
     cfg_dir.mkdir(parents=True, exist_ok=True)
@@ -184,9 +172,7 @@ def launch_sonic3air(ctx: LaunchContext) -> int:
     return _run_game_command(ctx, cmd, env).returncode
 
 def launch_catacombgl(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('catacombgl', 'CatacombGL')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('catacombgl', 'CatacombGL')
 
     cfg_dir = CONFIGS / 'CatacombGL'
     cfg_dir.mkdir(parents=True, exist_ok=True)
@@ -212,9 +198,7 @@ def launch_catacombgl(ctx: LaunchContext) -> int:
     return _run_game_command(ctx, cmd, env, cwd=ctx.rom.parent if ctx.rom.is_file() else ctx.rom).returncode
 
 def launch_fallout1_ce(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('fallout1-ce')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('fallout1-ce')
 
     rom_dir = ctx.rom if ctx.rom.is_dir() else ctx.rom.parent
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
@@ -234,9 +218,7 @@ def launch_fallout1_ce(ctx: LaunchContext) -> int:
     return _run_game_command(ctx, cmd, env, cwd=rom_dir).returncode
 
 def launch_fallout2_ce(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('fallout2-ce')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('fallout2-ce')
 
     rom_dir = ctx.rom if ctx.rom.is_dir() else ctx.rom.parent
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)

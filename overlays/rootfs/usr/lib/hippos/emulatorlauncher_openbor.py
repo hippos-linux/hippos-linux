@@ -11,12 +11,12 @@ from emulatorlauncher_shared import (
     LaunchContext,
     _build_game_env,
     _conf_value,
-    _find_emulator_bin_in_package,
     _load_es_input_configs,
     _load_hippos_conf,
     _pick_es_profile,
     _run_game_command,
     _write_unix_settings_file,
+    _require_emulator_bin_in_package,
 )
 
 from HipposPaths import CONFIGS, SAVES, USERDATA
@@ -139,9 +139,7 @@ def _write_openbor_config(ctx: LaunchContext) -> str:
 def launch_openbor(ctx: LaunchContext) -> int:
     core = _write_openbor_config(ctx)
     binary_name = OPENBOR_BINARIES.get(core, 'OpenBOR7530')
-    bin_path = _find_emulator_bin_in_package('openbor', binary_name, 'OpenBOR')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin_in_package('openbor', binary_name, 'OpenBOR')
 
     cmd = [str(bin_path), str(ctx.rom)]
     conf = _load_hippos_conf()

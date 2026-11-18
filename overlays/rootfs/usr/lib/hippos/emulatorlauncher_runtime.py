@@ -31,6 +31,7 @@ from emulatorlauncher_shared import (
     _sync_tree,
     _write_unix_settings_file,
     generate_sdl_game_controller_config,
+    _require_emulator_bin,
 )
 
 from emulatorlauncher_generic import _RA_AXIS_MAP, _RA_DPAD_MAP
@@ -119,9 +120,7 @@ def _write_amiberry_retroarch_config(ctx: LaunchContext) -> None:
         per_pad_cfg.write_text('\n'.join(pad_lines) + '\n', encoding='utf-8')
 
 def launch_amiberry(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('amiberry')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('amiberry')
     conf = _load_hippos_conf()
     rom_type = _amiberry_rom_type(ctx.rom)
 
@@ -227,9 +226,7 @@ def _solarus_key_val(binding, reverse: bool = False) -> str:
     return ''
 
 def launch_solarus(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('solarus-run', 'solarus')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('solarus-run', 'solarus')
     conf = _load_hippos_conf()
     config_dir = CONFIGS / 'solarus'
     config_dir.mkdir(parents=True, exist_ok=True)

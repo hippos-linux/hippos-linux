@@ -10,11 +10,11 @@ from emulatorlauncher_shared import (
     _build_game_env,
     _conf_value,
     _display_resolution_from_conf,
-    _find_emulator_bin,
     _load_effective_hippos_conf,
     _new_ini_parser,
     _run_game_command,
     generate_sdl_game_controller_config,
+    _require_emulator_bin,
 )
 
 from HipposPaths import CONFIGS
@@ -173,9 +173,7 @@ def write_vpinball_config(ctx: LaunchContext) -> None:
         parser.write(fh)
 
 def launch_vpinball(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('vpinball')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('vpinball')
 
     write_vpinball_config(ctx)
     conf = _load_effective_hippos_conf()

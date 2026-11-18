@@ -9,13 +9,13 @@ from emulatorlauncher_shared import (
     LaunchContext,
     _build_game_env,
     _display_resolution_from_conf,
-    _find_emulator_bin,
     _find_executable,
     _load_effective_hippos_conf,
     _read_toml,
     _run_game_command,
     _sync_tree,
     _write_toml,
+    _require_emulator_bin,
 )
 
 from HipposPaths import CACHE, CONFIGS, HOME, SAVES, USERDATA
@@ -167,9 +167,7 @@ def write_shadps4_config(ctx: LaunchContext) -> None:
     _write_toml(SHADPS4_TOML, config)
 
 def launch_shadps4(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('shadps4')
-    if bin_path is None:
-        return 1
+    bin_path = _require_emulator_bin('shadps4')
 
     write_shadps4_config(ctx)
     for user_dir in ('savedata', 'trophy', 'inputs'):

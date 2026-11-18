@@ -559,6 +559,24 @@ def _find_emulator_bin_in_package(package: str, *binary_names: str) -> Optional[
                 return candidate
     return None
 
+class EmulatorNotInstalled(Exception):
+    def __init__(self, package: str) -> None:
+        super().__init__(
+            f"Emulator '{package}' not installed. Expected binary in {EMULATORS_ROOT}/{package} or system PATH"
+        )
+
+def _require_emulator_bin(*names: str) -> Path:
+    bin_path = _find_emulator_bin(*names)
+    if bin_path is None:
+        raise EmulatorNotInstalled(names[0])
+    return bin_path
+
+def _require_emulator_bin_in_package(package: str, *binary_names: str) -> Path:
+    bin_path = _find_emulator_bin_in_package(package, *binary_names)
+    if bin_path is None:
+        raise EmulatorNotInstalled(package)
+    return bin_path
+
 HOTKEYS_BIN = Path('/usr/lib/hippos/hippos-hotkeys')
 
 @contextmanager
