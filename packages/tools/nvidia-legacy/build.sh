@@ -32,57 +32,6 @@ NVIDIA_LEGACY_TIERS=(
     "340:340.108:c671d4f1b7c09bc1af079b98b447adb06d704b04f802f7045a611fa50133b71b"
 )
 
-# Community-maintained kernel-compat patches, vendored under
-# build/patches/nvidia-legacy/<tier>/ — same role as the D0023R CRT kernel
-# patches (build/patches/kernel/${ARCH}/crt/), a different problem shape:
-# these are cumulative per-kernel-version fixes meant to all be applied in a
-# fixed order (not mutually exclusive per series), so every tier applies its
-# whole list unconditionally rather than picking a nearest-series match.
-# 470's list matches joanbm/nvidia-470xx-linux-mainline's own apply order
-# (reaches kernel 7.2); 390's matches the AUR nvidia-390xx-utils PKGBUILD's
-# prepare() order (reaches 7.0); 340's is archlinux-jerry/nvidia-340xx's
-# numbered series (only reaches 6.15 — the current AUR nvidia-340xx-utils
-# package ships no compat patches at all, 340.108 is the least maintained of
-# the three branches). 580 is pinned to 580.173.02, not the first 580.x
-# release — 580.126.09 fails to build against HippOS's kernel (7.1.8):
-# kernel/common/inc/nv-linux.h unconditionally includes <linux/of_gpio.h>,
-# which upstream dropped entirely, and nv-mmap.c's hand-rolled VMA locking
-# fallback (VMA_LOCK_OFFSET, __is_vma_write_locked) targets an older kernel
-# VMA-lock internal representation than 7.1.8 actually has — both confirmed
-# by attempting the build against HippOS's real kernel-headers package, not
-# assumed from changelog reading. Patching driver-side reimplementations of
-# kernel-internal locking is exactly the kind of fix to get from upstream
-# rather than hand-roll: got worse (not better) with more digging, since a
-# subtly-wrong VMA lock patch fails silently under load, not at compile
-# time. 580.173.02 has NVIDIA's own proper fix for both (conftest-guarded
-# <linux/of_gpio.h> with a real of_get_named_gpio() compat shim, and a
-# VM_REFCNT_EXCLUDE_READERS_FLAG-aware nv_is_vma_write_locked()) — verified
-# against HippOS's actual kernel headers, not just release-note reading.
-# 580's patch list was just the one generic LDFLAGS fix every tier here
-# could arguably use (upstream nvidia.ko/nvidia-modeset.ko Kbuild links
-# with bare $(LD) instead of $(LD) $(LDFLAGS), which only bites cross-arch
-# toolchains — harmless either way, kept for parity) until kernel 7.2's
-# strncpy removal broke both 580 and 390 against HippOS's `standard`
-# kernel (confirmed via a real 0.6.2 release build) — no upstream community
-# patch set exists yet for 580 (too new to be "legacy" in the community's
-# sense), and 390's own set stops at kernel 7.0. Both got a hand-ported
-# fix (kernel-7.2-strncpy-removal.patch in each tier's directory),
-# adapted line-for-line from 470's own already-vendored fix for the exact
-# same kernel commit against the same four files — see that patch's own
-# header comment. 390 also appeared to need a second, much bigger fix (the
-# DRM subsystem's own struct drm_atomic_state -> drm_atomic_commit
-# rename) — a hand-ported version of that was tried and built clean in
-# isolated testing, but reproducibly failed to apply inside the actual
-# builder container on two separate full release builds, and — the
-# important part — 390 built successfully on both kernels in both of
-# those same runs regardless of that patch never applying. Evidence says
-# it isn't actually needed against HippOS's real target kernels; removed
-# rather than shipped as a patch that reliably logs a scary warning and
-# does nothing. Patch paths are
-# "a/kernel/..." for 390/340/580 (apply from the extracted driver's top
-# dir) but bare "a/conftest.sh" etc for 470 (apply from its
-# kernel/ subdir) — an artifact of how each upstream generated its diffs,
-# not something to normalize away.
 nvidia_legacy_patch_order() {
     case "$1" in
         580)
@@ -108,8 +57,12 @@ nvidia_legacy_patch_order() {
                 nvidia-470xx-fix-linux-7.2-part1.patch \
                 nvidia-470xx-fix-linux-7.2-part2.patch \
                 nvidia-470xx-fix-linux-7.2-part3.patch \
+                nvidia-470xx-fix-linux-7.3.patch \
+                nvidia-470xx-fix-linux-7.4.patch \
+                nvidia-470xx-fix-clang.patch \
                 disable-objtool-override.patch \
-                enable-drm-modeset-by-default.patch
+                enable-drm-modeset-by-default.patch \
+                nvidia-470xx-fix-linux-6.15-followup.patch
             ;;
         390)
             printf '%s\n' \
@@ -131,7 +84,8 @@ nvidia_legacy_patch_order() {
                 kernel-6.19.patch \
                 kernel-6.18-nv_workqueue_flush.patch \
                 kernel-7.0.patch \
-                kernel-7.2-strncpy-removal.patch
+                kernel-7.2.patch \
+                kernel-7.3.patch
             ;;
         340)
             # Numbered 0001-0019, filename sort is the correct apply order.
