@@ -44,8 +44,6 @@ def _parse_desktop(path: Path) -> tuple[str | None, bool]:
 
 
 def _appimage_metadata(appimage: Path) -> tuple[str, bool]:
-    """Return (display name, is_game). Tries to read from embedded .desktop file."""
-    # Try 7z (fast, no full extraction)
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             subprocess.run(
@@ -59,7 +57,6 @@ def _appimage_metadata(appimage: Path) -> tuple[str, bool]:
     except (OSError, subprocess.TimeoutExpired):
         pass
 
-    # Try selective --appimage-extract (slower)
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             subprocess.run(
@@ -123,7 +120,6 @@ def sync() -> int:
     created = removed = 0
     dirty_dirs: set[Path] = set()
 
-    # Remove launchers for AppImages that are gone
     for key, launcher_str in old_state.items():
         if key not in appimages:
             launcher = Path(launcher_str)
@@ -131,7 +127,6 @@ def sync() -> int:
             dirty_dirs.add(launcher.parent)
             removed += 1
 
-    # Create launchers for new AppImages; carry forward existing ones
     for key, appimage in appimages.items():
         if key in old_state:
             new_state[key] = old_state[key]
@@ -147,7 +142,6 @@ def sync() -> int:
 
     _write_state(new_state)
 
-    # Prune stale gamelist entries in any dir we touched
     for d in dirty_dirs:
         update_gamelist(d, LAUNCHER_EXTENSION, {})
 

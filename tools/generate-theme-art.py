@@ -99,7 +99,6 @@ WORLDS = {
     "auto-favorites": World("2e2004", "d8a81e", "fff6cc", "ffd23f", "ice", True),
     "auto-lastplayed": World("140a3a", "7b3fff", "dcd0ff", "9b6bff", "bands", True),
     "auto-allgames": World("06183f", "1a6fff", "cfe0ff", "4d8dff", "continents", True),
-    # Windows Arcade Loader systems
     "adrenaline": World("2e0505", "c82020", "ffd8d8", "ff4040", "craters"),
     "alls":       World("041830", "1050c8", "d0e0ff", "2878f0", "ice"),
     "apm3":       World("1a0530", "9820c0", "f0d0ff", "c040e8", "bands"),
@@ -452,7 +451,6 @@ LOGOS = {
         lines=(LogoLine("Sora-SemiBold.ttf", "LINUX", 20, 0.32), LogoLine("Sora-ExtraBold.ttf", "Games", 50)),
         line_gap=13,
     ),
-    # Windows Arcade Loader systems — shared joystick icon
     **{system: Logo(
         icon=(
             "M38 12A12 12 0 1 0 62 12A12 12 0 1 0 38 12Z",  # ball
