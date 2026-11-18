@@ -162,6 +162,18 @@ for es_log in /userdata/system/configs/emulationstation/es_log*.txt; do
     [[ -f "${es_log}" ]] && install -m 0644 "${es_log}" "${OUT_DIR}/$(basename "${es_log}")" || true
 done
 
+# CONTROLLER_CONFIGS: controller mappings copied into the bundle under controller-configs/<path>; add an emulator's generated mapping file here.
+CONTROLLER_CONFIGS=(
+    /userdata/system/configs/emulationstation/es_input.cfg
+    /tmp/es_input_players.cfg
+    /userdata/system/configs/dolphin-emu/GCPadNew.ini
+    /userdata/system/configs/dolphin-emu/WiimoteNew.ini
+    /userdata/.config/cemu/controllerProfiles/*.xml
+)
+for controller_config in "${CONTROLLER_CONFIGS[@]}"; do
+    [[ -f "${controller_config}" ]] && install -D -m 0644 "${controller_config}" "${OUT_DIR}/controller-configs${controller_config}" || true
+done
+
 capture_shell "emulator-packages.txt" \
     'ls -la /userdata/emulators; echo; echo "retroarch cores: $(find /userdata/emulators/retroarch/cores -name "*.so" 2>/dev/null | wc -l)"'
 
