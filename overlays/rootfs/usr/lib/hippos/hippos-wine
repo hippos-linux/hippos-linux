@@ -10,6 +10,8 @@ GAMEEXT="${GAMENAME##*.}"
 WINE_BOTTLE_DIR="/userdata/wine-bottles/${SYSTEM}"
 WINE_RUNNERS_DIR="/userdata/system/wine-runners"
 WINE_BASE="/opt/wine-builds"
+UMU_DATA="${XDG_DATA_HOME:-${HOME}/.local/share}"
+ES_API="http://127.0.0.1:1234"
 SECONDS=0
 
 init_wine() {
@@ -38,7 +40,6 @@ init_wine() {
             WINE="${runner_dir}/bin/wine"
             WINE64="${runner_dir}/bin/wine64"
             WINESERVER="${runner_dir}/bin/wineserver"
-            MSIEXEC="${runner_dir}/bin/msiexec"
             USE_UMU=0
             export LD_LIBRARY_PATH="${runner_dir}/lib:${runner_dir}/lib32${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
             export WINEDLLPATH="${runner_dir}/lib/wine/i386-windows:${runner_dir}/lib/wine/x86_64-windows"
@@ -107,6 +108,26 @@ wait_wineserver() {
     timeout "${1:-30}" tail -q --pid="${pid}" -f /dev/null 2>/dev/null || true
 }
 
+umu_ready() {
+    compgen -G "${UMU_DATA}/umu/steamrt*" >/dev/null \
+        && compgen -G "${UMU_DATA}/Steam/compatibilitytools.d/UMU-Proton*" >/dev/null
+}
+
+wine_cmd() {
+    local prefix="$1"
+    shift
+    if [[ "${USE_UMU:-0}" == "1" ]]; then
+        if ! umu_ready; then
+            curl -sf -X POST -H 'Content-Type: text/plain' \
+                --data "Downloading the Windows game runtime for its first use. This can take several minutes." \
+                "${ES_API}/notify" >/dev/null 2>&1 || true
+        fi
+        GAMEID=0 WINEPREFIX="${prefix}" umu-run "$@"
+    else
+        WINEPREFIX="${prefix}" "${WINE}" "$@"
+    fi
+}
+
 stop_wine() {
     [[ -z "${WINESERVER:-}" || -z "${WINEPOINT:-}" ]] && return
     WINEPREFIX="${WINEPOINT}" "${WINESERVER}" -k 2>/dev/null || true
@@ -118,12 +139,13 @@ create_bottle() {
     local prefix="$1"
     [[ -d "${prefix}" ]] && return 0
     mkdir -p "${prefix}" || return 1
+    [[ "${USE_UMU:-0}" == "1" ]] && return 0
     export WINEDLLOVERRIDES="winegstreamer="
     WINEPREFIX="${prefix}" "${WINE}" hostname &>/dev/null || { rm -rf "${prefix}"; return 1; }
 }
 
 sandboxing() {
-    local prefix="$1"
+    local prefix="$1" dir
     local user="ark"
     [[ -d "${prefix}/drive_c/users/steamuser" ]] && user="steamuser"
     for dir in Downloads Documents "My Documents" Music "My Music" Pictures "My Pictures" Videos "My Videos"; do
@@ -148,15 +170,12 @@ get_wine_var() {
 
 do_launch() {
     local prefix="$1" game="$2"
-    if [[ "${USE_UMU:-0}" == "1" ]]; then
-        GAMEID=0 WINEPREFIX="${prefix}" umu-run "${game}"
-    elif [[ -n "${WINE_VIRTUAL_DESKTOP:-}" ]]; then
-        WINEPREFIX="${prefix}" "${WINE}" explorer "/desktop=hippos,${WINE_VIRTUAL_DESKTOP}" "${game}"
-        wait_wineserver
+    if [[ -n "${WINE_VIRTUAL_DESKTOP:-}" ]]; then
+        wine_cmd "${prefix}" explorer "/desktop=hippos,${WINE_VIRTUAL_DESKTOP}" "${game}"
     else
-        WINEPREFIX="${prefix}" "${WINE}" "${game}"
-        wait_wineserver
+        wine_cmd "${prefix}" "${game}"
     fi
+    wait_wineserver
 }
 
 play_exe() {
@@ -173,12 +192,8 @@ play_wine() {
     dir="$(get_wine_var "${GAMENAME}" "DIR" "")"
     env="$(get_wine_var "${GAMENAME}" "ENV" "")"
     sandboxing "${WINEPOINT}"
-    if [[ "${USE_UMU:-0}" == "1" ]]; then
-        (cd "${GAMENAME}/${dir}" && GAMEID=0 WINEPREFIX="${GAMENAME}" eval "${env}" umu-run ${cmd})
-    else
-        (cd "${GAMENAME}/${dir}" && WINEPREFIX="${GAMENAME}" eval "${env}" "${WINE}" ${cmd})
-        wait_wineserver
-    fi
+    (cd "${GAMENAME}/${dir}" && eval "${env}" wine_cmd '"${WINEPOINT}"' ${cmd})
+    wait_wineserver
 }
 
 play_pc() {
@@ -189,20 +204,16 @@ play_pc() {
     env="$(get_wine_var "${GAMENAME}" "ENV" "")"
     create_bottle "${WINEPOINT}" || return 1
     sandboxing "${WINEPOINT}"
-    if [[ "${USE_UMU:-0}" == "1" ]]; then
-        (cd "${GAMENAME}/${dir}" && GAMEID=0 WINEPREFIX="${WINEPOINT}" eval "${env}" umu-run ${cmd})
-    else
-        (cd "${GAMENAME}/${dir}" && WINEPREFIX="${WINEPOINT}" eval "${env}" "${WINE}" ${cmd})
-        wait_wineserver
-    fi
+    (cd "${GAMENAME}/${dir}" && eval "${env}" wine_cmd '"${WINEPOINT}"' ${cmd})
+    wait_wineserver
 }
 
 install_exe_msi() {
     local ext="$1"
     WINEPOINT="${WINE_BOTTLE_DIR}/${RUNNER}/$(date +%y%m%d-%H%M%S)_${ROMGAMENAME%.*}.wine"
     create_bottle "${WINEPOINT}" || return 1
-    [[ "${ext}" == "exe" ]] && WINEPREFIX="${WINEPOINT}" "${WINE}" "${GAMENAME}"
-    [[ "${ext}" == "msi" ]] && WINEPREFIX="${WINEPOINT}" "${MSIEXEC}" -i "${GAMENAME}"
+    [[ "${ext}" == "exe" ]] && wine_cmd "${WINEPOINT}" "${GAMENAME}"
+    [[ "${ext}" == "msi" ]] && wine_cmd "${WINEPOINT}" msiexec -i "${GAMENAME}"
     wait_wineserver
 }
 
@@ -216,7 +227,7 @@ install_iso() {
     create_bottle "${WINEPOINT}"
     mkdir -p "${WINEPOINT}/dosdevices"
     ln -sf "${mnt}" "${WINEPOINT}/dosdevices/d:"
-    WINEPREFIX="${WINEPOINT}" "${WINE}" explorer "d:"
+    wine_cmd "${WINEPOINT}" explorer "d:"
     rm -f "${WINEPOINT}/dosdevices/d:"
     wait_wineserver
     umount "${mnt}" && rmdir "${mnt}" || true
@@ -237,7 +248,8 @@ case "${ACTION}" in
             wine)  play_wine ;;
             pc)    play_pc ;;
             msi)   WINEPOINT="${WINE_BOTTLE_DIR}/${RUNNER}/${ROMGAMENAME}.wine"
-                   WINEPREFIX="${WINEPOINT}" "${MSIEXEC}" -i "${GAMENAME}"
+                   create_bottle "${WINEPOINT}" || exit 1
+                   wine_cmd "${WINEPOINT}" msiexec -i "${GAMENAME}"
                    wait_wineserver ;;
             *)     printf '[hippos-wine] unknown extension: %s\n' "${GAMEEXT}" >&2; exit 1 ;;
         esac
