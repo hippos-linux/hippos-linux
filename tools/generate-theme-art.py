@@ -91,6 +91,8 @@ WORLDS = {
     "androidapps": World("0a2a16", "2fb860", "d8f7d0", "4fe080", "continents"),
     "scummvm": World("062a22", "1ea888", "c8f7e8", "30e0b8", "continents"),
     "quiver": World("04192e", "1a8fd8", "c8eeff", "2fc0ff", "ice"),
+    "xcloud": World("041c08", "1a8a24", "d2f2c8", "3fe04a", "ice", True),
+    "luna": World("170834", "7a3fe0", "e4d6ff", "a46cff", "craters"),
     "linuxapps": World("0a1630", "3f5fd8", "d8e2ff", "6f8fff", "ice", True),
     "desktopshortcuts": World("0a1c2e", "3f7fb8", "d8e8f7", "5fa8f0", "continents", True),
     "linuxgames": World("261804", "d89a14", "fff0c0", "ffc21e", "bands"),
