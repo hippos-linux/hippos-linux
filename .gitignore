@@ -9,6 +9,7 @@ tmp/
 # Not yet public
 build/
 /build.sh
+/setup.sh
 /scripts/
 
 # Rootfs/images
@@ -75,3 +76,5 @@ r2-secret-key.txt
 dev-token.txt
 keys/*.txt
 .asura_index.json
+
+/docs/emulator-testing-checklist.md
