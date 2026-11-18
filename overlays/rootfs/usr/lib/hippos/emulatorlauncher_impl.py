@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import os
 import re
@@ -11,7 +12,8 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Optional
+from contextlib import AsyncExitStack, asynccontextmanager
+from typing import AsyncIterator, Optional
 
 try:
     import hippos_switchres as _switchres
@@ -43,6 +45,7 @@ from emulatorlauncher_shared import (
     launch_step,
 )
 from emulatorlauncher_power import game_power_settings
+from emulatorlauncher_async import Parallel, in_thread, timed
 
 LINDBERGH_BUNDLE_DIR = Path('/opt/emulators/linuxloader')
 
@@ -491,52 +494,66 @@ def _launch(args: argparse.Namespace) -> int:
         _log.error("No launcher registered for emulator '%s'", ctx.emulator)
         return EXIT_UNKNOWN_EMULATOR
 
-    with launch_step('controllers'):
-        profiles = _load_es_input_configs()
-        start_controller_monitor(ctx, profiles)
+    return asyncio.run(_prepare_and_run(ctx, conf, emulator))
 
-    with launch_step('video mode'):
-        game_output, original_mode = _switch_video_mode(conf, ctx.system)
-        raw_res = subprocess.run(
-            ['hippos-resolution', '--screen', game_output, 'currentResolution'],
-            capture_output=True, text=True, check=False,
-        ).stdout.strip()
-    if m := re.match(r'(\d+)x(\d+)', raw_res):
-        ctx.resolution = (int(m.group(1)), int(m.group(2)))
-        _log.info("videomode: game resolution %dx%d", ctx.resolution[0], ctx.resolution[1])
+async def _prepare_and_run(ctx: LaunchContext, conf: dict[str, str], emulator: Emulator) -> int:
+    async with AsyncExitStack() as stack:
+        stack.callback(_start_save_sync)
+        *_, rom = await stack.enter_async_context(Parallel(
+            timed('controllers', _controllers(ctx)),
+            timed('display', _display(conf, ctx)),
+            timed('hud', _hud(conf, ctx)),
+            timed('power', in_thread(game_power_settings(conf, ctx.system, ctx.rom))),
+            timed('rom', _prepared_rom(ctx, emulator)),
+        ))
+        ctx.rom = rom
+        return await asyncio.to_thread(emulator.launch, ctx)
 
-    with launch_step('bezel'):
-        _prepare_ctx_bezel(ctx, conf)
-    with launch_step('hud'):
-        _build_hud_config(conf, ctx)
+@asynccontextmanager
+async def _controllers(ctx: LaunchContext) -> AsyncIterator[None]:
+    profiles = await asyncio.to_thread(_load_es_input_configs)
+    start_controller_monitor(ctx, profiles)
+    yield
 
+@asynccontextmanager
+async def _display(conf: dict[str, str], ctx: LaunchContext) -> AsyncIterator[None]:
+    game_output, original_mode = await asyncio.to_thread(_switch_video_mode, conf, ctx.system)
     try:
-        power_started = time.perf_counter()
-        with game_power_settings(conf, ctx.system, ctx.rom):
-            _log.info("launch: power %.2fs", time.perf_counter() - power_started)
-            return _run_with_squashfs(ctx, emulator)
-    finally:
-        _restore_video_mode(game_output, original_mode, conf)
-        subprocess.run(
-            ['systemctl', 'start', '--no-block', 'hippos-save-sync.service'],
-            check=False, capture_output=True,
+        resolution = await asyncio.to_thread(
+            subprocess.run, ['hippos-resolution', '--screen', game_output, 'currentResolution'],
+            capture_output=True, text=True, check=False,
         )
+        if m := re.match(r'(\d+)x(\d+)', resolution.stdout.strip()):
+            ctx.resolution = (int(m.group(1)), int(m.group(2)))
+            _log.info("videomode: game resolution %dx%d", ctx.resolution[0], ctx.resolution[1])
+        with launch_step('bezel'):
+            await asyncio.to_thread(_prepare_ctx_bezel, ctx, conf)
+        yield
+    finally:
+        await asyncio.to_thread(_restore_video_mode, game_output, original_mode, conf)
 
-def _run_with_squashfs(ctx: LaunchContext, emulator: Emulator) -> int:
+@asynccontextmanager
+async def _hud(conf: dict[str, str], ctx: LaunchContext) -> AsyncIterator[None]:
+    await asyncio.to_thread(_build_hud_config, conf, ctx)
+    yield
+
+@asynccontextmanager
+async def _prepared_rom(ctx: LaunchContext, emulator: Emulator) -> AsyncIterator[Path]:
     if ctx.rom.suffix != '.squashfs':
-        return emulator.launch(ctx)
-
-    mount_started = time.perf_counter()
-    with mount_squashfs(ctx.rom) as squash_root:
-        _log.info("launch: squashfs mount %.2fs", time.perf_counter() - mount_started)
+        yield ctx.rom
+        return
+    async with in_thread(mount_squashfs(ctx.rom)) as squash_root:
         if emulator.writes_to_rom:
-            saves_root = SAVES_RW / ctx.system / ctx.rom.stem
-            with mount_overlayfs(squash_root, saves_root) as overlay:
-                ctx.rom = overlay
-                return emulator.launch(ctx)
+            async with in_thread(mount_overlayfs(squash_root, SAVES_RW / ctx.system / ctx.rom.stem)) as overlay:
+                yield overlay
         else:
-            ctx.rom = squash_root
-            return emulator.launch(ctx)
+            yield squash_root
+
+def _start_save_sync() -> None:
+    subprocess.run(
+        ['systemctl', 'start', '--no-block', 'hippos-save-sync.service'],
+        check=False, capture_output=True,
+    )
 
 if __name__ == '__main__':
     sys.exit(main())
