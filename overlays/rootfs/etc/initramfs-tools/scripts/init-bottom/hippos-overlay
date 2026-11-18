@@ -180,6 +180,11 @@ if [ -n "${STALE}" ]; then
         cp "${UPPER}/var/lib/apt/extended_states" "${UPPER}/var/lib/hippos/pre-update-apt-extended-states"
     remove_package_files
     move_shadowing_files
+    if [ -d "${BTRFS_MNT}/@userdata/system/backups/overlay-${DEPLOYMENT}" ]; then
+        mkdir -p "${UPPER}/var/lib/hippos"
+        printf '%s\n' "${DEPLOYMENT}" > "${UPPER}/var/lib/hippos/overlay-backup-pending"
+        kmsg "overlay backup pending notification written for ${DEPLOYMENT}"
+    fi
     rm -rf "${UPPER}/var/lib/dpkg" "${UPPER}/var/lib/apt" "${UPPER}/var/cache/apt" \
            "${UPPER}/etc/ld.so.cache" "${UPPER}/etc/alternatives"
     : > "${UPPER}/var/lib/hippos/apt-restore-pending"

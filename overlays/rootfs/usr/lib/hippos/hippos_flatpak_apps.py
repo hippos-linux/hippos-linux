@@ -9,6 +9,7 @@ from pathlib import Path
 FLATHUB_URL = 'https://dl.flathub.org/repo/flathub.flatpakrepo'
 SESSION_USER = 'hippos'
 CLAIMS = Path('/userdata/system/linux-apps-flatpak-claims')
+GAME_CLAIMS = Path('/userdata/system/linux-games-flatpak-claims')
 APP_ID = re.compile(r'^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+){2,}$')
 
 
@@ -21,32 +22,46 @@ def valid_app_id(app_id: str) -> bool:
     return APP_ID.match(app_id) is not None
 
 
-def claimed_apps() -> set[str]:
+def _read_claims(claims: Path) -> set[str]:
     try:
-        return set(CLAIMS.read_text(encoding='utf-8').split())
+        return set(claims.read_text(encoding='utf-8').split())
     except FileNotFoundError:
         return set()
 
 
-def _set_claimed(app_id: str, claimed: bool) -> None:
-    current = claimed_apps()
+def claimed_apps() -> set[str]:
+    return _read_claims(CLAIMS)
+
+
+def claimed_games() -> set[str]:
+    return _read_claims(GAME_CLAIMS)
+
+
+def _claims_for(game: bool) -> Path:
+    return GAME_CLAIMS if game else CLAIMS
+
+
+def _set_claimed(app_id: str, claimed: bool, game: bool = False) -> None:
+    claims = _claims_for(game)
+    current = _read_claims(claims)
     updated = current | {app_id} if claimed else current - {app_id}
     if updated != current:
-        CLAIMS.write_text(''.join(f'{app}\n' for app in sorted(updated)), encoding='utf-8')
+        claims.write_text(''.join(f'{app}\n' for app in sorted(updated)), encoding='utf-8')
 
 
 def installed(app_id: str) -> bool:
     return subprocess.run(_flatpak('info', '--user', app_id), capture_output=True).returncode == 0
 
 
-def install(app_id: str) -> int:
+def install(app_id: str, game: bool = False) -> int:
     if not valid_app_id(app_id):
         return 1
-    _set_claimed(app_id, True)
+    _set_claimed(app_id, False, not game)
+    _set_claimed(app_id, True, game)
     subprocess.run(_flatpak('remote-add', '--user', '--if-not-exists', 'flathub', FLATHUB_URL))
     result = subprocess.run(_flatpak('install', '--user', '--noninteractive', '--assumeyes', 'flathub', app_id)).returncode
     if result != 0 and not installed(app_id):
-        _set_claimed(app_id, False)
+        _set_claimed(app_id, False, game)
     return result
 
 
@@ -56,4 +71,5 @@ def remove(app_id: str) -> int:
     result = subprocess.run(_flatpak('uninstall', '--user', '--noninteractive', '--assumeyes', app_id)).returncode
     if not installed(app_id):
         _set_claimed(app_id, False)
+        _set_claimed(app_id, False, True)
     return result

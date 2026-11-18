@@ -1,0 +1,11 @@
+[Unit]
+Description=Notify user of system files backed up during OTA update
+After=greetd.service userdata.mount
+Wants=userdata.mount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/hippos/hippos-overlay-backup-notify
+
+[Install]
+WantedBy=multi-user.target

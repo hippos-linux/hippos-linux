@@ -58,8 +58,8 @@ _Generated from installed emulators and RetroArch cores in artifacts/_
 - [ ] mame / mess *(default)*
 
 ## Apple II
-- [ ] applewin / applewin
-- [ ] gsplus / gsplus *(default)*
+- [ ] applewin / applewin *(default)*
+- [ ] gsplus / gsplus
 - [ ] mame / mess
 
 ## Apple IIGS
@@ -169,8 +169,8 @@ _Generated from installed emulators and RetroArch cores in artifacts/_
 
 ## ColecoVision
 - [ ] clk / clk
-- [ ] libretro / bluemsx *(default)*
-- [ ] libretro / gearcoleco
+- [ ] libretro / bluemsx
+- [ ] libretro / gearcoleco *(default)*
 - [ ] libretro / jollycv
 - [ ] openmsx / openmsx
 
@@ -223,8 +223,8 @@ _Generated from installed emulators and RetroArch cores in artifacts/_
 - [ ] mame / mess *(default)*
 
 ## Enterprise
-- [ ] clk / clk *(default)*
-- [ ] libretro / ep128emu_core
+- [ ] clk / clk
+- [ ] libretro / ep128emu_core *(default)*
 - [ ] mame / mess
 
 ## Final Burn Neo
@@ -570,8 +570,8 @@ _Generated from installed emulators and RetroArch cores in artifacts/_
 - [ ] vice / xpet *(default)*
 
 ## Sega Pico
-- [ ] libretro / genesis_plus_gx *(default)*
-- [ ] libretro / picodrive
+- [ ] libretro / genesis_plus_gx
+- [ ] libretro / picodrive *(default)*
 
 ## Pico-8
 - [ ] libretro / retro8
@@ -886,7 +886,8 @@ _Generated from installed emulators and RetroArch cores in artifacts/_
 - [ ] libretro / pocketcdg *(default)*
 
 ## Java ME
-- [ ] libretro / squirreljme *(default)*
+- [ ] libretro / squirreljme
+- [ ] libretro / freej2me_plus *(default)*
 
 ## Tamagotchi
 - [ ] libretro / tamalibretro *(default)*

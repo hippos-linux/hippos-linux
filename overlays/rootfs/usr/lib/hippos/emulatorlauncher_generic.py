@@ -22,6 +22,7 @@ from emulatorlauncher_shared import (
     _ra_btn_map_for_ctx,
     _ra_type_suffix,
     _run_game_command,
+    _dos_folder_program,
 )
 
 from libretro_cores import core_file_names
@@ -60,7 +61,8 @@ def launch_libretro(ctx: LaunchContext) -> int:
     if ra_game_cfg is not None:
         cmd += ['--appendconfig', str(ra_game_cfg)]
     if ctx.rom.suffix != LAUNCH_FILE_SUFFIX:
-        cmd.append(str(ctx.rom))
+        program = _dos_folder_program(ctx.rom) if ctx.core.startswith('dosbox') and ctx.rom.is_dir() else None
+        cmd.append(str(program or ctx.rom))
     _log.info("Launching: %s", ' '.join(cmd))
 
     env = _build_game_env(conf, ctx)

@@ -836,7 +836,8 @@ systems = {
                     { "md5": "", "file": "bios/squirreljme.jar" },
                     { "md5": "", "file": "bios/squirreljme-fast.jar" },
                     { "md5": "", "file": "bios/squirreljme-0.3.0.jar" },
-                    { "md5": "", "file": "bios/squirreljme-0.3.0-fast.jar" } ] },
+                    { "md5": "", "file": "bios/squirreljme-0.3.0-fast.jar" },
+                    { "md5": "", "file": "bios/freej2me_plus-lr.jar" } ] },
 
     "nuon": { "name": "NUON", "biosFiles": [
                     { "md5": "", "file": "bios/nuance/bios.cof" },

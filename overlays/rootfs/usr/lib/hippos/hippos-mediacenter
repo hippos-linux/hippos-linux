@@ -22,7 +22,7 @@ sys.path.insert(0, '/usr/lib/hippos')
 import hippos_flatpak_apps  # noqa: E402
 
 SETTING = 'mediacenter.app'
-LINUX_APPS = Path('/userdata/roms/webapps')
+LINUX_APPS = Path('/userdata/roms/linuxapps')
 ARCH = platform.machine()
 PROGRESS = re.compile(r'(\d+)%')
 

@@ -1,29 +1,10 @@
 <div align="center">
+  <img src="https://raw.githubusercontent.com/hippos-linux/hippos-linux/main/overlays/rootfs/usr/share/icons/hicolor/128x128/apps/distributor-logo.png" width="200" alt="HippOS" /><br>
   <h1>HippOS</h1>
   <p><strong>A gaming OS that boots straight into your library.</strong></p>
 </div>
 
 <div align="center">
-  <a href="https://www.star-history.com/?repos=hippos-linux%2Fhippos-linux&type=date"><picture><source
-    media="(prefers-color-scheme: dark)"
-    srcset="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=rank&theme=dark"
-  /><source
-    media="(prefers-color-scheme: light)"
-    srcset="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=rank"
-  /><img
-    alt="Star History Rank"
-    src="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=rank"
-  /></picture></a>
-  <a href="https://www.star-history.com/?repos=hippos-linux%2Fhippos-linux&type=date"><picture><source
-    media="(prefers-color-scheme: dark)"
-    srcset="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=trending&theme=dark"
-  /><source
-    media="(prefers-color-scheme: light)"
-    srcset="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=trending"
-  /><img
-    alt="GitHub Trending"
-    src="https://api.star-history.com/badge?repo=hippos-linux/hippos-linux&type=trending"
-  /></picture></a><br><br>
   <a href="https://hippos-linux.org"><img src="https://img.shields.io/badge/download-hippos--linux.org-blue?style=for-the-badge" alt="Download" /></a>
   <a href="https://github.com/hippos-linux/hippos-linux/stargazers"><img src="https://img.shields.io/github/stars/hippos-linux/hippos-linux?style=for-the-badge&logo=github" alt="Stars" /></a>
   <a href="https://github.com/hippos-linux/hippos-linux/commits/main"><img src="https://img.shields.io/github/last-commit/hippos-linux/hippos-linux?style=for-the-badge&logo=github" alt="Last commit" /></a>
@@ -38,7 +19,7 @@ HippOS is a Debian-based gaming OS for x86 PCs and Raspberry Pi 4/5. Power it on
 
 It ships 85+ emulators built from source, covering 280+ systems — from Atari 2600 to PS4, arcade cabinets to Windows PC arcade hardware — all navigated with a controller from the couch.
 
-Visit **[hippos-linux.org](https://hippos-linux.org)** for downloads and release notes.
+Visit **[hippos-linux.org](https://hippos-linux.org)** for downloads and release notes, and **[wiki.hippos-linux.org](https://wiki.hippos-linux.org)** for documentation.
 
 ---
 
@@ -123,7 +104,7 @@ Install **Kodi, Jellyfin, Emby Theater, or Plex HTPC** directly from the main me
 | Multi-system | RetroArch (100+ cores), MAME |
 | PlayStation | DuckStation, PCSX2, RPCS3, shadPS4 |
 | Nintendo | Dolphin, Ryujinx, Cemu, melonDS, mupen64plus, NanoBoyAdvance |
-| Xbox | xemu (+ Chihiro), Xenia, Xenia Canary |
+| Xbox | xemu (+ Chihiro), Xenia, Xenia Canary, Xenia Edge |
 | Sega | Flycast, Redream, Supermodel, Model 2 Emulator |
 | Windows Arcade PC | WindowsArcadeLoader — TypeX, RingEdge, RingEdge 2, Nesica, Nesica 2, Lindbergh, Namco ES3, Konami, Wahlap, Raw Thrills, Global VR, Sega NU, Sega Shell, Adrenaline, ALLS, APM3, Europar, Tsunami, UNIS |
 | Computers | VICE, openMSX, FS-UAE, Hatari, BasiliskII, GSplus, AppleWin, SAM Coupé |
@@ -131,7 +112,7 @@ Install **Kodi, Jellyfin, Emby Theater, or Plex HTPC** directly from the main me
 | Other | ScummVM, BigPEmu, xroar, x16emu, EasyRPG, IKEMEN GO, TIC-80, Quiver, vpinball, and more |
 
 > [!NOTE]
-> Many emulators require BIOS files placed in `/userdata/bios/`. Refer to the documentation on [hippos-linux.org](https://hippos-linux.org) for per-system BIOS requirements.
+> Many emulators require BIOS files placed in `/userdata/bios/`. Refer to the [wiki](https://wiki.hippos-linux.org) for per-system BIOS requirements.
 
 ---
 
@@ -149,7 +130,8 @@ Install **Kodi, Jellyfin, Emby Theater, or Plex HTPC** directly from the main me
 ## ❓ Support
 
 - **Bug reports and feature requests**: [GitHub Issues](https://github.com/hippos-linux/hippos-linux/issues)
-- **Downloads and documentation**: [hippos-linux.org](https://hippos-linux.org)
+- **Downloads**: [hippos-linux.org](https://hippos-linux.org)
+- **Documentation**: [wiki.hippos-linux.org](https://wiki.hippos-linux.org)
 
 ---
 

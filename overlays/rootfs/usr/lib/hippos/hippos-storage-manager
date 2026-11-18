@@ -1188,9 +1188,10 @@ def network_merge_requests() -> list[tuple[str, str]]:
         if len(fields) < 4:
             continue
         ident, kind, uri, name = fields[:4]
-        if kind != "likely" or uri in sources or is_ignored_device(uri):
+        if kind != "games" or uri in sources or is_ignored_device(uri):
             continue
-        requests.append((uri, f"REQUEST_NETWORK_MERGE:{ident}:{sanitize_event_field(name)}:{uri}"))
+        counts = fields[5].split(",") if len(fields) > 5 and fields[5] else ["", "", ""]
+        requests.append((uri, f"REQUEST_NETWORK_MERGE:{ident}:{sanitize_event_field(name)}:{':'.join(counts)}:{uri}"))
     return requests
 
 def pending_merge_requests() -> list[tuple[str, str]]:

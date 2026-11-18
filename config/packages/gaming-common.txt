@@ -1,5 +1,8 @@
 # Gaming and controller-focused layer
 
+# Java runtime for the FreeJ2ME-Plus Java ME core
+default-jre-headless
+
 # Android emulation via Waydroid
 waydroid
 aapt

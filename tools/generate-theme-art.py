@@ -91,14 +91,33 @@ WORLDS = {
     "androidapps": World("0a2a16", "2fb860", "d8f7d0", "4fe080", "continents"),
     "scummvm": World("062a22", "1ea888", "c8f7e8", "30e0b8", "continents"),
     "quiver": World("04192e", "1a8fd8", "c8eeff", "2fc0ff", "ice"),
-    "webapps": World("0a1630", "3f5fd8", "d8e2ff", "6f8fff", "ice", True),
+    "linuxapps": World("0a1630", "3f5fd8", "d8e2ff", "6f8fff", "ice", True),
     "desktopshortcuts": World("0a1c2e", "3f7fb8", "d8e8f7", "5fa8f0", "continents", True),
-    "linux": World("261804", "d89a14", "fff0c0", "ffc21e", "bands"),
+    "linuxgames": World("261804", "d89a14", "fff0c0", "ffc21e", "bands"),
     "ports": World("2e1006", "c8501e", "ffd8c0", "ff7030", "craters"),
     "prboom": World("2a0505", "b8201e", "f2b8a0", "f03a28", "craters"),
     "auto-favorites": World("2e2004", "d8a81e", "fff6cc", "ffd23f", "ice", True),
     "auto-lastplayed": World("140a3a", "7b3fff", "dcd0ff", "9b6bff", "bands", True),
     "auto-allgames": World("06183f", "1a6fff", "cfe0ff", "4d8dff", "continents", True),
+    "adrenaline": World("2e0505", "c82020", "ffd8d8", "ff4040", "craters"),
+    "alls":       World("041830", "1050c8", "d0e0ff", "2878f0", "ice"),
+    "apm3":       World("1a0530", "9820c0", "f0d0ff", "c040e8", "bands"),
+    "arcadepc":   World("081028", "2050a0", "ccd8f0", "3870d0", "continents"),
+    "europar":    World("0a1430", "1a4cc0", "d8e4ff", "2060e0", "continents"),
+    "globalvr":   World("041a10", "189050", "c8f0d8", "30b870", "continents"),
+    "konami":     World("1e0408", "900818", "ffd8dc", "b0101e", "craters"),
+    "namcoes3":   World("1e1800", "c09000", "fff8cc", "f0c000", "bands"),
+    "nesica":     World("2a1000", "c06010", "ffe8c0", "e08020", "bands"),
+    "nesica2":    World("1e0c00", "a04808", "ffe0b0", "c86020", "bands"),
+    "rawthrills": World("0a1a04", "3a9018", "d8f0c0", "60b830", "craters"),
+    "ringedge":   World("041824", "0888b8", "c8eeff", "18b0e0", "ice"),
+    "ringedge2":  World("041c28", "0898c8", "d0f4ff", "20c8f8", "ice"),
+    "seganu":     World("040c20", "1038a0", "c8d4f0", "1850c8", "continents"),
+    "segashell":  World("081828", "1860b0", "cce0f8", "2888d8", "ice"),
+    "tsunami":    World("030f20", "0858a0", "c0e0f8", "1080d0", "continents"),
+    "typex":      World("1a0430", "8018a8", "f0c8ff", "a030d0", "craters"),
+    "unis":       World("101818", "206060", "c0e8e8", "30a0a0", "ice"),
+    "wahlap":     World("251000", "b04808", "ffd8b0", "d86010", "bands"),
 }
 
 FALLBACK_WORLDS = [
@@ -370,7 +389,7 @@ LOGOS = {
         lines=(LogoLine("Sora-ExtraBold.ttf", "QUIVER", 50, 0.08), LogoLine("Sora-SemiBold.ttf", "LAUNCHER", 20, 0.42)),
         line_gap=14,
     ),
-    "webapps": Logo(
+    "linuxapps": Logo(
         icon=(
             "M50 2A48 48 0 1 1 50 98A48 48 0 1 1 50 2Z" "M50 9A41 41 0 1 0 50 91A41 41 0 1 0 50 9Z",
             "M50 2A23 48 0 1 1 50 98A23 48 0 1 1 50 2Z" "M50 9A16 41 0 1 0 50 91A16 41 0 1 0 50 9Z",
@@ -417,7 +436,7 @@ LOGOS = {
         lines=(LogoLine("Sora-SemiBold.ttf", "APPS", 20, 0.32), LogoLine("Sora-ExtraBold.ttf", "Flatpak", 50)),
         line_gap=13,
     ),
-    "linux": Logo(
+    "linuxgames": Logo(
         icon=(
             "M50 2C31 2 24 19 24 37C24 50 13 62 13 77C13 92 30 98 50 98C70 98 87 92 87 77C87 62 76 50 76 37C76 19 69 2 50 2Z"
             "M50 44C37 44 31 58 31 73C31 86 40 92 50 92C60 92 69 86 69 73C69 58 63 44 50 44Z"
@@ -432,6 +451,39 @@ LOGOS = {
         lines=(LogoLine("Sora-SemiBold.ttf", "LINUX", 20, 0.32), LogoLine("Sora-ExtraBold.ttf", "Games", 50)),
         line_gap=13,
     ),
+    **{system: Logo(
+        icon=(
+            "M38 12A12 12 0 1 0 62 12A12 12 0 1 0 38 12Z",  # ball
+            "M44 24H56V58H44Z",                              # shaft
+            "M8 58H92A6 6 0 0 1 98 64V94A6 6 0 0 1 92 100H8A6 6 0 0 1 2 94V64A6 6 0 0 1 8 58Z",  # base
+            "M14 79A8 8 0 1 0 30 79A8 8 0 1 0 14 79Z",      # button 1
+            "M42 73A8 8 0 1 0 58 73A8 8 0 1 0 42 73Z",      # button 2
+            "M66 73A8 8 0 1 0 82 73A8 8 0 1 0 66 73Z",      # button 3
+            "M78 83A7 7 0 1 0 92 83A7 7 0 1 0 78 83Z",      # button 4
+        ),
+        lines=lines,
+        line_gap=12,
+    ) for system, lines in {
+        "adrenaline": (LogoLine("Sora-SemiBold.ttf", "ARCADE",    18, 0.08), LogoLine("Sora-ExtraBold.ttf", "Adrenaline",  48)),
+        "alls":       (LogoLine("Sora-SemiBold.ttf", "SEGA",      18, 0.08), LogoLine("Sora-ExtraBold.ttf", "P-ras MULTI", 48)),
+        "apm3":       (LogoLine("Sora-SemiBold.ttf", "ANDAMIRO",  18, 0.08), LogoLine("Sora-ExtraBold.ttf", "PM3",         48)),
+        "arcadepc":   (LogoLine("Sora-SemiBold.ttf", "WINDOWS",   18, 0.08), LogoLine("Sora-ExtraBold.ttf", "Arcade PC",   48)),
+        "europar":    (LogoLine("Sora-SemiBold.ttf", "ARCADE",    18, 0.08), LogoLine("Sora-ExtraBold.ttf", "EuroPAR",     48)),
+        "globalvr":   (LogoLine("Sora-SemiBold.ttf", "GLOBAL",    18, 0.08), LogoLine("Sora-ExtraBold.ttf", "VR",          48)),
+        "konami":     (LogoLine("Sora-SemiBold.ttf", "KONAMI",    18, 0.08), LogoLine("Sora-ExtraBold.ttf", "Arcade PC",   48)),
+        "namcoes3":   (LogoLine("Sora-SemiBold.ttf", "NAMCO",     18, 0.08), LogoLine("Sora-ExtraBold.ttf", "System ES3",  48)),
+        "nesica":     (LogoLine("Sora-SemiBold.ttf", "TAITO",     18, 0.08), LogoLine("Sora-ExtraBold.ttf", "NESiCA",      48)),
+        "nesica2":    (LogoLine("Sora-SemiBold.ttf", "TAITO",     18, 0.08), LogoLine("Sora-ExtraBold.ttf", "NESiCA 2",    48)),
+        "rawthrills": (LogoLine("Sora-SemiBold.ttf", "RAW",       18, 0.08), LogoLine("Sora-ExtraBold.ttf", "Thrills",     48)),
+        "ringedge":   (LogoLine("Sora-SemiBold.ttf", "SEGA",      18, 0.08), LogoLine("Sora-ExtraBold.ttf", "RingEdge",    48)),
+        "ringedge2":  (LogoLine("Sora-SemiBold.ttf", "SEGA",      18, 0.08), LogoLine("Sora-ExtraBold.ttf", "RingEdge 2",  48)),
+        "seganu":     (LogoLine("Sora-SemiBold.ttf", "SEGA",      18, 0.08), LogoLine("Sora-ExtraBold.ttf", "Nu",          48)),
+        "segashell":  (LogoLine("Sora-SemiBold.ttf", "SEGA",      18, 0.08), LogoLine("Sora-ExtraBold.ttf", "Shell",       48)),
+        "tsunami":    (LogoLine("Sora-SemiBold.ttf", "TSUNAMI",   18, 0.08), LogoLine("Sora-ExtraBold.ttf", "Visual Tech", 48)),
+        "typex":      (LogoLine("Sora-SemiBold.ttf", "TAITO",     18, 0.08), LogoLine("Sora-ExtraBold.ttf", "Type X",      48)),
+        "unis":       (LogoLine("Sora-SemiBold.ttf", "UNIS",      18, 0.08), LogoLine("Sora-ExtraBold.ttf", "Technology",  48)),
+        "wahlap":     (LogoLine("Sora-SemiBold.ttf", "WAHLAP",    18, 0.08), LogoLine("Sora-ExtraBold.ttf", "Arcade",      48)),
+    }.items()},
     "mrboom": Logo(
         icon=(
             "M42 30A35 35 0 1 1 42 100A35 35 0 1 1 42 30Z"
@@ -495,8 +547,9 @@ def logo_svg(fonts: Path, logo: Logo) -> str:
 
 def render_chrome(theme_dir: Path) -> None:
     assets = theme_dir / "assets"
+    fonts = assets / "fonts" if (assets / "fonts").is_dir() else assets
     for system, logo in LOGOS.items():
-        (theme_dir / "art" / f"{system}.svg").write_text(logo_svg(assets / "fonts", logo))
+        (theme_dir / "art" / f"{system}.svg").write_text(logo_svg(fonts, logo))
     Image.new("RGBA", (4, 4), (255, 255, 255, 255)).save(assets / "white.png")
 
     size, radius = 96, 26

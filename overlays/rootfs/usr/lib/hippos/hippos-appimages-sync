@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import configparser
+import json
+import os
+import re
+import shlex
+import subprocess
+import tempfile
+from pathlib import Path
+
+from hippos_launcher_sync import GameMetadata, reload_es, update_gamelist
+from hippos_linux_games import LAUNCHER_EXTENSION, LINUX_APPS_DIR, LINUX_GAMES_DIR, write_launcher
+
+USERDATA      = Path('/userdata')
+APPIMAGES_DIR = USERDATA / 'roms' / 'appimages'
+STATE_FILE    = USERDATA / 'system' / 'appimages-launchers.json'
+MARKER        = 'hippos-appimages'
+
+
+def log(msg: str) -> None:
+    print(f'[hippos-appimages-sync] {msg}', flush=True)
+
+
+def _name_from_path(path: Path) -> str:
+    stem = path.stem
+    stem = re.sub(r'[-_][vV]?[0-9]+(\.[0-9]+)+.*$', '', stem)
+    stem = re.sub(r'[-_](x86.64|x86_64|aarch64|arm64|arm|linux)$', '', stem, flags=re.IGNORECASE)
+    return stem.replace('_', ' ').replace('-', ' ').strip() or path.stem
+
+
+def _parse_desktop(path: Path) -> tuple[str | None, bool]:
+    try:
+        cp = configparser.RawConfigParser()
+        cp.read(path, encoding='utf-8')
+        name    = cp.get('Desktop Entry', 'Name', fallback=None) or None
+        cats    = cp.get('Desktop Entry', 'Categories', fallback='')
+        is_game = 'game' in cats.lower()
+        return name, is_game
+    except Exception:
+        return None, False
+
+
+def _appimage_metadata(appimage: Path) -> tuple[str, bool]:
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            subprocess.run(
+                ['7z', 'e', f'-o{tmpdir}', '-y', str(appimage), '*.desktop'],
+                capture_output=True, timeout=30,
+            )
+            for desktop in sorted(Path(tmpdir).glob('*.desktop')):
+                name, is_game = _parse_desktop(desktop)
+                if name:
+                    return name, is_game
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            subprocess.run(
+                [str(appimage), '--appimage-extract', '*.desktop'],
+                capture_output=True, timeout=60, cwd=tmpdir,
+            )
+            for desktop in sorted((Path(tmpdir) / 'squashfs-root').glob('*.desktop')):
+                name, is_game = _parse_desktop(desktop)
+                if name:
+                    return name, is_game
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+    return _name_from_path(appimage), False
+
+
+def _launcher_dir(is_game: bool) -> Path:
+    return LINUX_GAMES_DIR if is_game else LINUX_APPS_DIR
+
+
+def _make_launcher_path(name: str, is_game: bool) -> Path:
+    slug = re.sub(r'[^A-Za-z0-9._ -]', '', name).strip().replace(' ', '_') or 'app'
+    return _launcher_dir(is_game) / f'{slug}{LAUNCHER_EXTENSION}'
+
+
+def _read_state() -> dict[str, str]:
+    try:
+        data = json.loads(STATE_FILE.read_text(encoding='utf-8'))
+        return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _write_state(state: dict[str, str]) -> None:
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = STATE_FILE.with_suffix('.json.tmp')
+    tmp.write_text(json.dumps(state, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+    tmp.replace(STATE_FILE)
+    try:
+        os.chown(STATE_FILE, 1000, 100)
+    except OSError:
+        pass
+
+
+def sync() -> int:
+    APPIMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chown(APPIMAGES_DIR, 1000, 100)
+    except OSError:
+        pass
+
+    appimages = {
+        str(p): p
+        for p in sorted(
+            list(APPIMAGES_DIR.glob('*.AppImage')) + list(APPIMAGES_DIR.glob('*.appimage'))
+        )
+    }
+
+    old_state = _read_state()
+    new_state: dict[str, str] = {}
+    created = removed = 0
+    dirty_dirs: set[Path] = set()
+
+    for key, launcher_str in old_state.items():
+        if key not in appimages:
+            launcher = Path(launcher_str)
+            launcher.unlink(missing_ok=True)
+            dirty_dirs.add(launcher.parent)
+            removed += 1
+
+    for key, appimage in appimages.items():
+        if key in old_state:
+            new_state[key] = old_state[key]
+            continue
+
+        name, is_game = _appimage_metadata(appimage)
+        launcher = _make_launcher_path(name, is_game)
+        write_launcher(launcher, name, shlex.quote(str(appimage)), MARKER)
+        update_gamelist(_launcher_dir(is_game), LAUNCHER_EXTENSION, {launcher: GameMetadata(name)})
+        new_state[key] = str(launcher)
+        dirty_dirs.add(launcher.parent)
+        created += 1
+
+    _write_state(new_state)
+
+    for d in dirty_dirs:
+        update_gamelist(d, LAUNCHER_EXTENSION, {})
+
+    log(f'found={len(appimages)} created={created} removed={removed}')
+    if created or removed:
+        reload_es()
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(sync())

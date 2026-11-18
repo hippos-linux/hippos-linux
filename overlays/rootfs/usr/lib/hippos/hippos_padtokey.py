@@ -22,7 +22,7 @@ MAPS_FILE   = Path('/run/hippos/padtokey.json')
 LAUNCH_FILE = Path('/run/hippos/padtokey-launch.json')
 POINTER_MAP = SYSTEM_MAPS / 'controller-as-mouse.keys'
 HOTKEYS_BIN = Path('/usr/lib/hippos/hippos-hotkeys')
-NATIVE_LINUX_APPS = ('webapps', ('.flatpak', '.sh'))
+NATIVE_LINUX_APPS = ('linuxapps', ('.flatpak', '.sh'))
 
 DEFAULT_MOUSE_LEVEL = 5
 MOUSE_SPEED_AT_DEFAULT_LEVEL = 8.0
