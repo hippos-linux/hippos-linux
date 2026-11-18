@@ -4,7 +4,7 @@ set -euo pipefail
 source "/work/build/common.sh"
 
 NAME='sm2-emu'
-REPO='https://github.com/dmanlfc/sm2-emu.git'
+REPO='https://github.com/Keisho-Emu/Keisho.git'
 TAG="${SM2EMU_TAG:-$(github_latest_tag "${REPO}")}"
 
 REPO_ROOT="${REPO_ROOT:-/work}"
@@ -28,6 +28,9 @@ GL_OPTS=(-DSM2_BUILD_OPENGL_DESKTOP=ON)
 if [[ "${ARCH}" == "arm64" ]]; then
     GL_OPTS=(-DSM2_BUILD_OPENGL_DESKTOP=OFF -DSM2_BUILD_OPENGL_ES=ON)
 fi
+if [[ "${CROSS_BUILD}" -eq 1 ]]; then
+    unset CC CXX
+fi
 
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
@@ -43,11 +46,7 @@ cmake -S "${SRC}" -B "${BUILD}" \
 cmake --build "${BUILD}" -j"$(nproc)"
 cmake --install "${BUILD}"
 
-if [[ ! -x "${STAGING}/bin/sm2-emu" ]]; then
-    found="$(find "${BUILD}" "${STAGING}" -maxdepth 4 -name 'sm2-emu' -type f -perm /111 -print -quit 2>/dev/null || true)"
-    [[ -n "${found}" ]] && cp "${found}" "${STAGING}/bin/sm2-emu"
-fi
-[[ -x "${STAGING}/bin/sm2-emu" ]] || die "sm2-emu binary was not produced"
+[[ -x "${STAGING}/bin/keisho" ]] || die "keisho binary was not produced"
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"

@@ -25,7 +25,7 @@ from emulatorlauncher_shared import (
     generate_sdl_game_controller_config,
 )
 
-from HipposPaths import BIOS, CACHE, CONFIGS, SAVES, SCREENSHOTS
+from HipposPaths import BIOS, CACHE, CONFIGS, SAVES, SCREENSHOTS, USERDATA
 
 from emulatorlauncher_shared import (
     _conf_value,
@@ -517,11 +517,28 @@ def launch_nanoboyadvance(ctx: LaunchContext) -> int:
     env['QT_QPA_PLATFORM'] = 'xcb'
     return _run_game_command(ctx, 'nanoboyadvance', [str(bin_path), str(ctx.rom)], env).returncode
 
+KEISHO_RENAMED_DIRS = (
+    (USERDATA / '.config' / 'sm2-emu', USERDATA / '.config' / 'keisho'),
+    (USERDATA / '.local' / 'share' / 'sm2-emu', USERDATA / '.local' / 'share' / 'keisho'),
+)
+
+def _move_sm2emu_dirs_to_keisho() -> None:
+    for old, new in KEISHO_RENAMED_DIRS:
+        if old.is_dir() and not new.exists():
+            old.rename(new)
+            _log.info("sm2-emu: moved %s to %s", old, new)
+    old_ini = USERDATA / '.config' / 'keisho' / 'sm2-emu.ini'
+    new_ini = old_ini.with_name('keisho.ini')
+    if old_ini.is_file() and not new_ini.exists():
+        old_ini.rename(new_ini)
+
 def launch_sm2emu(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('sm2-emu')
     if bin_path is None:
         _log.error("sm2-emu: binary not found")
         return 1
+    if bin_path.name == 'keisho':
+        _move_sm2emu_dirs_to_keisho()
 
     conf = _load_effective_hippos_conf()
     env = _build_game_env(conf, ctx)
