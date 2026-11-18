@@ -50,6 +50,26 @@ ES_PLAYERS_INPUT = Path('/tmp/es_input_players.cfg')
 
 _log = logging.getLogger('emulatorlauncher')
 
+LAUNCHER_STARTED = time.perf_counter()
+
+
+@dataclass
+class LaunchClock:
+    game_started: Optional[float] = None
+    game_ended: Optional[float] = None
+
+
+launch_clock = LaunchClock()
+
+
+@contextmanager
+def launch_step(name: str):
+    started = time.perf_counter()
+    try:
+        yield
+    finally:
+        _log.info("launch: %s %.2fs", name, time.perf_counter() - started)
+
 @dataclass
 class ControllerInfo:
     player:      int
@@ -769,6 +789,7 @@ def _run_game_command(
     env: dict[str, str],
     cwd: Optional[Path] = None,
 ) -> subprocess.CompletedProcess[str]:
+    setup_started = time.perf_counter()
     conf = _load_hippos_conf()
     cmd = _gamescope_wrap(cmd, conf, ctx)
     emulator = lookup(ctx.emulator)
@@ -782,7 +803,12 @@ def _run_game_command(
                     keyboard = _game_or_system_setting(conf, ctx.system, ctx.rom, 'onscreen_keyboard') == '1'
                     with padtokey_context(ctx.system, ctx.emulator, ctx.rom, ctx.controllers, profiles), \
                             onscreen_keyboard(env) if keyboard else nullcontext():
+                        launch_clock.game_started = time.perf_counter()
+                        _log.info("launch: game setup %.2fs, game starts %.2fs after launcher start",
+                                  launch_clock.game_started - setup_started, launch_clock.game_started - LAUNCHER_STARTED)
                         result = subprocess.run(cmd, env=env, text=True, cwd=str(cwd) if cwd is not None else None)
+                        launch_clock.game_ended = time.perf_counter()
+                        _log.info("launch: game ran %.1fs", launch_clock.game_ended - launch_clock.game_started)
                         if result.returncode == -signal.SIGTERM:
                             result.returncode = 0
                         return result

@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
@@ -37,10 +38,17 @@ from emulatorlauncher_shared import (
     _load_hippos_conf,
     _load_yaml_defaults,
     _log,
+    LAUNCHER_STARTED,
+    launch_clock,
+    launch_step,
 )
 from emulatorlauncher_power import game_power_settings
 
 LINDBERGH_BUNDLE_DIR = Path('/opt/emulators/linuxloader')
+
+LAUNCH_ERROR_FILE = Path('/tmp/launch_error.log')
+EXIT_UNKNOWN_EMULATOR = 203
+EXIT_LAUNCH_FAILED = 250
 
 logging.basicConfig(
     level=logging.INFO,
@@ -404,8 +412,33 @@ def _build_controllers(args: argparse.Namespace) -> list[ControllerInfo]:
         ))
     return controllers
 
+class _LastError(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__(logging.ERROR)
+        self.message = ''
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.message = record.getMessage()
+
+
 def main() -> int:
-    args = _build_parser().parse_args()
+    _log.info("launch: imports %.2fs", time.perf_counter() - LAUNCHER_STARTED)
+    last_error = _LastError()
+    logging.getLogger().addHandler(last_error)
+    try:
+        code = _launch(_build_parser().parse_args())
+    except Exception as exc:
+        _log.exception("Launch failed: %s", exc)
+        code = 1
+    if code != 0 and launch_clock.game_started is None and not 200 <= code <= 300:
+        LAUNCH_ERROR_FILE.write_text(last_error.message or 'The game could not be started.', encoding='utf-8')
+        code = EXIT_LAUNCH_FAILED
+    if launch_clock.game_ended is not None:
+        _log.info("launch: teardown %.2fs", time.perf_counter() - launch_clock.game_ended)
+    return code
+
+
+def _launch(args: argparse.Namespace) -> int:
 
     emulator, core = resolve_emulator_core(args.system, args.emulator, args.core, args.rom)
     controllers    = _build_controllers(args)
@@ -431,8 +464,9 @@ def main() -> int:
     _log.info("system=%s emulator=%s core=%s controllers=%d",
               ctx.system, ctx.emulator, ctx.core, len(ctx.controllers))
 
-    conf = _load_hippos_conf()
-    _apply_yaml_options(conf, ctx.system)
+    with launch_step('settings'):
+        conf = _load_hippos_conf()
+        _apply_yaml_options(conf, ctx.system)
     if not _conf_bool(conf, 'global.use_guns', True):
         ctx.lightgun = False
     if not _conf_bool(conf, 'global.use_wheels', True):
@@ -455,25 +489,31 @@ def main() -> int:
     emulator = lookup(ctx.emulator)
     if emulator is None:
         _log.error("No launcher registered for emulator '%s'", ctx.emulator)
-        return 1
+        return EXIT_UNKNOWN_EMULATOR
 
-    profiles = _load_es_input_configs()
-    start_controller_monitor(ctx, profiles)
+    with launch_step('controllers'):
+        profiles = _load_es_input_configs()
+        start_controller_monitor(ctx, profiles)
 
-    game_output, original_mode = _switch_video_mode(conf, ctx.system)
-    raw_res = subprocess.run(
-        ['hippos-resolution', '--screen', game_output, 'currentResolution'],
-        capture_output=True, text=True, check=False,
-    ).stdout.strip()
+    with launch_step('video mode'):
+        game_output, original_mode = _switch_video_mode(conf, ctx.system)
+        raw_res = subprocess.run(
+            ['hippos-resolution', '--screen', game_output, 'currentResolution'],
+            capture_output=True, text=True, check=False,
+        ).stdout.strip()
     if m := re.match(r'(\d+)x(\d+)', raw_res):
         ctx.resolution = (int(m.group(1)), int(m.group(2)))
         _log.info("videomode: game resolution %dx%d", ctx.resolution[0], ctx.resolution[1])
 
-    _prepare_ctx_bezel(ctx, conf)
-    _build_hud_config(conf, ctx)
+    with launch_step('bezel'):
+        _prepare_ctx_bezel(ctx, conf)
+    with launch_step('hud'):
+        _build_hud_config(conf, ctx)
 
     try:
+        power_started = time.perf_counter()
         with game_power_settings(conf, ctx.system, ctx.rom):
+            _log.info("launch: power %.2fs", time.perf_counter() - power_started)
             return _run_with_squashfs(ctx, emulator)
     finally:
         _restore_video_mode(game_output, original_mode, conf)
@@ -486,7 +526,9 @@ def _run_with_squashfs(ctx: LaunchContext, emulator: Emulator) -> int:
     if ctx.rom.suffix != '.squashfs':
         return emulator.launch(ctx)
 
+    mount_started = time.perf_counter()
     with mount_squashfs(ctx.rom) as squash_root:
+        _log.info("launch: squashfs mount %.2fs", time.perf_counter() - mount_started)
         if emulator.writes_to_rom:
             saves_root = SAVES_RW / ctx.system / ctx.rom.stem
             with mount_overlayfs(squash_root, saves_root) as overlay:
