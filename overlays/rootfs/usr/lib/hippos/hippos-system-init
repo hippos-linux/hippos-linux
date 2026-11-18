@@ -65,13 +65,25 @@ if [[ -n "${WIFI_COUNTRY}" ]]; then
     iw reg set "${WIFI_COUNTRY}" 2>/dev/null || true
 fi
 
+wifi_profile_saved() {
+    local name type
+    while IFS=: read -r name type; do
+        [[ "${type}" == "802-11-wireless" ]] || continue
+        [[ "$(nmcli -g 802-11-wireless.ssid connection show "${name}" 2>/dev/null)" == "${WIFI_SSID}" ]] && return 0
+    done < <(nmcli -t -f NAME,TYPE connection show 2>/dev/null)
+    return 1
+}
+
 if [[ ("${WIFI_ENABLED}" == "true" || "${WIFI_ENABLED}" == "1") && -n "${WIFI_SSID}" ]]; then
-    log "wifi: connecting to '${WIFI_SSID}'"
     nmcli radio wifi on 2>/dev/null || true
-    if [[ -n "${WIFI_KEY}" ]]; then
+    if wifi_profile_saved; then
+        log "wifi: '${WIFI_SSID}' saved, NetworkManager connects it"
+    elif [[ -n "${WIFI_KEY}" ]]; then
+        log "wifi: connecting to '${WIFI_SSID}'"
         nmcli dev wifi connect "${WIFI_SSID}" password "${WIFI_KEY}" 2>/dev/null \
             || nmcli connection up "${WIFI_SSID}" 2>/dev/null || true
     else
+        log "wifi: connecting to '${WIFI_SSID}'"
         nmcli dev wifi connect "${WIFI_SSID}" 2>/dev/null \
             || nmcli connection up "${WIFI_SSID}" 2>/dev/null || true
     fi

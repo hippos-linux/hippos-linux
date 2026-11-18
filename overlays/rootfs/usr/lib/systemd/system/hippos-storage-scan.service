@@ -9,5 +9,3 @@ Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
 
-[Install]
-WantedBy=multi-user.target

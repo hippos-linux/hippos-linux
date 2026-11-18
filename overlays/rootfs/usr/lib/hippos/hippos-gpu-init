@@ -109,13 +109,8 @@ nvidia_load_and_probe() {
     modprobe nvidia-modeset 2>>"${LOG}" || true
     modprobe nvidia-drm     2>>"${LOG}" || true
     modprobe nvidia-uvm     2>>"${LOG}" || true
-    udevadm settle --timeout=10 2>>"${LOG}" || true
-    local _i
-    for _i in $(seq 1 80); do
-        [[ -c /dev/nvidia0 ]] && return 0
-        sleep 0.25
-    done
-    return 1
+    nvidia-modprobe -c 0 -m 2>>"${LOG}" || true
+    [[ -c /dev/nvidia0 ]]
 }
 
 nvidia_use_proprietary() {
@@ -180,7 +175,7 @@ nvidia_init() {
             nvidia_switch_tier "" ""
             nvidia_load_and_probe \
                 && log "NVIDIA device nodes ready" \
-                || log "WARNING: /dev/nvidia0 not found after 10s — Xorg may retry"
+                || log "WARNING: /dev/nvidia0 not created — NVIDIA driver did not attach"
             ;;
         580|legacy580|470|legacy470|390|340)
             local tier="${mode#legacy}"
@@ -190,7 +185,7 @@ nvidia_init() {
             if nvidia_switch_tier "${tier}" "${version}"; then
                 nvidia_load_and_probe \
                     && log "NVIDIA device nodes ready (legacy ${tier})" \
-                    || log "WARNING: /dev/nvidia0 not found after 10s — Xorg may retry"
+                    || log "WARNING: /dev/nvidia0 not created — NVIDIA driver did not attach"
             else
                 log "Legacy tier ${tier} unavailable — falling back to nouveau"
                 nvidia_use_nouveau
