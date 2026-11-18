@@ -1,0 +1,8 @@
+{
+  "name": "windowsarcadeloader",
+  "keys": {
+    "exit": "pkill -TERM -x arcade-launcher",
+    "coin": "KEY_5",
+    "screenshot": "KEY_F12"
+  }
+}

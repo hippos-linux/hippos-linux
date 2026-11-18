@@ -350,7 +350,7 @@ adam:
   release: 1983
 adrenaline:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Adrenaline Amusements
@@ -359,7 +359,7 @@ adrenaline:
   release: 2010
 alls:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Sega
@@ -514,7 +514,7 @@ apple2gs:
   release: 1986
 apm3:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Andamiro
@@ -523,7 +523,7 @@ apm3:
   release: 2010
 arcadepc:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Various
@@ -1069,7 +1069,7 @@ enterprise:
   release: 1985
 europar:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Various
@@ -1258,7 +1258,7 @@ gbc:
   release: 1998
 globalvr:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Global VR
@@ -1340,7 +1340,7 @@ jaguarcd:
   theme: atarijaguarcd
 konami:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Konami
@@ -1702,7 +1702,7 @@ naomi2:
   release: 2000
 namcoes3:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Bandai Namco
@@ -1711,7 +1711,7 @@ namcoes3:
   release: 2010
 nesica:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Taito
@@ -1720,7 +1720,7 @@ nesica:
   release: 2010
 nesica2:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Taito
@@ -2029,7 +2029,7 @@ pyxel:
   release: 2021
 rawthrills:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Raw Thrills
@@ -2038,7 +2038,7 @@ rawthrills:
   release: 2004
 ringedge:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Sega
@@ -2047,7 +2047,7 @@ ringedge:
   release: 2009
 ringedge2:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Sega
@@ -2127,7 +2127,7 @@ segaai:
   release: 1986
 seganu:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Sega
@@ -2136,7 +2136,7 @@ seganu:
   release: 2013
 segashell:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Sega
@@ -2314,7 +2314,7 @@ trs80:
   release: 1977
 tsunami:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Tsunami Visual Technologies
@@ -2352,7 +2352,7 @@ tvgames:
   release: 2002
 typex:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Taito
@@ -2361,7 +2361,7 @@ typex:
   release: 2004
 unis:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: UNIS Technology
@@ -2449,7 +2449,7 @@ vsmile:
   release: 2005
 wahlap:
   extensions:
-  - exe
+  - windowsloader
   - squashfs
   hardware: arcade
   manufacturer: Wahlap

@@ -91,6 +91,7 @@ STANDALONE_BINARIES: dict[str, tuple[str, ...]] = {
     'tic80': ('tic80',),
     'vita3k': ('Vita3K', 'vita3k'),
     'vpinball': ('VPinballX_GL', 'VPinballX', 'vpinball'),
+    'windowsarcadeloader': ('arcade-launcher',),
     'scummvm': ('scummvm',),
     'stella': ('stella',),
     'vice': ('x64', 'x64sc', 'xscpu64', 'xvic', 'x128', 'x64dtv', 'xplus4', 'xpet'),

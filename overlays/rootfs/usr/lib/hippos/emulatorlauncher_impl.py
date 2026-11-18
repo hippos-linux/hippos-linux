@@ -385,6 +385,7 @@ from emulatorlauncher_openbor import launch_openbor as _launch_openbor
 from emulatorlauncher_shadps4 import launch_shadps4 as _launch_shadps4
 from emulatorlauncher_supermodel import launch_supermodel as _launch_supermodel
 from emulatorlauncher_vpinball import launch_vpinball as _launch_vpinball
+from emulatorlauncher_windowsarcadeloader import launch_windowsarcadeloader as _launch_windowsarcadeloader
 from emulatorlauncher_drastic import launch_drastic as _launch_drastic
 from emulatorlauncher_xemu import launch_xemu as _launch_xemu
 from emulatorlauncher_xemu import launch_xemu_chihiro as _launch_xemu_chihiro
@@ -436,6 +437,7 @@ WRITES_TO_ROM: frozenset[str] = frozenset({
     'pygame',
     'pyxel',
     'thextech',
+    'windowsarcadeloader',
 })
 
 GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
@@ -539,6 +541,7 @@ GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
     'vkquake2':    _launch_standalone,
     'vkquake3':    _launch_standalone,
     'wine':        _launch_wine,
+    'windowsarcadeloader': _launch_windowsarcadeloader,
     'x16emu':      _launch_x16emu,
     'xash3d_fwgs': _launch_standalone,
     'xroar':       launch_xroar,

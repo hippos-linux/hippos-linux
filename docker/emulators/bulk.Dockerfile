@@ -321,7 +321,10 @@ RUN if [ "${TARGETARCH}" = "amd64" ]; then \
         apt-get update \
         && apt-get install -y --no-install-recommends \
             gcc-multilib \
+            gcc-mingw-w64 \
             libc6-dev-i386 \
+            mono-devel \
+            mono-mcs \
         && rm -rf /var/lib/apt/lists/*; \
     fi
 
@@ -342,9 +345,13 @@ RUN curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Step 7: Rust via rustup ───────────────────────────────────────────────────
-RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.88.0
+RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.100.0
 
 ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN if [ "${TARGETARCH}" = "amd64" ]; then \
+        /root/.cargo/bin/rustup target add i686-pc-windows-gnu x86_64-pc-windows-gnu; \
+    fi
 
 # For arm64: add the aarch64 cross-compilation target and configure the linker.
 RUN if [ "${TARGETARCH}" = "arm64" ]; then \

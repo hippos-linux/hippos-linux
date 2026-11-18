@@ -19,3 +19,7 @@ mesa-vulkan-drivers:i386
 
 # Steam (repo.steampowered.com configured in configure-rootfs.sh)
 steam-launcher
+
+# Windows Arcade Loader
+cabextract
+winetricks
