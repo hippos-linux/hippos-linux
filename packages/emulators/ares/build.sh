@@ -31,7 +31,6 @@ cmake -S "${SRC}" -B "${BUILD}" \
 
 cmake --build "${BUILD}" -j"$(nproc)"
 
-# Binary lands in build/rundir/bin/ares after cmake build
 ARES_BIN="$(find "${BUILD}" -maxdepth 5 -name 'ares' -type f -perm /111 | head -1)"
 [[ -n "${ARES_BIN}" ]] || die "ares binary not found after build"
 log "Binary: ${ARES_BIN}"
@@ -40,7 +39,6 @@ mkdir -p "${STAGING}/lib"
 cp -a /usr/lib/${GNU_ARCH}/libao.so.4* "${STAGING}/lib/"
 patchelf --set-rpath '$ORIGIN/../lib' "${STAGING}/bin/ares" 2>/dev/null || true
 
-# ares looks for its data next to the binary and can't load a game without Database.
 ARES_DATA="${BUILD}/rundir/share/ares"
 [[ -d "${ARES_DATA}/Database" ]] || die "ares Database not found in ${ARES_DATA}"
 cp -r "${ARES_DATA}/." "${STAGING}/bin/"

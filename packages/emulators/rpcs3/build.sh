@@ -16,11 +16,6 @@ STAGING="${ARTIFACT_ROOT}/emulators/${NAME}"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
-# rpcs3 needs SDL3 >= 3.2.12 for SDL_CameraPermissionState (used unmodified,
-# below); Trixie ships 3.2.10. Pulls in HippOS's shared from-source static
-# SDL3 stack instead of Trixie's package — USE_SYSTEM_SDL stays ON since this
-# is still "use an externally-provided SDL3, don't vendor your own", it's just
-# not literally the system package anymore.
 source "/work/build/sdl3-stack-env.sh"
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
@@ -46,22 +41,14 @@ if ! grep -q '^#include <unordered_set>' "${SRC}/rpcs3/rpcs3qt/game_list_frame.h
     sed -i '/^#include <set>/a #include <unordered_set>' "${SRC}/rpcs3/rpcs3qt/game_list_frame.h"
 fi
 
-# game_list_actions.cpp: one QString::arg(std::string) callsite is missing the
-# QString::fromStdString() wrap used at every other callsite in this file —
-# QString::arg has no std::string overload on this Qt version.
 sed -i \
     -e 's/\.arg(m_game_validator->get_name())/.arg(QString::fromStdString(m_game_validator->get_name()))/' \
     "${SRC}/rpcs3/rpcs3qt/game_list_actions.cpp"
 
-# basic_keyboard_handler.cpp calls xkb_context_new/unref (base libxkbcommon)
-# directly, but CMake only links xkbcommon-x11 — modern ld won't resolve the
-# base symbols transitively through it. Link xkbcommon explicitly too.
 sed -i \
     -e 's/target_link_libraries(rpcs3_lib PRIVATE X11::X11 xkbcommon-x11)/target_link_libraries(rpcs3_lib PRIVATE X11::X11 xkbcommon-x11 xkbcommon)/' \
     "${SRC}/rpcs3/CMakeLists.txt"
 
-# Clang doesn't always prove fmt::throw_exception [[noreturn]] through all paths.
-# Drop the three -Werror flags that fire as a result rather than patching every callsite.
 sed -i \
     -e '/add_compile_options(-Werror=return-type)/d' \
     -e '/add_compile_options(-Werror=missing-noreturn)/d' \
@@ -98,11 +85,6 @@ cmake --build "${BUILD}" -j"$(nproc)"
 cmake --install "${BUILD}"
 find "${BUILD}" -maxdepth 4 -name 'rpcs3' -type f -perm /111 -exec cp {} "${STAGING}/bin/" \; 2>/dev/null || true
 
-# rpcs3's LLVM recompiler backend links libLLVM.so.21.1 from the build
-# container's apt.llvm.org llvm-21 toolchain (LLVM_DIR above) — the shipped
-# rootfs only carries Trixie's own llvm-19, and per package-policy.md a
-# build-only toolchain dependency has no business becoming a base-OS package
-# just for this one emulator, so vendor it next to the binary instead.
 mkdir -p "${STAGING}/lib"
 cp "/usr/lib/${GNU_ARCH}/libLLVM.so.21.1" "${STAGING}/lib/"
 

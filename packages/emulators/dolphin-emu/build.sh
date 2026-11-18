@@ -19,15 +19,9 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
-# A stale CMakeCache.txt reuses cached *_DIR values from whatever prefix
-# resolved them last run instead of re-searching CMAKE_PREFIX_PATH/deps —
-# always start clean.
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 
-# LLVM only provides the debugger's disassembler. The build image's newest
-# LLVM (21) isn't in the runtime OS, and on arm64 cross builds the host LLVM is
-# the wrong architecture, so leave it out.
 cmake -S "${SRC}" -B "${BUILD}" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="${EMULATOR_RUNTIME_ROOT}/${NAME}" \

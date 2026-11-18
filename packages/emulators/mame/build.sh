@@ -18,10 +18,6 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}"
 
-# GroovyMAME's own makefile uses $(ARCH) as a compiler flag (e.g. -m64), and
-# make auto-imports env vars over its `?=` default. Our ARCH="amd64"/"arm64"
-# env var leaks in and gets fed to the linker as a literal token, so unset it
-# before invoking GroovyMAME's make.
 unset ARCH
 
 if [[ "${CROSS_BUILD}" -eq 1 ]]; then

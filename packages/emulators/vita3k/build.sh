@@ -19,14 +19,9 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
-# Reset all submodule contents to their committed state.
-# Previous runs may have incorrectly patched C++ libraries (yaml-cpp, psvpfstools, etc.)
-# that use std::uint8_t etc., breaking their compilation.
 git -C "${SRC}" submodule foreach --recursive \
     'git restore . 2>/dev/null || git checkout -- . 2>/dev/null || true' 2>/dev/null || true
 
-# Patch only known C libraries that incorrectly include <cstdint> (a C++-only header).
-# capstone: generated .inc files; external/sdl: SDL3 headers included by C translation units.
 for target_dir in "${SRC}/external/capstone" "${SRC}/external/sdl"; do
     [[ -d "${target_dir}" ]] || continue
     while IFS= read -r f; do
@@ -37,24 +32,17 @@ for target_dir in "${SRC}/external/capstone" "${SRC}/external/sdl"; do
         -exec grep -l '#include <cstdint>' {} \; 2>/dev/null || true)
 done
 
-# GCC 13+ rejects duplicate cv-qualifiers as an error.
-# Patch the offending line before configuring.
 LOAD_SELF="${SRC}/vita3k/kernel/src/load_self.cpp"
 if [[ -f "${LOAD_SELF}" ]]; then
     sed -i 's/reinterpret_cast<const Elf32_Phdr const \*>/reinterpret_cast<const Elf32_Phdr *>/g' "${LOAD_SELF}"
 fi
 
-# std::vector::append_range/assign_range are C++23 library features that
-# Trixie's libstdc++ 14 lacks (they arrived in GCC 15).
 VECTOR_UTILS="${SRC}/vita3k/util/include/util/vector_utils.h"
 sed -i -E \
     -e 's/(\w+)\.append_range\((\w+)\);/\1.insert(\1.end(), \2.begin(), \2.end());/' \
     -e 's/(\w+)\.assign_range\((\w+)\);/\1.assign(\2.begin(), \2.end());/' \
     "${VECTOR_UTILS}"
 
-# A stale CMakeCache.txt reuses cached *_DIR values from whatever prefix
-# resolved them last run instead of re-searching CMAKE_PREFIX_PATH/deps —
-# always start clean.
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 
@@ -76,8 +64,6 @@ cmake -S "${SRC}" -B "${BUILD}" \
     -DUSE_VITA3K_UPDATE=OFF \
     -DXXH_X86DISPATCH_ALLOW_AVX="${AVX_FLAG}"
 
-# SDL_build_config.h and similar headers are generated into the build tree during cmake
-# configure. Patch only files under the SDL build dir to avoid breaking C++ generated headers.
 while IFS= read -r f; do
     log "Fixing <cstdint> in generated: ${f}"
     sed -i 's|#include <cstdint>|#include <stdint.h>|g' "${f}"

@@ -1,8 +1,10 @@
 import importlib.machinery
 import importlib.util
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPT_PATH = (Path(__file__).resolve().parent.parent
                / 'overlays' / 'rootfs' / 'usr' / 'lib' / 'hippos' / 'hippos-storage-manager')
@@ -42,6 +44,20 @@ class NetworkSavesTests(unittest.TestCase):
         self.assertEqual(sm.network_mount_path('nfs:nas:/export saves=ro'), Path('/media/nas_export'))
         self.assertEqual(sm.network_mount_path(f'cifs://nas/Games {CREDENTIALS}'), Path('/media/nas_Games'))
 
+
+
+class IgnoredShareTests(unittest.TestCase):
+    def test_share_ignored_forever_is_not_offered_again(self):
+        ignored = Path(tempfile.mkdtemp()) / 'ignored-storage-devices.txt'
+        ignored.write_text('smb://nas/games\n')
+        listing = ('nas\tgames\tsmb://nas/games\tNAS\t\t10,2,3\n'
+                   'other\tgames\tsmb://other/roms\tOther\t\t5,,\n')
+        with mock.patch.object(sm, 'IGNORED_DEVICES', ignored), \
+                mock.patch.object(sm, 'setting', lambda key, default: 'true'), \
+                mock.patch.object(sm, 'network_sources', lambda: []), \
+                mock.patch.object(sm, 'run_text', lambda cmd: listing):
+            offered = [uri for uri, _ in sm.network_merge_requests()]
+        self.assertEqual(offered, ['smb://other/roms'])
 
 if __name__ == '__main__':
     unittest.main()

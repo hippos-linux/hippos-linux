@@ -18,9 +18,6 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
-# A stale CMakeCache.txt reuses cached *_DIR values from whatever prefix
-# resolved them last run instead of re-searching CMAKE_PREFIX_PATH/deps —
-# always start clean, and drop whatever earlier builds staged.
 rm -rf "${BUILD}" "${STAGING}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 cmake -S "${SRC}" -B "${BUILD}" \
@@ -34,7 +31,6 @@ cmake -S "${SRC}" -B "${BUILD}" \
 cmake --build "${BUILD}" -j"$(nproc)"
 cmake --install "${BUILD}"
 
-# sa2 exits at startup without this folder, and the install rule leaves it out.
 cp -r "${SRC}/bin" "${STAGING}/share/applewin/"
 
 mkdir -p "${STAGING}/lib"

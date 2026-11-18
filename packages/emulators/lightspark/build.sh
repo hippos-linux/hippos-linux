@@ -18,9 +18,6 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}"
 
-# A stale CMakeCache.txt reuses cached *_DIR values from whatever prefix
-# resolved them last run instead of re-searching CMAKE_PREFIX_PATH/deps —
-# always start clean.
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 
@@ -52,8 +49,6 @@ fi
 find "${STAGING}/bin" -maxdepth 1 -type f -perm /111 | while read -r b; do
     patchelf --set-rpath '$ORIGIN/../lib/lightspark:$ORIGIN/../lib' "${b}" 2>/dev/null || true
 done
-# Fix shared libs: cmake bakes the Docker-internal absolute install path into RUNPATH.
-# Patch them to use $ORIGIN so they find sibling libs at any deployment location.
 find "${STAGING}/lib" -name "*.so*" -type f | while read -r lib; do
     patchelf --set-rpath '$ORIGIN' "${lib}" 2>/dev/null || true
 done

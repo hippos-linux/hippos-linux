@@ -12,7 +12,6 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 mkdir -p "${STAGING}/bin"
 
-# Demul is Windows-only and has no public release API.
 # The user must manually place demul.exe in ~/.local/share/demul/
 cat > "${STAGING}/bin/demul" <<'LAUNCHER'
 #!/usr/bin/env bash

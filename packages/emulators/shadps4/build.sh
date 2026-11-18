@@ -48,7 +48,6 @@ found_bin="$(find "${BUILD}" "${STAGING}" \
 
 cp "${found_bin}" "${STAGING}/bin/shadps4"
 chmod +x "${STAGING}/bin/shadps4"
-# Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"

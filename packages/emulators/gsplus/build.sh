@@ -29,7 +29,6 @@ mkdir -p "${STAGING}/bin"
 cp "${SRC}/gsplus" "${STAGING}/bin/gsplus"
 chmod +x "${STAGING}/bin/gsplus"
 
-# Stage supporting data (ROM images, config templates)
 for item in assets lib; do
     [[ -d "${SRC}/${item}" ]] && rsync -a "${SRC}/${item}/" "${STAGING}/${item}/" || true
 done

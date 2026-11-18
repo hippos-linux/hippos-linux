@@ -18,9 +18,6 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
-# A stale CMakeCache.txt reuses cached *_DIR values from whatever prefix
-# resolved them last run instead of re-searching CMAKE_PREFIX_PATH/deps —
-# always start clean.
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 cmake -S "${SRC}" -B "${BUILD}" \
@@ -33,15 +30,11 @@ cmake --build "${BUILD}" -j"$(nproc)"
 cmake --install "${BUILD}"
 find "${BUILD}" -maxdepth 4 -name 'thextech' -type f -perm /111 -exec cp {} "${STAGING}/bin/" \; 2>/dev/null || true
 
-# Move all libSDL2_mixer_ext files to lib/ regardless of install subdir.
-# cmake install only delivers the dev symlink (.so); also copy the real versioned
-# lib from the build tree so the binary's $ORIGIN/../lib rpath can resolve it.
 mkdir -p "${STAGING}/lib"
 find "${STAGING}" ! -path "${STAGING}/lib/*" -name "libSDL2_mixer_ext*" \
     -exec mv {} "${STAGING}/lib/" \; 2>/dev/null || true
 find "${BUILD}" -name "libSDL2_mixer_ext.so.*" -type f \
     -exec cp -n {} "${STAGING}/lib/" \; 2>/dev/null || true
-# Ensure soname symlink (.so.2 → .so.2.x.x) exists for runtime linker
 (cd "${STAGING}/lib" && \
     versioned="$(ls libSDL2_mixer_ext.so.*.*.* 2>/dev/null | head -1)" && \
     [[ -n "${versioned}" ]] && \
@@ -49,7 +42,6 @@ find "${BUILD}" -name "libSDL2_mixer_ext.so.*" -type f \
     [[ -n "${soname}" && ! -e "${soname}" ]] && \
     ln -sf "${versioned}" "${soname}") 2>/dev/null || true
 
-# Fix RPATH — cmake flag doesn't stick for this project
 find "${STAGING}/bin" -maxdepth 1 -type f -perm /111 | while read -r b; do
     patchelf --set-rpath '$ORIGIN/../lib' "${b}" 2>/dev/null || true
 done

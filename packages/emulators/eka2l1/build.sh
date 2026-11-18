@@ -21,7 +21,6 @@ if [[ ! -d "${SRC}/.git" ]]; then
     git clone --depth=1 "${REPO}" "${SRC}"
 fi
 
-# Remove Android-only submodules not needed for Linux build
 git -C "${SRC}" config -f "${SRC}/.gitmodules" --remove-section submodule.dynarmic-android 2>/dev/null || true
 git -C "${SRC}" config -f "${SRC}/.gitmodules" --remove-section submodule.ext-boost 2>/dev/null || true
 git -C "${SRC}" submodule sync
@@ -30,8 +29,6 @@ git -C "${SRC}" submodule update --init --recursive
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 
-# Bundled x86_64 ffmpeg statics take priority over USE_SYSTEM_FFMPEG on arm64;
-# remove them so cmake falls back to the system arm64 ffmpeg packages.
 [[ "${ARCH:-amd64}" == "arm64" ]] && rm -rf "${SRC}/src/external/ffmpeg/linux/x86_64"
 
 log "Configuring"
@@ -61,7 +58,6 @@ if [[ ! -x "${BUILD}/bin/eka2l1_qt" ]]; then
 fi
 
 cp -a "${BUILD}/bin/." "${STAGING}/bin/"
-# Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
 write_artifact_version "${STAGING}" "$(git -C "${SRC}" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d)"
 log "Done. Artifact at ${STAGING}"

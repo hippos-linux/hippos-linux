@@ -18,8 +18,6 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}"
 
-# openMSX's configure has no --prefix; install locations are make variables
-# (build/main.mk), and INSTALL_SHARE_DIR is compiled in as the system data dir.
 RUNTIME_PREFIX="${EMULATOR_RUNTIME_ROOT}/${NAME}"
 case "${ARCH:-amd64}" in
     arm64) OPENMSX_TARGET_CPU="aarch64" ;;
@@ -32,8 +30,6 @@ INSTALL_VARS=(
     INSTALL_DOC_DIR="${RUNTIME_PREFIX}/doc"
     SYMLINK_FOR_BINARY=false
 )
-# derived/ holds build-info.hh with the install paths, which make doesn't
-# regenerate when they change.
 rm -rf "${SRC}/derived"
 (
     cd "${SRC}"

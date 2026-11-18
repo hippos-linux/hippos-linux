@@ -22,8 +22,6 @@ git -C "${SRC}" submodule update --init --recursive
 
 source "/work/build/qt-env.sh"
 
-# GCC 14 false positive: addr is set by ParseGhidraCsvLine (out-param) before use,
-# but the compiler can't see through it. Initialize to suppress -Werror=maybe-uninitialized.
 sed -i 's/^\( *\)u64 addr;$/\1u64 addr = 0;/' \
     "${SRC}/src/citron/debugger/function_browser.cpp"
 
@@ -84,7 +82,6 @@ fi
 
 [[ -x "${STAGING}/bin/citron" || -x "${STAGING}/bin/citron-neo" ]] \
     || die "Citron Neo executable was not produced"
-# Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"

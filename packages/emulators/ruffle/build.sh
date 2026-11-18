@@ -23,8 +23,6 @@ cd "${SRC}"
 
 export PATH="/root/.cargo/bin:${PATH}"
 
-# openssl-sys uses pkg-config but the Debian default path isn't always inherited
-# in cargo subprocess environments. OPENSSL_DIR bypasses pkg-config entirely.
 export OPENSSL_DIR=/usr
 export OPENSSL_INCLUDE_DIR=/usr/include
 if [[ "${ARCH:-amd64}" == "arm64" ]]; then

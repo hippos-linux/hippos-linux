@@ -1,4 +1,5 @@
 requireArtifact: linuxloader
+arch: [amd64]
 systems:
 - lindbergh
 features: []

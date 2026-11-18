@@ -55,7 +55,6 @@ if [[ ! -x "${STAGING}/bin/eden" && -x "${BUILD}/src/eden" ]]; then
 fi
 
 [[ -x "${STAGING}/bin/eden" ]] || die "Eden executable was not produced"
-# Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"

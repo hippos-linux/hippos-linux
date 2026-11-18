@@ -35,7 +35,6 @@ log "Installing to staging prefix"
 make -C "${SRC}" install DESTDIR="${INSTALL_DEST}" PREFIX=/usr
 
 log "Staging binary"
-# The makefile install target omits the binary; copy it directly from source.
 install -m 755 "${SRC}/switchres" "${STAGING}/bin/switchres"
 "${STRIP:-strip}" "${STAGING}/bin/switchres"
 

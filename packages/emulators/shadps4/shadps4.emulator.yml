@@ -1,4 +1,5 @@
 requireArtifact: shadps4
+arch: [amd64]
 features:
   - padtokeyboard
 shared_features:

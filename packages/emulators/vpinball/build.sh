@@ -6,8 +6,6 @@ source "/work/build/common.sh"
 NAME='vpinball'
 REPO='https://github.com/vpinball/vpinball.git'
 REF="${VPINBALL_REF:-standalone}"
-# Pinned: latest standalone HEAD's external.sh references a libserum_concentrate SHA that 404s.
-# This SHA (Sep 27, 2025) has a known-working external.sh.
 SHA="${VPINBALL_SHA:-3ec37c7f9a7f57168802ca7bbb3fd9f6b745bdc3}"
 
 REPO_ROOT="${REPO_ROOT:-/work}"

@@ -31,15 +31,12 @@ python3 xb setup
 log "Building xenia-edge (release)"
 python3 xb build --config=release
 
-# The build also produces helpers such as xenia-shader-cc, so match the app by name.
 XENIA_BIN="$(find "${SRC}/build" -maxdepth 4 \( -name 'xenia-edge' -o -name 'xenia_edge' \) -type f -perm /111 | head -1)"
 [[ -n "${XENIA_BIN}" ]] || die "xenia-edge binary not found after build"
 log "Binary: ${XENIA_BIN}"
-# The launcher wrapper below takes the plain name.
 BIN_NAME="xenia-edge.bin"
 cp "${XENIA_BIN}" "${STAGING}/bin/${BIN_NAME}"
 
-# Bundle clang-21 libc++ — rootfs links against system libc++ which may differ
 for lib in libc++ libc++abi; do
     LIB_SRC="$(find /usr/lib/x86_64-linux-gnu -name "${lib}.so.1*" -not -type d 2>/dev/null | sort | tail -1 || true)"
     [[ -n "${LIB_SRC}" ]] && cp -L "${LIB_SRC}" "${STAGING}/lib/${lib}.so.1"

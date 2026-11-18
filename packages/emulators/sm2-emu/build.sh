@@ -16,8 +16,6 @@ STAGING="${ARTIFACT_ROOT}/emulators/${NAME}"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
-# imgui, miniz, musashi, ymfm, VulkanMemoryAllocator are submodules; lzma-sdk is
-# vendored in-repo. sdl3/shaderc/pugixml/curl/spirv come from the bulk image.
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
 if ! command -v glslc >/dev/null 2>&1; then

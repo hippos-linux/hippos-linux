@@ -14,17 +14,6 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 ARCH="${ARCH:-amd64}"
 
-# nvidia-open (installed separately via apt in configure-rootfs.sh) only
-# binds Turing/RTX 20xx and newer. These three tiers cover everything older
-# — Debian doesn't package any legacy branch for Trixie at all (checked live
-# against packages.debian.org), so these come straight from NVIDIA's own
-# official .run installers, the same distribution channel nvidia-open itself
-# uses upstream.
-#
-# Every tier's userspace .so keeps its full version suffix and every tier's
-# kernel module is staged under a tier-prefixed name, so nothing here ever
-# collides with nvidia-open's files or another tier's. hippos-gpu-init is the
-# only thing that switches between them at boot — see that script.
 NVIDIA_LEGACY_TIERS=(
     "580:580.173.02:8d8eb9001e05a9a8a663d3d5d304feb64ef2844ee185ccdfd952786820f46e1b"
     "470:470.256.02:d6451862deb695bb0447f3b7cd6268f73e81168c10e2c10597ff3fa01349b1de"
@@ -88,15 +77,11 @@ nvidia_legacy_patch_order() {
                 kernel-7.3.patch
             ;;
         340)
-            # Numbered 0001-0019, filename sort is the correct apply order.
             (cd "${REPO_ROOT}/build/patches/nvidia-legacy/340" 2>/dev/null && ls -1 *.patch 2>/dev/null | sort)
             ;;
     esac
 }
 
-# 470's patches were generated with the extracted driver's kernel/
-# subdirectory as the diff root; 390's and 340's were generated one level up
-# (their hunk paths already read "a/kernel/...").
 nvidia_legacy_patch_apply_dir() {
     case "$1" in
         470) printf 'kernel' ;;
@@ -130,12 +115,6 @@ mkdir -p "${STAGING}/usr/lib/x86_64-linux-gnu/vdpau" \
 
 BUILT_ANY=0
 
-# Per-tier regression tracking: a tier that never worked (340, permanently
-# EOL — see comment above) must not block every future release, but a tier
-# that DID work last time (build-machine-local state, not committed —
-# WORK_ROOT is bind-mounted from the host, same pattern as this script's
-# other WORK_ROOT paths) silently going to zero working kernels is exactly
-# the kind of regression release.sh's exit-on-failure is supposed to catch.
 STATUS_FILE="${WORK_ROOT}/${NAME}/.tier-status"
 declare -A TIER_BUILT_PREV=()
 if [[ -f "${STATUS_FILE}" ]]; then
@@ -173,31 +152,6 @@ for entry in "${NVIDIA_LEGACY_TIERS[@]}"; do
     log "  Applying kernel-compat patches for tier ${tier}"
     apply_nvidia_legacy_patches "${tier}" "${EXTRACT_DIR}"
 
-    # Every driver source tree accumulates its -I/-D flags into EXTRA_CFLAGS
-    # and (in the two newer, Kbuild-based tiers) carries a comment claiming
-    # "newer kernels append $(EXTRA_CFLAGS) to ccflags-y for compatibility"
-    # — that compat shim no longer exists anywhere in current mainline
-    # kbuild, so EXTRA_CFLAGS silently never reaches the real per-object
-    # compile. Confirmed by direct iteration: this alone was the root cause
-    # of three separate-looking failures on tier 470 — nvmisc.h not found
-    # (needs -I$(src)/common/inc), stdarg.h not found (nv_stdarg.h's
-    # correct <linux/stdarg.h> path is gated behind
-    # -DNV_KERNEL_INTERFACE_LAYER), and bogus uint32_t/stdint.h errors
-    # (nv-ioctl-numa.h's correct <linux/types.h> path is gated behind the
-    # same macro). Forwarding EXTRA_CFLAGS into ccflags-y (kbuild's actual
-    # always-applied mechanism) fixes all three at once, and is the fix
-    # NVIDIA's own comment already describes as the intended behavior — the
-    # 6.15+ compat patches above independently make the same fix by renaming
-    # EXTRA_CFLAGS to ccflags-y outright, which makes this sed a no-op on
-    # patched kernel versions and a fallback on unpatched ones.
-    #
-    # 340.108 predates the Kbuild-based layout entirely (flat kernel/
-    # Makefile + nvidia-modules-common.mk, no per-module Kbuild fragments,
-    # no NV_KERNEL_INTERFACE_LAYER macro) and its Makefile has no
-    # ccflags-y-awareness comment at all — this bug hits it just as hard,
-    # just with no upstream fix to lean on, since none of its vendored
-    # patches touch this. Same forwarding fix, applied to whichever file
-    # actually accumulates EXTRA_CFLAGS for that tier's layout.
     if [[ -f "${EXTRACT_DIR}/kernel/Kbuild" ]]; then
         sed -i '/^EXTRA_CFLAGS += -DNV_KERNEL_INTERFACE_LAYER$/a\
 ccflags-y += $(EXTRA_CFLAGS)' "${EXTRACT_DIR}/kernel/Kbuild"
@@ -218,21 +172,11 @@ ccflags-y += $(EXTRA_CFLAGS)' "${EXTRACT_DIR}/kernel/Kbuild"
     _vdpau="${EXTRACT_DIR}/libvdpau_nvidia.so.${version}"
     [[ -f "${_vdpau}" ]] && cp "${_vdpau}" "${STAGING}/usr/lib/x86_64-linux-gnu/vdpau/$(basename "${_vdpau}")"
 
-    # Xorg driver + GLX extension module — tier-prefixed filenames so they
-    # never collide with nvidia-open's or each other's. No underscore before
-    # "legacy": Xorg strips internal underscores from a Driver name before
-    # searching for its module file, so hippos-gpu-init's OutputClass rewrite
-    # (nvidia_switch_tier) ends up asking for "nvidia${tier}legacy_drv.so" —
-    # stage it under that exact name or Xorg's LoadModule reports "module
-    # does not exist" and silently falls back to nvidia-open's driver
-    # (real hardware, tier 580: GTX 970 forced onto swrast the whole session).
     [[ -f "${EXTRACT_DIR}/nvidia_drv.so" ]] && \
         cp "${EXTRACT_DIR}/nvidia_drv.so" "${STAGING}/usr/lib/xorg/modules/drivers/nvidia${tier}legacy_drv.so"
     _glxserver="${EXTRACT_DIR}/libglxserver_nvidia.so.${version}"
     [[ -f "${_glxserver}" ]] && cp "${_glxserver}" "${STAGING}/usr/lib/xorg/modules/extensions/$(basename "${_glxserver}")"
 
-    # Vulkan ICD — 340.xx predates Vulkan entirely, nvidia_icd.json just
-    # won't exist there, nothing to stage, that's correct.
     if [[ -f "${EXTRACT_DIR}/nvidia_icd.json" ]]; then
         sed "s|\"library_path\": *\"libGLX_nvidia|\"library_path\": \"/usr/lib/x86_64-linux-gnu/libGLX_nvidia|" \
             "${EXTRACT_DIR}/nvidia_icd.json" > "${STAGING}/usr/share/vulkan/icd.d/nvidia${tier}_legacy_icd.json"
@@ -263,31 +207,6 @@ ccflags-y += $(EXTRA_CFLAGS)' "${EXTRACT_DIR}/kernel/Kbuild"
 
         log "  Building tier ${tier} kernel modules against ${KVER} (${variant})"
         make -C "${EXTRACT_DIR}/kernel" clean >/dev/null 2>&1 || true
-        # ARCH=x86_64 explicit on the make command line — same fix as
-        # build-kernel.sh's MAKE_KERNEL_ARGS. The kernel source tree names
-        # its arch dir "x86"/"x86_64" (kernel convention), not "amd64"
-        # (Debian's, and this build image's default $ARCH); kbuild trusts
-        # whatever ARCH it's given and looks for a nonexistent
-        # arch/amd64/Makefile otherwise. nvidia-installer normalizes this
-        # internally when run in full, but calling `make` directly here
-        # bypasses that.
-        #
-        # NV_KERNEL_MODULES lists which per-module Kbuild fragments to build
-        # (nvidia/nvidia.Kbuild etc, foreach-included in kernel/Kbuild) —
-        # without it that foreach is empty and the conftest.sh
-        # feature-detection header (nvidia/conftest/headers.h) never gets
-        # wired in as a build prerequisite at all, so nv.c's
-        # #include "conftest.h" fails outright. Confirmed by direct
-        # iteration against a real build.
-        #
-        # See the ccflags-y sed patch above for the EXTRA_CFLAGS fix — this
-        # single driver source tree still isn't guaranteed to build clean
-        # against every kernel HippOS ships (470.256.02 predates some 2025+
-        # kernel API churn, e.g. timespec_to_ns/efi_enabled signature
-        # changes) — that's real upstream driver/kernel version drift, not
-        # a build-plumbing bug, and the per-release WARNING below already
-        # degrades that tier to nouveau gracefully rather than failing the
-        # whole build.
         if ARCH=x86_64 make -C "${EXTRACT_DIR}/kernel" \
                 SYSSRC="${KERNEL_SOURCE_DIR}" \
                 SYSOUT="${KERNEL_SOURCE_DIR}" \
@@ -321,10 +240,6 @@ done
 
 [[ "${BUILT_ANY}" -eq 1 ]] || log "WARNING: no legacy NVIDIA tier produced a working kernel module — older GPUs will fall back to nouveau"
 
-# A tier that skipped its build step entirely (download failure, checksum
-# mismatch — see the "continue"s above) never reaches the
-# TIER_BUILT_THIS_RUN assignment at all; treat that the same as an explicit
-# 0, since it's just as real a regression as a compile failure.
 regressed=()
 for tier in "${!TIER_BUILT_PREV[@]}"; do
     if [[ "${TIER_BUILT_PREV[${tier}]}" == "1" && "${TIER_BUILT_THIS_RUN[${tier}]:-0}" != "1" ]]; then

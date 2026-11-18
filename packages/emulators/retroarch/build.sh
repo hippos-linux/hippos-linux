@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Syncs libretro cores from the buildbot nightly into the retroarch package.
-# Uses ETags to skip cores that haven't changed since last download.
-# Use --force to re-download all cores regardless.
+# Use --force to re-download all cores.
 set -euo pipefail
 
 source "/work/build/common.sh"
@@ -35,7 +33,6 @@ esac
 ARTIFACT_ROOT="${ARTIFACT_ROOT:-"${ARTIFACTS_DIR}/${ARCH}"}"
 STAGING_DIR="${ARTIFACT_ROOT}/emulators/${EMULATOR_NAME}"
 CORES_DIR="${STAGING_DIR}/cores"
-# Outside the staging dir so the ETags are not packed with the cores.
 ETAG_DIR="${ARTIFACT_ROOT}/retroarch-core-etags"
 
 BUILDBOT_BASE="https://buildbot.libretro.com/nightly/linux/${LIBRETRO_ARCH}/latest"
@@ -141,8 +138,6 @@ done <<< "${AVAILABLE}"
 
 install_freej2me_plus
 
-# glibc 2.41 refuses to load a library that asks for an executable stack, and a
-# couple of buildbot cores do. RetroArch reports only "Failed to open libretro core".
 for core in "${CORES_DIR}"/*.so; do
     if readelf -lW "${core}" | grep -q 'GNU_STACK.*RWE'; then
         patchelf --clear-execstack "${core}"

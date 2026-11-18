@@ -8,8 +8,6 @@ REPO='https://github.com/cemu-project/Cemu'
 TAG="$(github_latest_tag "${REPO}")"
 
 WX_REPO='https://github.com/wxWidgets/wxWidgets'
-# Pin to 3.2.x: wxWidgets 3.3 changed the _() macro and wxColour API in ways
-# that break Cemu's GUI code. 3.2 is the LTS series and fully compatible.
 WX_TAG='v3.2.10'
 
 HIDAPI_REPO='https://github.com/libusb/hidapi'
@@ -32,10 +30,6 @@ WX_PREFIX="${WORK_ROOT}/${NAME}/wxwidgets/install"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
-# Cemu needs a newer SDL3 than Trixie packages. Pulls in HippOS's shared
-# from-source static SDL3 stack (see build/sdl3-stack-build.sh) instead of
-# building its own — also fixes a latent mismatch here: ENABLE_WAYLAND=ON
-# below was previously paired with a private SDL3 built with SDL_WAYLAND=OFF.
 source "/work/build/sdl3-stack-env.sh"
 
 log "Installing build dependencies"
@@ -47,8 +41,6 @@ else
     log "Skipping inline dependency install; relying on the container image"
 fi
 
-# Build hidapi from source — Debian's libhidapi-dev doesn't ship cmake config files
-# and Cemu requires find_package(hidapi CONFIG REQUIRED).
 clone_source "${HIDAPI_REPO}" "${HIDAPI_TAG}" "${HIDAPI_SRC}"
 cmake -S "${HIDAPI_SRC}" -B "${HIDAPI_BUILD}" \
     -DCMAKE_BUILD_TYPE=Release \
@@ -61,7 +53,6 @@ cmake --install "${HIDAPI_BUILD}"
 
 clone_source "${WX_REPO}" "${WX_TAG}" "${WX_SRC}" --submodules
 git config --global --add safe.directory "${WX_SRC}" 2>/dev/null || true
-# Clear stale wxWidgets build/install if the source version changed
 if [[ "$(cat "${WX_PREFIX}/.wx-tag" 2>/dev/null)" != "${WX_TAG}" ]]; then
     rm -rf "${WX_BUILD}" "${WX_PREFIX}"
 fi
@@ -79,9 +70,6 @@ echo "${WX_TAG}" > "${WX_PREFIX}/.wx-tag"
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
-# wxWidgets 3.3 changed _() to static-assert against non-literal args.
-# Cemu passes _(wxString::Format(...)) and _("..." + fmt::...) in several debug
-# GUI files. Strip the _() wrapper from these dynamic strings.
 python3 - "${SRC}" <<'PYEOF'
 import sys
 from pathlib import Path
@@ -104,7 +92,7 @@ def remove_wx_translation_wrapper(text):
     mlen = len(marker)
     while i < len(text):
         if text[i:i+mlen] == marker:
-            j = i + 2  # skip '_('
+            j = i + 2
             depth = 1
             while j < len(text) and depth > 0:
                 if text[j] == '(':
@@ -112,8 +100,7 @@ def remove_wx_translation_wrapper(text):
                 elif text[j] == ')':
                     depth -= 1
                 j += 1
-            # text[i:j] is '_(wxString::Format(...))'
-            result.append(text[i+2:j-1])  # emit inner without _( and )
+            result.append(text[i+2:j-1])
             i = j
         else:
             result.append(text[i])
@@ -127,12 +114,10 @@ for rel in files_to_patch:
         continue
     original = p.read_text()
     text = remove_wx_translation_wrapper(original)
-    # Original form: _("literal" + expr) → _("literal") + expr
     text = text.replace(
         '_("Collecting list of files..." + fmt::format(" ({})", writerContext.totalFileCount.load()))',
         '_("Collecting list of files...") + fmt::format(" ({})", writerContext.totalFileCount.load())'
     )
-    # Idempotent: fix stray paren if partial patch was previously applied
     text = text.replace(
         'writerContext.totalFileCount.load())));',
         'writerContext.totalFileCount.load()));'
@@ -142,10 +127,6 @@ for rel in files_to_patch:
         print(f'  patched: {rel}')
 PYEOF
 
-# Stale CMakeCache.txt would pin SDL3_DIR (and friends) to whatever prefix
-# resolved them last run instead of re-searching CMAKE_PREFIX_PATH — see the
-# hypseus-singe build.sh comment for how that silently breaks a shared-stack
-# migration. Always start clean.
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 cmake -S "${SRC}" -B "${BUILD}" -G Ninja \
@@ -172,7 +153,6 @@ cmake -S "${SRC}" -B "${BUILD}" -G Ninja \
     -DLINUX=ON
 cmake --build "${BUILD}" -j"$(nproc)"
 cmake --install "${BUILD}"
-# Cemu builds the binary into SRC/bin/ as Cemu_release (Release mode)
 found_bin="$(find "${SRC}/bin" "${BUILD}" \
     -maxdepth 3 -type f -perm /111 \
     \( -name 'Cemu_release' -o -name 'Cemu' \) \
@@ -180,7 +160,6 @@ found_bin="$(find "${SRC}/bin" "${BUILD}" \
 [[ -n "${found_bin}" ]] || die "Cemu binary was not produced"
 cp "${found_bin}" "${STAGING}/bin/Cemu"
 chmod +x "${STAGING}/bin/Cemu"
-# Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
 mkdir -p "${STAGING}/lib"
 for f in /usr/lib/x86_64-linux-gnu/libboost_atomic.so.1.83.0 \

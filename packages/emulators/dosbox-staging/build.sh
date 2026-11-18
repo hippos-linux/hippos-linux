@@ -19,9 +19,6 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}"
 
-# Upstream dropped its Meson build in favour of CMake + a vcpkg manifest, and
-# Debian lacks several manifest deps (iir1, libmt32emu, zlib-ng). Pin vcpkg to
-# the manifest's builtin-baseline so port versions match upstream CI.
 VCPKG_BASELINE="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["builtin-baseline"])' "${SRC}/vcpkg.json")"
 if [[ ! -d "${VCPKG_ROOT}/.git" ]]; then
     git clone --filter=blob:none "${VCPKG_REPO}" "${VCPKG_ROOT}"
@@ -36,8 +33,6 @@ if [[ ! -x "${VCPKG_ROOT}/vcpkg" ]]; then
     "${VCPKG_ROOT}/bootstrap-vcpkg.sh" -disableMetrics
 fi
 
-# The manifest's overlay libsystemd port (pulled in by sdl2[dbus]) builds with
-# meson, which needs jinja2. apt lists are cleared in the container; use pip.
 pip3 install --quiet --break-system-packages jinja2
 
 rm -rf "${BUILD}"
@@ -82,9 +77,6 @@ cmake --build "${BUILD}" -j"$(nproc)"
 log "Installing"
 install_staged "${NAME}" "${STAGING}" "${BUILD}/destdir" cmake --install "${BUILD}"
 
-# The install puts data under share/dosbox-staging/resources/, but the binary
-# looks for share/dosbox-staging/<shaders|freedos-cpi|...>, so without this it
-# aborts on its default CRT shader.
 RESOURCES="${STAGING}/share/dosbox-staging/resources"
 if [[ -d "${RESOURCES}" ]]; then
     cp -a "${RESOURCES}/." "${STAGING}/share/dosbox-staging/"

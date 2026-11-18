@@ -1,4 +1,5 @@
 requireArtifact: model2emu
+arch: [amd64]
 features:
   - padtokeyboard
 shared_features:

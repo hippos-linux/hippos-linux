@@ -17,20 +17,16 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}"
 
-# Allow git commands inside Docker (source owned by host user)
 git config --global --add safe.directory "${SRC}" 2>/dev/null || true
 
-# Remove -Werror so modern gcc warnings don't abort the build
 sed -i 's/ -Werror//' "${SRC}/engine/Makefile"
 
-# Add SDL2 cflags for the LE x86_64 target (BUILD_LINUX block adds these but LE variant doesn't)
 SDL2_CFLAGS="$(pkg-config --cflags sdl2 2>/dev/null || true)"
 if [[ -n "${SDL2_CFLAGS}" ]]; then
     sed -i "s|CFLAGS\s*+=\s*-g -Wall|CFLAGS += ${SDL2_CFLAGS} -Wno-unused-result\\nCFLAGS += -g -Wall|" \
         "${SRC}/engine/Makefile" 2>/dev/null || true
 fi
 
-# Fix default runtime paths to match HippOS /userdata layout
 sed -i \
     -e 's|= {"Paks"};|= {"/userdata/roms/openbor"};|' \
     -e 's|= {"Saves"};|= {"/userdata/saves/openbor"};|' \

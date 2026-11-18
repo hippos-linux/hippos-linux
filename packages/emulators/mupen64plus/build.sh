@@ -57,7 +57,6 @@ make -C "${SRC}/mupen64plus-core/projects/unix" \
     PREFIX=/ \
     "${_make_args[@]}"
 
-# Build remaining components
 for comp in mupen64plus-ui-console mupen64plus-audio-sdl mupen64plus-input-sdl mupen64plus-rsp-hle mupen64plus-video-glide64mk2; do
     log "Building ${comp}"
     make -C "${SRC}/${comp}/projects/unix" \

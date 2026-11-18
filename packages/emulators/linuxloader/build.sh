@@ -46,7 +46,6 @@ docker cp "${cid}:/output/build-linux" "${BUILD}/output/build-linux"
 docker rm -f "${cid}" >/dev/null 2>&1 || true
 trap - EXIT
 
-# Stage the whole build-linux payload (loader + Sega shims + bundled ll-deps libs)
 cp -a "${BUILD}/output/build-linux/." "${STAGING}/"
 found="$(find "${STAGING}" -maxdepth 3 -name 'linuxloader' -type f -perm /111 -print -quit 2>/dev/null || true)"
 [[ -n "${found}" ]] || die "linuxloader binary was not produced"

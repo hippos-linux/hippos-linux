@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# evsieve: input-event remapper that pad2key drives to turn arcade encoders
-# (keyboard-mode boards such as Ultimarc I-PAC) into virtual gamepads.
-# Not packaged by Debian. Links against libevdev.so.2 (libevdev2 at runtime).
-# Pinned to a main-branch commit: pad2key's --output device-id= clause isn't in
-# any release yet (1.4.0 rejects it).
 set -euo pipefail
 
 source "/work/build/common.sh"

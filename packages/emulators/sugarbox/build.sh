@@ -25,9 +25,6 @@ while IFS= read -r target_file; do
     fi
 done < <(grep -R "std::transform" -l "${SRC}" --include='*.cpp' --include='*.h' --include='*.hpp' 2>/dev/null || true)
 
-# A stale CMakeCache.txt reuses cached *_DIR values from whatever prefix
-# resolved them last run instead of re-searching CMAKE_PREFIX_PATH/deps —
-# always start clean.
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 
@@ -42,7 +39,6 @@ cmake --build "${BUILD}" -j"$(nproc)"
 log "Installing"
 cmake --install "${BUILD}" || log "Warning: cmake --install failed, falling back to manual staging"
 
-# Explicitly stage runtime data in case cmake install rules are incomplete
 for item in CART CONF Keyboards Resources ROM translations lib; do
     for src in "${STAGING}/${item}" "${BUILD}/install/${item}" "${BUILD}/${item}"; do
         if [[ -d "${src}" ]] && [[ "${src}" != "${STAGING}/${item}" ]]; then
@@ -80,7 +76,6 @@ fi
 
 cp "${candidate}" "${STAGING}/bin/sugarbox"
 chmod +x "${STAGING}/bin/sugarbox"
-# Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"

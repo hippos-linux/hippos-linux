@@ -5,8 +5,6 @@ source "/work/build/common.sh"
 
 NAME='xonedo'
 REPO='https://github.com/OpenGamingCollective/xonedo.git'
-# Pinned like xpadneo — the built .ko's vermagic must match the target kernel
-# exactly, so floating to latest buys nothing and adds an untested variable.
 TAG="${XONEDO_TAG:-v0.5.7-ogc1}"
 
 REPO_ROOT="${REPO_ROOT:-/work}"
@@ -17,13 +15,6 @@ STAGING="${ARTIFACT_ROOT}/${ARCH}/tools/${NAME}"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
-# Xbox Wireless Dongle only — doesn't overlap xpadneo (Bluetooth) or the
-# in-tree xpad (wired/360). Built against both kernel variants — lts
-# exists for hardware regressing on the stable series, and that
-# population losing controller support too defeats the point of it (see
-# configure-rootfs.sh, which now installs lts headers into the rootfs for
-# the same reason). Staged output is keyed by kernel release string, so
-# both coexist under the same STAGING tree without conflict.
 ARCH="${ARCH:-amd64}"
 
 log "Installing bsdtar (needed to unpack Microsoft's dongle firmware .cab files)"

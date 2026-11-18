@@ -19,18 +19,13 @@ clone_source "${REPO}" "${TAG}" "${SRC}"
 
 git -C "${SRC}" submodule update --init --recursive
 
-# vcpkg's dbus port has systemd as a default feature → libsystemd → meson needs jinja2.
-# apt lists are cleared in the container so apt-get install won't work; use pip.
 pip3 install --quiet --break-system-packages jinja2
 
-# vcpkg provides all deps (semver, rtmidi, tomlplusplus, ngtcp2, nghttp3, curl, etc.)
 if [[ ! -x "${SRC}/vcpkg/vcpkg" ]]; then
     log "Bootstrapping vcpkg"
     "${SRC}/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
 fi
 
-# Overlay triplets: x64-linux (amd64) and arm64-linux (cross-compile).
-# Disable SDL_IBUS so SDL3 compiles consistently without ibus symbols.
 TRIPLET_DIR="${SRC}/custom-triplets"
 mkdir -p "${TRIPLET_DIR}"
 cat > "${TRIPLET_DIR}/x64-linux.cmake" << 'TRIPLET_EOF'
@@ -44,8 +39,6 @@ if("${PORT}" STREQUAL "sdl3")
 endif()
 TRIPLET_EOF
 
-# arm64 cross-compile triplet: chains to the hippos aarch64 toolchain so vcpkg
-# packages are built with aarch64-linux-gnu-gcc, not the host x86_64 compiler.
 cat > "${TRIPLET_DIR}/arm64-linux.cmake" << 'TRIPLET_EOF'
 set(VCPKG_TARGET_ARCHITECTURE arm64)
 set(VCPKG_CRT_LINKAGE dynamic)
@@ -79,8 +72,6 @@ fi
 _ar="$(command -v llvm-ar-19 || command -v llvm-ar || true)"
 _ranlib="$(command -v llvm-ranlib-19 || command -v llvm-ranlib || true)"
 
-# If cached SDL3 is missing SDL_IBus_* symbols (broken build), clear vcpkg
-# installed packages so they rebuild with the corrected triplet.
 SDL3_LIB="${SRC}/vcpkg_installed/${_vcpkg_triplet}/lib/libSDL3.a"
 if [[ -f "${SDL3_LIB}" ]] && ! nm "${SDL3_LIB}" 2>/dev/null | grep -q 'SDL_IBus_Quit'; then
     log "SDL3 missing IBus symbols; clearing vcpkg cache for clean rebuild"
@@ -147,7 +138,6 @@ found_bin="$(find "${BUILD}" "${STAGING}" \
 
 cp "${found_bin}" "${STAGING}/bin/ymir"
 chmod +x "${STAGING}/bin/ymir"
-# Stripping is now handled centrally by build/strip-emulator-payload.sh (called from both configure-rootfs.sh and build-emulators.sh).
 
 write_artifact_version "${STAGING}" "${TAG}"
 log "Done. Artifact at ${STAGING}"

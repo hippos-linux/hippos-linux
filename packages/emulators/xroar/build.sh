@@ -23,7 +23,6 @@ if [[ ! -f "${TARBALL}" ]]; then
     mkdir -p "${BUILD}"
     curl -fL "${TARBALL_URL}" -o "${TARBALL}"
 fi
-# Extract fresh each run so a new VERSION actually replaces the old source.
 rm -rf "${SRC}"
 mkdir -p "${SRC}"
 tar xf "${TARBALL}" -C "${SRC}" --strip-components=1
@@ -34,8 +33,6 @@ _host_args=()
 [[ "${ARCH:-amd64}" == "arm64" ]] && [[ "$(uname -m)" == "x86_64" ]] && \
     _host_args=(--host=aarch64-linux-gnu --build=x86_64-linux-gnu)
 ./configure --prefix="${EMULATOR_RUNTIME_ROOT}/${NAME}" "${_host_args[@]}"
-# doc/ is skipped: the release tarball's rules for it need manpage-header and
-# xroar-man.html, which it doesn't ship.
 make -j"$(nproc)" SUBDIRS="portalib src"
 install_staged "${NAME}" "${STAGING}" "${BUILD}/destdir" make install SUBDIRS="portalib src"
 

@@ -18,9 +18,6 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
-# A stale CMakeCache.txt reuses cached *_DIR values from whatever prefix
-# resolved them last run instead of re-searching CMAKE_PREFIX_PATH/deps —
-# always start clean.
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 cmake -S "${SRC}" -B "${BUILD}" \
@@ -33,8 +30,6 @@ cmake -S "${SRC}" -B "${BUILD}" \
 cmake --build "${BUILD}" -j"$(nproc)"
 cp "${BUILD}/PPSSPPSDL" "${STAGING}/bin/"
 
-# Assets are required at runtime — copy from source tree
-# PPSSPP looks for its fonts and UI next to the binary.
 cp -r "${SRC}/assets" "${STAGING}/bin/"
 
 write_artifact_version "${STAGING}" "${TAG}"

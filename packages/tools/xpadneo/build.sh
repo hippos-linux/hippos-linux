@@ -5,10 +5,6 @@ source "/work/build/common.sh"
 
 NAME='xpadneo'
 REPO='https://github.com/atar-axis/xpadneo.git'
-# Pinned, not github_latest_tag like the other tools — the built .ko's vermagic
-# must match the target kernel exactly, so floating to whatever's newest on
-# every build buys nothing here and just adds an untested variable. Bump
-# deliberately.
 TAG="${XPADNEO_TAG:-v0.10.4}"
 
 REPO_ROOT="${REPO_ROOT:-/work}"
@@ -19,13 +15,6 @@ STAGING="${ARTIFACT_ROOT}/${ARCH}/tools/${NAME}"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
-# Covers Xbox One/Series-protocol BT pads only — xpad (in-tree) already
-# handles Xbox 360 and USB mode. Built against both kernel variants —
-# lts exists for hardware regressing on the stable series, and that
-# population losing controller support too defeats the point of it (see
-# configure-rootfs.sh, which now installs lts headers into the rootfs for
-# the same reason). Staged output is keyed by kernel release string, so
-# both coexist under the same STAGING tree without conflict.
 ARCH="${ARCH:-amd64}"
 
 if [[ ! -d "${SRC}/.git" ]]; then

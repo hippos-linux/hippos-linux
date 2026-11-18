@@ -1,4 +1,5 @@
 requireArtifact: xenia-edge
+arch: [amd64]
 systems:
 - name: xbox360
   as_core: xenia_edge

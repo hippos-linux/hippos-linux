@@ -24,7 +24,6 @@ fi
 
 unzip -o "${ARCHIVE}" -d "${STAGING}/emulator"
 
-# Launcher — invokes the Windows binary via Wine
 cat > "${STAGING}/bin/model2emu" <<'LAUNCHER'
 #!/usr/bin/env bash
 export WINEPREFIX=/userdata/wine-bottles/model2emu

@@ -37,8 +37,6 @@ mkdir -p "${STAGING}/bin"
         --prefix="${EMULATOR_RUNTIME_ROOT}/${NAME}" \
         --without-oss
 
-    # GCC 10+ changed -fno-common default; old VICE has z80_regs as a tentative global
-    # in both cpmcart.c and z80.c, causing a multiple-definition linker error in x128.
     find "${SRC}/src" -name 'Makefile' -exec sed -i 's/^CFLAGS = /CFLAGS = -fcommon /' {} \;
 
     make -j"$(nproc)"

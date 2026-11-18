@@ -1,4 +1,5 @@
 requireArtifact: rpcs3
+arch: [amd64]
 shared_features:
   - powermode
   - tdp

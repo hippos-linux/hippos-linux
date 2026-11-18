@@ -1181,6 +1181,7 @@ def network_merge_requests() -> list[tuple[str, str]]:
     if not is_true(setting("storage.prompt_merge", "true")):
         return []
     sources = {line.split()[0] for line in network_sources()}
+    ignored = ignored_device_ids()
     listing = run_text(["/usr/lib/hippos/hippos-network-roms-discover", "list"])
     requests = []
     for line in listing.splitlines():
@@ -1188,7 +1189,7 @@ def network_merge_requests() -> list[tuple[str, str]]:
         if len(fields) < 4:
             continue
         ident, kind, uri, name = fields[:4]
-        if kind != "games" or uri in sources or is_ignored_device(uri):
+        if kind != "games" or uri in sources or uri in ignored:
             continue
         counts = fields[5].split(",") if len(fields) > 5 and fields[5] else ["", "", ""]
         requests.append((uri, f"REQUEST_NETWORK_MERGE:{ident}:{sanitize_event_field(name)}:{':'.join(counts)}:{uri}"))
