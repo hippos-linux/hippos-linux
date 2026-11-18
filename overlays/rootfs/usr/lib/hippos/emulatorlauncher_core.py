@@ -240,6 +240,8 @@ def _write_dolphin_config(ctx: LaunchContext) -> None:
         gfx_parser.write(fh)
 
     _write_dolphin_controller_configs(ctx, profiles)
+    if ctx.system == 'wii':
+        _write_dolphin_wii_controller_configs(ctx, profiles)
 
 def launch_dolphin(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('dolphin-emu') or _find_emulator_bin('dolphin')
@@ -867,6 +869,32 @@ DOLPHIN_GC_MAPPING: dict[str, str] = {
     'hotkey': 'Buttons/Hotkey',
 }
 
+DOLPHIN_WII_MAPPING: dict[str, str] = {
+    'a':             'Buttons/A',
+    'b':             'Buttons/B',
+    'x':             'Buttons/1',
+    'y':             'Buttons/2',
+    'start':         'Buttons/+',
+    'select':        'Buttons/-',
+    'pageup':        'Buttons/Home',
+    'pagedown':      '',
+    'up':            'D-Pad/Up',
+    'down':          'D-Pad/Down',
+    'left':          'D-Pad/Left',
+    'right':         'D-Pad/Right',
+    'l2':            'Nunchuk/Buttons/C',
+    'r2':            'Nunchuk/Buttons/Z',
+    'joystick1up':   'Nunchuk/Stick/Up',
+    'joystick1down': 'Nunchuk/Stick/Down',
+    'joystick1left': 'Nunchuk/Stick/Left',
+    'joystick1right':'Nunchuk/Stick/Right',
+    'joystick2up':   'IR/Up',
+    'joystick2down': 'IR/Down',
+    'joystick2left': 'IR/Left',
+    'joystick2right':'IR/Right',
+    'hotkey':        'Buttons/Hotkey',
+}
+
 DOLPHIN_WHEEL_MAPPING: dict[str, str] = {
     'select': 'Buttons/Z',
     'start': 'Buttons/Start',
@@ -987,6 +1015,43 @@ def _write_dolphin_controller_configs(ctx: LaunchContext, profiles: list[ESContr
                     continue
                 fh.write(f'{target} = {value}\n')
             fh.write('\n')
+
+def _write_dolphin_wii_controller_configs(ctx: LaunchContext, profiles: list[ESControllerProfile]) -> None:
+    config_path = DOLPHIN_CONFIG_DIR / 'WiimoteNew.ini'
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    profile_counts: dict[str, int] = {}
+    with config_path.open('w', encoding='utf-8') as fh:
+        for ctrl in ctx.controllers:
+            profile = _pick_es_profile(profiles, ctrl)
+            name_key = _normalize(ctrl.name)
+            nsamepad = profile_counts.get(name_key, 0)
+            profile_counts[name_key] = nsamepad + 1
+            if profile is None:
+                _log.warning("No ES input profile matched controller %s (%s)", ctrl.name, ctrl.guid)
+                continue
+
+            section = f'Wiimote{ctrl.player}'
+            fh.write(f'[{section}]\n')
+            fh.write(f'Device = evdev/{nsamepad}/{ctrl.name}\n')
+            fh.write('Source = 1\n')
+            fh.write('Extension = Nunchuk\n')
+
+            for logical_name, target in DOLPHIN_WII_MAPPING.items():
+                if not target:
+                    continue
+                binding = profile.inputs.get(logical_name)
+                if binding is None:
+                    continue
+                value = _es_binding_to_dolphin(binding, target, ctrl, profile)
+                if value is None:
+                    continue
+                fh.write(f'{target} = {value}\n')
+            fh.write('\n')
+
+        for slot in range(1, 5):
+            if not any(c.player == slot for c in ctx.controllers):
+                fh.write(f'[Wiimote{slot}]\n')
+                fh.write('Source = 0\n\n')
 
 def _mupen_selected_mapping(ctrl: ControllerInfo) -> dict[str, str]:
     if ctrl.guid in MUPEN_VALID_N64_CONTROLLER_GUIDS or ctrl.name in MUPEN_VALID_N64_CONTROLLER_NAMES:
