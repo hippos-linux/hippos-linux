@@ -24,6 +24,7 @@ from emulatorlauncher_shared import (
 
 from HipposPaths import BIOS, CACHE, CONFIGS, SAVES, SCREENSHOTS
 import hippos_win9x
+from emulatorlauncher_registry import Emulator, register
 
 def launch_dosbox_staging(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -59,7 +60,7 @@ def launch_dosbox_staging(ctx: LaunchContext) -> int:
     cmd.append('--exit')
 
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'dosbox-staging', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 WIN9X_CD_SUFFIXES = ('.cue', '.iso', '.chd')
 WIN9X_CD_CACHE = CACHE / 'win98' / 'dosbox-x'
@@ -132,7 +133,7 @@ def _launch_dosbox_x_win9x(ctx: LaunchContext, bin_path: Path) -> int:
     if user_conf.exists():
         cmd += ['-conf', str(user_conf)]
     env = _build_game_env(_load_hippos_conf(), ctx)
-    return _run_game_command(ctx, 'dosbox-x', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 def launch_dosbox_x(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -174,7 +175,7 @@ def launch_dosbox_x(ctx: LaunchContext) -> int:
     ]
 
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'dosbox-x', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 _HATARI_MACHINES = {'st', 'ste', 'megaste', 'tt', 'falcon'}
 _HATARI_EXTS_FLOPPY = {'.st', '.msa', '.stx', '.dim', '.ipf'}
@@ -266,7 +267,7 @@ def launch_hatari(ctx: LaunchContext) -> int:
         cmd.append(str(rom))
 
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'hatari', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 def launch_scummvm(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -317,7 +318,7 @@ def launch_scummvm(ctx: LaunchContext) -> int:
         cmd += [f'--path={rom.parent}', '--auto-detect']
 
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'scummvm', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 def launch_mupen64plus(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -406,7 +407,7 @@ def launch_mupen64plus(ctx: LaunchContext) -> int:
     ]
 
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'mupen64plus', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 _FSUAE_MODELS = {
     'A500':  'A500',  'A500+': 'A500+', 'A600': 'A600',
@@ -474,7 +475,7 @@ def launch_fsuae(ctx: LaunchContext) -> int:
         cmd.append(f'--joystick_port_{ctrl.player - 1}={port_name}')
 
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'fsuae', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 _BASILISK2_ROM_DIR = BIOS / 'macintosh'
 
@@ -502,7 +503,7 @@ def launch_basilisk2(ctx: LaunchContext) -> int:
                      encoding='utf-8')
     cmd = [str(bin_path), '--config', str(prefs)]
     env = _build_game_env(_load_hippos_conf(), ctx)
-    return _run_game_command(ctx, 'basilisk2', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 _OPENMSX_MACHINES = {
     'msx1':       'Boosted_MSX2_EN',
@@ -637,4 +638,16 @@ def launch_openmsx(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     env['OPENMSX_HOME'] = str(cfg_dir)
     env['OPENMSX_SYSTEM_DATA'] = str(system_share)
-    return _run_game_command(ctx, 'openmsx', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
+
+register(Emulator('dosbox', launch_dosbox_staging, binaries=('dosbox',), hotkeys='dosbox-staging'))
+register(Emulator('dosbox-x', launch_dosbox_x, binaries=('dosbox-x',)))
+register(Emulator('dosbox_staging', launch_dosbox_staging, binaries=('dosbox-staging', 'dosbox_staging', 'dosbox'), packages=('dosbox-staging',), hotkeys='dosbox-staging'))
+register(Emulator('dosbox-staging', launch_dosbox_staging, binaries=('dosbox',)))
+register(Emulator('dosboxx', launch_dosbox_x, binaries=('dosbox-x', 'dosboxx'), packages=('dosbox-x',), hotkeys='dosbox-x'))
+register(Emulator('fsuae', launch_fsuae, binaries=('fs-uae', 'fsuae')))
+register(Emulator('hatari', launch_hatari, binaries=('hatari',)))
+register(Emulator('mupen64plus', launch_mupen64plus))
+register(Emulator('openmsx', launch_openmsx, binaries=('openmsx',)))
+register(Emulator('scummvm', launch_scummvm, binaries=('scummvm',)))
+register(Emulator('basilisk2', launch_basilisk2, binaries=('BasiliskII', 'basilisk2')))

@@ -18,6 +18,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import CONFIGS, USERDATA
+from emulatorlauncher_registry import Emulator, register
 
 def _model2_border_thickness(width: int) -> str:
     if width <= 640:
@@ -170,10 +171,12 @@ def launch_model2emu(ctx: LaunchContext) -> int:
             'GALLIUM_DRIVER': 'llvmpipe',
         })
 
-    result = _run_game_command(ctx, 'model2emu', cmd, env, cwd=runtime_emu)
+    result = _run_game_command(ctx, cmd, env, cwd=runtime_emu)
     return result.returncode
 
 MODEL2_RUNTIME_ROOT = CONFIGS / 'model2emu'
 MODEL2_RUNTIME_EMU  = MODEL2_RUNTIME_ROOT / 'emulator'
 MODEL2_SOURCE_EMU   = Path('/opt/emulators/model2emu/emulator')
 MODEL2_ROMS         = USERDATA / 'roms' / 'model2'
+
+register(Emulator('model2emu', launch_model2emu))

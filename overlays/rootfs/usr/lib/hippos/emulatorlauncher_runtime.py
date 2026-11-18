@@ -35,6 +35,7 @@ from emulatorlauncher_shared import (
 
 from emulatorlauncher_generic import _RA_AXIS_MAP, _RA_DPAD_MAP
 from HipposPaths import BIOS, CONFIGS, LOGS, SAVES, SCREENSHOTS, USERDATA
+from emulatorlauncher_registry import Emulator, register
 
 def _amiberry_floppies_from_rom(rom: Path) -> list[Path]:
     floppies: list[Path] = []
@@ -210,7 +211,7 @@ def launch_amiberry(ctx: LaunchContext) -> int:
         'SDL_GAMECONTROLLERCONFIG': generate_sdl_game_controller_config(ctx.controllers),
         'SDL_JOYSTICK_HIDAPI': '0',
     })
-    result = _run_game_command(ctx, 'amiberry', commandArray, env)
+    result = _run_game_command(ctx, commandArray, env)
     return result.returncode
 
 def _solarus_key_val(binding, reverse: bool = False) -> str:
@@ -269,7 +270,7 @@ def launch_solarus(ctx: LaunchContext) -> int:
     _log.info("Launching solarus: %s", ' '.join(cmd))
     env = _build_game_env(conf, ctx)
     env['SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS'] = '0'
-    result = _run_game_command(ctx, 'solarus', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def launch_steam(ctx: LaunchContext) -> int:
@@ -298,7 +299,7 @@ def launch_steam(ctx: LaunchContext) -> int:
 
     _log = __import__('logging').getLogger('hippos.emulatorlauncher')
     _log.info("Launching Steam: %s", ' '.join(cmd))
-    result = _run_game_command(ctx, 'steam', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def launch_wine(ctx: LaunchContext) -> int:
@@ -324,7 +325,7 @@ def launch_wine(ctx: LaunchContext) -> int:
         env['HIPPOS_RUNNER'] = ctx.core
     cmd = [str(wrapper), ctx.system, mode, str(ctx.rom)]
     __import__('logging').getLogger('hippos.emulatorlauncher').info("Launching Wine: %s", ' '.join(cmd))
-    result = _run_game_command(ctx, 'wine', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def launch_linuxloader(ctx: LaunchContext) -> int:
@@ -514,7 +515,7 @@ def launch_linuxloader(ctx: LaunchContext) -> int:
         env['MESA_LOADER_DRIVER_OVERRIDE'] = 'zink'
         env['VK_LOADER_LAYERS_DISABLE'] = '~all~'
 
-    result = _run_game_command(ctx, 'linuxloader', cmd, env, cwd=LINDBERGH_RUNTIME_DIR)
+    result = _run_game_command(ctx, cmd, env, cwd=LINDBERGH_RUNTIME_DIR)
     return result.returncode
 
 AMIBERRY_CONFIG_DIR = CONFIGS / 'amiberry'
@@ -764,3 +765,10 @@ def _amiberry_rom_type(rom: Path) -> str:
         except Exception as exc:
             _log.warning("Could not inspect Amiberry zip %s: %s", rom, exc)
     return 'UNKNOWN'
+
+register(Emulator('solarus-engine', launch_solarus, hotkeys='solarus'))
+register(Emulator('amiberry', launch_amiberry, binaries=('amiberry',)))
+register(Emulator('linuxloader', launch_linuxloader))
+register(Emulator('solarus', launch_solarus, binaries=('solarus-run', 'solarus'), packages=('solarus-engine',), writes_to_rom=True))
+register(Emulator('steam', launch_steam, binaries=('steam',)))
+register(Emulator('wine', launch_wine, binaries=('wine-tkg', 'wine'), hud_wrapper=True))

@@ -17,6 +17,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import CACHE, CONFIGS, SAVES
+from emulatorlauncher_registry import Emulator, register
 
 def _play_device_id(profile: Optional[object], ctrl: object) -> str:
     if profile is not None and getattr(profile, 'device_guid', None):
@@ -186,7 +187,7 @@ def launch_play(ctx: LaunchContext) -> int:
     env['XDG_DATA_HOME'] = str(PLAY_CONFIG_DIR)
     env['XDG_CACHE_HOME'] = str(CACHE)
     env['QT_QPA_PLATFORM'] = 'xcb'
-    result = _run_game_command(ctx, 'play', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 PLAY_CONFIG_DIR = CONFIGS / 'play'
@@ -194,3 +195,5 @@ PLAY_DATA_DIR = PLAY_CONFIG_DIR / 'Play Data Files'
 PLAY_CONFIG_FILE = PLAY_DATA_DIR / 'config.xml'
 PLAY_INPUT_FILE = PLAY_DATA_DIR / 'inputprofiles' / 'default.xml'
 PLAY_SAVES_DIR = SAVES / 'ps2'
+
+register(Emulator('play', launch_play, binaries=('Play', 'play')))

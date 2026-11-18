@@ -30,6 +30,7 @@ from libretro_cores import core_file_names
 from HipposPaths import BIOS, CHEATS, CONFIGS, EMULATORS_ROOT, SAVES, SCREENSHOTS, USERDATA, USER_DECORATIONS, USER_SHADERS
 import hippos_dosbox_pure_ddrive
 import hippos_win9x
+from emulatorlauncher_registry import Emulator, lookup, register
 
 def launch_libretro(ctx: LaunchContext) -> int:
     if not ctx.core:
@@ -67,36 +68,11 @@ def launch_libretro(ctx: LaunchContext) -> int:
 
     env = _build_game_env(conf, ctx)
     try:
-        result = _run_game_command(ctx, 'retroarch', cmd, env)
+        result = _run_game_command(ctx, cmd, env)
     finally:
         if ra_game_cfg is not None:
             ra_game_cfg.unlink(missing_ok=True)
     return result.returncode
-
-_FULLSCREEN_FLAGS: dict[str, list[str]] = {
-    'vkquake':        ['-fullscreen'],
-    'vkquake2':       ['-fullscreen'],
-    'vkquake3':       ['-fullscreen'],
-    'yquake2':        ['-fullscreen'],
-    'iortcw':         ['+set', 'r_fullscreen', '1'],
-    'openjk':         ['+set', 'r_fullscreen', '1'],
-    'openjkdf2':      ['+set', 'r_fullscreen', '1'],
-    'openmohaa':      ['+set', 'r_fullscreen', '1'],
-    'dhewm3':         ['+set', 'r_fullscreen', '1'],
-    'etlegacy':       ['+set', 'r_fullscreen', '1'],
-    'devilutionx':    ['--fullscreen'],
-    'raze':           ['-fullscreen'],
-    'ecwolf':         ['--fullscreen'],
-    'xash3d_fwgs':    ['-fullscreen'],
-    'dxx-rebirth':    ['--fullscreen'],
-    'hurrican':       ['--fullscreen'],
-    'openjazz':       ['-f'],
-    'jazz2-native':   ['--fullscreen'],
-    'cdogs':          ['--fullscreen'],
-    'cgenius':        ['--fullscreen'],
-    'sdlpop':         ['--fullscreen'],
-    'mugen':          ['-f'],
-}
 
 def launch_standalone(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin(ctx.emulator)
@@ -110,12 +86,13 @@ def launch_standalone(ctx: LaunchContext) -> int:
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
 
     conf = _load_hippos_conf()
-    fullscreen_flags = _FULLSCREEN_FLAGS.get(ctx.emulator, [])
+    emulator = lookup(ctx.emulator)
+    fullscreen_flags = list(emulator.fullscreen_flags) if emulator else []
     cmd = [str(bin_path)] + fullscreen_flags + [str(ctx.rom)]
     _log.info("Launching standalone: %s", ' '.join(cmd))
 
     env = _build_game_env(conf, ctx)
-    result = _run_game_command(ctx, ctx.emulator, cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 RA_CONFIG_DIR = CONFIGS / 'retroarch'
@@ -727,3 +704,43 @@ def _write_retroarch_game_overrides(ctx: LaunchContext) -> Optional[Path]:
     cfg.write()
     _log.info("Wrote retroarch overrides: %s", cfg.path)
     return cfg.path
+
+register(Emulator('libretro', launch_libretro, hotkeys='retroarch'))
+register(Emulator('retroarch', launch_libretro))
+register(Emulator('abuse', launch_standalone))
+register(Emulator('bstone', launch_standalone))
+register(Emulator('cannonball', launch_standalone))
+register(Emulator('cdogs', launch_standalone, fullscreen_flags=('--fullscreen',)))
+register(Emulator('cgenius', launch_standalone, fullscreen_flags=('--fullscreen',)))
+register(Emulator('devilutionx', launch_standalone, fullscreen_flags=('--fullscreen',)))
+register(Emulator('dhewm3', launch_standalone, fullscreen_flags=('+set', 'r_fullscreen', '1')))
+register(Emulator('dxx-rebirth', launch_standalone, fullscreen_flags=('--fullscreen',)))
+register(Emulator('ecwolf', launch_standalone, fullscreen_flags=('--fullscreen',)))
+register(Emulator('etlegacy', launch_standalone, fullscreen_flags=('+set', 'r_fullscreen', '1')))
+register(Emulator('hcl', launch_standalone))
+register(Emulator('hurrican', launch_standalone, fullscreen_flags=('--fullscreen',)))
+register(Emulator('iortcw', launch_standalone, fullscreen_flags=('+set', 'r_fullscreen', '1')))
+register(Emulator('jazz2-native', launch_standalone, fullscreen_flags=('--fullscreen',)))
+register(Emulator('moonlight', launch_standalone, binaries=('moonlight',)))
+register(Emulator('mugen', launch_standalone, fullscreen_flags=('-f',)))
+register(Emulator('odcommander', launch_standalone))
+register(Emulator('openjazz', launch_standalone, fullscreen_flags=('-f',)))
+register(Emulator('openjk', launch_standalone, fullscreen_flags=('+set', 'r_fullscreen', '1')))
+register(Emulator('openjkdf2', launch_standalone, fullscreen_flags=('+set', 'r_fullscreen', '1')))
+register(Emulator('openmohaa', launch_standalone, fullscreen_flags=('+set', 'r_fullscreen', '1')))
+register(Emulator('raze', launch_standalone, binaries=('raze',), fullscreen_flags=('-fullscreen',)))
+register(Emulator('sdlpop', launch_standalone, fullscreen_flags=('--fullscreen',)))
+register(Emulator('taradino', launch_standalone))
+register(Emulator('tr1x', launch_standalone))
+register(Emulator('tyrian', launch_standalone))
+register(Emulator('vkquake', launch_standalone, fullscreen_flags=('-fullscreen',)))
+register(Emulator('vkquake2', launch_standalone, fullscreen_flags=('-fullscreen',)))
+register(Emulator('vkquake3', launch_standalone, fullscreen_flags=('-fullscreen',)))
+register(Emulator('xash3d_fwgs', launch_standalone, fullscreen_flags=('-fullscreen',)))
+register(Emulator('yquake2', launch_standalone, binaries=('yquake2',), fullscreen_flags=('-fullscreen',)))
+register(Emulator('fceux', launch_standalone, binaries=('fceux',)))
+register(Emulator('mednafen', launch_standalone, binaries=('mednafen',)))
+register(Emulator('stella', launch_standalone, binaries=('stella',)))
+register(Emulator('desmume', launch_standalone, binaries=('desmume',)))
+register(Emulator('nestopia', launch_standalone, binaries=('nestopia',)))
+register(Emulator('virtualjaguar', launch_standalone, binaries=('virtualjaguar',)))

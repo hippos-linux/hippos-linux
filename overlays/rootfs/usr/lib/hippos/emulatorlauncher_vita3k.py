@@ -20,6 +20,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import BIOS, CONFIGS, SAVES
+from emulatorlauncher_registry import Emulator, register
 
 VITA3K_CONFIG_FILE = CONFIGS / 'Vita3K' / 'config.yml'
 VITA3K_PREF_DIR    = SAVES / 'psvita'
@@ -120,5 +121,7 @@ def launch_vita3k(ctx: LaunchContext) -> int:
         cmd += ['-r', title_id]
     else:
         cmd.append(str(ctx.rom))
-    result = _run_game_command(ctx, 'vita3k', cmd, env, cwd=bin_path.parent)
+    result = _run_game_command(ctx, cmd, env, cwd=bin_path.parent)
     return result.returncode
+
+register(Emulator('vita3k', launch_vita3k, binaries=('Vita3K', 'vita3k')))

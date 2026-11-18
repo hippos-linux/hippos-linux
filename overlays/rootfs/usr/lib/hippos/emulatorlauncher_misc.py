@@ -32,6 +32,7 @@ from hippos_launcher_sync import CLIENT_ENTRY
 from hippos_desktop_entries import read_desktop_file
 from hippos_webapps import ADD_WEBAPP_URL, WEBAPP_PROFILES, WEBAPPS_BIN, read_webapp
 import hippos_quiver
+from emulatorlauncher_registry import Emulator, register
 
 _VICE_MACHINE_NAMES: dict[str, str] = {
     'x64':     'C64SC',
@@ -177,7 +178,7 @@ def launch_vice(ctx: LaunchContext) -> int:
         cmd += [border_option, _VICE_BORDER_NONE]
     cmd.append(str(ctx.rom))
     env = _build_game_env(conf, ctx)
-    result = _run_game_command(ctx, 'vice', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def launch_simcoupe(ctx: LaunchContext) -> int:
@@ -188,7 +189,7 @@ def launch_simcoupe(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     cmd = [str(bin_path), 'autoboot', '-disk1', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
-    result = _run_game_command(ctx, 'samcoupe', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def launch_sh(ctx: LaunchContext) -> int:
@@ -207,7 +208,7 @@ def launch_sh(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
-    result = _run_game_command(ctx, 'shell', ['/bin/bash', str(script)], env,
+    result = _run_game_command(ctx, ['/bin/bash', str(script)], env,
                                cwd=script.parent)
     return result.returncode
 
@@ -225,7 +226,7 @@ def launch_flatpak(ctx: LaunchContext) -> int:
     env['SDL_JOYSTICK_HIDAPI_XBOX'] = '0'
     cmd = ['/usr/bin/flatpak', 'run', app_id]
     _log.info("Launching Flatpak: %s", app_id)
-    result = _run_game_command(ctx, 'flatpak', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 CHROMIUM_BROWSERS = frozenset({
@@ -248,7 +249,7 @@ def _run_desktop_app(ctx: LaunchContext, cmd: list[str]) -> int:
     env = _build_game_env(conf, ctx)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
     _log.info("Launching %s", ' '.join(cmd))
-    return _run_game_command(ctx, 'shell', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 def launch_desktopshortcuts(ctx: LaunchContext) -> int:
     try:
@@ -299,7 +300,7 @@ def launch_heroic(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     cmd = [str(wrapper), str(ctx.rom)]
     _log.info("Launching Heroic: %s", entry)
-    result = _run_game_command(ctx, 'heroic', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def launch_lutris(ctx: LaunchContext) -> int:
@@ -323,7 +324,7 @@ def launch_lutris(ctx: LaunchContext) -> int:
     else:
         cmd = ['lutris', f'lutris:rungameid/{target}']
     _log.info("Launching Lutris: %s", target)
-    return _run_game_command(ctx, 'lutris', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 def launch_quiver(ctx: LaunchContext) -> int:
     try:
@@ -340,7 +341,7 @@ def launch_quiver(ctx: LaunchContext) -> int:
     if target != CLIENT_ENTRY:
         cmd += ['--run', target]
     _log.info("Launching Quiver: %s", target)
-    return _run_game_command(ctx, 'quiver', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 def launch_pygame(ctx: LaunchContext) -> int:
     pygame_dir = Path('/opt/emulators/python-pygame2')
@@ -351,7 +352,7 @@ def launch_pygame(ctx: LaunchContext) -> int:
         env['PYTHONPATH'] = str(pygame_dir) + ':' + env.get('PYTHONPATH', '')
         libs = str(pygame_dir / 'pygame.libs')
         env['LD_LIBRARY_PATH'] = libs + ':' + env.get('LD_LIBRARY_PATH', '')
-    result = _run_game_command(ctx, 'pygame', ['python3', str(ctx.rom)], env,
+    result = _run_game_command(ctx, ['python3', str(ctx.rom)], env,
                                cwd=ctx.rom.parent)
     return result.returncode
 
@@ -362,7 +363,7 @@ def launch_ruffle(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     cmd = [str(bin_path), str(ctx.rom)]
     env = _build_game_env(conf, ctx)
-    result = _run_game_command(ctx, 'ruffle', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def launch_lightspark(ctx: LaunchContext) -> int:
@@ -372,7 +373,7 @@ def launch_lightspark(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     cmd = [str(bin_path), '-fs', '-s', 'local-with-networking', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
-    result = _run_game_command(ctx, 'lightspark', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def launch_pyxel(ctx: LaunchContext) -> int:
@@ -383,7 +384,7 @@ def launch_pyxel(ctx: LaunchContext) -> int:
     cmd = [str(bin_path), 'play' if ctx.rom.suffix == '.pyxapp' else 'run', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['PYTHONPATH'] = str(bin_path.parent.parent)
-    result = _run_game_command(ctx, 'pyxel', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def _clk_media(rom: Path) -> Path:
@@ -410,7 +411,7 @@ def launch_clk(ctx: LaunchContext) -> int:
     if ctx.system in CLK_QUICKLOAD_SYSTEMS:
         cmd.append('--accelerate-media-loading')
     env = _build_game_env(conf, ctx)
-    result = _run_game_command(ctx, 'clk', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def launch_tsugaru(ctx: LaunchContext) -> int:
@@ -428,7 +429,7 @@ def launch_tsugaru(ctx: LaunchContext) -> int:
     else:
         cmd += ['-FD0', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
-    result = _run_game_command(ctx, 'tsugaru', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def launch_x16emu(ctx: LaunchContext) -> int:
@@ -463,7 +464,7 @@ def launch_x16emu(ctx: LaunchContext) -> int:
     (SAVES / 'x16').mkdir(parents=True, exist_ok=True)
     env = _build_game_env(conf, ctx)
     env['XDG_DATA_HOME'] = str(SAVES / 'x16')
-    result = _run_game_command(ctx, 'x16emu', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def launch_ioquake3(ctx: LaunchContext) -> int:
@@ -480,7 +481,7 @@ def launch_ioquake3(ctx: LaunchContext) -> int:
         pass
     env = _build_game_env(conf, ctx)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
-    result = _run_game_command(ctx, 'ioquake3', cmd, env, cwd=ctx.rom.parent)
+    result = _run_game_command(ctx, cmd, env, cwd=ctx.rom.parent)
     return result.returncode
 
 def launch_lexaloffle(ctx: LaunchContext) -> int:
@@ -526,7 +527,7 @@ def launch_lexaloffle(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     existing_ld = env.get('LD_LIBRARY_PATH', '')
     env['LD_LIBRARY_PATH'] = f"{ld_lib}:{existing_ld}" if existing_ld else str(ld_lib)
-    result = _run_game_command(ctx, 'lexaloffle', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def launch_uqm(ctx: LaunchContext) -> int:
@@ -543,7 +544,7 @@ def launch_uqm(ctx: LaunchContext) -> int:
     cmd = [str(bin_path), f'--contentdir={roms_dir}', f'--configdir={saves_dir}']
     env = _build_game_env(conf, ctx)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
-    result = _run_game_command(ctx, 'uqm', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def launch_redream(ctx: LaunchContext) -> int:
@@ -616,7 +617,7 @@ def launch_redream(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     env['SDL_JOYSTICK_HIDAPI'] = '0'
     env['SDL_AUDIODRIVER']     = 'alsa'
-    result = _run_game_command(ctx, 'redream', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def launch_corsixth(ctx: LaunchContext) -> int:
@@ -674,7 +675,7 @@ def launch_corsixth(ctx: LaunchContext) -> int:
 
     cmd = [str(bin_path), f'--config-file={cfg_file}']
     env = _build_game_env(conf, ctx)
-    result = _run_game_command(ctx, 'corsixth', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 _GZDOOM_JOY_BINDINGS: dict[str, str] = {
@@ -809,7 +810,7 @@ def launch_gzdoom(ctx: LaunchContext) -> int:
 
     env = _build_game_env(conf, ctx)
     env['SDL_JOYSTICK_HIDAPI'] = '0'
-    result = _run_game_command(ctx, 'gzdoom', cmd, env, cwd=ctx.rom.parent)
+    result = _run_game_command(ctx, cmd, env, cwd=ctx.rom.parent)
     return result.returncode
 
 _RYUJINX_CTRL_TEMPLATE: dict = {
@@ -873,10 +874,38 @@ def launch_ryujinx(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     cmd = [str(bin_path), str(ctx.rom)]
     env = _build_game_env(conf, ctx)
-    result = _run_game_command(ctx, 'ryujinx', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 CLK_QUICKLOAD_SYSTEMS = {'amstradcpc', 'archimedes', 'electron', 'msx1', 'msx2', 'oricatmos', 'zxspectrum'}
 CLK_SVIDEO_SYSTEMS = {'colecovision', 'mastersystem'}
 CLK_RGB_SYSTEMS = {'amstradcpc', 'atarist', 'electron', 'enterprise', 'msx1', 'msx2', 'oricatmos', 'zxspectrum'}
 TSUGARU_CD_SYSTEMS = {'.iso', '.cue', '.bin'}
+
+register(Emulator('sh', launch_sh, writes_to_rom=True, hud_wrapper=True, hotkeys='shell'))
+register(Emulator('python-pygame2', launch_pygame, hotkeys='pygame'))
+register(Emulator('python-pyxel', launch_pyxel, hotkeys='pyxel'))
+register(Emulator('corsixth', launch_corsixth))
+register(Emulator('flatpak', launch_flatpak, binaries=('flatpak',), hud_wrapper=True))
+register(Emulator('desktopshortcuts', launch_desktopshortcuts, hotkeys='shell'))
+register(Emulator('webapp', launch_webapp, hotkeys='shell'))
+register(Emulator('heroic', launch_heroic, binaries=('heroic',)))
+register(Emulator('lutris', launch_lutris))
+register(Emulator('quiver', launch_quiver))
+register(Emulator('clk', launch_clk, binaries=('clksignal', 'clk')))
+register(Emulator('gzdoom', launch_gzdoom))
+register(Emulator('lightspark', launch_lightspark, binaries=('lightspark',)))
+register(Emulator('pyxel', launch_pyxel, binaries=('pyxel',), packages=('python-pyxel',), writes_to_rom=True))
+register(Emulator('pygame', launch_pygame, writes_to_rom=True))
+register(Emulator('ruffle', launch_ruffle, binaries=('ruffle',)))
+register(Emulator('ryujinx', launch_ryujinx, binaries=('Ryujinx.sh', 'Ryujinx', 'ryujinx')))
+register(Emulator('samcoupe', launch_simcoupe, binaries=('samcoupe', 'simcoupe')))
+register(Emulator('tsugaru', launch_tsugaru, binaries=('Tsugaru_CUI', 'tsugaru')))
+register(Emulator('x16emu', launch_x16emu, binaries=('x16emu',)))
+register(Emulator('redream', launch_redream, binaries=('redream',)))
+register(Emulator('vice', launch_vice, binaries=('x64', 'x64sc', 'xscpu64', 'xvic', 'x128', 'x64dtv', 'xplus4', 'xpet')))
+register(Emulator('ioquake3', launch_ioquake3))
+register(Emulator('lexaloffle', launch_lexaloffle))
+register(Emulator('lexaloffle-pico8', launch_lexaloffle))
+register(Emulator('lexaloffle-voxatron', launch_lexaloffle))
+register(Emulator('uqm', launch_uqm))

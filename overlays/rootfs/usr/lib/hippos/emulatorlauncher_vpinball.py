@@ -18,6 +18,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import CONFIGS
+from emulatorlauncher_registry import Emulator, register
 
 def write_vpinball_config(ctx: LaunchContext) -> None:
     conf = _load_effective_hippos_conf()
@@ -182,7 +183,7 @@ def launch_vpinball(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
     env['SDL_RENDER_VSYNC'] = '0'
-    result = _run_game_command(ctx, 'vpinball', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 VPINBALL_CONFIG_DIR = CONFIGS / 'vpinball'
@@ -190,3 +191,5 @@ VPINBALL_INI = VPINBALL_CONFIG_DIR / 'VPinballX.ini'
 VPINBALL_LOG = VPINBALL_CONFIG_DIR / 'vpinball.log'
 VPINBALL_PINMAME_INI = VPINBALL_CONFIG_DIR / 'pinmame' / 'ini'
 VPINBALL_DEFAULT_INI = Path('/usr/bin/vpinball/assets/Default_VPinballX.ini')
+
+register(Emulator('vpinball', launch_vpinball, binaries=('VPinballX_GL', 'VPinballX', 'vpinball')))

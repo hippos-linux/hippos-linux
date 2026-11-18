@@ -11,6 +11,7 @@ from emulatorlauncher_shared import (
     _run_game_command,
     generate_sdl_game_controller_config,
 )
+from emulatorlauncher_registry import Emulator, register
 
 from HipposPaths import CONFIGS, EMULATORS_ROOT, USERDATA
 
@@ -58,5 +59,7 @@ def launch_windowsarcadeloader(ctx: LaunchContext) -> int:
     env['WAL_PLAYER_PADS'] = ';'.join(c.device_path for c in ctx.controllers if c.device_path)
 
     cmd = [str(bin_path), 'run', str(ctx.rom), '--root', str(WAL_ROOT)]
-    result = _run_game_command(ctx, 'windowsarcadeloader', cmd, env, cwd=WAL_ROOT)
+    result = _run_game_command(ctx, cmd, env, cwd=WAL_ROOT)
     return result.returncode
+
+register(Emulator('windowsarcadeloader', launch_windowsarcadeloader, binaries=('arcade-launcher',), writes_to_rom=True))

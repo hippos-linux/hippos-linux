@@ -19,6 +19,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import BIOS, CONFIGS, SAVES
+from emulatorlauncher_registry import Emulator, register
 
 def _xemu_find_data_dir() -> Optional[Path]:
     for data_dir in XEMU_DATA_DIRS:
@@ -163,7 +164,7 @@ def launch_xemu(ctx: LaunchContext) -> int:
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
     env['SDL_GAMECONTROLLERCONFIG'] = ''
     env['LC_NUMERIC'] = 'C'
-    result = _run_game_command(ctx, 'xemu', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def launch_xemu_chihiro(ctx: LaunchContext) -> int:
@@ -177,7 +178,7 @@ def launch_xemu_chihiro(ctx: LaunchContext) -> int:
     env['XDG_DATA_HOME'] = str(CHIHIRO_SAVES_DIR)
     env['SDL_GAMECONTROLLERCONFIG'] = ''
     env['LC_NUMERIC'] = 'C'
-    result = _run_game_command(ctx, 'xemu-chihiro', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 XEMU_CONFIG_DIR = CONFIGS / 'xemu'
@@ -188,3 +189,6 @@ CHIHIRO_CONFIG_DIR = CONFIGS / 'xemu-chihiro'
 CHIHIRO_CONFIG_FILE = CHIHIRO_CONFIG_DIR / 'xemu.toml'
 CHIHIRO_SAVES_DIR = SAVES / 'chihiro'
 CHIHIRO_BIOS_DIR = BIOS / 'chihiro'
+
+register(Emulator('xemu', launch_xemu))
+register(Emulator('xemu-chihiro', launch_xemu_chihiro))

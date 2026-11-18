@@ -19,6 +19,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import CACHE, CONFIGS, HOME, SAVES, USERDATA
+from emulatorlauncher_registry import Emulator, register
 
 def _shadps4_base_config(display_resolution: Optional[tuple[int, int]]) -> dict[str, object]:
     width, height = display_resolution if display_resolution is not None else (1280, 720)
@@ -197,7 +198,7 @@ def launch_shadps4(ctx: LaunchContext) -> int:
     env['XDG_CONFIG_HOME'] = str(SHADPS4_CONFIG_DIR)
     env['XDG_DATA_HOME'] = str(SHADPS4_RUNTIME_DIR)
     env['XDG_CACHE_HOME'] = str(CACHE / 'shadps4')
-    result = _run_game_command(ctx, 'shadps4', cmd, env, cwd=SHADPS4_RUNTIME_DIR)
+    result = _run_game_command(ctx, cmd, env, cwd=SHADPS4_RUNTIME_DIR)
     return result.returncode
 
 SHADPS4_CONFIG_DIR = CONFIGS / 'shadps4'
@@ -207,3 +208,5 @@ SHADPS4_SAVES = SAVES / 'shadps4'
 SHADPS4_RUNTIME_DIR = CONFIGS / 'shadps4-runtime'
 SHADPS4_BUNDLE_DIR = Path('/opt/emulators/shadps4')
 SHADPS4_ROM_DIR = USERDATA / 'roms' / 'ps4'
+
+register(Emulator('shadps4', launch_shadps4))

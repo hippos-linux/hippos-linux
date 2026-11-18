@@ -17,6 +17,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import CONFIGS, SAVES, SCREENSHOTS
+from emulatorlauncher_registry import Emulator, register
 
 AZAHAR_CONFIG_DIR  = CONFIGS / 'azahar-emu'
 AZAHAR_INI         = AZAHAR_CONFIG_DIR / 'qt-config.ini'
@@ -186,5 +187,7 @@ def launch_azahar(ctx: LaunchContext) -> int:
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
     env['XDG_DATA_HOME']   = str(SAVES / '3ds')
     env['SDL_JOYSTICK_HIDAPI'] = '0'
-    result = _run_game_command(ctx, 'azahar', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
+
+register(Emulator('azahar', launch_azahar))

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from emulatorlauncher_registry import Emulator, register
 
 try:
     import yaml
@@ -274,5 +275,7 @@ def launch_rpcs3(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
     env['XDG_CACHE_HOME']  = str(CACHE)
-    result = _run_game_command(ctx, 'rpcs3', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
+
+register(Emulator('rpcs3', launch_rpcs3))

@@ -24,6 +24,7 @@ from emulatorlauncher_shared import (
     _run_game_command,
     generate_sdl_game_controller_config,
 )
+from emulatorlauncher_registry import Emulator, register
 
 from HipposPaths import BIOS, CACHE, CONFIGS, SAVES, SCREENSHOTS, USERDATA
 
@@ -85,7 +86,7 @@ def launch_xenia_edge(ctx: LaunchContext) -> int:
     env['SDL_JOYSTICK_HIDAPI'] = '0'
     env['VKD3D_SHADER_CACHE_PATH'] = str(XENIA_CACHE_DIR)
 
-    return _run_game_command(ctx, 'xenia-edge', cmd, env, cwd=cfg_dir).returncode
+    return _run_game_command(ctx, cmd, env, cwd=cfg_dir).returncode
 
 def _write_switch_qt_config(cfg_dir: Path, emu_name: str) -> None:
     cfg_file = cfg_dir / 'qt-config.ini'
@@ -167,7 +168,7 @@ def _launch_switch(ctx: LaunchContext, emu_name: str) -> int:
     env['XDG_DATA_HOME']   = str(saves_dir)
     env['XDG_CACHE_HOME']  = str(cache_dir)
     env['QT_QPA_PLATFORM'] = 'xcb'
-    return _run_game_command(ctx, emu_name, cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 def launch_citron_neo(ctx: LaunchContext) -> int:
     return _launch_switch(ctx, 'citron-neo')
@@ -199,7 +200,7 @@ def launch_ymir(ctx: LaunchContext) -> int:
     cmd = [str(bin_path), '--profile', str(cfg_dir), '--fullscreen', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
-    return _run_game_command(ctx, 'ymir', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 _XROAR_MACHINES = {
     'coco':     'coco2bus',
@@ -232,7 +233,7 @@ def launch_xroar(ctx: LaunchContext) -> int:
     cmd = [str(bin_path), '-C', str(conf_file), str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
-    return _run_game_command(ctx, 'xroar', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 def launch_easyrpg(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -256,7 +257,7 @@ def launch_easyrpg(ctx: LaunchContext) -> int:
         '--fullscreen',
     ]
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'easyrpg', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 def launch_thextech(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -270,7 +271,7 @@ def launch_thextech(ctx: LaunchContext) -> int:
 
     cmd = [str(bin_path), '-u', str(saves_dir), '-c', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'thextech', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 _HYPSEUS_SHARE_DIR = Path('/usr/share/hypseus-singe')
 _DAPHNE_ROM_DIR    = BIOS / 'daphne'
@@ -328,7 +329,7 @@ def launch_hypseus_singe(ctx: LaunchContext) -> int:
         cmd += ['-keymapfile', keymapfile]
 
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'hypseus-singe', cmd, env, cwd=cfg_dir).returncode
+    return _run_game_command(ctx, cmd, env, cwd=cfg_dir).returncode
 
 def launch_tic80(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -342,7 +343,7 @@ def launch_tic80(ctx: LaunchContext) -> int:
 
     cmd = [str(bin_path), str(ctx.rom)]
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'tic80', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 _IKEMEN_KEYMAPPING = [
     {'Joystick': -1, 'Buttons': ['UP','DOWN','LEFT','RIGHT','a','s','d','z','x','c','RETURN','f','v','q']},
@@ -384,7 +385,7 @@ def launch_ikemen(ctx: LaunchContext) -> int:
 
     cmd = [str(bin_path), '-f']
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'ikemen', cmd, env, cwd=game_dir).returncode
+    return _run_game_command(ctx, cmd, env, cwd=game_dir).returncode
 
 _BIGPEMU_P1_BTNS: list[tuple[str, str]] = [
     ('y', 'C'), ('b', 'B'), ('a', 'A'), ('select', 'Pause'), ('start', 'Option'),
@@ -483,7 +484,7 @@ def launch_bigpemu(ctx: LaunchContext) -> int:
     env['XDG_CONFIG_HOME'] = str(cfg_dir)
     env['XDG_DATA_HOME']   = str(saves_dir)
     env['SDL_JOYSTICK_HIDAPI'] = '0'
-    return _run_game_command(ctx, 'bigpemu', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 def launch_snes9x(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('snes9x')
@@ -504,7 +505,7 @@ def launch_snes9x(ctx: LaunchContext) -> int:
     conf = _load_effective_hippos_conf()
     env = _build_game_env(conf, ctx)
     env['QT_QPA_PLATFORM'] = 'xcb'
-    return _run_game_command(ctx, 'snes9x', [str(bin_path), str(ctx.rom)], env).returncode
+    return _run_game_command(ctx, [str(bin_path), str(ctx.rom)], env).returncode
 
 def launch_nanoboyadvance(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('nanoboyadvance')
@@ -515,7 +516,7 @@ def launch_nanoboyadvance(ctx: LaunchContext) -> int:
     conf = _load_effective_hippos_conf()
     env = _build_game_env(conf, ctx)
     env['QT_QPA_PLATFORM'] = 'xcb'
-    return _run_game_command(ctx, 'nanoboyadvance', [str(bin_path), str(ctx.rom)], env).returncode
+    return _run_game_command(ctx, [str(bin_path), str(ctx.rom)], env).returncode
 
 KEISHO_RENAMED_DIRS = (
     (USERDATA / '.config' / 'sm2-emu', USERDATA / '.config' / 'keisho'),
@@ -543,8 +544,7 @@ def launch_sm2emu(ctx: LaunchContext) -> int:
     conf = _load_effective_hippos_conf()
     env = _build_game_env(conf, ctx)
     return _run_game_command(
-        ctx, 'sm2-emu',
-        [str(bin_path), '--graphics-backend', 'opengl', str(ctx.rom)],
+        ctx, [str(bin_path), '--graphics-backend', 'opengl', str(ctx.rom)],
         env,
     ).returncode
 
@@ -564,7 +564,7 @@ def launch_eka2l1(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     env['XDG_DATA_HOME'] = str(CONFIGS)
     env['QT_QPA_PLATFORM'] = 'xcb'
-    return _run_game_command(ctx, 'eka2l1', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 def launch_applewin(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -587,7 +587,7 @@ def launch_applewin(ctx: LaunchContext) -> int:
 
     env = _build_game_env(conf, ctx)
     env['XDG_CONFIG_HOME'] = str(cfg_dir)
-    return _run_game_command(ctx, 'applewin', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 _DEMUL_SYSTEMS = {
     'hikaru':  'hikaru',
@@ -617,7 +617,7 @@ def launch_demul(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
     env['WINEDLLOVERRIDES'] = WINE_NO_INSTALLER_PROMPTS
-    return _run_game_command(ctx, 'demul', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 def launch_sugarbox(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
@@ -638,4 +638,24 @@ def launch_sugarbox(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     env['XDG_CONFIG_HOME'] = str(cfg_dir)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
-    return _run_game_command(ctx, 'sugarbox', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
+
+register(Emulator('xenia-edge', launch_xenia_edge))
+register(Emulator('sm2-emu', launch_sm2emu, binaries=('keisho', 'sm2-emu')))
+
+register(Emulator('applewin', launch_applewin, binaries=('sa2', 'qapple', 'applen', 'applewin', 'AppleWin')))
+register(Emulator('eka2l1', launch_eka2l1, binaries=('eka2l1_qt', 'eka2l1')))
+register(Emulator('snes9x', launch_snes9x))
+register(Emulator('nanoboyadvance', launch_nanoboyadvance))
+register(Emulator('bigpemu', launch_bigpemu))
+register(Emulator('demul', launch_demul, binaries=('demul',)))
+register(Emulator('easyrpg', launch_easyrpg, binaries=('easyrpg-player', 'easyrpg')))
+register(Emulator('hypseus-singe', launch_hypseus_singe, binaries=('hypseus',)))
+register(Emulator('ikemen', launch_ikemen, binaries=('Ikemen_GO', 'ikemen')))
+register(Emulator('sugarbox', launch_sugarbox, binaries=('sugarbox', 'SugarboxV2')))
+register(Emulator('thextech', launch_thextech, binaries=('thextech',), writes_to_rom=True))
+register(Emulator('tic80', launch_tic80, binaries=('tic80',)))
+register(Emulator('xroar', launch_xroar, binaries=('xroar',)))
+register(Emulator('ymir', launch_ymir))
+register(Emulator('citron-neo', launch_citron_neo, binaries=('citron-neo', 'citron')))
+register(Emulator('eden', launch_eden, binaries=('eden',)))

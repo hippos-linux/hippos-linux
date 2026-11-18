@@ -26,86 +26,11 @@ except ImportError:
 
 from hippos_onscreen_keyboard import onscreen_keyboard
 from hippos_padtokey import padtokey_context
+from emulatorlauncher_registry import lookup
 
 from HipposPaths import (
     CONFIGS, EMULATORLAUNCHER_DEFAULTS, EMULATORS_ROOT, HIPPOS_CONF, HIPPOS_SHARE_DIR, USER_ES_DIR,
 )
-
-STANDALONE_BINARIES: dict[str, tuple[str, ...]] = {
-    'amiberry': ('amiberry',),
-    'applewin': ('sa2', 'qapple', 'applen', 'applewin', 'AppleWin'),
-    'dosbox-staging': ('dosbox',),
-    'supermodel-es': ('supermodel',),
-    'supermodel-legacy': ('supermodel',),
-    'cemu': ('Cemu', 'cemu'),
-    'easyrpg': ('easyrpg-player', 'easyrpg'),
-    'hypseus-singe': ('hypseus',),
-    'ikemen': ('Ikemen_GO', 'ikemen'),
-    'melonds': ('melonDS', 'melonds'),
-    'openbor': ('OpenBOR', 'OpenBOR7530'),
-    'pcsx2': ('pcsx2-qt', 'pcsx2'),
-    'pcsx2x6': ('pcsx2x6-qt',),
-    'armsx2': ('armsx2-qt',),
-    'ppsspp': ('PPSSPPSDL', 'ppsspp'),
-    'basilisk2': ('BasiliskII', 'basilisk2'),
-    'citron-neo': ('citron-neo', 'citron'),
-    'clk': ('clksignal', 'clk'),
-    'demul': ('demul',),
-    'dosbox_staging': ('dosbox-staging', 'dosbox_staging', 'dosbox'),
-    'eka2l1': ('eka2l1_qt', 'eka2l1'),
-    'dosboxx': ('dosbox-x', 'dosboxx'),
-    'play': ('Play', 'play'),
-    'gsplus': ('GSplus', 'gsplus'),
-    'samcoupe': ('samcoupe', 'simcoupe'),
-    'heroic': ('heroic',),
-    'steam': ('steam',),
-    'flatpak': ('flatpak',),
-    'moonlight': ('moonlight',),
-    'wine': ('wine-tkg', 'wine'),
-    'lightspark': ('lightspark',),
-    'pyxel': ('pyxel',),
-    'ruffle': ('ruffle',),
-    'solarus': ('solarus-run', 'solarus'),
-    'tsugaru': ('Tsugaru_CUI', 'tsugaru'),
-    'x16emu': ('x16emu',),
-    'xroar': ('xroar',),
-    'thextech': ('thextech',),
-    'yquake2': ('yquake2',),
-    'desmume': ('desmume',),
-    'dolphin': ('dolphin-emu', 'dolphin'),
-    'dolphin-emu': ('dolphin-emu', 'dolphin'),
-    'dosbox': ('dosbox',),
-    'dosbox-x': ('dosbox-x',),
-    'fsuae': ('fs-uae', 'fsuae'),
-    'fceux': ('fceux',),
-    'hatari': ('hatari',),
-    'mame': ('mame',),
-    'mednafen': ('mednafen',),
-    'nestopia': ('nestopia',),
-    'openmsx': ('openmsx',),
-    'raze': ('raze',),
-    'redream': ('redream',),
-    'ryujinx': ('Ryujinx.sh', 'Ryujinx', 'ryujinx'),
-    'eden': ('eden',),
-    'sugarbox': ('sugarbox', 'SugarboxV2'),
-    'tic80': ('tic80',),
-    'vita3k': ('Vita3K', 'vita3k'),
-    'vpinball': ('VPinballX_GL', 'VPinballX', 'vpinball'),
-    'sm2-emu': ('keisho', 'sm2-emu'),
-    'windowsarcadeloader': ('arcade-launcher',),
-    'scummvm': ('scummvm',),
-    'stella': ('stella',),
-    'vice': ('x64', 'x64sc', 'xscpu64', 'xvic', 'x128', 'x64dtv', 'xplus4', 'xpet'),
-    'virtualjaguar': ('virtualjaguar',),
-}
-
-ARTIFACT_PACKAGE_ALIASES: dict[str, tuple[str, ...]] = {
-    'dolphin': ('dolphin-emu',),
-    'dosbox_staging': ('dosbox-staging',),
-    'dosboxx': ('dosbox-x',),
-    'pyxel': ('python-pyxel',),
-    'solarus': ('solarus-engine',),
-}
 
 DEFAULTS_FILE      = EMULATORLAUNCHER_DEFAULTS
 
@@ -580,8 +505,9 @@ def _display_resolution_from_conf(conf: dict[str, str]) -> Optional[tuple[int, i
 
 def _find_emulator_bin(*names: str) -> Optional[Path]:
     for name in names:
-        packages = (name,) + ARTIFACT_PACKAGE_ALIASES.get(name, ())
-        binaries = STANDALONE_BINARIES.get(name, (name,))
+        emulator = lookup(name)
+        packages = (name,) + (emulator.packages if emulator else ())
+        binaries = emulator.binary_names if emulator else (name,)
         for d in (EMULATORS_ROOT / package for package in packages):
             for binary in binaries:
                 for candidate in (d / binary, d / 'bin' / binary):
@@ -839,19 +765,19 @@ def _restore_crt_resolution() -> None:
 
 def _run_game_command(
     ctx: LaunchContext,
-    hotkey_name: str,
     cmd: list[str],
     env: dict[str, str],
     cwd: Optional[Path] = None,
 ) -> subprocess.CompletedProcess[str]:
     conf = _load_hippos_conf()
     cmd = _gamescope_wrap(cmd, conf, ctx)
-    if _hud_config_path() is not None and ctx.emulator in _HUD_NEEDS_WRAPPER and _hud_supported(ctx.system):
+    emulator = lookup(ctx.emulator)
+    if _hud_config_path() is not None and emulator is not None and emulator.hud_wrapper and _hud_supported(ctx.system):
         cmd = ['mangohud'] + cmd
     try:
         with game_monitor_primary(ctx):
             with wheel_proxy_context(ctx, env):
-                with hotkey_context(hotkey_name):
+                with hotkey_context(emulator.hotkey_context if emulator else ctx.emulator):
                     profiles = _load_es_input_configs()
                     keyboard = _game_or_system_setting(conf, ctx.system, ctx.rom, 'onscreen_keyboard') == '1'
                     with padtokey_context(ctx.system, ctx.emulator, ctx.rom, ctx.controllers, profiles), \
@@ -922,8 +848,6 @@ def _build_game_env(conf: dict[str, str], ctx: Optional[LaunchContext] = None) -
     return env
 
 _HUD_CONFIG_PATH = Path('/var/run/hippos/hud.config')
-
-_HUD_NEEDS_WRAPPER: frozenset[str] = frozenset({'wine', 'sh', 'flatpak'})
 
 def _hud_config_path() -> Optional[Path]:
     conf = _load_hippos_conf()

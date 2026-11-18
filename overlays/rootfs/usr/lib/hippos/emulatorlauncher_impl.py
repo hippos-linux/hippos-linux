@@ -10,7 +10,7 @@ import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 try:
     import hippos_switchres as _switchres
@@ -324,266 +324,34 @@ def _build_hud_config(conf: dict[str, str], ctx: LaunchContext) -> Optional[Path
     _log.info("hud: config written (%s mode, %s)", mode, position)
     return _HUD_CONFIG_PATH
 
-from emulatorlauncher_generic import (
-    launch_libretro as _launch_libretro,
-    launch_standalone as _launch_standalone,
-)
-from emulatorlauncher_ports import (
-    launch_eduke32 as _launch_eduke32,
-    launch_theforceengine as _launch_theforceengine,
-    launch_tr2x as _launch_tr2x,
-    launch_sonic_mania as _launch_sonic_mania,
-    launch_sonicretro as _launch_sonicretro,
-    launch_sonic3air as _launch_sonic3air,
-    launch_catacombgl as _launch_catacombgl,
-    launch_fallout1_ce as _launch_fallout1_ce,
-    launch_fallout2_ce as _launch_fallout2_ce,
-)
-from emulatorlauncher_runtime import (
-    launch_amiberry as _launch_amiberry,
-    launch_linuxloader as _launch_linuxloader,
-    launch_solarus as _launch_solarus,
-    launch_steam as _launch_steam,
-    launch_wine as _launch_wine,
-)
-from emulatorlauncher_core import (
-    launch_dolphin as _launch_dolphin,
-    launch_duckstation as _launch_duckstation,
-    launch_flycast as _launch_flycast,
-    launch_mame as _launch_mame,
-)
+import emulatorlauncher_ares
+import emulatorlauncher_azahar
+import emulatorlauncher_cemu
+import emulatorlauncher_computers
+import emulatorlauncher_core
+import emulatorlauncher_drastic
+import emulatorlauncher_extras
+import emulatorlauncher_generic
+import emulatorlauncher_gsplus
+import emulatorlauncher_melonds
+import emulatorlauncher_misc
+import emulatorlauncher_model2emu
+import emulatorlauncher_openbor
+import emulatorlauncher_pcsx2
+import emulatorlauncher_play
+import emulatorlauncher_ports
+import emulatorlauncher_ppsspp
+import emulatorlauncher_rpcs3
+import emulatorlauncher_runtime
+import emulatorlauncher_shadps4
+import emulatorlauncher_supermodel
+import emulatorlauncher_vita3k
+import emulatorlauncher_vpinball
+import emulatorlauncher_windowsarcadeloader
+import emulatorlauncher_xemu
+import emulatorlauncher_xenia
 
-from emulatorlauncher_gsplus import launch_gsplus as _launch_gsplus
-from emulatorlauncher_misc import (
-    launch_clk as _launch_clk,
-    launch_desktopshortcuts as _launch_desktopshortcuts,
-    launch_webapp as _launch_webapp,
-    launch_flatpak as _launch_flatpak,
-    launch_heroic as _launch_heroic,
-    launch_lutris as _launch_lutris,
-    launch_quiver as _launch_quiver,
-    launch_ioquake3 as _launch_ioquake3,
-    launch_lexaloffle as _launch_lexaloffle,
-    launch_lightspark as _launch_lightspark,
-    launch_pygame as _launch_pygame,
-    launch_pyxel as _launch_pyxel,
-    launch_ruffle as _launch_ruffle,
-    launch_sh as _launch_sh,
-    launch_simcoupe as _launch_simcoupe,
-    launch_tsugaru as _launch_tsugaru,
-    launch_uqm as _launch_uqm,
-    launch_vice as _launch_vice,
-    launch_x16emu as _launch_x16emu,
-    launch_redream as _launch_redream,
-    launch_corsixth as _launch_corsixth,
-    launch_gzdoom as _launch_gzdoom,
-    launch_ryujinx as _launch_ryujinx,
-)
-from emulatorlauncher_model2emu import launch_model2emu as _launch_model2emu
-from emulatorlauncher_play import launch_play as _launch_play
-from emulatorlauncher_openbor import launch_openbor as _launch_openbor
-from emulatorlauncher_shadps4 import launch_shadps4 as _launch_shadps4
-from emulatorlauncher_supermodel import launch_supermodel as _launch_supermodel
-from emulatorlauncher_vpinball import launch_vpinball as _launch_vpinball
-from emulatorlauncher_windowsarcadeloader import launch_windowsarcadeloader as _launch_windowsarcadeloader
-from emulatorlauncher_drastic import launch_drastic as _launch_drastic
-from emulatorlauncher_xemu import launch_xemu as _launch_xemu
-from emulatorlauncher_xemu import launch_xemu_chihiro as _launch_xemu_chihiro
-from emulatorlauncher_ares import launch_ares as _launch_ares
-from emulatorlauncher_xenia import launch_xenia as _launch_xenia
-from emulatorlauncher_ppsspp import launch_ppsspp as _launch_ppsspp
-from emulatorlauncher_melonds import launch_melonds as _launch_melonds
-from emulatorlauncher_vita3k import launch_vita3k as _launch_vita3k
-from emulatorlauncher_azahar import launch_azahar as _launch_azahar
-from emulatorlauncher_cemu import launch_cemu as _launch_cemu
-from emulatorlauncher_pcsx2 import launch_armsx2 as _launch_armsx2
-from emulatorlauncher_pcsx2 import launch_pcsx2 as _launch_pcsx2
-from emulatorlauncher_pcsx2 import launch_pcsx2x6 as _launch_pcsx2x6
-from emulatorlauncher_rpcs3 import launch_rpcs3 as _launch_rpcs3
-from emulatorlauncher_computers import (
-    launch_dosbox_staging,
-    launch_dosbox_x,
-    launch_hatari,
-    launch_scummvm,
-    launch_mupen64plus,
-    launch_fsuae,
-    launch_openmsx,
-    launch_basilisk2,
-)
-from emulatorlauncher_extras import (
-    launch_xenia_edge,
-    launch_citron_neo,
-    launch_eden,
-    launch_ymir,
-    launch_xroar,
-    launch_easyrpg,
-    launch_thextech,
-    launch_hypseus_singe,
-    launch_tic80,
-    launch_ikemen,
-    launch_bigpemu,
-    launch_applewin,
-    launch_eka2l1,
-    launch_snes9x,
-    launch_nanoboyadvance,
-    launch_sm2emu,
-    launch_demul,
-    launch_sugarbox,
-)
-
-WRITES_TO_ROM: frozenset[str] = frozenset({
-    'sh',
-    'solarus',
-    'pygame',
-    'pyxel',
-    'thextech',
-    'windowsarcadeloader',
-})
-
-GENERATORS: dict[str, Callable[[LaunchContext], int]] = {
-    'libretro':    _launch_libretro,
-    'retroarch':   _launch_libretro,
-    'sh':          _launch_sh,
-    'duckstation': _launch_duckstation,
-    'armsx2':      _launch_armsx2,
-    'pcsx2':       _launch_pcsx2,
-    'pcsx2x6':     _launch_pcsx2x6,
-    'dolphin':     _launch_dolphin,
-    'dolphin-emu': _launch_dolphin,
-    'dosbox':         launch_dosbox_staging,
-    'dosbox-x':       launch_dosbox_x,
-    'dosbox_staging': launch_dosbox_staging,
-    'dosbox-staging': launch_dosbox_staging,
-    'python-pygame2': _launch_pygame,
-    'python-pyxel':   _launch_pyxel,
-    'solarus-engine': _launch_solarus,
-    'dosboxx':        launch_dosbox_x,
-    'amiberry':    _launch_amiberry,
-    'applewin':    launch_applewin,
-    'eka2l1':      launch_eka2l1,
-    'snes9x':      launch_snes9x,
-    'nanoboyadvance': launch_nanoboyadvance,
-    'sm2-emu':     launch_sm2emu,
-    'bigpemu':     launch_bigpemu,
-    'abuse':       _launch_standalone,
-    'bstone':      _launch_standalone,
-    'cannonball':  _launch_standalone,
-    'catacombgl':  _launch_catacombgl,
-    'cdogs':       _launch_standalone,
-    'cgenius':     _launch_standalone,
-    'corsixth':    _launch_corsixth,
-    'demul':       launch_demul,
-    'devilutionx': _launch_standalone,
-    'dhewm3':      _launch_standalone,
-    'dxx-rebirth': _launch_standalone,
-    'ecwolf':      _launch_standalone,
-    'eduke32':     _launch_eduke32,
-    'fury':        _launch_eduke32,
-    'etlegacy':    _launch_standalone,
-    'fallout1-ce': _launch_fallout1_ce,
-    'fallout2-ce': _launch_fallout2_ce,
-    'flatpak':     _launch_flatpak,
-    'desktopshortcuts': _launch_desktopshortcuts,
-    'webapp':      _launch_webapp,
-    'heroic':      _launch_heroic,
-    'lutris':      _launch_lutris,
-    'quiver':      _launch_quiver,
-    'clk':         _launch_clk,
-    'easyrpg':     launch_easyrpg,
-    'fsuae':       launch_fsuae,
-    'gzdoom':      _launch_gzdoom,
-    'hcl':         _launch_standalone,
-    'hurrican':    _launch_standalone,
-    'gsplus':      _launch_gsplus,
-    'hypseus-singe': launch_hypseus_singe,
-    'ikemen':      launch_ikemen,
-    'iortcw':      _launch_standalone,
-    'jazz2-native': _launch_standalone,
-    'lightspark':  _launch_lightspark,
-    'linuxloader':  _launch_linuxloader,
-    'model2emu':   _launch_model2emu,
-    'moonlight':   _launch_standalone,
-    'mugen':       _launch_standalone,
-    'play':        _launch_play,
-    'odcommander': _launch_standalone,
-    'openjazz':    _launch_standalone,
-    'openjk':      _launch_standalone,
-    'openjkdf2':   _launch_standalone,
-    'openmohaa':   _launch_standalone,
-    'openbor':     _launch_openbor,
-    'pyxel':       _launch_pyxel,
-    'raze':        _launch_standalone,
-    'pygame':      _launch_pygame,
-    'ruffle':      _launch_ruffle,
-    'ryujinx':     _launch_ryujinx,
-    'samcoupe':    _launch_simcoupe,
-    'sdlpop':      _launch_standalone,
-    'solarus':     _launch_solarus,
-    'sonic-mania': _launch_sonic_mania,
-    'sonic2013':   _launch_sonicretro,
-    'sonic3-air':  _launch_sonic3air,
-    'soniccd':     _launch_sonicretro,
-    'steam':       _launch_steam,
-    'sugarbox':    launch_sugarbox,
-    'supermodel':  _launch_supermodel,
-    'supermodel-es':     _launch_supermodel,
-    'supermodel-legacy': _launch_supermodel,
-    'taradino':    _launch_standalone,
-    'theforceengine': _launch_theforceengine,
-    'thextech':    launch_thextech,
-    'tic80':       launch_tic80,
-    'tr1x':        _launch_standalone,
-    'tr2x':        _launch_tr2x,
-    'tyrian':      _launch_standalone,
-    'tsugaru':     _launch_tsugaru,
-    'vpinball':    _launch_vpinball,
-    'vkquake':     _launch_standalone,
-    'vkquake2':    _launch_standalone,
-    'vkquake3':    _launch_standalone,
-    'wine':        _launch_wine,
-    'windowsarcadeloader': _launch_windowsarcadeloader,
-    'x16emu':      _launch_x16emu,
-    'xash3d_fwgs': _launch_standalone,
-    'xroar':       launch_xroar,
-    'ymir':        launch_ymir,
-    'yquake2':     _launch_standalone,
-    'fceux':       _launch_standalone,
-    'hatari':      launch_hatari,
-    'mame':        _launch_mame,
-    'mednafen':    _launch_standalone,
-    'mupen64plus': launch_mupen64plus,
-    'cemu':        _launch_cemu,
-    'azahar':      _launch_azahar,
-    'rpcs3':       _launch_rpcs3,
-    'redream':     _launch_redream,
-    'shadps4':     _launch_shadps4,
-    'flycast':     _launch_flycast,
-    'ppsspp':      _launch_ppsspp,
-    'openmsx':     launch_openmsx,
-    'scummvm':     launch_scummvm,
-    'stella':      _launch_standalone,
-    'vice':        _launch_vice,
-    'vita3k':      _launch_vita3k,
-    'melonds':     _launch_melonds,
-    'basilisk2':   launch_basilisk2,
-    'desmume':     _launch_standalone,
-    'nestopia':    _launch_standalone,
-    'virtualjaguar': _launch_standalone,
-    'drastic':     _launch_drastic,
-    'xemu':        _launch_xemu,
-    'xemu-chihiro': _launch_xemu_chihiro,
-    'ares':        _launch_ares,
-    'xenia':       _launch_xenia,
-    'xenia-canary': _launch_xenia,
-    'xenia-edge':  launch_xenia_edge,
-    'citron-neo':  launch_citron_neo,
-    'eden':        launch_eden,
-    'ioquake3':    _launch_ioquake3,
-    'lexaloffle':  _launch_lexaloffle,
-    'lexaloffle-pico8':    _launch_lexaloffle,
-    'lexaloffle-voxatron': _launch_lexaloffle,
-    'uqm':         _launch_uqm,
-}
+from emulatorlauncher_registry import Emulator, lookup
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description='HippOS emulator launcher')
@@ -684,9 +452,9 @@ def main() -> int:
         os.environ.pop('HIPPOS_WHEEL', None)
         os.environ.pop('HIPPOS_WHEEL_ROTATION_ANGLE', None)
 
-    generator = GENERATORS.get(ctx.emulator)
-    if generator is None:
-        _log.error("No generator registered for emulator '%s'", ctx.emulator)
+    emulator = lookup(ctx.emulator)
+    if emulator is None:
+        _log.error("No launcher registered for emulator '%s'", ctx.emulator)
         return 1
 
     profiles = _load_es_input_configs()
@@ -706,7 +474,7 @@ def main() -> int:
 
     try:
         with game_power_settings(conf, ctx.system, ctx.rom):
-            return _run_with_squashfs(ctx, generator)
+            return _run_with_squashfs(ctx, emulator)
     finally:
         _restore_video_mode(game_output, original_mode, conf)
         subprocess.run(
@@ -714,19 +482,19 @@ def main() -> int:
             check=False, capture_output=True,
         )
 
-def _run_with_squashfs(ctx: LaunchContext, generator: Callable[[LaunchContext], int]) -> int:
+def _run_with_squashfs(ctx: LaunchContext, emulator: Emulator) -> int:
     if ctx.rom.suffix != '.squashfs':
-        return generator(ctx)
+        return emulator.launch(ctx)
 
     with mount_squashfs(ctx.rom) as squash_root:
-        if ctx.emulator in WRITES_TO_ROM:
+        if emulator.writes_to_rom:
             saves_root = SAVES_RW / ctx.system / ctx.rom.stem
             with mount_overlayfs(squash_root, saves_root) as overlay:
                 ctx.rom = overlay
-                return generator(ctx)
+                return emulator.launch(ctx)
         else:
             ctx.rom = squash_root
-            return generator(ctx)
+            return emulator.launch(ctx)
 
 if __name__ == '__main__':
     sys.exit(main())

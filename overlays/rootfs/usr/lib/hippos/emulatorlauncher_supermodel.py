@@ -12,6 +12,7 @@ from emulatorlauncher_shared import (
     _new_ini_parser,
     _run_game_command,
 )
+from emulatorlauncher_registry import Emulator, register
 
 from HipposPaths import CONFIGS
 
@@ -121,5 +122,8 @@ def launch_supermodel(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     env['SDL_VIDEODRIVER'] = 'x11'
     env['SDL_JOYSTICK_HIDAPI'] = '0'
-    result = _run_game_command(ctx, 'supermodel', cmd, env, cwd=run_dir)
+    result = _run_game_command(ctx, cmd, env, cwd=run_dir)
     return result.returncode
+
+for _variant in SUPERMODEL_VARIANTS:
+    register(Emulator(_variant, launch_supermodel, binaries=('supermodel',), hotkeys='supermodel'))

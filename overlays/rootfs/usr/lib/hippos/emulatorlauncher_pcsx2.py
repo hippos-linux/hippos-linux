@@ -21,6 +21,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import BIOS, CACHE, CONFIGS, SAVES, SCREENSHOTS, USERDATA
+from emulatorlauncher_registry import Emulator, register
 
 @dataclass(frozen=True)
 class Pcsx2Flavor:
@@ -245,7 +246,7 @@ def _run_pcsx2(flavor: Pcsx2Flavor, ctx: LaunchContext, bios_file: Optional[str]
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
     if ctx.wheel:
         env.pop('SDL_GAMECONTROLLERCONFIG', None)
-    result = _run_game_command(ctx, flavor.name, cmd, env, cwd=bin_path.parent)
+    result = _run_game_command(ctx, cmd, env, cwd=bin_path.parent)
     return result.returncode
 
 def launch_pcsx2(ctx: LaunchContext) -> int:
@@ -277,3 +278,7 @@ def launch_pcsx2x6(ctx: LaunchContext) -> int:
         shutil.copy(dongle, PCSX2X6.memcard_dir / dongle.name)
     bios_file = NAMCO246_BIOS if platform == '246' else NAMCO256_BIOS
     return _run_pcsx2(PCSX2X6, ctx, bios_file)
+
+register(Emulator('armsx2', launch_armsx2, binaries=('armsx2-qt',)))
+register(Emulator('pcsx2', launch_pcsx2, binaries=('pcsx2-qt', 'pcsx2')))
+register(Emulator('pcsx2x6', launch_pcsx2x6, binaries=('pcsx2x6-qt',)))

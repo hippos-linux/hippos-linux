@@ -17,6 +17,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import CONFIGS, SAVES
+from emulatorlauncher_registry import Emulator, register
 
 PPSSPP_CONFIG_DIR    = CONFIGS / 'ppsspp'
 PPSSPP_INI           = PPSSPP_CONFIG_DIR / 'PSP' / 'SYSTEM' / 'ppsspp.ini'
@@ -197,5 +198,7 @@ def launch_ppsspp(ctx: LaunchContext) -> int:
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(
         ctx.controllers, ignore_buttons=['hotkey']
     )
-    result = _run_game_command(ctx, 'ppsspp', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
+
+register(Emulator('ppsspp', launch_ppsspp, binaries=('PPSSPPSDL', 'ppsspp')))

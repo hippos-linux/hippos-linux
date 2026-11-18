@@ -13,6 +13,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import SAVES, USERDATA
+from emulatorlauncher_registry import Emulator, register
 
 CEMU_CONFIG_DIR          = USERDATA / '.config' / 'cemu'
 CEMU_SETTINGS_XML        = CEMU_CONFIG_DIR / 'settings.xml'
@@ -151,5 +152,7 @@ def launch_cemu(ctx: LaunchContext) -> int:
     env['XDG_CONFIG_HOME'] = str(USERDATA / '.config')
     env['XDG_DATA_HOME'] = str(SAVES)
     env['SDL_JOYSTICK_HIDAPI'] = '0'
-    result = _run_game_command(ctx, 'cemu', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
+
+register(Emulator('cemu', launch_cemu, binaries=('Cemu', 'cemu')))

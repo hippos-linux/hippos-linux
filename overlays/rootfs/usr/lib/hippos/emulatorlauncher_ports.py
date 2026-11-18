@@ -13,6 +13,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import CONFIGS, SAVES
+from emulatorlauncher_registry import Emulator, register
 
 def launch_eduke32(ctx: LaunchContext) -> int:
     core = ctx.core or ctx.emulator
@@ -41,7 +42,7 @@ def launch_eduke32(ctx: LaunchContext) -> int:
 
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, core, cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 def launch_theforceengine(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('theforceengine')
@@ -74,7 +75,7 @@ def launch_theforceengine(ctx: LaunchContext) -> int:
     cmd = [str(bin_path), '--config', str(cfg_dir), data_dir]
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'theforceengine', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 def launch_tr2x(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('tr2x')
@@ -101,7 +102,7 @@ def launch_tr2x(ctx: LaunchContext) -> int:
     cmd = [str(bin_path)]
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'tr2x', cmd, env, cwd=rom_dir).returncode
+    return _run_game_command(ctx, cmd, env, cwd=rom_dir).returncode
 
 def launch_sonic_mania(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('sonic-mania')
@@ -131,7 +132,7 @@ def launch_sonic_mania(ctx: LaunchContext) -> int:
     cmd = [str(bin_path)]
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'sonic-mania', cmd, env, cwd=rom_dir).returncode
+    return _run_game_command(ctx, cmd, env, cwd=rom_dir).returncode
 
 def launch_sonicretro(ctx: LaunchContext) -> int:
     rom_dir = ctx.rom if ctx.rom.is_dir() else ctx.rom.parent
@@ -154,7 +155,7 @@ def launch_sonicretro(ctx: LaunchContext) -> int:
     cmd = [str(bin_path)]
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, emu_name, cmd, env, cwd=rom_dir).returncode
+    return _run_game_command(ctx, cmd, env, cwd=rom_dir).returncode
 
 def launch_sonic3air(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('sonic3-air')
@@ -180,7 +181,7 @@ def launch_sonic3air(ctx: LaunchContext) -> int:
     cmd = [str(bin_path), '--data', str(rom)]
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'sonic3-air', cmd, env).returncode
+    return _run_game_command(ctx, cmd, env).returncode
 
 def launch_catacombgl(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('catacombgl', 'CatacombGL')
@@ -208,7 +209,7 @@ def launch_catacombgl(ctx: LaunchContext) -> int:
     cmd = [str(bin_path), '--savedir', str(saves_dir)]
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'catacombgl', cmd, env, cwd=ctx.rom.parent if ctx.rom.is_file() else ctx.rom).returncode
+    return _run_game_command(ctx, cmd, env, cwd=ctx.rom.parent if ctx.rom.is_file() else ctx.rom).returncode
 
 def launch_fallout1_ce(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('fallout1-ce')
@@ -230,7 +231,7 @@ def launch_fallout1_ce(ctx: LaunchContext) -> int:
     cmd = [str(bin_path)]
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'fallout1-ce', cmd, env, cwd=rom_dir).returncode
+    return _run_game_command(ctx, cmd, env, cwd=rom_dir).returncode
 
 def launch_fallout2_ce(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('fallout2-ce')
@@ -252,4 +253,16 @@ def launch_fallout2_ce(ctx: LaunchContext) -> int:
     cmd = [str(bin_path)]
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
-    return _run_game_command(ctx, 'fallout2-ce', cmd, env, cwd=rom_dir).returncode
+    return _run_game_command(ctx, cmd, env, cwd=rom_dir).returncode
+
+register(Emulator('catacombgl', launch_catacombgl))
+register(Emulator('eduke32', launch_eduke32))
+register(Emulator('fury', launch_eduke32))
+register(Emulator('fallout1-ce', launch_fallout1_ce))
+register(Emulator('fallout2-ce', launch_fallout2_ce))
+register(Emulator('sonic-mania', launch_sonic_mania))
+register(Emulator('sonic2013', launch_sonicretro))
+register(Emulator('sonic3-air', launch_sonic3air))
+register(Emulator('soniccd', launch_sonicretro))
+register(Emulator('theforceengine', launch_theforceengine))
+register(Emulator('tr2x', launch_tr2x))

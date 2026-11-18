@@ -18,6 +18,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import CONFIGS
+from emulatorlauncher_registry import Emulator, register
 
 DRASTIC_HOME = CONFIGS / 'drastic'
 DRASTIC_CFG = DRASTIC_HOME / 'config' / 'drastic.cfg'
@@ -125,5 +126,7 @@ def launch_drastic(ctx: LaunchContext) -> int:
     _write_drastic_cfg(ctx, conf)
 
     env = _build_game_env(conf, ctx)
-    result = _run_game_command(ctx, 'drastic', [str(DRASTIC_HOME / 'drastic'), str(ctx.rom)], env, cwd=DRASTIC_HOME)
+    result = _run_game_command(ctx, [str(DRASTIC_HOME / 'drastic'), str(ctx.rom)], env, cwd=DRASTIC_HOME)
     return result.returncode
+
+register(Emulator('drastic', launch_drastic))

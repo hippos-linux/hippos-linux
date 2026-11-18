@@ -20,6 +20,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import CONFIGS, SAVES, USERDATA
+from emulatorlauncher_registry import Emulator, register
 
 def _openbor_guess_core(rom: Path) -> str:
     match = re.search(r'\[.*([0-9]{4})\]+', rom.name)
@@ -145,7 +146,7 @@ def launch_openbor(ctx: LaunchContext) -> int:
     cmd = [str(bin_path), str(ctx.rom)]
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
-    result = _run_game_command(ctx, 'openbor', cmd, env, cwd=OPENBOR_ROM_DIR)
+    result = _run_game_command(ctx, cmd, env, cwd=OPENBOR_ROM_DIR)
     return result.returncode
 
 OPENBOR_CONFIG_DIR = CONFIGS / 'openbor'
@@ -163,3 +164,5 @@ OPENBOR_BINARIES = {
     'openbor7142': 'OpenBOR7142',
     'openbor7530': 'OpenBOR7530',
 }
+
+register(Emulator('openbor', launch_openbor, binaries=('OpenBOR', 'OpenBOR7530')))

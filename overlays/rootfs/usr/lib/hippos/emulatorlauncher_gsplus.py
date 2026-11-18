@@ -12,6 +12,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import BIOS, CONFIGS
+from emulatorlauncher_registry import Emulator, register
 
 def write_gsplus_config(ctx: LaunchContext) -> None:
     conf = _load_hippos_conf()
@@ -109,8 +110,10 @@ def launch_gsplus(ctx: LaunchContext) -> int:
     cmd = [str(bin_path), '-fullscreen']
     env = _build_game_env(conf, ctx)
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
-    result = _run_game_command(ctx, 'gsplus', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 GSPLUS_CONFIG_DIR = CONFIGS / 'GSplus'
 GSPLUS_CONFIG_FILE = GSPLUS_CONFIG_DIR / 'config.txt'
+
+register(Emulator('gsplus', launch_gsplus, binaries=('GSplus', 'gsplus')))

@@ -49,7 +49,7 @@ class StagingFolderTests(unittest.TestCase):
                 mock.patch.object(computers, '_run_game_command', run), \
                 mock.patch.object(computers, 'SAVES', Path(tempfile.mkdtemp())):
             computers.launch_dosbox_staging(ctx)
-        cmd = run.call_args.args[2]
+        cmd = run.call_args.args[1]
         self.assertIn(f'mount c "{game}"', cmd)
         self.assertEqual(cmd[cmd.index('--conf') + 1], str(game / 'dosbox.conf'))
         self.assertEqual(cmd[cmd.index('c:') + 2], 'dosbox.bat')

@@ -32,6 +32,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import BIOS, CONFIGS, EMULATORLAUNCHER_DATA_DIR, SAVES, SCREENSHOTS, USERDATA
+from emulatorlauncher_registry import Emulator, register
 
 def _write_mame_config(conf: dict[str, str]) -> None:
     MAME_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -152,7 +153,7 @@ def launch_mame(ctx: LaunchContext) -> int:
     cmd = [str(bin_path), '-inipath', f'{MAME_CONFIG_DIR};/etc/mame', '-rompath', rompath, *game_flags]
     cmd += _mess_args(ctx.system, ctx.rom) or [str(ctx.rom)]
     env = _build_game_env(conf, ctx)
-    result = _run_game_command(ctx, 'mame', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def _write_dolphin_config(ctx: LaunchContext) -> None:
@@ -253,7 +254,7 @@ def launch_dolphin(ctx: LaunchContext) -> int:
     cmd = [str(bin_path), '-b', '-e', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['XDG_DATA_HOME'] = str(SAVES)
-    result = _run_game_command(ctx, 'dolphin', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 def _lightgun_color(index: int) -> str:
@@ -613,7 +614,7 @@ def _launch_duckstation(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     env['SDL_JOYSTICK_HIDAPI'] = '0'
     env['QT_QPA_PLATFORM'] = 'xcb'
-    result = _run_game_command(ctx, 'duckstation', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 _FLYCAST_MAPPING_DIR = CONFIGS / 'flycast' / 'mappings'
@@ -796,7 +797,7 @@ def _launch_flycast(ctx: LaunchContext) -> int:
     env['XDG_DATA_HOME'] = str(FLYCAST_SAVES.parent)
     env['FLYCAST_DATADIR'] = str(FLYCAST_SAVES.parent)
     FLYCAST_SAVES.mkdir(parents=True, exist_ok=True)
-    result = _run_game_command(ctx, 'flycast', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
 launch_duckstation = _launch_duckstation
@@ -1182,3 +1183,9 @@ def _es_binding_to_mupen(binding: ESBinding, target: str, ctrl: ControllerInfo, 
     if binding.type == 'key':
         return f'button({binding.code})'
     return None
+
+register(Emulator('duckstation', _launch_duckstation))
+register(Emulator('dolphin', launch_dolphin, binaries=('dolphin-emu', 'dolphin'), packages=('dolphin-emu',)))
+register(Emulator('dolphin-emu', launch_dolphin, binaries=('dolphin-emu', 'dolphin'), hotkeys='dolphin'))
+register(Emulator('mame', launch_mame, binaries=('mame',)))
+register(Emulator('flycast', _launch_flycast))

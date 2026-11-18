@@ -14,6 +14,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import BIOS, CONFIGS, SAVES
+from emulatorlauncher_registry import Emulator, register
 
 MELONDS_CONFIG_DIR = CONFIGS / 'melonDS'
 MELONDS_TOML       = MELONDS_CONFIG_DIR / 'melonDS.toml'
@@ -116,5 +117,7 @@ def launch_melonds(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
     env['XDG_DATA_HOME']   = str(SAVES)
-    result = _run_game_command(ctx, 'melonds', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
+
+register(Emulator('melonds', launch_melonds, binaries=('melonDS', 'melonds')))

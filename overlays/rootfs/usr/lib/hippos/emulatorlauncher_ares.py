@@ -14,6 +14,7 @@ from emulatorlauncher_shared import (
 )
 
 from HipposPaths import CONFIGS, SAVES
+from emulatorlauncher_registry import Emulator, register
 
 _SYSTEM_MAP: dict[str, str] = {
     'nes':          'Famicom',
@@ -159,5 +160,7 @@ def launch_ares(ctx: LaunchContext) -> int:
     cmd.append(str(ctx.rom))
 
     env = _build_game_env(conf, ctx)
-    result = _run_game_command(ctx, 'ares', cmd, env)
+    result = _run_game_command(ctx, cmd, env)
     return result.returncode
+
+register(Emulator('ares', launch_ares))

@@ -20,6 +20,7 @@ from emulatorlauncher_shared import (
     _write_toml,
     configure_emulator,
 )
+from emulatorlauncher_registry import Emulator, register
 
 from HipposPaths import CACHE, HOME, SAVES, USERDATA
 
@@ -214,7 +215,7 @@ def launch_xenia(ctx: LaunchContext) -> int:
         env['VK_ICD_FILENAMES'] = '/usr/share/vulkan/icd.d/nvidia_icd.x86_64.json'
         env['VK_LAYER_PATH'] = '/usr/share/vulkan/explicit_layer.d'
 
-    result = _run_game_command(ctx, ctx.emulator, cmd, env, cwd=config_dir)
+    result = _run_game_command(ctx, cmd, env, cwd=config_dir)
     return result.returncode
 
 XENIA_RUNTIME_DIR = USERDATA / 'emulators' / 'xenia' / 'current'
@@ -225,3 +226,6 @@ XENIA_BUNDLE_DIR = Path('/opt/emulators/xenia/emulator')
 XENIA_CANARY_BUNDLE_DIR = Path('/opt/emulators/xenia-canary/emulator')
 XENIA_CACHE_DIR = CACHE / 'xenia'
 XENIA_SAVES_DIR = SAVES / 'xbox360'
+
+register(Emulator('xenia', launch_xenia))
+register(Emulator('xenia-canary', launch_xenia))
