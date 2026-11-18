@@ -112,6 +112,12 @@ if version_lt "$APPLIED" "0.6.13"; then
     rm -f /userdata/system/configs/emulationstation/scripts/reboot/reboot /userdata/system/configs/emulationstation/scripts/shutdown/shutdown
 fi
 
+if version_lt "$APPLIED" "0.6.14"; then
+    log "0.6.14: FreeJ2ME-Plus jar comes from the RetroArch package instead of the Content Downloader"
+    ln -sfn /opt/emulators/retroarch/freej2me/freej2me_plus-lr.jar /userdata/bios/freej2me_plus-lr.jar
+    chown -h hippos:users /userdata/bios/freej2me_plus-lr.jar
+fi
+
 HIPPOS_CONFIG=/userdata/system/configs/hippos
 mkdir -p "${HIPPOS_CONFIG}"
 for name in external-roms.conf roms-sources.conf ignored-storage-devices.txt current-storage.conf; do
