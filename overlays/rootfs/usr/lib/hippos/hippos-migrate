@@ -118,6 +118,14 @@ if version_lt "$APPLIED" "0.6.14"; then
     chown -h hippos:users /userdata/bios/freej2me_plus-lr.jar
 fi
 
+if version_lt "$APPLIED" "0.6.15"; then
+    log "0.6.15: ES lists ports from the ports folder and each port's own folder, not the files ports bundle deeper down"
+    ES_SETTINGS=/userdata/system/configs/emulationstation/es_settings.cfg
+    if [[ -f "${ES_SETTINGS}" ]] && ! grep -q 'name="ports.IndexDirectoryDepth"' "${ES_SETTINGS}"; then
+        sed -i 's#</config>#\t<string name="ports.IndexDirectoryDepth" value="1" />\n</config>#' "${ES_SETTINGS}"
+    fi
+fi
+
 HIPPOS_CONFIG=/userdata/system/configs/hippos
 mkdir -p "${HIPPOS_CONFIG}"
 for name in external-roms.conf roms-sources.conf ignored-storage-devices.txt current-storage.conf; do
