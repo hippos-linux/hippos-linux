@@ -1,0 +1,7 @@
+{
+  "name": "eden",
+  "keys": {
+    "exit": "/usr/lib/hippos/hippos-close-game ctrl+q",
+    "screenshot": "KEY_SYSRQ"
+  }
+}

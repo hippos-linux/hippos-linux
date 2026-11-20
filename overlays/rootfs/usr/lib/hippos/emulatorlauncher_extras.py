@@ -102,8 +102,8 @@ def _write_switch_qt_config(cfg_dir: Path, emu_name: str) -> None:
 
     cfg.set('UI', 'fullscreen', 'true')
     cfg.set('UI', r'fullscreen\default', 'false')
-    cfg.set('UI', 'confirmClose', 'false')
-    cfg.set('UI', r'confirmClose\default', 'false')
+    cfg.set('UI', 'confirmStop', '2')
+    cfg.set('UI', r'confirmStop\default', 'false')
     cfg.set('UI', 'firstStart', 'false')
     cfg.set('UI', r'firstStart\default', 'false')
     cfg.set('UI', 'enable_discord_presence', 'false')
@@ -179,7 +179,7 @@ def install_switch_firmware(registered: Path, title_folders: bool = False) -> No
 def _launch_switch(ctx: LaunchContext, emu_name: str) -> int:
     conf = _load_hippos_conf()
     saves_dir = SAVES / 'switch'
-    cfg_dir   = CONFIGS / emu_name
+    cfg_dir   = CONFIGS / SWITCH_DATA_DIRS[emu_name]
     cache_dir = CACHE / emu_name
     saves_dir.mkdir(parents=True, exist_ok=True)
     cfg_dir.mkdir(parents=True, exist_ok=True)
