@@ -228,6 +228,8 @@ def is_installed(pkg, state):
         return any(app.url == url for app in hippos_webapps.load_webapps())
     if pkg.get("type") == "flatpak":
         return hippos_flatpak_apps.installed(pkg.get("flatpak_id", ""))
+    if pkg.get("type") == "script":
+        return os.path.exists(pkg["installed_path"])
     return pkg["id"] in state
 
 def cmd_list():
@@ -544,6 +546,33 @@ def _install_with_installer(pkg):
     if pkg.get("launcher_command"):
         add_catalog_game(pkg)
 
+def _as_store_user(cmd):
+    return ["runuser", "-u", "hippos", "--"] + cmd if os.getuid() == 0 else cmd
+
+def _install_script(pkg):
+    script = pkg["script"]
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    path = os.path.join(CACHE_DIR, f"{pkg['id']}-installer.sh")
+    _download(script["url"], path, f"{pkg['name']} installer")
+    if _sha256(path) != script["sha256"]:
+        os.remove(path)
+        print(f"ERROR: {pkg['name']} installer has changed since it was reviewed (checksum mismatch)", flush=True)
+        sys.exit(1)
+    print(f"Installing {pkg['name']}...", flush=True)
+    os.chmod(path, 0o644)
+    ret = subprocess.call(_as_store_user(["bash", path]), env={**os.environ, **script.get("env", {})},
+                          stdin=subprocess.DEVNULL)
+    os.remove(path)
+    if ret != 0 or not os.path.exists(pkg["installed_path"]):
+        print(f"ERROR: install failed (exit {ret})", flush=True)
+        sys.exit(1)
+
+def _remove_script(pkg):
+    ret = subprocess.call(_as_store_user(pkg["uninstall"]), stdin=subprocess.DEVNULL)
+    if ret != 0 or os.path.exists(pkg["installed_path"]):
+        print(f"ERROR: {pkg['name']} was not removed (exit {ret})", flush=True)
+        sys.exit(1)
+
 def cmd_install(name):
     state = load_state()
 
@@ -580,6 +609,8 @@ def cmd_install(name):
         _install_deb(pkg)
     elif pkg.get("type") == "installer":
         _install_with_installer(pkg)
+    elif pkg.get("type") == "script":
+        _install_script(pkg)
     elif pkg.get("type") == "archive":
         _install_archive(pkg)
     elif pkg.get("type") == "flatpak":
@@ -631,6 +662,8 @@ def cmd_remove(name):
     elif pkg.get("type") == "installer":
         hippos_content_installers.run(pkg.get("installer", ""), "remove")
         remove_catalog_game(pkg)
+    elif pkg.get("type") == "script":
+        _remove_script(pkg)
     elif pkg.get("type") == "flatpak":
         hippos_flatpak_apps.remove(pkg.get("flatpak_id", ""))
     elif pkg.get("type") == "archive":
