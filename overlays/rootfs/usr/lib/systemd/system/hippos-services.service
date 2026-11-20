@@ -1,0 +1,13 @@
+[Unit]
+Description=HippOS optional services (SSH, Samba) switched on in EmulationStation
+After=network.target userdata.mount hippos-migrate.service hippos-system-init.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/hippos/hippos-services apply
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

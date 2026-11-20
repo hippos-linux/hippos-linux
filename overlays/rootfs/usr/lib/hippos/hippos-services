@@ -89,8 +89,20 @@ cmd_call() {
     fi
 }
 
+cmd_apply() {
+    local name state
+    while IFS=';' read -r name state; do
+        if [[ "${state}" == "*" ]]; then
+            cmd_call "${name}" start
+        else
+            cmd_call "${name}" stop
+        fi
+    done < <(cmd_list)
+}
+
 case "${1:-}" in
     list)    shift; cmd_list "$@" ;;
+    apply)   cmd_apply ;;
     enable)  cmd_enable "${2:-}" ;;
     disable) cmd_disable "${2:-}" ;;
     start)   cmd_call "${2:-}" start ;;
@@ -99,6 +111,7 @@ case "${1:-}" in
     status)  cmd_call "${2:-}" status ;;
     *)
         echo "Usage: $0 list [all|system|user]" >&2
+        echo "       $0 apply" >&2
         echo "       $0 enable|disable|start|stop|restart|status <name>" >&2
         exit 1
         ;;

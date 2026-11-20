@@ -1,5 +1,5 @@
 [Unit]
-Description=HippOS system settings initialisation (hostname, locale, SSH, WiFi, CPU governor)
+Description=HippOS system settings initialisation (hostname, locale, WiFi, CPU governor)
 After=NetworkManager.service
 Before=greetd.service
 Wants=NetworkManager.service

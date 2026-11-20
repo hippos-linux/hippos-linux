@@ -39,15 +39,6 @@ EOF
     log "keyboard: ${KBLAYOUT}${KBVARIANT:+/${KBVARIANT}}"
 fi
 
-SSH_ENABLED="$(get system.ssh.enabled)"
-if [[ "${SSH_ENABLED}" == "false" ]]; then
-    systemctl disable --now ssh 2>/dev/null || true
-    log "ssh: disabled"
-else
-    systemctl enable --now ssh 2>/dev/null || true
-    log "ssh: enabled"
-fi
-
 GOVERNOR="$(get system.cpu.governor)"
 if [[ -n "${GOVERNOR}" ]]; then
     for gov_file in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_governor; do

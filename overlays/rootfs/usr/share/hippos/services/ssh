@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+case "$1" in
+    start)  sudo -n systemctl start --no-block ssh.service ;;
+    stop)   sudo -n systemctl stop ssh.service ;;
+    status) systemctl is-active ssh.service ;;
+esac
