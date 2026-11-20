@@ -151,12 +151,18 @@ HippOS is free and open source. If you find it useful, consider supporting devel
   <a href="https://github.com/sponsors/hippos-linux"><img src="https://img.shields.io/badge/sponsor-hippos--linux-ea4aaa?style=for-the-badge&logo=github-sponsors" alt="Sponsor on GitHub" /></a>
 </p>
 
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/hippos-linux/hippos-linux@contributors/sponsors.svg" alt="Sponsors" />
+</p>
+
 ---
 
 ## 👥 Contributors
 
+Thank you to everyone who has helped make HippOS better!
+
 <p align="center">
-  <img src="https://contrib.rocks/image?repo=hippos-linux/hippos-linux" alt="Contributors" />
+  <img src="https://cdn.jsdelivr.net/gh/hippos-linux/hippos-linux@contributors/github.svg" alt="GitHub contributors" />
 </p>
 
 ---
