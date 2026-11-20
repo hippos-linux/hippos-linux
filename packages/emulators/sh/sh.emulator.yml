@@ -4,6 +4,15 @@ shared_features:
   - padtokey
   - onscreen_keyboard
   - padtokey_mouse_speed
+  - gamescope
+  - gamescope_output_resolution
+  - gamescope_nested_resolution
+  - gamescope_nested_refresh
+  - gamescope_scaler
+  - gamescope_filter
+  - gamescope_sharpness
+  - gamescope_hdr
+  - gamescope_args
 systems:
 - name: ports
   as_core: sh

@@ -740,8 +740,14 @@ def game_monitor_primary(ctx: Optional[LaunchContext]):
         if connector and previous and connector != previous:
             _set_primary(previous)
 
-def _gamescope_wrap(cmd: list[str], conf: dict[str, str], ctx: Optional[LaunchContext] = None) -> list[str]:
-    if not _conf_bool(conf, 'global.gamescope'):
+def _gamescope_wrap(cmd: list[str], conf: dict[str, str], ctx: LaunchContext) -> list[str]:
+    def setting(name: str, default: str = '') -> str:
+        return _game_setting(conf, ctx.system, ctx.rom, name) or _conf_value(conf, f'global.{name}', default)
+
+    def enabled(name: str) -> bool:
+        return setting(name).lower() in ('1', 'true', 'on', 'enabled', 'yes')
+
+    if not enabled('gamescope'):
         return cmd
     bin_path = which('gamescope')
     if bin_path is None:
@@ -750,43 +756,28 @@ def _gamescope_wrap(cmd: list[str], conf: dict[str, str], ctx: Optional[LaunchCo
 
     gs = [bin_path]
 
-    if ctx is not None and ctx.monitor >= 0:
+    if ctx.monitor >= 0:
         connector = _connector_for_monitor(ctx.monitor)
         if connector:
             gs += ['--prefer-output', connector]
 
-    output_res = _conf_value(conf, 'global.gamescope_output_resolution', '')
-    if output_res:
-        w, _, h = output_res.partition('x')
-        gs += ['-W', w, '-H', h]
+    for name, width_flag, height_flag in (('gamescope_output_resolution', '-W', '-H'),
+                                          ('gamescope_nested_resolution', '-w', '-h')):
+        if resolution := setting(name):
+            w, _, h = resolution.partition('x')
+            gs += [width_flag, w, height_flag, h]
 
-    nested_res = _conf_value(conf, 'global.gamescope_nested_resolution', '')
-    if nested_res:
-        w, _, h = nested_res.partition('x')
-        gs += ['-w', w, '-h', h]
+    for name, flag in (('gamescope_nested_refresh', '-r'),
+                       ('gamescope_scaler', '-S'),
+                       ('gamescope_filter', '-F'),
+                       ('gamescope_sharpness', '--sharpness')):
+        if value := setting(name):
+            gs += [flag, value]
 
-    refresh = _conf_value(conf, 'global.gamescope_nested_refresh', '')
-    if refresh:
-        gs += ['-r', refresh]
-
-    scaler = _conf_value(conf, 'global.gamescope_scaler', '')
-    if scaler:
-        gs += ['-S', scaler]
-
-    filt = _conf_value(conf, 'global.gamescope_filter', '')
-    if filt:
-        gs += ['-F', filt]
-
-    sharpness = _conf_value(conf, 'global.gamescope_sharpness', '')
-    if sharpness:
-        gs += ['--sharpness', sharpness]
-
-    if _conf_bool(conf, 'global.gamescope_hdr'):
+    if enabled('gamescope_hdr'):
         gs.append('--hdr-enabled')
 
-    extra_args = _conf_value(conf, 'global.gamescope_args', '-f -e')
-    if extra_args.strip():
-        gs += extra_args.split()
+    gs += setting('gamescope_args', '-f -e').split()
 
     gs.append('--')
     _log.info("gamescope wrap: %s", ' '.join(gs))
