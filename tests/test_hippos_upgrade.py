@@ -188,8 +188,6 @@ class UpdateSpaceShortfallTests(unittest.TestCase):
         self.assertEqual(hu.update_space_shortfall(0, {"url": "x"}, False), 0)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class FirmwareBootTests(unittest.TestCase):
@@ -318,3 +316,72 @@ class PruneOverlayBackupsTests(unittest.TestCase):
             with mock.patch.object(hu, "OVERLAY_BACKUPS", backups), mock.patch.object(hu, "log"):
                 hu.prune_overlay_backups("current")
             self.assertEqual(sorted(p.name for p in Path(backups).iterdir()), ["overlay-current", "saves"])
+
+class UpdateAllEmulatorsTests(unittest.TestCase):
+    def setUp(self):
+        manifest = {"payloads": {"emulators": {
+            "alpha": {"version": "2"}, "beta": {"version": "2"}, "gamma": {"version": "2"},
+        }}}
+        for name, value in {
+            "fetch_manifest": mock.Mock(return_value=manifest),
+            "get_channel": mock.Mock(return_value="stable"),
+            "current_version": mock.Mock(return_value="0.6.16"),
+            "emulator_up_to_date": mock.Mock(return_value=False),
+            "installed_emulator_version": mock.Mock(return_value="1"),
+            "log": mock.Mock(),
+            "prune_removed_emulators": mock.Mock(),
+        }.items():
+            patcher = mock.patch.object(hu, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_failed_emulator_does_not_stop_the_rest_and_is_reported(self):
+        def install(name, info):
+            if name == "beta":
+                raise hu.DownloadError("SHA256 mismatch")
+        with mock.patch.object(hu, "install_emulator", side_effect=install) as installer, \
+                mock.patch.object(hu, "die", side_effect=SystemExit(1)) as die:
+            with self.assertRaises(SystemExit):
+                hu.cmd_update_all_emulators()
+        self.assertEqual([c.args[0] for c in installer.call_args_list], ["alpha", "beta", "gamma"])
+        die.assert_called_once_with("Could not update beta (2 of 3 updated)")
+
+    def test_all_succeeding_does_not_fail(self):
+        with mock.patch.object(hu, "install_emulator") as installer, \
+                mock.patch.object(hu, "die") as die:
+            hu.cmd_update_all_emulators()
+        self.assertEqual(installer.call_count, 3)
+        die.assert_not_called()
+
+class PruneRemovedEmulatorsTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        for name, installed_by_hippos in {"kept": True, "held-back": True, "dropped": True,
+                                          "user-copied": False, "kept.new": False}.items():
+            (self.root / name).mkdir()
+            if installed_by_hippos:
+                (self.root / name / hu.INSTALLED_SHA256_FILE).write_text("abc\n")
+        for name, value in {"EMULATORS_DIR": str(self.root), "log": mock.Mock()}.items():
+            patcher = mock.patch.object(hu, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def remaining(self):
+        return sorted(p.name for p in self.root.iterdir())
+
+    def test_removes_dropped_and_unfinished_installs_only(self):
+        hu.prune_removed_emulators({"payloads": {
+            "emulators": {"kept": {}},
+            "emulator_builds": {"held-back": [{"min_os": "9.9.9"}]},
+        }})
+        self.assertEqual(self.remaining(), ["held-back", "kept", "user-copied"])
+
+    def test_manifest_without_emulators_removes_nothing(self):
+        hu.prune_removed_emulators({"payloads": {}})
+        self.assertEqual(self.remaining(), ["dropped", "held-back", "kept", "kept.new", "user-copied"])
+
+
+if __name__ == "__main__":
+    unittest.main()
