@@ -1,7 +1,0 @@
-{
-  "name": "xenia",
-  "keys": {
-    "exit": "/usr/lib/hippos/hippos-close-game",
-    "screenshot": "KEY_F12"
-  }
-}
