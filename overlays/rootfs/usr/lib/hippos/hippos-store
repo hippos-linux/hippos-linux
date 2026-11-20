@@ -17,6 +17,7 @@ import zipfile
 
 import hippos_content_installers
 import hippos_flatpak_apps
+import hippos_store_search
 import hippos_webapps
 from hippos_linux_games import add_catalog_game, remove_catalog_game, set_claimed
 
@@ -311,6 +312,35 @@ def cmd_list():
         print(ET.tostring(pkg_node, encoding="unicode"), flush=True)
     print("</packages>", flush=True)
 
+def cmd_search(term):
+    root = ET.Element("packages")
+    for result in hippos_store_search.search(term):
+        _pkg_node(root,
+            pkg_id        = result.name,
+            title         = result.title,
+            repository    = "Search",
+            version       = result.version,
+            description   = result.description,
+            group         = result.source,
+            packager      = result.source,
+            installed     = result.installed,
+            url           = "",
+            download_size = 0,
+            preview_url   = "",
+        )
+    print("<packages>", flush=True)
+    for pkg_node in root:
+        print(ET.tostring(pkg_node, encoding="unicode"), flush=True)
+    print("</packages>", flush=True)
+
+def _run_search_result(action, name):
+    try:
+        action(name)
+    except hippos_store_search.StoreSearchError as exc:
+        print(f"ERROR: {exc}", flush=True)
+        sys.exit(1)
+    print("Done.", flush=True)
+
 def _download(url, dest_path, label):
     req = urllib.request.Request(url, headers={"User-Agent": "hippos-store/1.0"})
     print(f"Downloading {label}...", flush=True)
@@ -574,6 +604,10 @@ def _remove_script(pkg):
         sys.exit(1)
 
 def cmd_install(name):
+    if hippos_store_search.is_search_result(name):
+        _run_search_result(hippos_store_search.install, name)
+        return
+
     state = load_state()
 
     if name.startswith("bezels-"):
@@ -633,6 +667,10 @@ def cmd_install(name):
     print(f"Done: {pkg['name']} installed.", flush=True)
 
 def cmd_remove(name):
+    if hippos_store_search.is_search_result(name):
+        _run_search_result(hippos_store_search.remove, name)
+        return
+
     state = load_state()
 
     if name.startswith("bezels-"):
@@ -710,6 +748,8 @@ if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     if cmd == "list":
         cmd_list()
+    elif cmd == "search" and len(sys.argv) >= 3:
+        cmd_search(sys.argv[2])
     elif cmd == "install" and len(sys.argv) >= 3:
         cmd_install(sys.argv[2])
     elif cmd == "remove" and len(sys.argv) >= 3:
@@ -721,5 +761,5 @@ if __name__ == "__main__":
     elif cmd == "update":
         cmd_update()
     else:
-        print("Usage: hippos-store <list|install NAME|remove NAME|refresh|clean-all|update>")
+        print("Usage: hippos-store <list|search TERM|install NAME|remove NAME|refresh|clean-all|update>")
         sys.exit(1)

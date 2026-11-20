@@ -97,3 +97,13 @@ def install_packages(packages: list[str], root: str | None = None) -> tuple[bool
     failed = [p for p in packages
               if subprocess.run([*prefix, *_APT_INSTALL, p], env=_APT_ENV).returncode != 0]
     return updated, failed
+
+def search_packages(term: str) -> list[tuple[str, str]]:
+    listing = subprocess.run(['apt-cache', 'search', '--names-only', term],
+                             capture_output=True, text=True, check=False).stdout
+    results = []
+    for line in listing.splitlines():
+        name, sep, description = line.partition(' - ')
+        if sep:
+            results.append((name, description))
+    return results
