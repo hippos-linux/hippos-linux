@@ -364,6 +364,7 @@ import emulatorlauncher_shadps4
 import emulatorlauncher_sheepshaver
 import emulatorlauncher_stella
 import emulatorlauncher_supermodel
+import emulatorlauncher_switch
 import emulatorlauncher_vita3k
 import emulatorlauncher_vpinball
 import emulatorlauncher_waydroid

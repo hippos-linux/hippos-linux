@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import shlex
 import zipfile
@@ -34,7 +33,6 @@ from hippos_desktop_entries import read_desktop_file
 from hippos_webapps import ADD_WEBAPP_URL, WEBAPP_PROFILES, WEBAPPS_BIN, read_webapp
 import hippos_quiver
 from emulatorlauncher_registry import Emulator, register
-from emulatorlauncher_extras import install_switch_firmware, install_switch_keys
 
 _VICE_MACHINE_NAMES: dict[str, str] = {
     'x64':     'C64SC',
@@ -799,72 +797,6 @@ def launch_gzdoom(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, cmd, env, cwd=ctx.rom.parent)
     return result.returncode
 
-_RYUJINX_CTRL_TEMPLATE: dict = {
-    'left_joycon_stick':  {'joystick': 'Left', 'invert_stick_x': False, 'invert_stick_y': False, 'rotate90_cw': False, 'stick_button': 'LeftStick'},
-    'right_joycon_stick': {'joystick': 'Right', 'invert_stick_x': False, 'invert_stick_y': False, 'rotate90_cw': False, 'stick_button': 'RightStick'},
-    'deadzone_left': 0, 'deadzone_right': 0, 'range_left': 1, 'range_right': 1, 'trigger_threshold': 0,
-    'motion': {'motion_backend': 'GamepadDriver', 'sensitivity': 100, 'gyro_deadzone': 1, 'enable_motion': True},
-    'rumble': {'strong_rumble': 8.0, 'weak_rumble': 2.0, 'enable_rumble': True},
-    'left_joycon': {
-        'button_minus': 'Minus', 'button_l': 'LeftShoulder', 'button_zl': 'LeftTrigger',
-        'button_sl': 'Unbound', 'button_sr': 'Unbound',
-        'dpad_up': 'DpadUp', 'dpad_down': 'DpadDown', 'dpad_left': 'DpadLeft', 'dpad_right': 'DpadRight',
-    },
-    'right_joycon': {
-        'button_plus': 'Plus', 'button_r': 'RightShoulder', 'button_zr': 'RightTrigger',
-        'button_sl': 'Unbound', 'button_sr': 'Unbound',
-        'button_x': 'Y', 'button_b': 'A', 'button_y': 'X', 'button_a': 'B',
-    },
-    'version': 1,
-    'backend': 'GamepadSDL2',
-}
-
-def _ryujinx_ctrl_uuid(ctrl) -> str:
-    guid = (ctrl.guid or '').lower().replace('-', '')
-    if len(guid) == 32:
-        bustype    = guid[0:8]
-        vendor     = guid[8:12]
-        product    = guid[16:20]
-        version    = guid[24:28]
-        prod_rev   = product[2:4] + product[0:2]
-        ver_rev    = version[2:4] + version[0:2]
-        return f'{ctrl.index}-{bustype}-{vendor}-0000-{prod_rev}-0000{ver_rev}0000'
-    return f'{ctrl.index}-00000003-0000-0000-0000-000000000000'
-
-def launch_ryujinx(ctx: LaunchContext) -> int:
-    bin_path = _find_emulator_bin('Ryujinx.sh', 'Ryujinx', 'ryujinx')
-    if bin_path is None:
-        _log.error("ryujinx not installed")
-        return 1
-    cfg_path = USERDATA / 'system' / 'configs' / 'Ryujinx' / 'Config.json'
-    cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    cfg: dict = {}
-    if cfg_path.exists():
-        try:
-            cfg = json.loads(cfg_path.read_text())
-        except Exception:
-            pass
-    cfg['start_fullscreen'] = True
-    cfg['docked_mode']      = True
-    cfg['input_config']     = []
-
-    for nplayer, ctrl in enumerate(ctx.controllers[:8], start=1):
-        ctrl_cfg = dict(_RYUJINX_CTRL_TEMPLATE)
-        ctrl_cfg['id']              = _ryujinx_ctrl_uuid(ctrl)
-        ctrl_cfg['controller_type'] = 'ProController'
-        ctrl_cfg['player_index']    = f'Player{nplayer}'
-        cfg['input_config'].append(ctrl_cfg)
-
-    cfg_path.write_text(json.dumps(cfg, indent=2))
-    install_switch_keys(cfg_path.parent / 'system')
-    (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
-    conf = _load_hippos_conf()
-    install_switch_firmware(cfg_path.parent / 'bis' / 'system' / 'Contents' / 'registered', title_folders=True)
-    cmd = [str(bin_path), '--fullscreen', str(ctx.rom)]
-    env = _build_game_env(conf, ctx)
-    result = _run_game_command(ctx, cmd, env)
-    return result.returncode
-
 CLK_QUICKLOAD_SYSTEMS = {'amstradcpc', 'archimedes', 'electron', 'msx1', 'msx2', 'oricatmos', 'zxspectrum'}
 CLK_SVIDEO_SYSTEMS = {'colecovision', 'mastersystem'}
 CLK_RGB_SYSTEMS = {'amstradcpc', 'atarist', 'electron', 'enterprise', 'msx1', 'msx2', 'oricatmos', 'zxspectrum'}
@@ -886,7 +818,6 @@ register(Emulator('lightspark', launch_lightspark, binaries=('lightspark',)))
 register(Emulator('pyxel', launch_pyxel, binaries=('pyxel',), packages=('python-pyxel',), writes_to_rom=True))
 register(Emulator('pygame', launch_pygame, writes_to_rom=True))
 register(Emulator('ruffle', launch_ruffle, binaries=('ruffle',)))
-register(Emulator('ryujinx', launch_ryujinx, binaries=('Ryujinx.sh', 'Ryujinx', 'ryujinx')))
 register(Emulator('samcoupe', launch_simcoupe, binaries=('samcoupe', 'simcoupe')))
 register(Emulator('tsugaru', launch_tsugaru, binaries=('Tsugaru_CUI', 'tsugaru')))
 register(Emulator('x16emu', launch_x16emu, binaries=('x16emu',)))
