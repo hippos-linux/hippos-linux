@@ -16,8 +16,8 @@ from emulatorlauncher_registry import Emulator, register
 
 from HipposPaths import CONFIGS
 
-def _prepare_run_dir(variant: str, share: Path) -> Path:
-    run_dir = CONFIGS / variant
+def _prepare_run_dir(share: Path) -> Path:
+    run_dir = CONFIGS / 'supermodel'
     config_dir = run_dir / 'Config'
     config_dir.mkdir(parents=True, exist_ok=True)
     for name in ('Games.xml', 'Music.xml'):
@@ -96,14 +96,13 @@ def write_supermodel_config(ctx: LaunchContext, run_dir: Path, share: Path) -> N
     with (run_dir / 'Config' / 'Supermodel.ini').open('w', encoding='utf-8') as fh:
         target.write(fh)
 
-SUPERMODEL_VARIANTS = ('supermodel', 'supermodel-es', 'supermodel-legacy')
+REMOVED_SUPERMODEL_BUILDS = ('supermodel-es', 'supermodel-legacy')
 
 def launch_supermodel(ctx: LaunchContext) -> int:
-    variant = ctx.emulator if ctx.emulator in SUPERMODEL_VARIANTS else 'supermodel'
-    bin_path = _require_emulator_bin(variant)
+    bin_path = _require_emulator_bin('supermodel')
 
     share = bin_path.parent.parent / 'share'
-    run_dir = _prepare_run_dir(variant, share)
+    run_dir = _prepare_run_dir(share)
     write_supermodel_config(ctx, run_dir, share)
 
     conf = _load_effective_hippos_conf()
@@ -123,5 +122,5 @@ def launch_supermodel(ctx: LaunchContext) -> int:
     result = _run_game_command(ctx, cmd, env, cwd=run_dir)
     return result.returncode
 
-for _variant in SUPERMODEL_VARIANTS:
-    register(Emulator(_variant, launch_supermodel, binaries=('supermodel',), hotkeys='supermodel'))
+for _name in ('supermodel', *REMOVED_SUPERMODEL_BUILDS):
+    register(Emulator(_name, launch_supermodel, binaries=('supermodel',), hotkeys='supermodel'))

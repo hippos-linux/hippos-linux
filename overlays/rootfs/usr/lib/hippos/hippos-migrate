@@ -126,6 +126,19 @@ if version_lt "$APPLIED" "0.6.15"; then
     fi
 fi
 
+if version_lt "$APPLIED" "0.6.16"; then
+    log "0.6.16: Supermodel-es and Supermodel-legacy are replaced by Supermodel; their NVRAM and save states are copied to it"
+    for build in supermodel-es supermodel-legacy; do
+        for data in NVRAM Saves; do
+            if [[ -d "/userdata/system/configs/${build}/${data}" ]]; then
+                mkdir -p "/userdata/system/configs/supermodel/${data}"
+                cp -rn "/userdata/system/configs/${build}/${data}/." "/userdata/system/configs/supermodel/${data}/"
+                chown -R hippos:users /userdata/system/configs/supermodel
+            fi
+        done
+    done
+fi
+
 HIPPOS_CONFIG=/userdata/system/configs/hippos
 mkdir -p "${HIPPOS_CONFIG}"
 for name in external-roms.conf roms-sources.conf ignored-storage-devices.txt current-storage.conf; do
