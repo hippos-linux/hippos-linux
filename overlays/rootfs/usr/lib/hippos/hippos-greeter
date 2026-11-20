@@ -67,7 +67,8 @@ WIDE_KEYS = {SHIFT: 1.5, SPACE: 4, DELETE: 3, LOGIN: 3}
 KEY_LABELS = {SHIFT: 'SHIFT', SPACE: 'SPACE', DELETE: 'DELETE', LOGIN: 'LOG IN', POWER: 'POWER'}
 
 POWER_ACTIONS = [('POWER OFF', 'poweroff'), ('RESTART', 'reboot'), ('CANCEL', None)]
-START_MODES = [('EMULATIONSTATION', 'es'), ('DESKTOP', 'desktop')]
+DESKTOP_SESSION_BIN = '/usr/bin/startlxqt'
+START_MODES = [('EMULATIONSTATION', 'es')] + ([('DESKTOP', 'desktop')] if os.path.exists(DESKTOP_SESSION_BIN) else [])
 START_MODE_VALUES = [value for _, value in START_MODES]
 FOOTER_HINTS = [('A', 'TYPE'), ('B', 'DELETE'), ('START', 'LOG IN'), ('SELECT', 'POWER')]
 

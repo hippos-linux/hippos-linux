@@ -3,6 +3,7 @@ usrmerge
 systemd
 systemd-sysv
 systemd-coredump
+logrotate
 dbus
 udev
 sudo
@@ -233,3 +234,17 @@ nethogs
 libcap2-bin
 inxi
 psmisc
+
+# Network sharing, network ROM shares and discovery
+samba
+smbclient
+cifs-utils
+nfs-common
+avahi-daemon
+avahi-utils
+
+# Session tools used by HippOS outside the desktop
+dbus-user-session
+libnotify-bin
+scrot
+python3-pyudev

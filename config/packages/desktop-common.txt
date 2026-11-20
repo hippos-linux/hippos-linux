@@ -23,33 +23,15 @@ ark
 # Privilege escalation for desktop tools
 pkexec
 
-# Per-user dbus session
-dbus-user-session
-
 # XDG integration
 xdg-utils
-libnotify-bin
 xdg-user-dirs
 xdg-desktop-portal
 xdg-desktop-portal-gtk
 xdg-desktop-portal-lxqt
-
-# Network sharing and discovery
-samba
-smbclient
-cifs-utils
-nfs-common
-avahi-daemon
-avahi-utils
 
 # Software centre (Discover — Flatpak + apt, works on all desktops)
 plasma-discover
 plasma-discover-backend-flatpak
 flatpak-xdg-utils
 packagekit
-
-# Screenshot
-scrot
-
-# Python extras
-python3-pyudev

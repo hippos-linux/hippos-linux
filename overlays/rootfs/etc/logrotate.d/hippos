@@ -1,0 +1,9 @@
+/userdata/system/logs/*.log {
+    size 1M
+    rotate 2
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

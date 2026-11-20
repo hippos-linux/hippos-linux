@@ -1,6 +1,7 @@
 [Unit]
 Description=HippOS First-Boot Flatpak App Installer
 After=network.target local-fs.target hippos-migrate.service
+ConditionPathExists=/usr/bin/startlxqt
 
 [Service]
 Type=simple
