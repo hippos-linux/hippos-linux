@@ -1,6 +1,14 @@
 systems:
 - name: androidapps
   as_core: waydroid
+  exclude_extensions:
+    - xapk
+    - apks
+    - aab
 - name: androidgames
   as_core: waydroid
+  exclude_extensions:
+    - xapk
+    - apks
+    - aab
 features: []

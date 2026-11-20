@@ -45,6 +45,9 @@ FREEJ2ME_PLUS_JAR_SHA256='f2c647c3a62a55d904115fc7ec28103ed3bc3f438cac1de8d90e2c
 FREEJ2ME_PLUS_SRC="${WORK_ROOT:-/work/work/emulators}/freej2me-plus/source"
 FREEJ2ME_PLUS_DIR="${STAGING_DIR}/freej2me"
 
+OPENCDI_REPO='https://github.com/sigsantilio/opencdi'
+OPENCDI_SRC="${WORK_ROOT:-/work/work/emulators}/opencdi/source"
+
 FORCE=0
 [[ "${1:-}" == "--force" ]] && FORCE=1
 
@@ -64,6 +67,16 @@ install_freej2me_plus() {
     unzip -p "${tmp}/jar.zip" freej2me_plus-lr.jar > "${FREEJ2ME_PLUS_DIR}/freej2me_plus-lr.jar"
     rm -rf "${tmp}"
     log "Installed FreeJ2ME-Plus ${FREEJ2ME_PLUS_VERSION}"
+}
+
+install_opencdi() {
+    local tag
+    tag="$(github_latest_tag "${OPENCDI_REPO}")"
+    clone_source "${OPENCDI_REPO}" "${tag}" "${OPENCDI_SRC}"
+    cargo build --release --locked --package opencdi-libretro --manifest-path "${OPENCDI_SRC}/Cargo.toml"
+    install -m755 "$(cargo_release_dir "${OPENCDI_SRC}")/libopencdi_libretro.so" "${CORES_DIR}/opencdi_libretro.so"
+    "${STRIP:-strip}" "${CORES_DIR}/opencdi_libretro.so"
+    log "Installed OpenCDi ${tag}"
 }
 
 mkdir -p "${STAGING_DIR}" "${CORES_DIR}" "${ETAG_DIR}"
@@ -137,6 +150,14 @@ while IFS= read -r so_name; do
 done <<< "${AVAILABLE}"
 
 install_freej2me_plus
+
+set +e
+( set -e; install_opencdi )
+opencdi_status=$?
+set -e
+if (( opencdi_status != 0 )); then
+    log "WARN: OpenCDi build failed (exit ${opencdi_status}); keeping the previous core, if any"
+fi
 
 for core in "${CORES_DIR}"/*.so; do
     if readelf -lW "${core}" | grep -q 'GNU_STACK.*RWE'; then

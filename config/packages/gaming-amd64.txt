@@ -23,3 +23,6 @@ steam-launcher
 # Windows Arcade Loader
 cabextract
 winetricks
+
+# Lunaria
+libglfw3

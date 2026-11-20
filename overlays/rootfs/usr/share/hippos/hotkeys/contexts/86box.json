@@ -1,0 +1,6 @@
+{
+  "name": "86box",
+  "keys": {
+    "exit": "/usr/lib/hippos/hippos-close-game"
+  }
+}

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+URL='https://dl.google.com/android/repository/platform-31_r01.zip'
+INSTALLER='/opt/emulators/lunaria/bin/scripts/install-framework.py'
+TARGET='/userdata/system/configs/lunaria/framework-res'
+
+workdir="$(mktemp -d)"
+trap 'rm -rf "${workdir}"' EXIT
+
+curl -fsSL --retry 3 -o "${workdir}/platform-31_r01.zip" "${URL}"
+mkdir -p "$(dirname "${TARGET}")"
+python3 "${INSTALLER}" "${workdir}/platform-31_r01.zip" "${workdir}/framework-res"
+mv "${workdir}/framework-res" "${TARGET}"
+echo "[hippos-lunaria-framework] Android framework resources installed in ${TARGET}"

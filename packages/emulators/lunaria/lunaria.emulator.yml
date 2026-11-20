@@ -1,0 +1,11 @@
+requireArtifact: lunaria
+arch: [amd64]
+best_effort: true
+systems:
+- name: androidapps
+  exclude_extensions:
+    - waydroid
+- name: androidgames
+  exclude_extensions:
+    - waydroid
+features: []

@@ -1,0 +1,5 @@
+requireArtifact: gopher64
+best_effort: true
+systems:
+- n64
+features: []

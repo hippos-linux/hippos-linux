@@ -80,6 +80,7 @@ gamescope                               # trixie-backports
 
 # Standalone emulators (apt-only — no build artifact exists for these)
 # mame, scummvm, dosbox, hatari, openmsx, mupen64plus, dosbox-x, dolphin-emu,
-# desmume, stella, mednafen, mednaffe, mupen64plus-qt, nestopia, fceux, virtualjaguar
+# desmume, mednafen, mednaffe, mupen64plus-qt, nestopia, fceux, virtualjaguar
 # removed — superseded by build artifacts in /opt/emulators
 basilisk2
+stella

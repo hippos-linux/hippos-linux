@@ -1,0 +1,6 @@
+{
+  "name": "sheepshaver",
+  "keys": {
+    "exit": "/usr/lib/hippos/hippos-close-game"
+  }
+}

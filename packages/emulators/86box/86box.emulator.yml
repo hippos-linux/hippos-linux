@@ -1,0 +1,5 @@
+requireArtifact: 86box
+best_effort: true
+systems:
+- 86box
+features: []

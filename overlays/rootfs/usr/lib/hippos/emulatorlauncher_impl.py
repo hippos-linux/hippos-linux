@@ -336,6 +336,7 @@ def _build_hud_config(conf: dict[str, str], ctx: LaunchContext) -> Optional[Path
     _log.info("hud: config written (%s mode, %s)", mode, position)
     return _HUD_CONFIG_PATH
 
+import emulatorlauncher_86box
 import emulatorlauncher_ares
 import emulatorlauncher_azahar
 import emulatorlauncher_cemu
@@ -344,8 +345,11 @@ import emulatorlauncher_core
 import emulatorlauncher_drastic
 import emulatorlauncher_extras
 import emulatorlauncher_generic
+import emulatorlauncher_gopher64
 import emulatorlauncher_gsplus
+import emulatorlauncher_lunaria
 import emulatorlauncher_melonds
+import emulatorlauncher_mesen2
 import emulatorlauncher_misc
 import emulatorlauncher_model2emu
 import emulatorlauncher_openbor
@@ -356,10 +360,14 @@ import emulatorlauncher_ppsspp
 import emulatorlauncher_rpcs3
 import emulatorlauncher_runtime
 import emulatorlauncher_shadps4
+import emulatorlauncher_sheepshaver
+import emulatorlauncher_stella
 import emulatorlauncher_supermodel
 import emulatorlauncher_vita3k
 import emulatorlauncher_vpinball
+import emulatorlauncher_waydroid
 import emulatorlauncher_windowsarcadeloader
+import emulatorlauncher_xbased
 import emulatorlauncher_xemu
 import emulatorlauncher_xenia
 

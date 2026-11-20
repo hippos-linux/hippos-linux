@@ -1,0 +1,20 @@
+requireArtifact: mesen2
+arch: [amd64]
+best_effort: true
+systems:
+- nes
+- fds
+- snes
+- gb
+- gbc
+- gba
+- pcengine
+- pcenginecd
+- supergrafx
+- mastersystem
+- gamegear
+- sg1000
+- colecovision
+- wswan
+- wswanc
+features: []

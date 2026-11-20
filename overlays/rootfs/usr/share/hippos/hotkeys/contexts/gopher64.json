@@ -1,0 +1,6 @@
+{
+  "name": "gopher64",
+  "keys": {
+    "exit": "/usr/lib/hippos/hippos-close-game"
+  }
+}

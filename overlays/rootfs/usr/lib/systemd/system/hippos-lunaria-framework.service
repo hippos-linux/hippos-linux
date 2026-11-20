@@ -1,0 +1,19 @@
+[Unit]
+Description=HippOS Lunaria Android framework download
+Wants=network-online.target
+After=network-online.target userdata.mount opt-emulators.mount
+ConditionPathExists=!/userdata/system/configs/lunaria/framework-res
+ConditionPathExists=/opt/emulators/lunaria/bin/scripts/install-framework.py
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+User=hippos
+ExecStart=/usr/lib/hippos/hippos-lunaria-framework
+StandardOutput=journal
+StandardError=journal
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,6 @@
+requireArtifact: sheepshaver
+arch: [amd64]
+best_effort: true
+systems:
+- macintosh
+features: []
