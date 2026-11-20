@@ -121,7 +121,6 @@ systems:
       - dosbox_pure
       - dosbox_core
       - dosbox_svn
-      - rust_dos
     shared_features:
       - padtokey
       - onscreen_keyboard
@@ -153,7 +152,6 @@ systems:
   - name: dreamcast
     as_core:
       - flycast
-      - parallel_dc
   - name: easyrpg
     as_core: easyrpg
   - name: fbneo
@@ -246,8 +244,6 @@ systems:
       - mame2003
       - mame2003_midway
       - mame2000
-      - mame2015
-      - mame2016
   - name: mastersystem
     as_core:
       - genesis_plus_gx
@@ -275,7 +271,6 @@ systems:
     as_core:
       - mupen64plus_next
       - parallel_n64
-      - n64emu
   - name: nds
     as_core:
       - melonds
@@ -515,7 +510,6 @@ systems:
   - name: prboom
     as_core:
       - prboom
-      - uzdoom
   - name: quake
     as_core: tyrquake
   - name: reminiscence
@@ -555,7 +549,6 @@ systems:
   - name: atomiswave
     as_core:
       - flycast
-      - parallel_dc
   - name: bk
     as_core: bk
   - name: c64
@@ -604,11 +597,9 @@ systems:
   - name: naomi
     as_core:
       - flycast
-      - parallel_dc
   - name: naomi2
     as_core:
       - flycast
-      - parallel_dc
   - name: scummvm
     as_core: scummvm
   - name: spectravideo
@@ -618,7 +609,6 @@ systems:
   - name: systemsp
     as_core:
       - flycast
-      - parallel_dc
   - name: tic80
     as_core: tic80
   - name: uzebox
@@ -630,9 +620,6 @@ systems:
   - name: 3ds
     as_core:
       - azahar
-      - citra
-      - citra2018
-      - panda3ds
   - name: apple2
     as_core:
       - applewin
@@ -657,6 +644,7 @@ systems:
     as_core:
       - cdi2015
       - same_cdi
+      - opencdi
   - name: cplus4
     as_core:
       - vice_xplus4
@@ -669,6 +657,9 @@ systems:
   - name: fmtowns
     as_core:
       - geartowns
+  - name: gaelco
+    as_core:
+      - odin
   - name: hikaru
     as_core:
       - odin
@@ -681,24 +672,13 @@ systems:
   - name: ps2
     as_core:
       - armsx2
-      - pcee2
       - pcsx2
-      - play
-  - name: ps3
-    as_core:
-      - rpcs3
   - name: vgmplay
     as_core:
       - gme
   - name: wiiu
     as_core:
       - cemu
-  - name: xbox
-    as_core:
-      - xemu
-  - name: xbox360
-    as_core:
-      - xenia_edge
   - name: chip8
     as_core:
       - jaxe
@@ -827,9 +807,6 @@ systems:
   - name: thepowdertoy
     as_core:
       - thepowdertoy
-  - name: psvita
-    as_core:
-      - vita3k
   - name: daphne
     as_core:
       - dirksimple

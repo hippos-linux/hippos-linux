@@ -1,0 +1,14 @@
+diff --git a/src/xenia/ui/window_wx.cc b/src/xenia/ui/window_wx.cc
+index d7a6874..08a7939 100644
+--- a/src/xenia/ui/window_wx.cc
++++ b/src/xenia/ui/window_wx.cc
+@@ -419,6 +419,9 @@ void WxWindow::ApplyNewFullscreen() {
+   if (fullscreen && !frame_->IsFullScreen()) {
+     SaveGeometryToConfig();
+   }
++  auto* main_menu = static_cast<WxMenuItem*>(GetMainMenu());
++  frame_->SetMenuBar(!fullscreen && main_menu ? main_menu->GetMenuBar()
++                                              : nullptr);
+   frame_->ShowFullScreen(fullscreen);
+   if (content_visibility_callback_) {
+     content_visibility_callback_();

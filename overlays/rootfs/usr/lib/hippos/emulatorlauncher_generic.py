@@ -543,6 +543,16 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
     _log.info("Wrote retroarch config: %s", RA_CUSTOM_CFG)
     return RA_CUSTOM_CFG
 
+ODIN_SHARED_SETS: tuple[str, ...] = ('hikaru', 'mie', 'jvs13551', '18wheelr', 'srally2')
+
+def _link_odin_shared_sets() -> None:
+    odin_dir = BIOS / 'odin'
+    odin_dir.mkdir(parents=True, exist_ok=True)
+    for name in ODIN_SHARED_SETS:
+        target = odin_dir / f'{name}.zip'
+        if (BIOS / f'{name}.zip').is_file() and not target.is_symlink() and not target.exists():
+            target.symlink_to(Path('..') / f'{name}.zip')
+
 def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> None:
     RA_CORES_CFG.parent.mkdir(parents=True, exist_ok=True)
     opts: dict[str, str] = {}
@@ -601,6 +611,9 @@ def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> N
         opts['pce_nospritelimit']         = _get('pce_nospritelimit', 'disabled')
         opts['pce_ocmultiplier']          = _get('pce_ocmultiplier', '1')
         opts['pce_aspect_ratio']          = _get('pce_aspect_ratio', 'auto')
+
+    elif core == 'odin':
+        _link_odin_shared_sets()
 
     elif core in ('mame', 'mame2003_plus'):
         opts['mame_read_config']          = _get('mame_read_config', 'disabled')
@@ -734,7 +747,6 @@ register(Emulator('xash3d_fwgs', launch_standalone, fullscreen_flags=('-fullscre
 register(Emulator('yquake2', launch_standalone, binaries=('yquake2',), fullscreen_flags=('-fullscreen',)))
 register(Emulator('fceux', launch_standalone, binaries=('fceux',)))
 register(Emulator('mednafen', launch_standalone, binaries=('mednafen',)))
-register(Emulator('stella', launch_standalone, binaries=('stella',)))
 register(Emulator('desmume', launch_standalone, binaries=('desmume',)))
 register(Emulator('nestopia', launch_standalone, binaries=('nestopia',)))
 register(Emulator('virtualjaguar', launch_standalone, binaries=('virtualjaguar',)))

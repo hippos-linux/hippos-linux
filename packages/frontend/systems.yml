@@ -5,6 +5,7 @@ _defaults:
 _emulator_defaults:
   3do:           { emulator: retroarch,          core: opera              }
   3ds:           { emulator: azahar,             core: azahar             }
+  86box:         { emulator: 86box,              core: 86box              }
   adam:          { emulator: mame,               core: mame               }
   advision:      { emulator: mame,               core: mame               }
   amiga500:      { emulator: amiberry,           core: A500               }
@@ -36,7 +37,7 @@ _emulator_defaults:
   c64:           { emulator: vice,               core: x64                }
   c128:          { emulator: vice,               core: x128               }
   camplynx:      { emulator: mame,               core: mame               }
-  cave3rd:       { emulator: demul,              core: demul              }
+  cave3rd:       { emulator: mame,               core: mame               }
   cannonball:    { emulator: retroarch,          core: cannonball         }
   cavestory:     { emulator: retroarch,          core: nxengine           }
   cdi:           { emulator: mame,               core: mame               }
@@ -64,7 +65,7 @@ _emulator_defaults:
   flash:         { emulator: ruffle,             core: ruffle, options: { hud_support: false } }
   fm7:           { emulator: mame,               core: mame               }
   fmtowns:       { emulator: tsugaru,            core: tsugaru            }
-  gaelco:        { emulator: demul,              core: demul              }
+  gaelco:        { emulator: retroarch,          core: odin               }
   gamate:        { emulator: mame,               core: mame               }
   gameandwatch:  { emulator: mame,               core: mame, options: { forceNoBezel: true } }
   gamecom:       { emulator: mame,               core: mame               }
@@ -76,7 +77,7 @@ _emulator_defaults:
   gbc:           { emulator: retroarch,          core: gambatte           }
   gmaster:       { emulator: mame,               core: mame               }
   gp32:          { emulator: mame,               core: mame               }
-  hikaru:        { emulator: demul,              core: demul              }
+  hikaru:        { emulator: retroarch,          core: odin               }
   ikemen:        { emulator: ikemen,             core: ikemen, options: { videomode: max-720x480 } }
   intellivision: { emulator: retroarch,          core: freeintv           }
   jaguar:        { emulator: bigpemu,            core: bigpemu            }
@@ -216,8 +217,8 @@ _emulator_defaults:
   x68000:        { emulator: retroarch,          core: px68k              }
   xegs:          { emulator: mame,               core: mame               }
   xrick:         { emulator: retroarch,          core: xrick              }
-  xbox:          { emulator: xemu,               core: xemu               }
-  xbox360:       { emulator: xenia-canary,       core: xenia_canary, options: { hud_support: false } }
+  xbox:          { emulator: xbased,             core: xbased             }
+  xbox360:       { emulator: xenia-edge,         core: xenia_edge, options: { hud_support: false } }
   zx81:          { emulator: retroarch,          core: "81"                 }
   zxspectrum:    { emulator: retroarch,          core: fuse               }
   gb2players:    { emulator: retroarch,          core: tgbdual          }
@@ -323,6 +324,15 @@ _emulator_defaults_arm64:
   name: 3DO
   release: 1993
   theme: 3do
+86box:
+  extensions:
+  - cfg
+  hardware: computer
+  manufacturer: IBM
+  name: PC (86Box)
+  platform: pc
+  release: 1981
+  theme: pc
 adam:
   extensions:
   - wav
@@ -453,9 +463,11 @@ amstradcpc:
   name: Amstrad CPC
   release: 1984
 androidapps:
-  command: /usr/lib/hippos/waydroid-launcher %ROM%
   extensions:
   - apk
+  - xapk
+  - apks
+  - aab
   - waydroid
   hardware: os
   manufacturer: Google
@@ -463,9 +475,11 @@ androidapps:
   platform: android
   release: 2008
 androidgames:
-  command: /usr/lib/hippos/waydroid-launcher %ROM%
   extensions:
   - apk
+  - xapk
+  - apks
+  - aab
   hardware: os
   manufacturer: Google
   name: Android Games
@@ -2511,6 +2525,7 @@ wswanc:
 xbox:
   extensions:
   - iso
+  - chd
   - squashfs
   hardware: console
   manufacturer: Microsoft

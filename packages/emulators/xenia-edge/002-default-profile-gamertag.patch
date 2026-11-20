@@ -1,0 +1,37 @@
+diff --git a/src/xenia/app/emulator_window.cc b/src/xenia/app/emulator_window.cc
+index 3de2020..87f12d8 100644
+--- a/src/xenia/app/emulator_window.cc
++++ b/src/xenia/app/emulator_window.cc
+@@ -209,6 +209,11 @@ DEFINE_bool(boot_to_dashboard, false,
+ DEFINE_bool(fullscreen, false, "Whether to launch the emulator in fullscreen.",
+             "Display");
+ 
++DEFINE_string(default_profile_gamertag, "",
++              "Gamertag of a profile to create and sign in at startup when "
++              "none exists, instead of asking.",
++              "Profiles");
++
+ DEFINE_bool(guide_button, true,
+             "Toggle the context menu with the guide button.", "UI");
+ 
+@@ -906,11 +911,15 @@ void EmulatorWindow::OnEmulatorInitialized() {
+   // right there. The import needs the library.
+   InitializeGameLibrary();
+ 
+-  if (!emulator_->kernel_state()
+-           ->xam_state()
+-           ->profile_manager()
+-           ->GetAccountCount()) {
+-    ShowNoProfilePrompt();
++  auto* profile_manager =
++      emulator_->kernel_state()->xam_state()->profile_manager();
++  if (!profile_manager->GetAccountCount()) {
++    const std::string& gamertag = cvars::default_profile_gamertag;
++    if (kernel::xam::ProfileManager::IsGamertagValid(gamertag)) {
++      profile_manager->CreateProfile(gamertag, /*autologin=*/true);
++    } else {
++      ShowNoProfilePrompt();
++    }
+   }
+ 
+   // When a title launches outside of RunTitle (e.g. --target on the command

@@ -17,6 +17,15 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
+PATCH_DIR="${REPO_ROOT}/packages/emulators/${NAME}"
+for patch in 001-fullscreen-hide-menu-bar.patch 002-default-profile-gamertag.patch; do
+    if git -C "${SRC}" apply --reverse --check "${PATCH_DIR}/${patch}" >/dev/null 2>&1; then
+        log "Patch already applied: ${patch}"
+    else
+        git -C "${SRC}" apply "${PATCH_DIR}/${patch}"
+    fi
+done
+
 mkdir -p "${STAGING}/bin" "${STAGING}/lib"
 
 cd "${SRC}"

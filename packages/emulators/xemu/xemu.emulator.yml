@@ -99,4 +99,6 @@ custom_features:
       xemu.toml configuration file.
     preset: input
 systems:
-  - xbox
+  - name: xbox
+    exclude_extensions:
+      - chd
