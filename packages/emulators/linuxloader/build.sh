@@ -6,7 +6,7 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 source "${REPO_ROOT}/build/common.sh"
 
 NAME='linuxloader'
-REPO='https://github.com/lindbergh-loader/linuxloader.git'
+REPO='https://github.com/aderumier/linuxloader.git'
 TAG="${LINUXLOADER_TAG:-$(github_latest_tag "${REPO}")}"
 
 WORK_ROOT="${WORK_ROOT:-${REPO_ROOT}/work/emulators}"
@@ -19,6 +19,8 @@ IMAGE_NAME="hippos-${NAME}-builder"
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
+patch="${SCRIPT_DIR}/001-linux-build.patch"
+git -C "${SRC}" apply --reverse --check "${patch}" >/dev/null 2>&1 || git -C "${SRC}" apply "${patch}"
 sudo chown -R "$(id -u):$(id -g)" "${WORK_ROOT}/${NAME}" "${STAGING}" 2>/dev/null || true
 mkdir -p "${BUILD}" "${STAGING}/bin"
 
