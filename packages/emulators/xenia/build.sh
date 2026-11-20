@@ -112,7 +112,20 @@ export WINEPREFIX="${XENIA_PREFIX}"
 export WINEARCH=win64
 export WINEDEBUG=-all
 
-exec /opt/wine-builds/wine-proton/bin/wine "${XENIA_EXE}" "$@"
+RUNNER=/opt/wine-builds/wine-proton
+[[ -d "${XENIA_PREFIX}/drive_c/windows/system32" ]] || "${RUNNER}/bin/wine" wineboot -u
+for arch_dir in x86_64-windows:system32 i386-windows:syswow64; do
+    dst="${XENIA_PREFIX}/drive_c/windows/${arch_dir##*:}"
+    for src in "${RUNNER}/lib/vkd3d" "${RUNNER}/lib/wine/vkd3d-proton" "${RUNNER}/lib/wine/dxvk"; do
+        src="${src}/${arch_dir%%:*}"
+        [[ -d "${src}" && -d "${dst}" ]] && ln -sf "${src}"/*.dll "${dst}/"
+    done
+done
+export WINEDLLOVERRIDES="d3d12,d3d12core,dxgi,d3d11,d3d10core,d3d9=n"
+grep -qi '^\[Software\\\\Xenia\]' "${XENIA_PREFIX}/user.reg" 2>/dev/null \
+    || "${RUNNER}/bin/wine" reg add 'HKCU\Software\Xenia' /v XEFLAGS /t REG_QWORD /d 1 /f
+
+exec "${RUNNER}/bin/wine" "${XENIA_EXE}" "$@"
 LAUNCHER
 
 chmod +x "${STAGING}/bin/xenia"
