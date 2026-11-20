@@ -1,0 +1,4 @@
+# Raspberry Pi-specific base packages
+
+# Raspberry Pi boot firmware
+raspi-firmware

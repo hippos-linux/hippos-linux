@@ -3,7 +3,6 @@
 # GRUB EFI bootloader for arm64
 grub-efi-arm64
 
-# Raspberry Pi firmware and trusted firmware
-raspi-firmware
+# Bluetooth and trusted firmware
 bluez-firmware
 arm-trusted-firmware

@@ -8,7 +8,7 @@ NAME='nvidia-legacy'
 REPO_ROOT="${REPO_ROOT:-/work}"
 ARTIFACT_ROOT="${ARTIFACT_ROOT:-/artifacts}"
 WORK_ROOT="${WORK_ROOT:-/work/work/tools}"
-STAGING="${ARTIFACT_ROOT}/${ARCH}/tools/${NAME}"
+STAGING="${ARTIFACT_ROOT}/${BUILD_TARGET}/tools/${NAME}"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
@@ -185,8 +185,8 @@ ccflags-y += $(EXTRA_CFLAGS)' "${EXTRACT_DIR}/kernel/Kbuild"
     log "Building tier ${tier} kernel modules"
     _built_any_release=0
     for variant in standard lts; do
-        KERNEL_ARTIFACTS_DIR="${ARTIFACT_ROOT}/${ARCH}/kernel/${variant}"
-        HEADERS_DEB="$(ls "${KERNEL_ARTIFACTS_DIR}"/linux-headers-*.deb 2>/dev/null | head -1)"
+        KERNEL_ARTIFACTS_DIR="${ARTIFACT_ROOT}/${BUILD_TARGET}/kernel/${variant}"
+        HEADERS_DEB="$(ls "${KERNEL_ARTIFACTS_DIR}"/linux-headers-*.deb 2>/dev/null | head -1 || true)"
         if [[ -z "${HEADERS_DEB}" ]]; then
             if [[ "${variant}" == "standard" ]]; then
                 log "No kernel headers artifact at ${KERNEL_ARTIFACTS_DIR} — run build/build-kernel.sh first"
