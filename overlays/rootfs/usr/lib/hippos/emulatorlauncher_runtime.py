@@ -320,6 +320,16 @@ def launch_wine(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     if ctx.core and ctx.core not in ('wine', 'wine-default'):
         env['HIPPOS_RUNNER'] = ctx.core
+    if mode == 'play':
+        language = _conf_value(conf, 'system.language', 'en_US')
+        env['LANG'] = env['LC_ALL'] = f'{language}.UTF-8'
+        if _game_bool(conf, ctx, 'sdl_config', True):
+            env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
+            env['SDL_JOYSTICK_HIDAPI'] = '0'
+        if Path('/var/tmp/hippos-nvidia.prime').exists():
+            for name in ('__NV_PRIME_RENDER_OFFLOAD', '__VK_LAYER_NV_optimus', '__GLX_VENDOR_LIBRARY_NAME'):
+                env.pop(name, None)
+            env['VK_ICD_FILENAMES'] = '/usr/share/vulkan/icd.d/nvidia_icd.x86_64.json:/usr/share/vulkan/icd.d/nvidia_icd.i686.json'
     cmd = [str(wrapper), ctx.system, mode, str(ctx.rom)]
     __import__('logging').getLogger('hippos.emulatorlauncher').info("Launching Wine: %s", ' '.join(cmd))
     result = _run_game_command(ctx, cmd, env)

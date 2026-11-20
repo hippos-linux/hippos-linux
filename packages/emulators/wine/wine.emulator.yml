@@ -23,10 +23,133 @@ custom_features:
     preset: runners
   dxvk:
     prompt: DXVK
-    description: Converts DirectX 8/9/10/11 calls to Vulkan. Disable if you get graphical issues.
+    description: Converts DirectX 8/9/10/11/12 calls to Vulkan. Disable if you get graphical issues.
     choices:
-      "On (Default)": "true"
-      "Off": "false"
+      "On (Default)": 1
+      "Off": 0
+  fps_limit:
+    prompt: FPS LIMITER
+    description: Allows you to limit FPS to 60.
+    choices:
+      "Off": 0
+      "On": 1
+  sdl_config:
+    prompt: SDL CONFIG
+    description: Choose whether to pass SDL Game Controller config to the Windows game. Disabling may help with some games.
+    choices:
+      "Off": 0
+      On (Default): 1
+  enable_hidraw:
+    prompt: ENABLE HIDRAW
+    description: Enable gamepad HID raw access. This allow modern game to use special gamepad features (like gyroscope for example), but can break older games with x-input support only.
+    choices:
+      Off (Default): 0
+      "On": 1
+  dxvk_hud:
+    group: ADVANCED OPTIONS
+    prompt: DXVK HUD
+    description: See your FPS and version of Vulkan API/driver.
+    choices:
+      "Off": 0
+      "On": 1
+  d7vk:
+    group: ADVANCED OPTIONS
+    prompt: D7VK
+    description: Translate DirectDraw and Direct3D up to 7 to Vulkan.
+    choices:
+      Off (Default): 0
+      "On": 1
+  ntsync:
+    group: ADVANCED OPTIONS
+    prompt: NTSYNC
+    description: Improves frame rate and responsiveness.
+    choices:
+      "Off": 0
+      On (Default): 1
+  fsr:
+    group: ADVANCED OPTIONS
+    prompt: FIDELITY FX SUPER RESOLUTION
+    description: Renders game at a lower res then upscales to increase FPS.
+    choices:
+      "Off": 0
+      "On": 1
+  virtual_desktop:
+    group: ADVANCED OPTIONS
+    prompt: VIRTUAL DESKTOP
+    description: Define the resolution and a new dedicated window.
+    choices:
+      "Off": 0
+      "On": 1
+  enable_win32:
+    group: ADVANCED OPTIONS
+    prompt: ENABLE WIN32
+    description: Forces a pure 32bit prefix, only if no prefix exists and the runner supports win32.
+    choices:
+      "Off": 0
+      "On": 1
+  allow_xim:
+    group: ADVANCED OPTIONS
+    prompt: ENABLE XIM
+    description: Enable support for Chinese, Japanese and Korean input methods.
+    choices:
+      "Off": 0
+      "On": 1
+  no_write_watch:
+    group: ADVANCED OPTIONS
+    prompt: NO WRITE WATCH
+    description: Disable support for memory write watches in ntdll.
+    choices:
+      "Off": 0
+      "On": 1
+  force_large_adress:
+    group: ADVANCED OPTIONS
+    prompt: FORCE LARGE ADDRESS
+    description: Force WINE to run games with large addresses.
+    choices:
+      "Off": 0
+      On (Default): 1
+  heap_delay_free:
+    group: ADVANCED OPTIONS
+    prompt: HEAP DELAY FREE
+    description: Delay freeing some memory.
+    choices:
+      "Off": 0
+      "On": 1
+  hide_nvidia_gpu:
+    group: ADVANCED OPTIONS
+    prompt: HIDE NVIDIA GPU
+    description: Force Nvidia GPUs to always be reported as AMD GPUs to workaround game issues.
+    choices:
+      "Off": 0
+      "On": 1
+  enable_nvapi:
+    group: ADVANCED OPTIONS
+    prompt: ENABLE NVAPI
+    description: NVAPI is NVIDIA's core software that allows direct access to NVIDIA GPU.
+    choices:
+      "Off": 0
+      "On": 1
+  enable_vkreflex:
+    group: ADVANCED OPTIONS
+    prompt: ENABLE NVIDIA REFLEX
+    description: Enables Vulkan Reflex low-latency mode to reduce input lag. Automatically activates NVAPI if enabled.
+    choices:
+      "Off": 0
+      "On": 1
+  dxvk_reset_cache:
+    group: ADVANCED OPTIONS
+    prompt: DXVK RESET CACHE
+    description: Reset the cache can fix some crashes if your game was running under Batocera 29.
+    choices:
+      "Off": 0
+      "On": 1
+  wine_debug:
+    group: ADVANCED OPTIONS
+    prompt: ENABLE DEBUG
+    description: Useful to troubleshoot when your Windows game won't start of crashes.
+    choices:
+      "Off": 0
+      "On": 1
 systems:
 - name: windows
 - name: windows_installers

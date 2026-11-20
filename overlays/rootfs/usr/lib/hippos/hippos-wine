@@ -3,273 +3,902 @@
 SYSTEM="${1,,}"
 ACTION="${2,,}"
 GAMENAME="${3:-}"
-
 ROMGAMENAME="$(basename "${GAMENAME}")"
+ROMBASEDIR="$(dirname "${GAMENAME}")"
 GAMEEXT="${GAMENAME##*.}"
-
-WINE_BOTTLE_DIR="/userdata/wine-bottles/${SYSTEM}"
-WINE_RUNNERS_DIR="/userdata/system/wine-runners"
-WINE_BASE="/opt/wine-builds"
-UMU_DATA="${XDG_DATA_HOME:-${HOME}/.local/share}"
-ES_API="http://127.0.0.1:1234"
+AUTORUN_FILEMASK="${4:-}"
 SECONDS=0
 
-init_wine() {
-    local runner="${HIPPOS_RUNNER:-}"
-    [[ -z "${runner}" ]] && runner="$(hippos-settings get "windows.wine-runner" 2>/dev/null || true)"
-    [[ -z "${runner}" ]] && runner="wine-tkg"
+WINE_BOTTLE_DIR="/userdata/wine-bottles/${SYSTEM}"
+G_ROMS_DIR="/userdata/roms/${SYSTEM}"
+USER_DIR="/userdata/system/wine"
+WINE_RUNNERS_DIR="/userdata/system/wine-runners"
+WINE_BASE="/opt/wine-builds"
+SYSTEM_DXVK_DIR="/opt/dxvk"
+WINE_CACHE_DIR="/userdata/system/cache"
+WINE_RUN_DIR="/run/hippos-wine"
+NVIDIA_WINE_DIR="/usr/lib/x86_64-linux-gnu/nvidia/wine"
+UMU_DATA="${XDG_DATA_HOME:-${HOME}/.local/share}"
+ES_API="http://127.0.0.1:1234"
 
-    local runner_dir=""
-    if [[ -d "${WINE_RUNNERS_DIR}/${runner}" ]]; then
-        runner_dir="${WINE_RUNNERS_DIR}/${runner}"
-    elif [[ -d "${WINE_BASE}/${runner}" ]]; then
-        runner_dir="${WINE_BASE}/${runner}"
-    fi
+WINE_VERSION=""
+RUNNER_DIR=""
+WINE=""
+WINE64=""
+WINESERVER=""
+MSIEXEC=""
+WINE_LIB64_DIR=""
+WINE_LIB32_DIR=""
+USE_UMU=0
+VDESKTOP=""
+WINEPOINT=""
+SQUASHFSPOINT=""
+IDMAPPOINT=""
+WORKPOINT=""
+GAMEISOMOUNT=""
+declare -A CONF=()
+declare -a AUTORUN_FOUNDEXE=()
 
-    case "${runner}" in
-        umu)
-            USE_UMU=1
-            ;;
-        *)
-            if [[ -z "${runner_dir}" ]]; then
-                printf '[hippos-wine] runner not found: %s, falling back to wine-tkg\n' "${runner}" >&2
-                runner="wine-tkg"
-                init_wine
-                return
-            fi
-            WINE="${runner_dir}/bin/wine"
-            WINE64="${runner_dir}/bin/wine64"
-            WINESERVER="${runner_dir}/bin/wineserver"
-            USE_UMU=0
-            export LD_LIBRARY_PATH="${runner_dir}/lib:${runner_dir}/lib32${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-            export WINEDLLPATH="${runner_dir}/lib/wine/i386-windows:${runner_dir}/lib/wine/x86_64-windows"
-            export PATH="${runner_dir}/bin:${PATH}"
-            ;;
+load_settings() {
+    local line
+    while IFS= read -r line; do
+        CONF["${line%%=*}"]="${line#*=}"
+    done < <(hippos-settings list 2>/dev/null)
+}
+
+get_setting() {
+    local key="$1" system="${2:-${SYSTEM}}" game="${3:-${ROMGAMENAME}}" name
+    for name in "${system}[\"${game}\"].${key}" "${system}.folder[\"${ROMBASEDIR}\"].${key}" \
+                "${system}.${key}" "global.${key}"; do
+        if [[ -n "${CONF[${name}]:-}" ]]; then
+            printf '%s' "${CONF[${name}]}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+setting_on() {
+    case "$(get_setting "$1" | tr '[:upper:]' '[:lower:]')" in
+        1|true|on|yes|enabled) return 0 ;;
+        *) return 1 ;;
     esac
-
-    RUNNER="${runner}"
-    export WINEDEBUG="-all"
-    export WINEARCH=win64
-    ulimit -n 524288 2>/dev/null || true
-
-    local fsync esync dxvk
-    fsync="$(hippos-settings get windows.fsync 2>/dev/null || true)"
-    esync="$(hippos-settings get windows.esync 2>/dev/null || true)"
-    dxvk="$(hippos-settings get windows.dxvk 2>/dev/null || true)"
-
-    if [[ "${fsync}" == "true" ]]; then
-        export WINEFSYNC=1
-        export WINEESYNC=0
-    elif [[ "${esync}" == "true" ]]; then
-        export WINEESYNC=1
-    fi
-
-    if [[ "${dxvk}" == "false" ]]; then
-        export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:+${WINEDLLOVERRIDES};}d3d9,d3d10core,d3d11,dxgi=b"
-    fi
-
-    local vdesk res
-    vdesk="$(hippos-settings get windows.virtual_desktop 2>/dev/null || true)"
-    WINE_VIRTUAL_DESKTOP="${vdesk}"
-    res="$(hippos-settings get windows.desktop_resolution 2>/dev/null || true)"
-    WINE_RESOLUTION="${res}"
 }
 
-XRANDR_ORIGINAL_MODE=""
-XRANDR_OUTPUT=""
+setting_off() {
+    case "$(get_setting "$1" | tr '[:upper:]' '[:lower:]')" in
+        0|false|off|no|disabled) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 
-xrandr_set_resolution() {
-    local res="${1:-}"
-    [[ -z "${res}" ]] && return 0
-    command -v xrandr >/dev/null 2>&1 || { printf '[hippos-wine] xrandr not found, skipping resolution change\n' >&2; return 0; }
-    XRANDR_OUTPUT="$(xrandr --query 2>/dev/null | awk '/ connected/{print $1; exit}')"
-    [[ -z "${XRANDR_OUTPUT}" ]] && return 0
-    XRANDR_ORIGINAL_MODE="$(xrandr --query 2>/dev/null | awk '/\*/{print $1; exit}')"
-    if xrandr --output "${XRANDR_OUTPUT}" --mode "${res}" 2>/dev/null; then
-        printf '[hippos-wine] resolution -> %s\n' "${res}" >&2
+es_notify() {
+    curl -sf -X POST -H 'Content-Type: text/plain' --data "$1" "${ES_API}/notify" >/dev/null 2>&1 || true
+}
+
+find_runner_dir() {
+    if [[ -d "${WINE_RUNNERS_DIR}/$1" ]]; then
+        echo "${WINE_RUNNERS_DIR}/$1"
+    elif [[ -d "${WINE_BASE}/$1" ]]; then
+        echo "${WINE_BASE}/$1"
     else
-        printf '[hippos-wine] xrandr mode %s unavailable, keeping current resolution\n' "${res}" >&2
-        XRANDR_ORIGINAL_MODE=""
+        return 1
     fi
 }
 
-xrandr_restore_resolution() {
-    [[ -z "${XRANDR_ORIGINAL_MODE}" ]] && return 0
-    xrandr --output "${XRANDR_OUTPUT}" --mode "${XRANDR_ORIGINAL_MODE}" 2>/dev/null || true
-    printf '[hippos-wine] resolution restored to %s\n' "${XRANDR_ORIGINAL_MODE}" >&2
-    XRANDR_ORIGINAL_MODE=""
-}
+init_wine() {
+    load_settings
 
-wait_wineserver() {
-    [[ "${USE_UMU:-0}" == "1" ]] && return 0
-    local pid
-    pid="$(pgrep -o -f "${WINESERVER}" 2>/dev/null || true)"
-    [[ -z "${pid}" ]] && return 0
-    timeout "${1:-30}" tail -q --pid="${pid}" -f /dev/null 2>/dev/null || true
-}
+    WINE_VERSION="$(get_setting wine-runner)"
+    [[ -z "${WINE_VERSION}" ]] && WINE_VERSION="${HIPPOS_RUNNER:-wine-tkg}"
+    [[ "${WINE_VERSION}" == "proton" ]] && WINE_VERSION="wine-proton"
 
-umu_ready() {
-    compgen -G "${UMU_DATA}/umu/steamrt*" >/dev/null \
-        && compgen -G "${UMU_DATA}/Steam/compatibilitytools.d/UMU-Proton*" >/dev/null
+    if [[ "${WINE_VERSION}" == "umu" ]]; then
+        USE_UMU=1
+        export WINEARCH=win64
+        return 0
+    fi
+
+    if ! RUNNER_DIR="$(find_runner_dir "${WINE_VERSION}")"; then
+        printf '[hippos-wine] runner not found: %s, using wine-tkg\n' "${WINE_VERSION}" >&2
+        WINE_VERSION="wine-tkg"
+        RUNNER_DIR="$(find_runner_dir "${WINE_VERSION}")" || { echo "[hippos-wine] no Wine runner installed" >&2; exit 1; }
+    fi
+    printf '[hippos-wine] runner: %s\n' "${WINE_VERSION}" >&2
+
+    if [[ -e "${RUNNER_DIR}/lib/wine/i386-unix/wine" ]]; then
+        WINE="${RUNNER_DIR}/lib/wine/i386-unix/wine"
+    else
+        WINE="${RUNNER_DIR}/bin/wine"
+    fi
+    if [[ -e "${RUNNER_DIR}/lib/wine/x86_64-unix/wine64" ]]; then
+        WINE64="${RUNNER_DIR}/lib/wine/x86_64-unix/wine64"
+    elif [[ -e "${RUNNER_DIR}/bin/wine64" ]]; then
+        WINE64="${RUNNER_DIR}/bin/wine64"
+    else
+        WINE64="${WINE}"
+    fi
+    WINESERVER="${RUNNER_DIR}/bin/wineserver"
+    MSIEXEC="${RUNNER_DIR}/bin/msiexec"
+
+    WINE_LIB64_DIR="${RUNNER_DIR}/lib/wine"
+    [[ -e "${RUNNER_DIR}/lib64/wine" ]] && WINE_LIB64_DIR="${RUNNER_DIR}/lib64/wine"
+    WINE_LIB32_DIR="${RUNNER_DIR}/lib/wine"
+    [[ -e "${RUNNER_DIR}/lib32/wine" ]] && WINE_LIB32_DIR="${RUNNER_DIR}/lib32/wine"
+
+    export PATH="${RUNNER_DIR}/bin:${PATH}"
+    export LD_LIBRARY_PATH="${RUNNER_DIR}/lib:${RUNNER_DIR}/lib32:${WINE_LIB32_DIR}/i386-unix:${WINE_LIB64_DIR}/x86_64-unix"
+    if [[ -d "${RUNNER_DIR}/lib/x86_64-linux-gnu" ]]; then
+        LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${RUNNER_DIR}/lib/x86_64-linux-gnu:${RUNNER_DIR}/lib/i386-linux-gnu"
+    fi
+    export WINEDLLPATH="${WINE_LIB32_DIR}/i386-windows:${WINE_LIB64_DIR}/x86_64-windows"
 }
 
 wine_cmd() {
-    local prefix="$1"
-    shift
-    if [[ "${USE_UMU:-0}" == "1" ]]; then
-        if ! umu_ready; then
-            curl -sf -X POST -H 'Content-Type: text/plain' \
-                --data "Downloading the Windows game runtime for its first use. This can take several minutes." \
-                "${ES_API}/notify" >/dev/null 2>&1 || true
-        fi
-        GAMEID=0 WINEPREFIX="${prefix}" umu-run "$@"
+    if [[ "${USE_UMU}" == "1" ]]; then
+        compgen -G "${UMU_DATA}/umu/steamrt*" >/dev/null \
+            && compgen -G "${UMU_DATA}/Steam/compatibilitytools.d/UMU-Proton*" >/dev/null \
+            || es_notify "Downloading the Windows game runtime for its first use. This can take several minutes."
+        GAMEID=umu-default WINEPREFIX="${WINEPOINT}" umu-run "$@"
     else
-        WINEPREFIX="${prefix}" "${WINE}" "$@"
+        WINEPREFIX="${WINEPOINT}" "${WINE}" "$@"
     fi
 }
 
-stop_wine() {
-    [[ -z "${WINESERVER:-}" || -z "${WINEPOINT:-}" ]] && return
-    WINEPREFIX="${WINEPOINT}" "${WINESERVER}" -k 2>/dev/null || true
-    wait_wineserver 10
-    xrandr_restore_resolution
+wait_wineserver() {
+    local prefix="${2:-${WINEPOINT}}" ret
+    [[ "${USE_UMU}" == "1" || -z "${WINESERVER}" ]] && return 0
+    if [[ "$1" == "0" ]]; then
+        WINEPREFIX="${prefix}" "${WINESERVER}" -w
+    else
+        WINEPREFIX="${prefix}" timeout "$1" "${WINESERVER}" -w
+    fi
+    ret=$?
+    [[ ${ret} -eq 124 ]] && printf '[hippos-wine] wineserver still running after %ss\n' "$1" >&2
+    return ${ret}
 }
 
-create_bottle() {
-    local prefix="$1"
-    [[ -d "${prefix}" ]] && return 0
-    mkdir -p "${prefix}" || return 1
-    [[ "${USE_UMU:-0}" == "1" ]] && return 0
-    export WINEDLLOVERRIDES="winegstreamer="
-    WINEPREFIX="${prefix}" "${WINE}" hostname &>/dev/null || { rm -rf "${prefix}"; return 1; }
-}
+stop_wine_server() {
+    [[ -z "${WINEPOINT}" ]] && return 0
+    if [[ -n "${WINESERVER}" ]]; then
+        WINEPREFIX="${WINEPOINT}" "${WINESERVER}" -k &
+        wait_wineserver 10 && return 0
+    fi
 
-sandboxing() {
-    local prefix="$1" dir
-    local user="ark"
-    [[ -d "${prefix}/drive_c/users/steamuser" ]] && user="steamuser"
-    for dir in Downloads Documents "My Documents" Music "My Music" Pictures "My Pictures" Videos "My Videos"; do
-        if [[ -L "${prefix}/drive_c/users/${user}/${dir}" ]]; then
-            unlink "${prefix}/drive_c/users/${user}/${dir}"
-            mkdir -p "${prefix}/drive_c/users/${user}/${dir}"
-        fi
+    local pid environ pids=()
+    for pid in $(ps -u "$(id -u)" -o pid=); do
+        [[ "${pid}" == "$$" ]] && continue
+        environ="$(tr '\0' '\n' < "/proc/${pid}/environ" 2>/dev/null)" || continue
+        case $'\n'"${environ}"$'\n' in
+            *$'\n'"WINEPREFIX=${WINEPOINT}"[/$'\n']*|*$'\n'"STEAM_COMPAT_DATA_PATH=${WINEPOINT}"[/$'\n']*)
+                pids+=("${pid}") ;;
+        esac
     done
+    if [[ ${#pids[@]} -gt 0 ]]; then
+        printf '[hippos-wine] killing stuck Wine processes: %s\n' "${pids[*]}" >&2
+        kill -9 "${pids[@]}"
+    fi
+}
+
+set_prefix_arch() {
+    local prefix="$1" action="${2:-}" arch supports_win32=0
+    [[ "${USE_UMU}" == "1" ]] && return 0
+    [[ -e "${WINE_LIB32_DIR}/i386-unix/wine" ]] && supports_win32=1
+
+    if [[ -e "${prefix}/userdef.reg" ]]; then
+        arch="$(grep -Po '^#arch=\K.*' "${prefix}/userdef.reg")" || return 0
+        if [[ "${arch}" == "win32" && "${action}" == "tricks" ]]; then
+            [[ -d "${prefix}/drive_c/windows/syswow64" ]] && rm -r -- "${prefix}/drive_c/windows/syswow64"
+        elif [[ "${arch}" == "win32" ]]; then
+            if [[ ${supports_win32} -eq 0 ]]; then
+                printf '[hippos-wine] %s is a 32-bit prefix and runner %s has no 32-bit mode; recreate the prefix or change the runner\n' \
+                    "${prefix}" "${WINE_VERSION}" >&2
+                return 1
+            fi
+            export WINEARCH=win32
+        fi
+    elif setting_on enable_win32 && [[ ! -d "${prefix}" && ${supports_win32} -eq 1 ]]; then
+        export WINEARCH=win32
+    fi
+}
+
+wine_options() {
+    VDESKTOP=""
+    if setting_on virtual_desktop; then
+        VDESKTOP="explorer /desktop=Wine,$(xrandr --query 2>/dev/null | awk '/\*/{print $1; exit}')"
+    fi
+
+    if setting_off ntsync; then
+        export WINEDISABLEFASTSYNC=1
+    else
+        [[ -e /dev/ntsync ]] || sudo -n modprobe ntsync 2>/dev/null
+        if [[ -r /dev/ntsync ]]; then
+            export WINEDISABLEFASTSYNC=0
+        else
+            export WINEDISABLEFASTSYNC=1
+        fi
+    fi
+
+    export DXVK_FRAME_RATE=0
+    setting_on fps_limit && DXVK_FRAME_RATE=60
+
+    export WINEDEBUG="-all" DXVK_LOG_LEVEL=none VKD3D_DEBUG=none
+    if setting_on wine_debug; then
+        WINEDEBUG="err+all,fixme+all"
+        unset DXVK_LOG_LEVEL VKD3D_DEBUG
+    fi
+
+    export VKD3D_SHADER_CACHE_PATH="${WINE_CACHE_DIR}"
+
+    export WINE_ENABLE_HIDRAW=0
+    setting_on enable_hidraw && WINE_ENABLE_HIDRAW=1
+    if grep -aq "hidraw handles native reports" "${WINE_LIB64_DIR}/x86_64-unix/winebus.so" 2>/dev/null; then
+        get_setting enable_hidraw >/dev/null || WINE_ENABLE_HIDRAW=1
+        [[ "${WINE_ENABLE_HIDRAW}" == "1" ]] && export PROTON_SONY_HIDRAW_XINPUT=1
+    fi
+
+    export WINE_FULLSCREEN_FSR=0
+    setting_on fsr && unset WINE_FULLSCREEN_FSR
+
+    export WINE_MONO_OVERRIDES="Microsoft.Xna.Framework.*,Gac=n"
+
+    export WINE_ALLOW_XIM=0
+    setting_on allow_xim && WINE_ALLOW_XIM=1
+
+    export WINE_DISABLE_WRITE_WATCH=0
+    setting_on no_write_watch && WINE_DISABLE_WRITE_WATCH=1
+
+    setting_off force_large_adress && export WINE_LARGE_ADDRESS_AWARE=0
+
+    export WINE_HEAP_DELAY_FREE=0
+    setting_on heap_delay_free && WINE_HEAP_DELAY_FREE=1
+
+    export WINE_HIDE_NVIDIA_GPU=0
+    setting_on hide_nvidia_gpu && WINE_HIDE_NVIDIA_GPU=1
+
+    NVAPI=0
+    setting_on enable_nvapi && NVAPI=1
+    if setting_on enable_vkreflex; then
+        NVAPI=1
+        export DXVK_NVAPI_VKREFLEX=1
+        unset DISABLE_DXVK_NVAPI_VKREFLEX
+    else
+        export DISABLE_DXVK_NVAPI_VKREFLEX=1
+        unset DXVK_NVAPI_VKREFLEX
+    fi
+
+    export DXVK_STATE_CACHE=1
+    setting_on dxvk_reset_cache && DXVK_STATE_CACHE=reset
+
+    export STAGING_SHARED_MEMORY=1 USE_BUILTIN_VKD3D=0
+    mkdir -p "${WINE_CACHE_DIR}/nvidia"
+    export XDG_CACHE_HOME="${WINE_CACHE_DIR}"
+    export __GL_SHADER_DISK_CACHE_SIZE=2147483648 __GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
+    export __GL_SHADER_DISK_CACHE_PATH="${WINE_CACHE_DIR}/nvidia"
+
+    ulimit -n 1048576 2>/dev/null || ulimit -n 524288 2>/dev/null \
+        || echo "[hippos-wine] could not raise the open file limit" >&2
+}
+
+find_runner_dll_dir() {
+    local component="$1" arch="$2" dir lib_dir alt_dir
+    if [[ "${arch}" == "i386-windows" ]]; then
+        lib_dir="${WINE_LIB32_DIR}"; alt_dir="${RUNNER_DIR}/lib"
+    else
+        lib_dir="${WINE_LIB64_DIR}"; alt_dir="${RUNNER_DIR}/lib64"
+    fi
+    for dir in "${WINE_LIB64_DIR}/${component}/${arch}" "${RUNNER_DIR}/lib/${component}/${arch}" \
+               "${lib_dir}/${component}" "${alt_dir}/${component}"; do
+        [[ -d "${dir}" ]] && { echo "${dir}"; return 0; }
+    done
+    return 1
+}
+
+runner_libs_install() {
+    local sys32="${WINEPOINT}/drive_c/windows/system32" wow64="${WINEPOINT}/drive_c/windows/syswow64" src
+    if [[ "${WINEARCH}" == "win32" ]]; then
+        wow64="${sys32}"
+        mkdir -p "${sys32}" || return 1
+    else
+        mkdir -p "${sys32}" "${wow64}" || return 1
+        src="$(find_runner_dll_dir vkd3d x86_64-windows)" && { ln -sf "${src}"/*.dll "${sys32}" || return 1; }
+        src="$(find_runner_dll_dir icu x86_64-windows)" && { ln -sf "${src}"/*.dll "${sys32}" || return 1; }
+    fi
+    src="$(find_runner_dll_dir vkd3d i386-windows)" && { ln -sf "${src}"/*.dll "${wow64}" || return 1; }
+    src="$(find_runner_dll_dir icu i386-windows)" && { ln -sf "${src}"/*.dll "${wow64}" || return 1; }
+    return 0
+}
+
+create_or_update_prefix() {
+    local inf="${RUNNER_DIR}/share/wine/wine.inf" stamp inf_ts overrides=""
+    if [[ "${USE_UMU}" == "1" ]]; then
+        mkdir -p "${WINEPOINT}" || return 1
+        find "${WINEPOINT}/drive_c/windows/system32" "${WINEPOINT}/drive_c/windows/syswow64" \
+            -maxdepth 1 -xtype l -delete 2>/dev/null
+        return 0
+    fi
+
+    if [[ ! -e "${WINEPOINT}" ]]; then
+        es_notify "Preparing Windows environment, please wait..."
+        mkdir -p "${WINEPOINT}" || return 1
+        if ! WINEDLLOVERRIDES="winegstreamer=" WINEPREFIX="${WINEPOINT}" "${WINE}" wineboot -u; then
+            rm -rf "${WINEPOINT}"
+            printf '[hippos-wine] failed to create prefix %s\n' "${WINEPOINT}" >&2
+            return 1
+        fi
+        wait_wineserver 0
+        runner_libs_install
+        return
+    fi
+
+    stamp="$(cat "${WINEPOINT}/.update-timestamp" 2>/dev/null)"
+    inf_ts="$(stat -c %Y "${inf}" 2>/dev/null)"
+    if [[ -f "${inf}" && "${stamp}" != "${inf_ts}" ]]; then
+        printf '[hippos-wine] runner changed (%s != %s), updating the prefix\n' "${stamp:-none}" "${inf_ts}" >&2
+        find "${WINEPOINT}/drive_c/windows/system32" "${WINEPOINT}/drive_c/windows/syswow64" \
+            -maxdepth 1 -type l -delete 2>/dev/null
+        runner_libs_install || return 1
+        grep -q '"\*mscoree"="native"' "${WINEPOINT}/user.reg" 2>/dev/null && overrides="mscoree,mshtml="
+        WINEDLLOVERRIDES="${overrides}" WINEPREFIX="${WINEPOINT}" "${WINE}" wineboot -u
+        wait_wineserver 0
+        echo "${inf_ts}" > "${WINEPOINT}/.update-timestamp"
+    fi
+    return 0
+}
+
+move_installed() {
+    local file="$1" kind="$2"
+    printf '%s - Installed: %s --> %s\n' "$(date '+%D %T')" "${file}" "${WINEPOINT}" | tee -a "${USER_DIR}/imports.log" >&2
+    mkdir -p "${USER_DIR}/installed.${kind}"
+    mv --backup=t "${file}" "${USER_DIR}/installed.${kind}"
+}
+
+redist_install() {
+    local file name
+    [[ -d "${USER_DIR}/exe" && "${USE_UMU}" != "1" ]] || return 0
+    for file in "${USER_DIR}"/exe/*.[eE][xX][eE]; do
+        [[ -f "${file}" ]] || continue
+        name="$(basename "${file,,}")"
+        case "${name}" in
+            dxsetup.exe)
+                wine_cmd "${file}" /silent &>/dev/null || return 1 ;;
+            vcredist_x64_2005.exe|vcredist_x86_2005.exe|vcredist_x64_2008.exe|vcredist_x86_2008.exe)
+                wine_cmd "${file}" /q &>/dev/null || return 1 ;;
+            vcredist_*.exe)
+                wine_cmd "${file}" /quiet /qn /norestart &>/dev/null || return 1 ;;
+            oalinst.exe)
+                wine_cmd "${file}" /s &>/dev/null ;;
+            *)
+                wine_cmd "${file}" &>/dev/null ;;
+        esac
+        wait_wineserver 0
+        move_installed "${file}" exe
+    done
+    rmdir "${USER_DIR}/exe" 2>/dev/null || echo "[hippos-wine] put only .exe files in ${USER_DIR}/exe" >&2
+    return 0
+}
+
+msi_install() {
+    local file
+    [[ -d "${USER_DIR}/msi" && "${USE_UMU}" != "1" ]] || return 0
+    for file in "${USER_DIR}"/msi/*.[mM][sS][iI]; do
+        [[ -f "${file}" ]] || continue
+        WINEPREFIX="${WINEPOINT}" "${MSIEXEC}" -i "${file}" /quiet /qn /norestart &>/dev/null || return 1
+        wait_wineserver 0
+        move_installed "${file}" msi
+    done
+    rmdir "${USER_DIR}/msi" 2>/dev/null || echo "[hippos-wine] put only .msi files in ${USER_DIR}/msi" >&2
+    return 0
+}
+
+reg_add() {
+    WINEPREFIX="${WINEPOINT}" "${WINE}" reg add "$@" /f &>/dev/null
+    wait_wineserver 0
+}
+
+reg_install() {
+    local file ngx
+    [[ "${USE_UMU}" == "1" ]] && return 0
+
+    [[ -n "${VDESKTOP}" ]] && reg_add 'HKEY_CURRENT_USER\Control Panel\Colors' /v Background /t REG_SZ /d "0 0 0"
+
+    if [[ -d "${USER_DIR}/regs" ]]; then
+        for file in "${USER_DIR}"/regs/*.[rR][eE][gG]; do
+            [[ -f "${file}" ]] || continue
+            WINEPREFIX="${WINEPOINT}" "${WINE}" regedit "//?/unix${file}" &>/dev/null || return 1
+            if [[ "${WINE64}" != "${WINE}" ]]; then
+                WINEPREFIX="${WINEPOINT}" "${WINE64}" regedit "//?/unix${file}" &>/dev/null || return 1
+            fi
+            move_installed "${file}" regs
+        done
+        rmdir "${USER_DIR}/regs" 2>/dev/null || echo "[hippos-wine] put only .reg files in ${USER_DIR}/regs" >&2
+    fi
+
+    ngx="${NVIDIA_WINE_DIR}/nvngx.dll"
+    if [[ "${NVAPI}" == "1" && -e "${ngx}" ]] && ! grep -q 'NGXCore' "${WINEPOINT}/system.reg"; then
+        reg_add 'HKEY_LOCAL_MACHINE\Software\NVIDIA Corporation\Global\NGXCore' /v FullPath /t REG_SZ /d 'C:\Windows\System32'
+    fi
+
+    if ! grep -q "\"DisableHidraw\"=dword:0000000$((1 - WINE_ENABLE_HIDRAW))" "${WINEPOINT}/system.reg"; then
+        reg_add 'HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\winebus' /v DisableHidraw /t REG_DWORD /d $((1 - WINE_ENABLE_HIDRAW))
+    fi
+    return 0
+}
+
+fonts_install() {
+    local file font dst fonts="${WINEPOINT}/drive_c/windows/Fonts"
+    if [[ -d "${USER_DIR}/fonts" ]]; then
+        mkdir -p "${fonts}" || return 1
+        for file in "${USER_DIR}"/fonts/*.[tT][tT][fFcC]; do
+            [[ -f "${file}" ]] || continue
+            cp -n "${file}" "${fonts}" || return 1
+            move_installed "${file}" fonts
+        done
+        rmdir "${USER_DIR}/fonts" 2>/dev/null || echo "[hippos-wine] put only .ttf or .ttc files in ${USER_DIR}/fonts" >&2
+    fi
+
+    if [[ -d "${RUNNER_DIR}/share/fonts" ]]; then
+        mkdir -p "${fonts}" || return 1
+        for font in "${RUNNER_DIR}"/share/fonts/*.tt[fc]; do
+            [[ -e "${font}" ]] || continue
+            dst="${fonts}/${font##*/}"
+            [[ -e "${dst}" && ! -L "${dst}" ]] && continue
+            ln -sf "${font}" "${dst}" || return 1
+        done
+    fi
+    return 0
+}
+
+sandboxing_prefix() {
+    local user dir
+    for user in "$(id -un)" steamuser root; do
+        [[ -d "${WINEPOINT}/drive_c/users/${user}" ]] || continue
+        for dir in Downloads Documents "My Documents" Music "My Music" Pictures "My Pictures" Videos "My Videos" Templates; do
+            if [[ -L "${WINEPOINT}/drive_c/users/${user}/${dir}" ]]; then
+                unlink "${WINEPOINT}/drive_c/users/${user}/${dir}" || return 1
+                mkdir -p "${WINEPOINT}/drive_c/users/${user}/${dir}" || return 1
+            fi
+        done
+    done
+    return 0
+}
+
+link_dlls() {
+    local src="$1" dst="$2"
+    shift 2
+    local dll
+    for dll in "$@"; do
+        [[ -e "${src}/${dll}" ]] && { ln -sf "${src}/${dll}" "${dst}/${dll}" || return 1; }
+    done
+    return 0
+}
+
+dxvk_install() {
+    local sys32="${WINEPOINT}/drive_c/windows/system32" wow64="${WINEPOINT}/drive_c/windows/syswow64"
+    local d3d=(d3d8.dll d3d9.dll d3d10core.dll d3d11.dll dxgi.dll d3d12.dll d3d12core.dll)
+    local runner_dxvk src x32 x64 ddraw_dir
+    [[ "${USE_UMU}" == "1" ]] && return 0
+    export WINEDLLOVERRIDES="winemenubuilder.exe="
+
+    setting_on dxvk_hud && export DXVK_HUD=1
+    mkdir -p "${sys32}" "${wow64}" || return 1
+
+    if setting_on dxvk; then
+        if runner_dxvk="$(find_runner_dll_dir dxvk x86_64-windows)"; then
+            link_dlls "${runner_dxvk}" "${sys32}" "${d3d[@]:0:5}" || return 1
+            src="$(find_runner_dll_dir dxvk i386-windows)" && { link_dlls "${src}" "${wow64}" "${d3d[@]:0:5}" || return 1; }
+            src="$(find_runner_dll_dir vkd3d-proton x86_64-windows)" && { link_dlls "${src}" "${sys32}" d3d12.dll d3d12core.dll || return 1; }
+            src="$(find_runner_dll_dir vkd3d-proton i386-windows)" && { link_dlls "${src}" "${wow64}" d3d12.dll d3d12core.dll || return 1; }
+            src="$(find_runner_dll_dir nvapi x86_64-windows)" && { link_dlls "${src}" "${sys32}" nvapi64.dll nvofapi64.dll || return 1; }
+            src="$(find_runner_dll_dir nvapi i386-windows)" && { link_dlls "${src}" "${wow64}" nvapi.dll || return 1; }
+        else
+            x32="${SYSTEM_DXVK_DIR}/x32"; x64="${SYSTEM_DXVK_DIR}/x64"
+            [[ -d "${USER_DIR}/dxvk" ]] && { x32="${USER_DIR}/dxvk/x32"; x64="${USER_DIR}/dxvk/x64"; }
+            link_dlls "${x64}" "${sys32}" "${d3d[@]}" nvapi64.dll nvofapi64.dll || return 1
+            link_dlls "${x32}" "${wow64}" "${d3d[@]}" nvapi.dll || return 1
+        fi
+    else
+        link_dlls "${WINE_LIB64_DIR}/x86_64-windows" "${sys32}" "${d3d[@]}" || return 1
+        link_dlls "${WINE_LIB32_DIR}/i386-windows" "${wow64}" "${d3d[@]}" || return 1
+    fi
+
+    ddraw_dir="${wow64}"
+    [[ "${WINEARCH}" == "win32" ]] && ddraw_dir="${sys32}"
+    if setting_on d7vk; then
+        if src="$(find_runner_dll_dir d7vk i386-windows)"; then
+            ln -sf "${src}/ddraw.dll" "${ddraw_dir}/ddraw.dll" || return 1
+        elif [[ -e "${USER_DIR}/dxvk/x32/ddraw.dll" ]]; then
+            ln -sf "${USER_DIR}/dxvk/x32/ddraw.dll" "${ddraw_dir}/ddraw.dll" || return 1
+        else
+            ln -sf "${SYSTEM_DXVK_DIR}/x32/ddraw.dll" "${ddraw_dir}/ddraw.dll" || return 1
+        fi
+        ln -sf "${WINE_LIB32_DIR}/i386-windows/ddraw.dll" "${ddraw_dir}/ddraw_.dll" || return 1
+        WINEDLLOVERRIDES="${WINEDLLOVERRIDES};ddraw=n,b"
+    else
+        ln -sf "${WINE_LIB32_DIR}/i386-windows/ddraw.dll" "${ddraw_dir}/ddraw.dll" || return 1
+        rm -f "${ddraw_dir}/ddraw_.dll"
+    fi
+
+    if setting_on dxvk; then
+        [[ -e "${USER_DIR}/dxvk.conf" ]] || install -Dm644 "${SYSTEM_DXVK_DIR}/dxvk.conf" "${USER_DIR}/dxvk.conf"
+        export DXVK_ASYNC=1 DXVK_CONFIG_FILE="${USER_DIR}/dxvk.conf" DXVK_STATE_CACHE_PATH="${WINE_CACHE_DIR}"
+        WINEDLLOVERRIDES="${WINEDLLOVERRIDES};dxgi,d3d8,d3d9,d3d10core,d3d11,d3d12,d3d12core=n"
+    else
+        export DXVK_ASYNC=0
+        WINEDLLOVERRIDES="${WINEDLLOVERRIDES};dxgi,d3d8,d3d9,d3d10core,d3d11,d3d12,d3d12core=b"
+    fi
+
+    if [[ "${NVAPI}" == "1" ]]; then
+        export DXVK_ENABLE_NVAPI=1
+        WINEDLLOVERRIDES="${WINEDLLOVERRIDES};nvapi,nvapi64=n"
+        if [[ -e "${NVIDIA_WINE_DIR}/nvngx.dll" && "${WINEARCH}" != "win32" ]]; then
+            link_dlls "${NVIDIA_WINE_DIR}" "${sys32}" _nvngx.dll nvngx.dll nvngx_dlssg.dll || return 1
+        fi
+    else
+        export DXVK_ENABLE_NVAPI=0
+        WINEDLLOVERRIDES="${WINEDLLOVERRIDES};nvapi64,nvapi="
+    fi
+    return 0
 }
 
 get_wine_var() {
-    local prefix="$1" key="$2" default="$3"
-    if [[ -f "${prefix}/autorun.cmd" ]]; then
-        local val
-        val="$(dos2unix < "${prefix}/autorun.cmd" 2>/dev/null \
-            | grep "^${key}=" | sed "s/^${key}=//" | head -1 || true)"
-        printf '%s' "${val:-${default}}"
-    else
-        printf '%s' "${default}"
-    fi
+    local prefix="$1" key="$2" default="$3" val=""
+    [[ -f "${prefix}/autorun.cmd" ]] \
+        && val="$(tr -d '\r' < "${prefix}/autorun.cmd" | grep "^${key}=" | sed "s/^${key}=//" | head -1)"
+    printf '%s' "${val:-${default}}"
 }
 
-do_launch() {
-    local prefix="$1" game="$2"
-    if [[ -n "${WINE_VIRTUAL_DESKTOP:-}" ]]; then
-        wine_cmd "${prefix}" explorer "/desktop=hippos,${WINE_VIRTUAL_DESKTOP}" "${game}"
+save_files_to_userdata() {
+    local savedir="$1" savefiles="$2" system_savedir="/userdata/saves/${SYSTEM}/${ROMGAMENAME%.*}" file
+    [[ -z "${savedir}" ]] && return 0
+    mkdir -p "${system_savedir}" "${WINEPOINT}/$(dirname "${savedir}")"
+    pushd "${WINEPOINT}/$(dirname "${savedir}")" >/dev/null || return 1
+    savedir="$(basename "${savedir}")"
+
+    if [[ -z "${savefiles}" ]]; then
+        if [[ ! -L "${savedir}" && -d "${savedir}" ]]; then
+            cp -r "${savedir}/." "${system_savedir}" \
+                || { printf '[hippos-wine] could not copy %s to %s\n' "${savedir}" "${system_savedir}" >&2; popd >/dev/null; return 1; }
+            rm -rf "${savedir}"
+        fi
+        [[ -L "${savedir}" ]] || ln -s "${system_savedir}" "${savedir}"
     else
-        wine_cmd "${prefix}" "${game}"
+        mkdir -p "${savedir}"
+        pushd "${savedir}" >/dev/null || { popd >/dev/null; return 1; }
+        IFS=';' read -r -a savefiles <<< "${savefiles}"
+        for file in "${savefiles[@]}"; do
+            if [[ -e "${file}" ]]; then
+                if [[ ! -e "${system_savedir}/${file}" && ! -L "${file}" ]]; then
+                    mv -f "${file}" "${system_savedir}/${file}"
+                else
+                    rm "${file}"
+                fi
+            fi
+            ln -sf "${system_savedir}/${file}" "${file}"
+        done
+        popd >/dev/null
     fi
-    wait_wineserver
+    popd >/dev/null
 }
 
-play_exe() {
-    WINEPOINT="${WINE_BOTTLE_DIR}/${RUNNER}/${ROMGAMENAME}.wine"
-    create_bottle "${WINEPOINT}" || return 1
-    sandboxing "${WINEPOINT}"
-    do_launch "${WINEPOINT}" "${GAMENAME}"
+prepare_prefix() {
+    set_prefix_arch "${WINEPOINT}" || return 1
+    wine_options
+    create_or_update_prefix || return 1
+    redist_install || return 1
+    msi_install || return 1
+    reg_install || return 1
+    fonts_install || return 1
+    sandboxing_prefix || return 1
+    dxvk_install
+}
+
+run_autorun() {
+    local gamedir="$1" cmd dir lang env savedir savefiles
+    cmd="$(get_wine_var "${gamedir}" CMD explorer)"
+    dir="$(get_wine_var "${gamedir}" DIR "")"
+    lang="$(get_wine_var "${gamedir}" LANG "")"
+    env="$(get_wine_var "${gamedir}" ENV "")"
+    savedir="$(get_wine_var "${gamedir}" SAVEDIR "")"
+    savefiles="$(get_wine_var "${gamedir}" SAVEFILES "")"
+    save_files_to_userdata "${savedir}" "${savefiles}" || return 1
+
+    (
+        cd "${gamedir}/${dir}" || exit 1
+        [[ -n "${lang}" ]] && export LC_ALL="${lang}"
+        eval "${env}" wine_cmd ${VDESKTOP} ${cmd}
+    )
+    wait_wineserver 0
 }
 
 play_wine() {
     WINEPOINT="${GAMENAME}"
-    local cmd dir env
-    cmd="$(get_wine_var "${GAMENAME}" "CMD" "explorer")"
-    dir="$(get_wine_var "${GAMENAME}" "DIR" "")"
-    env="$(get_wine_var "${GAMENAME}" "ENV" "")"
-    sandboxing "${WINEPOINT}"
-    (cd "${GAMENAME}/${dir}" && eval "${env}" wine_cmd '"${WINEPOINT}"' ${cmd})
-    wait_wineserver
+    prepare_prefix || return 1
+    run_autorun "${WINEPOINT}"
 }
 
 play_pc() {
-    WINEPOINT="${WINE_BOTTLE_DIR}/${RUNNER}/${ROMGAMENAME}.wine"
-    local cmd dir env
-    cmd="$(get_wine_var "${GAMENAME}" "CMD" "explorer")"
-    dir="$(get_wine_var "${GAMENAME}" "DIR" "")"
-    env="$(get_wine_var "${GAMENAME}" "ENV" "")"
-    create_bottle "${WINEPOINT}" || return 1
-    sandboxing "${WINEPOINT}"
-    (cd "${GAMENAME}/${dir}" && eval "${env}" wine_cmd '"${WINEPOINT}"' ${cmd})
-    wait_wineserver
+    WINEPOINT="${WINE_BOTTLE_DIR}/${WINE_VERSION}/${ROMGAMENAME}.wine"
+    prepare_prefix || return 1
+    run_autorun "${GAMENAME}"
+}
+
+play_exe() {
+    WINEPOINT="${WINE_BOTTLE_DIR}/${WINE_VERSION}/${ROMGAMENAME}.wine"
+    prepare_prefix || return 1
+    (cd "${ROMBASEDIR}" && wine_cmd ${VDESKTOP} "${ROMGAMENAME}")
+    wait_wineserver 0
+}
+
+play_winetgz() {
+    WINEPOINT="${WINE_BOTTLE_DIR}/${WINE_VERSION}/${ROMGAMENAME}.wine"
+    set_prefix_arch "${WINEPOINT}" || return 1
+    wine_options
+    if [[ ! -e "${WINEPOINT}" ]]; then
+        create_or_update_prefix || return 1
+        tar -xzf "${GAMENAME}" -C "${WINEPOINT}" || return 1
+    fi
+    create_or_update_prefix || return 1
+    redist_install || return 1
+    msi_install || return 1
+    reg_install || return 1
+    fonts_install || return 1
+    sandboxing_prefix || return 1
+    dxvk_install || return 1
+    run_autorun "${WINEPOINT}"
+}
+
+safe_umount() {
+    local mount_point="$1" attempt
+    mountpoint -q "${mount_point}" || return 0
+    for _ in 1 2 3; do
+        sudo -n umount -l "${mount_point}" && return 0
+        sudo -n umount -f "${mount_point}" && return 0
+        sleep 1
+    done
+    printf '[hippos-wine] failed to unmount %s\n' "${mount_point}" >&2
+    return 1
+}
+
+unmount_squashfs() {
+    [[ -z "${SQUASHFSPOINT}" ]] && return 0
+    safe_umount "${WINEPOINT}"
+    safe_umount "${IDMAPPOINT}"
+    safe_umount "${SQUASHFSPOINT}"
+    sudo -n rm -rf --one-file-system "${WINEPOINT}" "${IDMAPPOINT}" "${SQUASHFSPOINT}" "${WORKPOINT}"
+}
+
+play_squashfs() {
+    local savepoint="${WINE_BOTTLE_DIR}/${WINE_VERSION}/${ROMGAMENAME}.wine"
+    WINEPOINT="${WINE_RUN_DIR}/${ROMGAMENAME}"
+    SQUASHFSPOINT="${WINE_RUN_DIR}/squashfs_${ROMGAMENAME}"
+    IDMAPPOINT="${WINE_RUN_DIR}/idmap_${ROMGAMENAME}"
+    WORKPOINT="${WINE_BOTTLE_DIR}/${ROMGAMENAME}.work"
+
+    unmount_squashfs
+    mkdir -p "${savepoint}" "${WORKPOINT}" || return 1
+    sudo -n mkdir -p "${WINEPOINT}" "${IDMAPPOINT}" "${SQUASHFSPOINT}" || return 1
+
+    if ! sudo -n mount -t squashfs -o ro "${GAMENAME}" "${SQUASHFSPOINT}" \
+        || ! sudo -n mount --bind -o "X-mount.idmap=u:0:$(id -u):1 g:0:$(id -g):1" "${SQUASHFSPOINT}" "${IDMAPPOINT}" \
+        || ! sudo -n mount -t overlay overlay \
+            -o "rw,lowerdir=${IDMAPPOINT},upperdir=${savepoint},workdir=${WORKPOINT},redirect_dir=on" "${WINEPOINT}"; then
+        unmount_squashfs
+        return 1
+    fi
+
+    set_prefix_arch "${WINEPOINT}" || return 1
+    wine_options
+    create_or_update_prefix || return 1
+    reg_install || return 1
+    fonts_install || return 1
+    dxvk_install || return 1
+    run_autorun "${WINEPOINT}"
+}
+
+create_autorun_cmd() {
+    local filemask="$1" regex_file filter=() pattern i
+    regex_file="/userdata/roms/windows_installers/autorun-regex.txt"
+    [[ -e "${regex_file}" ]] || regex_file="/userdata/saves/windows_installers/autorun-regex.txt"
+    [[ -e "${regex_file}" ]] && readarray -t filter < <(tr -d '\r' < "${regex_file}" | grep -v -E "^[[:space:]*]|[#]|^[[:space:]]*$")
+    filter+=("^.*/Windows Media Player/.*$" "^.*/Windows NT/.*$" "^.*/Internet Explorer/.*$" "^.*/drive_c/windows/.*$"
+             "^.*/[Uu]nins[[:alnum:]]{0,6}\.exe$" "^.*/[Ii]nstall(..)?\.exe$" "^.*/[Ss]etup\.exe$" "^.*/[Uu]nwise(..)?\.exe$")
+
+    pushd "${WINEPOINT}" >/dev/null || return 1
+    readarray -t AUTORUN_FOUNDEXE < <(find ${filemask} -type f -iname "*.exe" -printf "%p\n" | sort -n)
+    for pattern in "${filter[@]}"; do
+        for i in "${!AUTORUN_FOUNDEXE[@]}"; do
+            [[ "${AUTORUN_FOUNDEXE[$i]}" =~ ${pattern} ]] && unset 'AUTORUN_FOUNDEXE[i]'
+        done
+    done
+    AUTORUN_FOUNDEXE=("${AUTORUN_FOUNDEXE[@]}")
+    popd >/dev/null
+    [[ "${ACTION}" == autorun* ]] && return 0
+
+    if [[ ${#AUTORUN_FOUNDEXE[@]} -eq 1 ]]; then
+        printf 'DIR=%s\nCMD="%s"\n' "$(dirname "${AUTORUN_FOUNDEXE[0]}")" "$(basename "${AUTORUN_FOUNDEXE[0]}")" > "${WINEPOINT}/autorun.cmd"
+    else
+        printf '#DIR=drive_c/Program Files/myprogram\n#CMD=start.exe\n' > "${WINEPOINT}/autorun.cmd"
+    fi
 }
 
 install_exe_msi() {
-    local ext="$1"
-    WINEPOINT="${WINE_BOTTLE_DIR}/${RUNNER}/$(date +%y%m%d-%H%M%S)_${ROMGAMENAME%.*}.wine"
-    create_bottle "${WINEPOINT}" || return 1
-    [[ "${ext}" == "exe" ]] && wine_cmd "${WINEPOINT}" "${GAMENAME}"
-    [[ "${ext}" == "msi" ]] && wine_cmd "${WINEPOINT}" msiexec -i "${GAMENAME}"
-    wait_wineserver
+    set_prefix_arch "${WINEPOINT}" || return 1
+    create_or_update_prefix || return 1
+    case "${GAMEEXT,,}" in
+        exe) wine_cmd "${GAMENAME}" ;;
+        msi) WINEPREFIX="${WINEPOINT}" "${MSIEXEC}" -i "${GAMENAME}" ;;
+    esac
+    wait_wineserver 0
+    create_autorun_cmd "drive_c/P*"
 }
 
 install_iso() {
-    local mnt="/run/hippos-wine/${ROMGAMENAME}.cdrom"
-    mkdir -p "${mnt}"
-    mount -t iso9660 "${GAMENAME}" "${mnt}" 2>/dev/null \
-        || mount -t udf "${GAMENAME}" "${mnt}" \
-        || { rmdir "${mnt}"; return 1; }
-    WINEPOINT="${WINE_BOTTLE_DIR}/${RUNNER}/$(date +%y%m%d-%H%M%S)_${ROMGAMENAME%.*}.wine"
-    create_bottle "${WINEPOINT}"
-    mkdir -p "${WINEPOINT}/dosdevices"
-    ln -sf "${mnt}" "${WINEPOINT}/dosdevices/d:"
-    wine_cmd "${WINEPOINT}" explorer "d:"
-    rm -f "${WINEPOINT}/dosdevices/d:"
-    wait_wineserver
-    umount "${mnt}" && rmdir "${mnt}" || true
+    GAMEISOMOUNT="${WINE_RUN_DIR}/${ROMGAMENAME}.cdrom"
+    sudo -n mkdir -p "${GAMEISOMOUNT}" || return 1
+    if ! sudo -n mount -t iso9660 -o ro "${GAMENAME}" "${GAMEISOMOUNT}" \
+        && ! sudo -n mount -t udf -o ro "${GAMENAME}" "${GAMEISOMOUNT}"; then
+        sudo -n rmdir "${GAMEISOMOUNT}"
+        GAMEISOMOUNT=""
+        return 1
+    fi
+
+    set_prefix_arch "${WINEPOINT}" || return 1
+    create_or_update_prefix || return 1
+    if mkdir -p "${WINEPOINT}/dosdevices" && rm -f "${WINEPOINT}/dosdevices/d:" \
+        && ln -sf "${GAMEISOMOUNT}" "${WINEPOINT}/dosdevices/d:"; then
+        wine_cmd explorer "d:"
+        rm -f "${WINEPOINT}/dosdevices/d:"
+    fi
+    wait_wineserver 0
+    create_autorun_cmd "drive_c/P*"
 }
 
-trap stop_wine SIGHUP SIGINT SIGTERM
+copy_installer_settings() {
+    local installed="$1" key value
+    for key in "${!CONF[@]}"; do
+        [[ "${key}" =~ ^${SYSTEM}_installers(\[\"${ROMGAMENAME//./\\.}\"\])?\. ]] || continue
+        value="${CONF[${key}]}"
+        key="${key/${SYSTEM}_installers/${SYSTEM}}"
+        key="${key/\"${ROMGAMENAME}\"/\"${installed}\"}"
+        hippos-settings set "${key}" "${value}"
+    done
+}
+
+clean_and_exit() {
+    local ret="$1"
+    [[ "${USE_UMU}" == "1" && "${ACTION}" == "play" ]] && stop_wine_server
+    if [[ -n "${GAMEISOMOUNT}" ]]; then
+        safe_umount "${GAMEISOMOUNT}"
+        sudo -n rmdir "${GAMEISOMOUNT}" 2>/dev/null
+    fi
+    unmount_squashfs
+    printf '[hippos-wine] session: %ss\n' "${SECONDS}" >&2
+    exit "${ret}"
+}
+
+on_signal() {
+    stop_wine_server
+    clean_and_exit 1
+}
+
+usage() {
+    local action
+    for action in "play <game>.exe|pc|wine|wsquashfs|wtgz" "install <game>.exe|iso|msi" "tricks <game>.wine <verb>..." \
+                  "createprefix <game>" "wine2squashfs <game>.wine" "wine2winetgz <game>.wine" \
+                  "autorun <game> [drive_c/P*]" "autorun-list <game>" "autorun-count <game>" "stop"; do
+        printf '  %s %s %s\n' "$0" "${SYSTEM:-windows}" "${action}" >&2
+    done
+    exit 1
+}
+
+trap on_signal SIGHUP SIGINT SIGTERM
 
 case "${ACTION}" in
     stop)
-        pkill -f "$(basename "$0")" 2>/dev/null || true
+        pid="$(pgrep -o -f "^bash $0 ")"
+        [[ -n "${pid}" ]] && kill -HUP $(pgrep -P "${pid}") "${pid}" 2>/dev/null
         exit 0
         ;;
+
     play)
         init_wine
-        xrandr_set_resolution "${WINE_RESOLUTION:-}"
         case "${GAMEEXT,,}" in
-            exe)   play_exe ;;
-            wine)  play_wine ;;
-            pc)    play_pc ;;
-            msi)   WINEPOINT="${WINE_BOTTLE_DIR}/${RUNNER}/${ROMGAMENAME}.wine"
-                   create_bottle "${WINEPOINT}" || exit 1
-                   wine_cmd "${WINEPOINT}" msiexec -i "${GAMENAME}"
-                   wait_wineserver ;;
-            *)     printf '[hippos-wine] unknown extension: %s\n' "${GAMEEXT}" >&2; exit 1 ;;
+            wine)      play_wine ;;
+            pc)        play_pc ;;
+            exe)       play_exe ;;
+            wsquashfs) play_squashfs ;;
+            wtgz)      play_winetgz ;;
+            *)         printf '[hippos-wine] unknown extension: %s\n' "${GAMEEXT}" >&2; clean_and_exit 1 ;;
         esac
-        xrandr_restore_resolution
+        clean_and_exit $?
         ;;
+
     install)
         init_wine
-        mkdir -p /run/hippos-wine
+        installed="$(date +%y%m%d-%H%M%S)_${ROMGAMENAME%.*}.wine"
+        copy_installer_settings "${installed}"
+        WINEPOINT="${G_ROMS_DIR}/${installed}"
         case "${GAMEEXT,,}" in
-            exe|msi) install_exe_msi "${GAMEEXT,,}" ;;
+            exe|msi) install_exe_msi ;;
             iso)     install_iso ;;
-            *)       printf '[hippos-wine] unknown extension: %s\n' "${GAMEEXT}" >&2; exit 1 ;;
+            *)       printf '[hippos-wine] unknown extension: %s\n' "${GAMEEXT}" >&2; clean_and_exit 1 ;;
         esac
+        clean_and_exit $?
         ;;
+
+    tricks|createprefix)
+        [[ "${GAMENAME}" == "." ]] && GAMENAME="${PWD}"
+        [[ -e "${GAMENAME}" ]] || usage
+        GAMENAME="$(realpath "${GAMENAME}")"
+        ROMGAMENAME="$(basename "${GAMENAME}")"
+        GAMEEXT="${GAMENAME##*.}"
+        init_wine
+        case "${GAMEEXT,,}" in
+            wine)
+                [[ "${ACTION}" == "createprefix" ]] && { echo "'${GAMENAME}' is already a prefix" >&2; exit 1; }
+                WINEPOINT="${GAMENAME}"
+                set_prefix_arch "${WINEPOINT}" "${ACTION}"
+                ;;
+            wtgz|pc|exe|wsquashfs)
+                WINEPOINT="${WINE_BOTTLE_DIR}/${WINE_VERSION}/${ROMGAMENAME}.wine"
+                set_prefix_arch "${WINEPOINT}" "${ACTION}"
+                if [[ -d "${WINEPOINT}" ]]; then
+                    echo "WINEPREFIX: '${WINEPOINT}' already exists"
+                else
+                    create_or_update_prefix && echo "WINEPREFIX: '${WINEPOINT}' created"
+                fi
+                ;;
+            *)
+                echo "Give the full path of a game with a known extension" >&2
+                exit 1
+                ;;
+        esac
+        if [[ "${ACTION}" == "tricks" && $# -gt 3 ]]; then
+            shift 3
+            WINEPREFIX="${WINEPOINT}" winetricks "$@"
+        fi
+        exit $?
+        ;;
+
+    wine2squashfs)
+        mksquashfs "${GAMENAME}" "${G_ROMS_DIR}/${ROMGAMENAME%.*}.wsquashfs" -comp zstd
+        exit $?
+        ;;
+
+    wine2winetgz)
+        (cd "${GAMENAME}" && tar cf - -- * | gzip -c > "${G_ROMS_DIR}/${ROMGAMENAME%.*}.wtgz")
+        exit $?
+        ;;
+
+    autorun|autorun-list|autorun-count)
+        [[ -z "${GAMENAME}" ]] && GAMENAME="${PWD}"
+        WINEPOINT="$(cd "${GAMENAME}" && pwd)" || { echo "Can't enter '${GAMENAME}'" >&2; exit 1; }
+        create_autorun_cmd "${AUTORUN_FILEMASK:-.}"
+        if [[ ${#AUTORUN_FOUNDEXE[@]} -eq 0 ]]; then
+            [[ "${ACTION}" == "autorun-count" ]] && echo 0 || echo "No Windows executable found in '${WINEPOINT}/${AUTORUN_FILEMASK:-.}'" >&2
+            exit 2
+        fi
+        [[ "${ACTION}" == "autorun-list" ]] && { printf '%s\n' "${AUTORUN_FOUNDEXE[@]}"; exit 0; }
+        [[ "${ACTION}" == "autorun-count" ]] && { echo "${#AUTORUN_FOUNDEXE[@]}"; exit 0; }
+        choice=1
+        if [[ ${#AUTORUN_FOUNDEXE[@]} -gt 1 ]]; then
+            echo "Found ${#AUTORUN_FOUNDEXE[@]} executables in ${WINEPOINT}"
+            echo "0) Cancel"
+            for i in "${!AUTORUN_FOUNDEXE[@]}"; do
+                echo "$((i + 1))) $(basename "${AUTORUN_FOUNDEXE[$i]}") --> $(dirname "${AUTORUN_FOUNDEXE[$i]}")"
+            done
+            read -r -p "Entry to write to autorun.cmd: " choice
+        fi
+        [[ "${choice}" =~ ^[1-9][0-9]*$ && ${choice} -le ${#AUTORUN_FOUNDEXE[@]} ]] || exit 2
+        [[ -e "${WINEPOINT}/autorun.cmd" ]] && mv --backup=t "${WINEPOINT}/autorun.cmd" "${WINEPOINT}/autorun.cmd.bak"
+        printf 'DIR=%s\nCMD="%s"\n' "$(dirname "${AUTORUN_FOUNDEXE[$((choice - 1))]}")" \
+            "$(basename "${AUTORUN_FOUNDEXE[$((choice - 1))]}")" > "${WINEPOINT}/autorun.cmd"
+        echo "Written: ${WINEPOINT}/autorun.cmd"
+        exit 0
+        ;;
+
     *)
-        printf 'Usage:\n  %s <system> play    <game>.exe|wine|pc|msi\n' "$0" >&2
-        printf '  %s <system> install <game>.exe|msi|iso\n' "$0" >&2
-        printf '  %s <system> stop\n' "$0" >&2
-        exit 1
+        usage
         ;;
 esac
-
-printf '[hippos-wine] session: %ds\n' "${SECONDS}" >&2
