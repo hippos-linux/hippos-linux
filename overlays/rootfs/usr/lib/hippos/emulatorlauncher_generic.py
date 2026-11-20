@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 import configparser
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
@@ -25,7 +26,7 @@ from emulatorlauncher_shared import (
     _require_emulator_bin,
 )
 
-from libretro_cores import core_file_names
+from libretro_cores import REPLACED_CORES, core_file_names
 
 from HipposPaths import BIOS, CHEATS, CONFIGS, EMULATORS_ROOT, SAVES, SCREENSHOTS, USERDATA, USER_DECORATIONS, USER_SHADERS
 import hippos_dosbox_pure_ddrive
@@ -45,6 +46,9 @@ def launch_libretro(ctx: LaunchContext) -> int:
             '\n  '.join(str(p) for p in _core_search_paths()),
         )
         return 1
+    replacement = REPLACED_CORES.get(ctx.core)
+    if replacement and core_path.name == f'{replacement}_libretro.so':
+        ctx = replace(ctx, core=replacement)
 
     conf = _load_hippos_conf()
     _write_retroarch_core_options(ctx, conf)
@@ -139,7 +143,7 @@ def find_core(core_name: str) -> Optional[Path]:
 
 _CORE_P1_DEVICE: dict[str, str] = {
     'atari800': '513', 'cap32': '513', '81': '259', 'fuse': '769',
-    'mupen64plus_next': '1', 'parallel_n64': '1',
+    'mupen64plus_next': '1',
     'beetle_pce': '769', 'beetle_pce_fast': '769',
     'genesisplusgx': '513', 'picodrive': '513',
     'genesis_plus_gx': '513',
@@ -571,7 +575,7 @@ def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> N
         opts['stella_phosphor']            = _get('stella_phosphor', 'auto')
         opts['stella_phosphor_blend']      = _get('stella_phosphor_blend', '60')
 
-    elif core in ('snes9x', 'snes9x_next', 'bsnes', 'bsnes_mercury_balanced'):
+    elif core in ('snes9x', 'snes9x_next'):
         opts['snes9x_gfx_hires']          = _get('snes9x_gfx_hires', 'enabled')
         opts['snes9x_overscan']            = _get('snes9x_overscan', 'enabled')
         opts['snes9x_aspect']              = _get('snes9x_aspect', '4:3')
@@ -599,13 +603,6 @@ def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> N
         opts['fceumm_overscan']           = _get('fceumm_overscan', 'enabled')
         opts['fceumm_palette']            = _get('fceumm_palette', 'default')
 
-    elif core in ('mesen',):
-        opts['mesen_region']              = _get('mesen_region', 'Auto')
-        opts['mesen_overscan_left']       = _get('mesen_overscan_left', '0')
-        opts['mesen_overscan_right']      = _get('mesen_overscan_right', '0')
-        opts['mesen_overscan_top']        = _get('mesen_overscan_top', '8')
-        opts['mesen_overscan_bottom']     = _get('mesen_overscan_bottom', '8')
-
     elif core in ('beetle_pce', 'beetle_pce_fast'):
         opts['pce_cdimagedir']            = ''
         opts['pce_nospritelimit']         = _get('pce_nospritelimit', 'disabled')
@@ -631,7 +628,7 @@ def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> N
         opts['dosbox_pure_bootos_dfreespace'] = free_space
         hippos_win9x.preset_dosbox_pure_autoboot(ctx.rom)
 
-    elif core in ('fbneo', 'fbalpha'):
+    elif core == 'fbneo':
         opts['fbneo-lightgun-hide-crosshair'] = _get('fbneo_hide_crosshair', 'enabled')
         opts['fbneo-allow-patched-romsets']   = _get('fbneo_patched_roms', 'enabled')
 
@@ -644,7 +641,7 @@ def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> N
             opts['atari800_system']       = '5200'
             opts['atari800_CartType']     = 'enabled'
 
-    elif core in ('mupen64plus_next', 'parallel_n64'):
+    elif core == 'mupen64plus_next':
         opts['mupen64plus-rdp-plugin']    = _get('mupen64plus_rdp', 'gliden64')
         opts['mupen64plus-rsp-plugin']    = _get('mupen64plus_rsp', 'hle')
         opts['mupen64plus-43screensize']  = _get('mupen64plus_screensize', '640x480')
@@ -681,9 +678,9 @@ def _write_retroarch_game_overrides(ctx: LaunchContext) -> Optional[Path]:
             cfg.set(f'input_player{ctrl.player}_mouse_index', '"0"')
         if ctx.core == 'nestopia':
             cfg.set('nestopia_zapper_device', '"lightgun"')
-        elif ctx.core == 'fceux':
+        elif ctx.core == 'fceumm':
             cfg.set('fceumm_zapper_mode', '"lightgun"')
-        elif ctx.core == 'mame2003-plus':
+        elif ctx.core == 'mame2003_plus':
             cfg.set('mame2003-plus_xy_device', '"lightgun"')
         elif ctx.core == 'genesis_plus_gx':
             cfg.set('genesis_plus_gx_gun_input', '"lightgun"')
@@ -700,7 +697,7 @@ def _write_retroarch_game_overrides(ctx: LaunchContext) -> Optional[Path]:
             cfg.set('bsnes_touchscreen_lightgun_superscope_reverse', '"OFF"')
 
     if ctx.wheel:
-        if ctx.core in ('mupen64plus', 'mupen64plus_next', 'parallel_n64'):
+        if ctx.core in ('mupen64plus', 'mupen64plus_next'):
             cfg.set('mupen64plus-astick-deadzone', '"0"')
             cfg.set('parallel-n64-astick-deadzone', '"0"')
         if ctx.core == 'reicast':

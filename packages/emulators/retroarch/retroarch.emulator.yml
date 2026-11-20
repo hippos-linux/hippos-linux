@@ -98,7 +98,6 @@ systems:
     as_core:
       - stella
       - stella2014
-      - stella2023
       - tia
   - name: atari5200
     as_core:
@@ -120,7 +119,6 @@ systems:
     as_core:
       - dosbox_pure
       - dosbox_core
-      - dosbox_svn
     shared_features:
       - padtokey
       - onscreen_keyboard
@@ -157,47 +155,31 @@ systems:
   - name: fbneo
     as_core:
       - fbneo
-      - fbalpha
-      - fbalpha2012
-      - fbalpha2012_cps1
-      - fbalpha2012_cps2
-      - fbalpha2012_cps3
-      - fbalpha2012_neogeo
   - name: fds
     as_core:
       - fceumm
       - nestopia
-      - mesen
-      - fixnes
       - mesen2
-      - rustynes
   - name: gb
     as_core:
       - gambatte
       - mgba
       - vba-m
       - DoubleCherryGB
-      - fixgb
       - gearboy
-      - irogb
       - sameboy
       - skyemu
   - name: gb2players
     as_core:
       - tgbdual
       - DoubleCherryGB
-      - fixgb
       - gearboy
-      - irogb
       - sameboy
   - name: gba
     as_core:
       - mgba
       - vba-m
       - gpsp
-      - mednafen_gba
-      - meteor
-      - vba_next
       - skyemu
   - name: gbc
     as_core:
@@ -205,17 +187,13 @@ systems:
       - mgba
       - vba-m
       - DoubleCherryGB
-      - fixgb
       - gearboy
-      - irogb
       - sameboy
   - name: gbc2players
     as_core:
       - tgbdual
       - DoubleCherryGB
-      - fixgb
       - gearboy
-      - irogb
       - sameboy
   - name: gamecube
     as_core: dolphin
@@ -233,7 +211,6 @@ systems:
   - name: lynx
     as_core:
       - handy
-      - mednafen_lynx
       - gearlynx
       - holani
   - name: mame
@@ -241,8 +218,6 @@ systems:
       - mame
       - mame2010
       - mame2003_plus
-      - mame2003
-      - mame2003_midway
       - mame2000
   - name: mastersystem
     as_core:
@@ -270,20 +245,14 @@ systems:
   - name: n64
     as_core:
       - mupen64plus_next
-      - parallel_n64
   - name: nds
     as_core:
-      - melonds
       - desmume
-      - desmume2015
       - melondsds
-      - noods
       - skyemu
   - name: neogeo
     as_core:
       - fbneo
-      - fbalpha
-      - fbalpha2012_neogeo
       - geolith
   - name: neogeocd
     as_core: neocd
@@ -291,11 +260,8 @@ systems:
     as_core:
       - fceumm
       - nestopia
-      - mesen
-      - fixnes
       - mesen2
       - quicknes
-      - rustynes
   - name: ngp
     as_core:
       - mednafen_ngp
@@ -311,7 +277,6 @@ systems:
   - name: pc98
     as_core:
       - np2kai
-      - nekop2
   - name: pce
     as_core:
       - pce
@@ -336,24 +301,13 @@ systems:
     as_core:
       - swanstation
       - mednafen_psx_hw
-      - mednafen_psx
       - pcsx_rearmed
   - name: satellaview
     as_core:
       - snes9x
       - mesen-s
       - bsnes-jg
-      - bsnes2014_accuracy
-      - bsnes2014_balanced
-      - bsnes2014_performance
-      - bsnes_cplusplus98
-      - bsnes_mercury_accuracy
-      - bsnes_mercury_performance
-      - mednafen_snes
       - mednafen_supafaust
-      - nside_sfc_balanced
-      - snes9x2002
-      - snes9x2005
       - snes9x2005_plus
       - snes9x2010
   - name: saturn
@@ -361,7 +315,6 @@ systems:
       - mednafen_saturn
       - kronos
       - yabasanshiro
-      - yabause
       - ymir
   - name: scv
     as_core:
@@ -378,78 +331,33 @@ systems:
       - mgba
       - mesen-s
       - bsnes-jg
-      - bsnes2014_accuracy
-      - bsnes2014_balanced
-      - bsnes2014_performance
-      - bsnes_cplusplus98
-      - bsnes_mercury_accuracy
-      - bsnes_mercury_performance
-      - nside_sfc_balanced
   - name: sgb-msu1
     as_core:
       - bsnes
       - bsnes_hd
       - bsnes-jg
-      - bsnes2014_accuracy
-      - bsnes2014_balanced
-      - bsnes2014_performance
-      - bsnes_cplusplus98
-      - bsnes_mercury_accuracy
-      - bsnes_mercury_performance
-      - nside_sfc_balanced
   - name: snes
     as_core:
       - snes9x
       - bsnes
       - mesen-s
       - bsnes-jg
-      - bsnes2014_accuracy
-      - bsnes2014_balanced
-      - bsnes2014_performance
-      - bsnes_cplusplus98
-      - bsnes_mercury_accuracy
-      - bsnes_mercury_performance
-      - mednafen_snes
       - mednafen_supafaust
-      - nside_sfc_balanced
-      - snes9x2002
-      - snes9x2005
       - snes9x2005_plus
       - snes9x2010
   - name: snes-msu1
     as_core:
-      - bsnes_mercury_balanced
       - bsnes_hd
       - snes9x
       - bsnes-jg
-      - bsnes2014_accuracy
-      - bsnes2014_balanced
-      - bsnes2014_performance
-      - bsnes_cplusplus98
-      - bsnes_mercury_accuracy
-      - bsnes_mercury_performance
-      - mednafen_snes
       - mednafen_supafaust
-      - nside_sfc_balanced
-      - snes9x2002
-      - snes9x2005
       - snes9x2005_plus
       - snes9x2010
   - name: sufami
     as_core:
       - snes9x
       - bsnes-jg
-      - bsnes2014_accuracy
-      - bsnes2014_balanced
-      - bsnes2014_performance
-      - bsnes_cplusplus98
-      - bsnes_mercury_accuracy
-      - bsnes_mercury_performance
-      - mednafen_snes
       - mednafen_supafaust
-      - nside_sfc_balanced
-      - snes9x2002
-      - snes9x2005
       - snes9x2005_plus
       - snes9x2010
   - name: supergrafx
@@ -488,8 +396,6 @@ systems:
       - mame
       - mame2010
       - mame2003_plus
-      - mame2003
-      - mame2003_midway
       - mame2000
   - name: cannonball
     as_core: cannonball
@@ -525,27 +431,22 @@ systems:
       - puae
       - amiberry
       - fsuae
-      - puae2021
   - name: amiga1200
     as_core:
       - puae
       - amiberry
       - fsuae
-      - puae2021
   - name: amigacd32
     as_core:
       - puae
       - amiberry
-      - puae2021
   - name: amigacdtv
     as_core:
       - puae
       - amiberry
-      - puae2021
   - name: amstradcpc
     as_core:
       - cap32
-      - crocods
   - name: atomiswave
     as_core:
       - flycast
@@ -629,7 +530,6 @@ systems:
   - name: atarist
     as_core:
       - hatari
-      - hatari2014
       - hatarib
   - name: bbcmicro
     as_core:
@@ -642,7 +542,6 @@ systems:
       - vice_xvic
   - name: cdi
     as_core:
-      - cdi2015
       - same_cdi
       - opencdi
   - name: cplus4

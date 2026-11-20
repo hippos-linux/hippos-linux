@@ -10,5 +10,59 @@ LIBRETRO_CORE_ALIASES: dict[str, tuple[str, ...]] = {
     'vba-m': ('vbam',),
 }
 
+REPLACED_CORES: dict[str, str] = {
+    'bsnes2014_accuracy': 'bsnes-jg',
+    'bsnes2014_balanced': 'bsnes-jg',
+    'bsnes2014_performance': 'bsnes-jg',
+    'bsnes_mercury_accuracy': 'bsnes-jg',
+    'bsnes_mercury_balanced': 'bsnes-jg',
+    'bsnes_mercury_performance': 'bsnes-jg',
+    'bsnes_cplusplus98': 'bsnes-jg',
+    'nside_sfc_balanced': 'bsnes-jg',
+    'mednafen_snes': 'mednafen_supafaust',
+    'snes9x2002': 'snes9x',
+    'snes9x2005': 'snes9x',
+    'snes9x2005_plus': 'snes9x',
+    'snes9x2010': 'snes9x',
+    'fbalpha': 'fbneo',
+    'fbalpha2012': 'fbneo',
+    'fbalpha2012_cps1': 'fbneo',
+    'fbalpha2012_cps2': 'fbneo',
+    'fbalpha2012_cps3': 'fbneo',
+    'fbalpha2012_neogeo': 'fbneo',
+    'mame2000': 'mame2003_plus',
+    'mame2003': 'mame2003_plus',
+    'mame2003_midway': 'mame2003_plus',
+    'stella2014': 'stella',
+    'stella2023': 'stella',
+    'desmume2015': 'desmume',
+    'melonds': 'melondsds',
+    'noods': 'melondsds',
+    'hatari2014': 'hatari',
+    'dosbox_svn': 'dosbox_core',
+    'fixgb': 'gearboy',
+    'irogb': 'gearboy',
+    'mesen': 'mesen2',
+    'fixnes': 'mesen2',
+    'rustynes': 'mesen2',
+    'quicknes': 'fceumm',
+    'meteor': 'mgba',
+    'vba_next': 'mgba',
+    'mednafen_gba': 'mgba',
+    'puae2021': 'puae',
+    'yabause': 'yabasanshiro',
+    'mednafen_psx': 'mednafen_psx_hw',
+    'parallel_n64': 'mupen64plus_next',
+    'cdi2015': 'same_cdi',
+    'mednafen_lynx': 'handy',
+    'vice_x64': 'vice_x64sc',
+    'nekop2': 'np2kai',
+    'crocods': 'cap32',
+    'race': 'mednafen_ngp',
+}
+
 def core_file_names(core: str) -> tuple[str, ...]:
-    return tuple(f'{name}_libretro.so' for name in (core, *LIBRETRO_CORE_ALIASES.get(core, ())))
+    names = (core, *LIBRETRO_CORE_ALIASES.get(core, ()))
+    if core in REPLACED_CORES:
+        names += (REPLACED_CORES[core],)
+    return tuple(f'{name}_libretro.so' for name in names)

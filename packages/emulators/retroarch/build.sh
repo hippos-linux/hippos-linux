@@ -16,11 +16,28 @@ EXCLUDED_CORES=(
     citra_libretro.so citra2018_libretro.so panda3ds_libretro.so play_libretro.so pcee2_libretro.so
     mame2015_libretro.so mame2016_libretro.so parallel_dc_libretro.so rust_dos_libretro.so
     uzdoom_libretro.so n64emu_libretro.so
+    bsnes2014_accuracy_libretro.so bsnes2014_balanced_libretro.so bsnes2014_performance_libretro.so
+    bsnes_mercury_accuracy_libretro.so bsnes_mercury_balanced_libretro.so bsnes_mercury_performance_libretro.so
+    bsnes_cplusplus98_libretro.so mednafen_snes_libretro.so nside_sfc_balanced_libretro.so
+    snes9x2002_libretro.so snes9x2005_libretro.so
+    fbalpha_libretro.so fbalpha2012_libretro.so fbalpha2012_cps1_libretro.so fbalpha2012_cps2_libretro.so
+    fbalpha2012_cps3_libretro.so fbalpha2012_neogeo_libretro.so
+    mame2003_libretro.so mame2003_midway_libretro.so stella2023_libretro.so
+    desmume2015_libretro.so hatari2014_libretro.so dosbox_svn_libretro.so
+    fixgb_libretro.so irogb_libretro.so mesen_libretro.so fixnes_libretro.so rustynes_libretro.so
+    meteor_libretro.so vba_next_libretro.so mednafen_gba_libretro.so puae2021_libretro.so
+    yabause_libretro.so mednafen_psx_libretro.so
+    melonds_libretro.so noods_libretro.so parallel_n64_libretro.so cdi2015_libretro.so mednafen_lynx_libretro.so
+    nekop2_libretro.so crocods_libretro.so
 )
 case "${ARCH}" in
     amd64)
         LIBRETRO_ARCH="x86_64"
-        EXCLUDED_CORES+=(cemu_libretro.so)
+        EXCLUDED_CORES+=(
+            cemu_libretro.so snes9x2005_plus_libretro.so snes9x2010_libretro.so
+            mame2000_libretro.so stella2014_libretro.so quicknes_libretro.so vice_x64_libretro.so
+            race_libretro.so
+        )
         ;;
     arm64)
         LIBRETRO_ARCH="aarch64"

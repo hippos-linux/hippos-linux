@@ -169,7 +169,7 @@ _emulator_defaults:
   sgb-msu1:      { emulator: retroarch,          core: bsnes              }
   singe:         { emulator: hypseus-singe,      core: hypseus-singe, options: { hud_support: false } }
   snes:          { emulator: retroarch,          core: snes9x             }
-  snes-msu1:     { emulator: retroarch,          core: bsnes_mercury_balanced }
+  snes-msu1:     { emulator: retroarch,          core: bsnes_hd           }
   socrates:      { emulator: mame,               core: mame               }
   solarus:       { emulator: solarus-engine,     core: solarus            }
   spectravideo:  { emulator: openmsx,            core: openmsx            }
