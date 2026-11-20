@@ -144,11 +144,7 @@ systems = {
 
     "nds": { "name": "Nintendo DS", "biosFiles": [  { "md5": "", "file": "bios/firmware.bin" },
                                             { "md5": "df692a80a5b1bc90728bc3dfc76cd948", "file": "bios/bios7.bin" },
-                                            { "md5": "a392174eb3e572fed6447e956bde4b25", "file": "bios/bios9.bin" },
-                                            { "md5": "559dae4ea78eb9d67702c56c1d791e81", "file": "bios/dsi_bios7.bin" },
-                                            { "md5": "87b665fce118f76251271c3732532777", "file": "bios/dsi_bios9.bin" },
-                                            { "md5": "", "file": "bios/dsi_firmware.bin" },
-                                            { "md5": "", "file": "bios/dsi_nand.bin" }
+                                            { "md5": "a392174eb3e572fed6447e956bde4b25", "file": "bios/bios9.bin" }
                                             ] },
 
     "gba": { "name": "Nintendo Gameboy Advance", "biosFiles": [  { "md5": "a860e8c0b6d573d191e4ec7db1b1e4f6", "file": "bios/gba_bios.bin" },
@@ -763,10 +759,6 @@ systems = {
                                   { "md5": "758f8fec271fbf526bb22b36e88f154b", "zippedFile": "p513bk1b.bin", "file": "bios/vis.zip"} ] },
 
     "n64dd":   { "name": "Nintendo 64DD", "biosFiles":  [ { "md5": "8d3d9f294b6e174bc7b1d2fd1c727530", "file": "bios/64DD_IPL.bin" } ] },
-
-    "gamecube":   { "name": "Nintendo GameCube", "biosFiles":  [ { "md5": "db92574caab77a7ec99d4605fd6f2450", "file": "bios/GC/EUR/IPL.bin" },
-                                                                 { "md5": "b17148254a5799684c7d783206504926", "file": "bios/GC/JAP/IPL.bin" },
-                                                                 { "md5": "b17148254a5799684c7d783206504926", "file": "bios/GC/USA/IPL.bin" } ] },
 
     "chihiro": { "name": "Sega Chihiro", "biosFiles": [{ "md5": "d49c52a4102f6df7bcf8d0617ac475ed", "file": "bios/mcpx_1.0.bin" },
                                                        { "md5": "f23d7e00ae8fbf88908ed1f9165f35eb", "file": "bios/cerbios.bin" }] },

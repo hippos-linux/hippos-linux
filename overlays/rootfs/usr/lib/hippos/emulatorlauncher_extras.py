@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import configparser
 import filecmp
+import re
 import shutil
+import zipfile
 from pathlib import Path
 
 from emulatorlauncher_shared import (
@@ -62,6 +64,7 @@ def launch_xenia_edge(ctx: LaunchContext) -> int:
     config.setdefault('HID', {})['hid'] = 'sdl'
     config.setdefault('General', {})['discord'] = False
     config.setdefault('Logging', {})['log_level'] = 1
+    config.setdefault('Profiles', {})['default_profile_gamertag'] = 'Player'
 
     _write_toml(toml_file, config)
 
@@ -80,7 +83,7 @@ def launch_xenia_edge(ctx: LaunchContext) -> int:
         except Exception:
             pass
 
-    cmd = [str(bin_path), str(rom)]
+    cmd = [str(bin_path), f'--storage_root={cfg_dir}', str(rom)]
 
     env = _build_game_env(conf, ctx)
     env['SDL_JOYSTICK_HIDAPI'] = '0'
@@ -119,8 +122,7 @@ SWITCH_BIOS = BIOS / 'switch'
 SWITCH_KEY_FILES = ('prod.keys', 'title.keys')
 SWITCH_DATA_DIRS = {'citron-neo': 'citron', 'eden': 'eden'}
 
-def _install_switch_keys(data_dir: Path) -> None:
-    keys_dir = data_dir / 'keys'
+def install_switch_keys(keys_dir: Path) -> None:
     keys_dir.mkdir(parents=True, exist_ok=True)
     for name in SWITCH_KEY_FILES:
         source, target = SWITCH_BIOS / 'keys' / name, keys_dir / name
@@ -128,20 +130,51 @@ def _install_switch_keys(data_dir: Path) -> None:
             shutil.copyfile(source, target)
             _log.info("Switch: installed %s", name)
 
-def _install_switch_firmware(data_dir: Path) -> None:
-    firmware = sorted((SWITCH_BIOS / 'firmware').glob('*.nca'))
-    if not firmware:
+def _version_key(path: Path) -> list[int]:
+    return [int(part) for part in re.findall(r'\d+', path.stem)]
+
+def switch_firmware() -> Path | None:
+    folder = SWITCH_BIOS / 'firmware'
+    if any(folder.glob('*.nca')):
+        return folder
+    archives = [*SWITCH_BIOS.glob('*.zip'), *folder.glob('*.zip')]
+    return max(archives, key=_version_key) if archives else None
+
+def _firmware_entry(name: str, title_folders: bool) -> str:
+    return f"{name.split('.')[0]}.nca" if title_folders else name
+
+def install_switch_firmware(registered: Path, title_folders: bool = False) -> None:
+    source = switch_firmware()
+    if source is None:
         return
-    registered = data_dir / 'nand' / 'system' / 'Contents' / 'registered'
-    registered.mkdir(parents=True, exist_ok=True)
-    installed = sorted(registered.glob('*.nca'))
-    if [path.name for path in installed] == [path.name for path in firmware]:
-        return
-    for path in installed:
-        path.unlink()
-    for path in firmware:
-        shutil.copyfile(path, registered / path.name)
-    _log.info("Switch: installed %d firmware files", len(firmware))
+    if source.is_dir():
+        files = {path.name: (lambda path=path: path.open('rb')) for path in sorted(source.glob('*.nca'))}
+        archive = None
+    else:
+        archive = zipfile.ZipFile(source)
+        files = {Path(name).name: (lambda member=name: archive.open(member))
+                 for name in archive.namelist() if name.lower().endswith('.nca')}
+    try:
+        registered.mkdir(parents=True, exist_ok=True)
+        wanted = sorted(_firmware_entry(name, title_folders) for name in files)
+        if sorted(path.name for path in registered.glob('*.nca')) == wanted:
+            return
+        for path in registered.glob('*.nca'):
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+        for name, open_source in files.items():
+            target = registered / _firmware_entry(name, title_folders)
+            if title_folders:
+                target.mkdir()
+                target = target / '00'
+            with open_source() as src, target.open('wb') as dst:
+                shutil.copyfileobj(src, dst)
+        _log.info("Switch: installed firmware from %s", source)
+    finally:
+        if archive is not None:
+            archive.close()
 
 def _launch_switch(ctx: LaunchContext, emu_name: str) -> int:
     conf = _load_hippos_conf()
@@ -159,8 +192,8 @@ def _launch_switch(ctx: LaunchContext, emu_name: str) -> int:
 
     _write_switch_qt_config(cfg_dir, emu_name)
     data_dir = saves_dir / SWITCH_DATA_DIRS[emu_name]
-    _install_switch_keys(data_dir)
-    _install_switch_firmware(data_dir)
+    install_switch_keys(data_dir / 'keys')
+    install_switch_firmware(data_dir / 'nand' / 'system' / 'Contents' / 'registered')
 
     cmd = [str(bin_path), '-f', '-g', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
@@ -513,9 +546,20 @@ def launch_nanoboyadvance(ctx: LaunchContext) -> int:
         _log.error("nanoboyadvance: binary not found")
         return 1
 
+    toml_file = CONFIGS / 'NanoBoyAdvance' / 'config.toml'
+    saves_dir = SAVES / 'nanoboyadvance'
+    saves_dir.mkdir(parents=True, exist_ok=True)
+    config = _read_toml(toml_file)
+    config.setdefault('general', {}).update(bios_path=str(BIOS / 'gba_bios.bin'), save_folder=str(saves_dir))
+    config.setdefault('window', {}).update(fullscreen=True, fullscreen_show_menu=False,
+                                           pause_emulator_when_inactive=False)
+    toml_file.parent.mkdir(parents=True, exist_ok=True)
+    _write_toml(toml_file, config)
+
     conf = _load_effective_hippos_conf()
     env = _build_game_env(conf, ctx)
     env['QT_QPA_PLATFORM'] = 'xcb'
+    env['XDG_CONFIG_HOME'] = str(CONFIGS)
     return _run_game_command(ctx, [str(bin_path), str(ctx.rom)], env).returncode
 
 KEISHO_RENAMED_DIRS = (

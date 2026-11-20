@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
+
 from emulatorlauncher_shared import (
     LaunchContext,
     _build_game_env,
@@ -18,6 +21,14 @@ from emulatorlauncher_registry import Emulator, register
 
 MELONDS_CONFIG_DIR = CONFIGS / 'melonDS'
 MELONDS_TOML       = MELONDS_CONFIG_DIR / 'melonDS.toml'
+MELONDS_WRITABLE_FIRMWARE_DIR = MELONDS_CONFIG_DIR / 'firmware'
+
+def _writable_firmware(name: str) -> Path:
+    copy = MELONDS_WRITABLE_FIRMWARE_DIR / name
+    if not copy.exists() and (BIOS / name).is_file():
+        MELONDS_WRITABLE_FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(BIOS / name, copy)
+    return copy if copy.exists() else BIOS / name
 
 def _write_melonds_config(conf: dict[str, str]) -> None:
     MELONDS_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -44,7 +55,7 @@ def _write_melonds_config(conf: dict[str, str]) -> None:
         'PauseLostFocus': False,
         'LimitFPS': limit_fps,
         'DS': {
-            'FirmwarePath': str(BIOS / 'firmware.bin'),
+            'FirmwarePath': str(_writable_firmware('firmware.bin')),
             'BIOS7Path':    str(BIOS / 'bios7.bin'),
             'BIOS9Path':    str(BIOS / 'bios9.bin'),
         },
@@ -54,10 +65,10 @@ def _write_melonds_config(conf: dict[str, str]) -> None:
             'Enable':     True,
         },
         'DSi': {
-            'FirmwarePath': str(BIOS / 'dsi_firmware.bin'),
+            'FirmwarePath': str(_writable_firmware('dsi_firmware.bin')),
             'BIOS9Path':    str(BIOS / 'dsi_bios9.bin'),
             'BIOS7Path':    str(BIOS / 'dsi_bios7.bin'),
-            'NANDPath':     str(BIOS / 'dsi_nand.bin'),
+            'NANDPath':     str(_writable_firmware('dsi_nand.bin')),
             'SD': {
                 'FolderPath': str(SAVES / 'nds'),
                 'ImagePath':  'dsisd.bin',

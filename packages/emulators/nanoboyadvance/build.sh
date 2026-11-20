@@ -18,6 +18,15 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
+PATCH_DIR="${REPO_ROOT}/packages/emulators/${NAME}"
+for patch in 001-portable-mode-off.patch; do
+    if git -C "${SRC}" apply --reverse --check "${PATCH_DIR}/${patch}" >/dev/null 2>&1; then
+        log "Patch already applied: ${patch}"
+    else
+        git -C "${SRC}" apply "${PATCH_DIR}/${patch}"
+    fi
+done
+
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
 

@@ -149,7 +149,7 @@ def launch_mame(ctx: LaunchContext) -> int:
         game_flags += ['-dial_device', 'mouse', '-trackball_device', 'mouse', '-paddle_device', 'mouse', '-positional_device', 'mouse', '-mouse_device', 'mouse', '-ui_mouse']
 
     rompath = ';'.join(str(p) for p in (ctx.rom.parent, BIOS, BIOS / 'mame', MAME_ROMS))
-    cmd = [str(bin_path), '-inipath', f'{MAME_CONFIG_DIR};/etc/mame', '-rompath', rompath, *game_flags]
+    cmd = [str(bin_path), '-skip_gameinfo', '-inipath', f'{MAME_CONFIG_DIR};/etc/mame', '-rompath', rompath, *game_flags]
     cmd += _mess_args(ctx.system, ctx.rom) or [str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     result = _run_game_command(ctx, cmd, env)
@@ -187,6 +187,7 @@ def _write_dolphin_config(ctx: LaunchContext) -> None:
     parser.set('Interface', 'UsePanicHandlers', 'False')
     parser.set('Interface', 'OnScreenDisplayMessages', 'True' if _game_bool(conf, ctx, 'ShowDpMsg', False) or _conf_bool(conf, 'global.retroachievements', False) else 'False')
     parser.set('Interface', 'ConfirmStop', 'False')
+    parser.set('Interface', 'SkipNKitWarning', 'True')
     parser.remove_option('Display', 'RenderToMain')
     parser.set('Display', 'Fullscreen', 'True')
 

@@ -168,7 +168,7 @@ CONTROLLER_CONFIGS=(
     /tmp/es_input_players.cfg
     /userdata/system/configs/dolphin-emu/GCPadNew.ini
     /userdata/system/configs/dolphin-emu/WiimoteNew.ini
-    /userdata/.config/cemu/controllerProfiles/*.xml
+    /userdata/.config/Cemu/controllerProfiles/*.xml
 )
 for controller_config in "${CONTROLLER_CONFIGS[@]}"; do
     [[ -f "${controller_config}" ]] && install -D -m 0644 "${controller_config}" "${OUT_DIR}/controller-configs${controller_config}" || true

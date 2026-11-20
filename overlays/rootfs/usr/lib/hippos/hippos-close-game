@@ -8,13 +8,6 @@ flock -n 9 || exit 0
 
 launcher="$(pgrep -of 'python3 /usr/bin/emulatorlauncher')" || exit 0
 
-DISPLAY=:0 xdotool key alt+F4
-
-for _ in $(seq "${CLOSE_GRACE_SECONDS}"); do
-    sleep 1
-    kill -0 "${launcher}" 2>/dev/null || exit 0
-done
-
 descendants() {
     local child
     for child in $(pgrep -P "$1"); do
@@ -23,4 +16,15 @@ descendants() {
     done
 }
 
+wait_for_launcher() {
+    for _ in $(seq "${CLOSE_GRACE_SECONDS}"); do
+        sleep 1
+        kill -0 "${launcher}" 2>/dev/null || exit 0
+    done
+}
+
+DISPLAY=:0 xdotool key alt+F4
+wait_for_launcher
 kill -TERM $(descendants "${launcher}") 2>/dev/null
+wait_for_launcher
+kill -KILL $(descendants "${launcher}") 2>/dev/null

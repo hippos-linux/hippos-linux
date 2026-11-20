@@ -15,7 +15,7 @@ from emulatorlauncher_shared import (
 from HipposPaths import SAVES, USERDATA
 from emulatorlauncher_registry import Emulator, register
 
-CEMU_CONFIG_DIR          = USERDATA / '.config' / 'cemu'
+CEMU_CONFIG_DIR          = USERDATA / '.config' / 'Cemu'
 CEMU_SETTINGS_XML        = CEMU_CONFIG_DIR / 'settings.xml'
 CEMU_CONTROLLER_PROFILES = CEMU_CONFIG_DIR / 'controllerProfiles'
 

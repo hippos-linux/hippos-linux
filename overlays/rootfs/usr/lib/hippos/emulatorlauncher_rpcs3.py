@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from emulatorlauncher_registry import Emulator, register
 
@@ -23,12 +24,14 @@ from emulatorlauncher_shared import (
     _run_game_command,
 )
 
-from HipposPaths import CACHE, CONFIGS, SAVES
+from HipposPaths import BIOS, CACHE, CONFIGS, SAVES
 
 RPCS3_CONFIG_DIR   = CONFIGS / 'rpcs3'
 RPCS3_VFS_YML      = RPCS3_CONFIG_DIR / 'vfs.yml'
 RPCS3_HDD0         = SAVES / 'ps3' / 'rpcs3' / 'dev_hdd0'
 RPCS3_CONFIG_YML   = RPCS3_CONFIG_DIR / 'config.yml'
+RPCS3_FIRMWARE_MARKER = RPCS3_CONFIG_DIR / 'dev_flash' / 'vsh' / 'module' / 'vsh.self'
+RPCS3_FIRMWARE_FILES  = (BIOS / 'ps3' / 'PS3UPDAT.PUP', BIOS / 'PS3UPDAT.PUP')
 
 _RPCS3_INPUT_DIR = RPCS3_CONFIG_DIR / 'input_configs' / 'global'
 
@@ -238,6 +241,22 @@ def _write_rpcs3_vfs() -> None:
     vfs['/dev_hdd0/'] = f'{RPCS3_HDD0}/'
     RPCS3_VFS_YML.write_text(yaml.dump(vfs, default_flow_style=False, allow_unicode=True))
 
+def _install_missing_firmware(bin_path: Path, env: dict[str, str]) -> None:
+    if RPCS3_FIRMWARE_MARKER.is_file():
+        return
+    pup = next((path for path in RPCS3_FIRMWARE_FILES if path.is_file()), None)
+    if pup is None:
+        return
+    _log.info("Installing PS3 firmware from %s", pup)
+    subprocess.run([str(bin_path), '--headless', '--installfw', str(pup)], env=env, check=False)
+
+def _disc_eboot(folder: Path) -> Path:
+    eboot = Path('PS3_GAME') / 'USRDIR' / 'EBOOT.BIN'
+    if (folder / eboot).is_file():
+        return folder / eboot
+    nested = [child / eboot for child in folder.iterdir() if (child / eboot).is_file()]
+    return nested[0] if len(nested) == 1 else folder / eboot
+
 def launch_rpcs3(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('rpcs3')
     if bin_path is None:
@@ -253,7 +272,7 @@ def launch_rpcs3(ctx: LaunchContext) -> int:
         try:
             target = Path(rom.read_text().strip())
             if target.is_dir():
-                rom = target / 'PS3_GAME' / 'USRDIR' / 'EBOOT.BIN'
+                rom = _disc_eboot(target)
             else:
                 rom = target
         except Exception:
@@ -270,11 +289,12 @@ def launch_rpcs3(ctx: LaunchContext) -> int:
             eboot = RPCS3_HDD0 / 'game' / game_id / 'USRDIR' / 'EBOOT.BIN'
             rom = eboot
     elif rom.is_dir():
-        rom = rom / 'PS3_GAME' / 'USRDIR' / 'EBOOT.BIN'
-    cmd = [str(bin_path), '--no-gui', str(rom)]
+        rom = _disc_eboot(rom)
     env = _build_game_env(conf, ctx)
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
     env['XDG_CACHE_HOME']  = str(CACHE)
+    _install_missing_firmware(bin_path, env)
+    cmd = [str(bin_path), '--no-gui', str(rom)]
     result = _run_game_command(ctx, cmd, env)
     return result.returncode
 

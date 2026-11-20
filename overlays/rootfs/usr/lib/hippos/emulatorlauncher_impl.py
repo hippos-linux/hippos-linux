@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import subprocess
+import signal
 import sys
 import time
 import xml.etree.ElementTree as ET
@@ -445,6 +446,9 @@ def main() -> int:
     except Exception as exc:
         _log.exception("Launch failed: %s", exc)
         code = 1
+    if code in (-signal.SIGTERM, -signal.SIGKILL):
+        _log.info("launch: game stopped by signal %d", -code)
+        code = 0
     if code != 0 and launch_clock.game_started is None and not 200 <= code <= 300:
         LAUNCH_ERROR_FILE.write_text(last_error.message or 'The game could not be started.', encoding='utf-8')
         code = EXIT_LAUNCH_FAILED

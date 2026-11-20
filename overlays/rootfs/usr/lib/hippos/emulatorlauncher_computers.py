@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import configparser
 import shutil
+import struct
 import zipfile
 from pathlib import Path
 from typing import Optional
@@ -62,6 +63,7 @@ def launch_dosbox_staging(ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     return _run_game_command(ctx, cmd, env).returncode
 
+DOSBOX_X_NO_QUIT_WARNING = ['-set', 'dosbox quit warning=false']
 WIN9X_CD_SUFFIXES = ('.cue', '.iso', '.chd')
 WIN9X_CD_CACHE = CACHE / 'win98' / 'dosbox-x'
 WIN9X_CONFIG = """[sdl]
@@ -100,6 +102,20 @@ def _win9x_system_disk() -> Optional[Path]:
         partial.replace(disk)
     return disk
 
+def _hdd_geometry(disk: Path) -> str:
+    size = disk.stat().st_size
+    sectors, heads = 63, 16 if size % (512 * 63 * 16) == 0 else 255
+    with disk.open('rb') as image:
+        mbr = image.read(512)
+        for entry in range(446, 510, 16):
+            if mbr[entry] == 0x80:
+                image.seek(int.from_bytes(mbr[entry + 8:entry + 12], 'little') * 512)
+                boot = image.read(512)
+                if boot[510:512] == b'\x55\xaa':
+                    sectors, heads = struct.unpack_from('<HH', boot, 24)
+                break
+    return f'512,{sectors},{heads},{size // (512 * sectors * heads)}'
+
 def _win9x_game_cd(rom: Path) -> Optional[Path]:
     if rom.suffix.lower() in WIN9X_CD_SUFFIXES:
         return rom
@@ -125,10 +141,10 @@ def _launch_dosbox_x_win9x(ctx: LaunchContext, bin_path: Path) -> int:
     generated = CACHE / 'win98' / 'dosbox-x.conf'
     generated.parent.mkdir(parents=True, exist_ok=True)
     generated.write_text(WIN9X_CONFIG + '\n[autoexec]\n'
-                         f'imgmount c "{disk}" -ide 1m\n'
+                         f'imgmount 2 "{disk}" -fs none -size {_hdd_geometry(disk)} -ide 1m\n'
                          f'imgmount d "{cd}" -t iso -ide 2m\n'
-                         'boot c:\n')
-    cmd = [str(bin_path), '-fastbioslogo', '-conf', str(generated)]
+                         'boot -l c\n')
+    cmd = [str(bin_path), '-fastbioslogo', *DOSBOX_X_NO_QUIT_WARNING, '-conf', str(generated)]
     user_conf = CONFIGS / 'dosbox' / 'dosboxx-win98.conf'
     if user_conf.exists():
         cmd += ['-conf', str(user_conf)]
@@ -167,7 +183,7 @@ def launch_dosbox_x(ctx: LaunchContext) -> int:
 
     cmd = [
         str(bin_path),
-        '-fastbioslogo', '-exit',
+        '-fastbioslogo', '-exit', *DOSBOX_X_NO_QUIT_WARNING,
         '-conf', str(custom_cfg),
         '-c', f'mount c "{rom.parent}"',
         '-c', 'c:',

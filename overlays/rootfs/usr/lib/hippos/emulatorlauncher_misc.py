@@ -34,6 +34,7 @@ from hippos_desktop_entries import read_desktop_file
 from hippos_webapps import ADD_WEBAPP_URL, WEBAPP_PROFILES, WEBAPPS_BIN, read_webapp
 import hippos_quiver
 from emulatorlauncher_registry import Emulator, register
+from emulatorlauncher_extras import install_switch_firmware, install_switch_keys
 
 _VICE_MACHINE_NAMES: dict[str, str] = {
     'x64':     'C64SC',
@@ -855,9 +856,11 @@ def launch_ryujinx(ctx: LaunchContext) -> int:
         cfg['input_config'].append(ctrl_cfg)
 
     cfg_path.write_text(json.dumps(cfg, indent=2))
+    install_switch_keys(cfg_path.parent / 'system')
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
     conf = _load_hippos_conf()
-    cmd = [str(bin_path), str(ctx.rom)]
+    install_switch_firmware(cfg_path.parent / 'bis' / 'system' / 'Contents' / 'registered', title_folders=True)
+    cmd = [str(bin_path), '--fullscreen', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     result = _run_game_command(ctx, cmd, env)
     return result.returncode

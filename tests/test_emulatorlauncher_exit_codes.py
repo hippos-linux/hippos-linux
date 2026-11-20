@@ -49,6 +49,21 @@ class ExitCodeTests(unittest.TestCase):
         self.assertEqual(self.run_main(launch), 1)
         self.assertFalse(self.error_file.exists())
 
+    def test_game_closed_by_term_or_kill_is_a_normal_exit(self):
+        for code in (-15, -9):
+            def launch(args, code=code):
+                impl.launch_clock.game_started = time.perf_counter()
+                impl.launch_clock.game_ended = time.perf_counter()
+                return code
+            self.assertEqual(self.run_main(launch), 0)
+
+    def test_game_crash_by_signal_is_still_reported(self):
+        def launch(args):
+            impl.launch_clock.game_started = time.perf_counter()
+            impl.launch_clock.game_ended = time.perf_counter()
+            return -11
+        self.assertEqual(self.run_main(launch), -11)
+
     def test_unexpected_exception_is_reported(self):
         def launch(args):
             raise RuntimeError("bad config value")
