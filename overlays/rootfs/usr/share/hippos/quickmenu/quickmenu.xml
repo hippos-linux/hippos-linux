@@ -1,6 +1,6 @@
 <!-- Copy to /userdata/system/configs/quickmenu/quickmenu.xml to change the quick menu.
      ${command} runs a shell command and shows its output; refresh="N" re-runs it every N seconds.
-     if="${command}" shows a row or tab only when the command prints something.
+     if="${command}" shows a row or tab only when the command prints something; it is checked when the menu opens and after each action.
      afterclick="close" hides the menu after the action, "refresh" re-reads every value,
      "rescreen" moves the menu to the screen chosen in the System tab.
      progressbar takes showvalue="true" to print its percentage inside the bar.

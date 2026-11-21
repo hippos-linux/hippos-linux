@@ -32,12 +32,17 @@ INACTIVITY_CLOSE_S = 20
 GRAB_DELAY_MS    = 250
 WIDTH_SHARE      = 0.42
 HEIGHT_SHARE     = 0.8
+SMALL_SCREEN_HEIGHT = 480
+SMALL_SCREEN_SHARE  = 0.94
+STYLE_REFERENCE_HEIGHT = 1080
+MIN_STYLE_SCALE  = 0.7
 CORNER_SHARE     = 0.022
 HINT_ICON_PX     = 22
 COMMAND_WORKERS  = 4
 DEFAULT_IMAGE_HEIGHT = '10%'
 
 EXPRESSION = re.compile(r'\$\{(.*)\}', re.DOTALL)
+PX_VALUE   = re.compile(r'(\d+(?:\.\d+)?)px')
 
 
 @dataclass
@@ -125,6 +130,11 @@ def command_choices(source: dict[str, str]) -> list[tuple[str, str]]:
     values = evaluate(source.get('action_arg', '')).splitlines() if source.get('action_arg') else labels
     action = source.get('action', '')
     return [(label, f'{action} {shlex.quote(value)}') for label, value in zip(labels, values) if label.strip()]
+
+
+def scaled_style(css: str, screen_height: int) -> str:
+    scale = min(1.0, max(MIN_STYLE_SCALE, screen_height / STYLE_REFERENCE_HEIGHT))
+    return PX_VALUE.sub(lambda match: f'{max(1, round(float(match.group(1)) * scale))}px', css)
 
 
 def height_pixels(spec: str, screen_height: int) -> int:
@@ -245,8 +255,10 @@ def run_menu() -> int:
         return box
 
     class QuickMenu(Gtk.Window):
-        def __init__(self, menu: Menu) -> None:
+        def __init__(self, menu: Menu, style: Gtk.CssProvider, style_css: str) -> None:
             super().__init__(type=Gtk.WindowType.TOPLEVEL, title='HippOS quick menu')
+            self.style = style
+            self.style_css = style_css
             self.executor = ThreadPoolExecutor(max_workers=COMMAND_WORKERS)
             self.refreshers: list = []
             self.timers: list[int] = []
@@ -356,7 +368,7 @@ def run_menu() -> int:
             rows.add(line)
             if row.condition:
                 line.set_no_show_all(True)
-                self.watch({'if': row.condition, 'refresh': '2'}, 'if',
+                self.watch({'if': row.condition}, 'if',
                            lambda output, line=line: self.set_shown(line, bool(output.strip())))
 
         def build_static(self, rows: list[Row], inline: bool) -> Gtk.Box:
@@ -384,7 +396,7 @@ def run_menu() -> int:
                 box.pack_start(line, False, False, 0)
                 if row.condition:
                     line.set_no_show_all(True)
-                    self.watch({'if': row.condition, 'refresh': '5'}, 'if',
+                    self.watch({'if': row.condition}, 'if',
                                lambda output, line=line: self.set_shown(line, bool(output.strip())))
             return box
 
@@ -645,7 +657,17 @@ def run_menu() -> int:
         def place_window(self) -> None:
             area = selected_monitor().get_geometry()
             self.screen_height = area.height
-            width, height = int(area.width * WIDTH_SHARE), int(area.height * HEIGHT_SHARE)
+            self.style.load_from_data(scaled_style(self.style_css, area.height).encode())
+            small_screen = area.height <= SMALL_SCREEN_HEIGHT
+            self.tabs.set_homogeneous(not small_screen)
+            style_context = self.get_style_context()
+            if small_screen:
+                style_context.add_class('small-screen')
+            else:
+                style_context.remove_class('small-screen')
+            width_share, height_share = ((SMALL_SCREEN_SHARE, SMALL_SCREEN_SHARE) if small_screen
+                                         else (WIDTH_SHARE, HEIGHT_SHARE))
+            width, height = int(area.width * width_share), int(area.height * height_share)
             self.set_size_request(width, height)
             self.resize(width, height)
             self.move(area.x + (area.width - width) // 2, area.y + (area.height - height) // 2)
@@ -800,11 +822,11 @@ def run_menu() -> int:
                 return True
             return False
 
-    provider = Gtk.CssProvider()
-    provider.load_from_path(str(first_existing(HIPPOS_STYLE_FILES)))
-    Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), provider,
+    style = Gtk.CssProvider()
+    Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), style,
                                              Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-    window = QuickMenu(parse_menu(first_existing(MENU_FILES).read_text()))
+    window = QuickMenu(parse_menu(first_existing(MENU_FILES).read_text()), style,
+                       first_existing(HIPPOS_STYLE_FILES).read_text())
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, window.toggle)
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, Gtk.main_quit)
     window.show_menu()

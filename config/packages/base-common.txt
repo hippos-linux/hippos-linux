@@ -160,6 +160,9 @@ libhidapi-hidraw0
 python3-gi
 python3-venv
 
+# In-game quick menu (hippos-quickmenu)
+gir1.2-gtk-3.0
+
 # Boot splash
 plymouth
 plymouth-themes
