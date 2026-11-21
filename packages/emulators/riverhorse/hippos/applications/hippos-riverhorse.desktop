@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Riverhorse
+GenericName=PlayStation Emulator
+Comment=Riverhorse PlayStation emulator
+Exec=/opt/emulators/riverhorse/hippos/bin/launch-riverhorse
+Icon=/opt/emulators/riverhorse/hippos/riverhorse.png
+Terminal=false
+Categories=Game;Emulator;

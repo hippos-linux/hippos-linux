@@ -330,6 +330,7 @@ class UpdateAllEmulatorsTests(unittest.TestCase):
             "installed_emulator_version": mock.Mock(return_value="1"),
             "log": mock.Mock(),
             "prune_removed_emulators": mock.Mock(),
+            "sync_emulator_integration": mock.Mock(),
         }.items():
             patcher = mock.patch.object(hu, name, value)
             patcher.start()
@@ -352,6 +353,14 @@ class UpdateAllEmulatorsTests(unittest.TestCase):
             hu.cmd_update_all_emulators()
         self.assertEqual(installer.call_count, 3)
         die.assert_not_called()
+        hu.sync_emulator_integration.assert_called_once_with()
+
+    def test_failed_updates_still_regenerate_the_integration(self):
+        with mock.patch.object(hu, "install_emulator", side_effect=hu.DownloadError("SHA256 mismatch")), \
+                mock.patch.object(hu, "die", side_effect=SystemExit(1)):
+            with self.assertRaises(SystemExit):
+                hu.cmd_update_all_emulators()
+        hu.sync_emulator_integration.assert_called_once_with()
 
 class PruneRemovedEmulatorsTests(unittest.TestCase):
     def setUp(self):

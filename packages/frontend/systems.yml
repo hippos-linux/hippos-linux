@@ -148,7 +148,7 @@ _emulator_defaults:
   ps4:           { emulator: shadps4,            core: shadps4            }
   psp:           { emulator: ppsspp,             core: ppsspp             }
   psvita:        { emulator: vita3k,             core: vita3k, options: { hud_support: false } }
-  psx:           { emulator: duckstation,        core: duckstation        }
+  psx:           { emulator: riverhorse,         core: riverhorse         }
   pv1000:        { emulator: mame,               core: mame               }
   pv2000:        { emulator: mame,               core: mame               }
   pygame:        { emulator: python-pygame2,     core: pygame             }
@@ -209,8 +209,8 @@ _emulator_defaults:
   wasm4:         { emulator: retroarch,          core: wasm4              }
   wii:           { emulator: dolphin-emu,        core: dolphin-emu        }
   wiiu:          { emulator: cemu,               core: cemu, options: { hud_support: false } }
-  windows:       { emulator: wine,               core: wine-tkg, options: { hud_support: false, padtokey: '0' } }
-  windows_installers: { emulator: wine,          core: wine-tkg, options: { hud_support: false, padtokey: '0' } }
+  windows:       { emulator: wine,               core: wine,     options: { hud_support: false, padtokey: '0' } }
+  windows_installers: { emulator: wine,          core: wine,     options: { hud_support: false, padtokey: '0' } }
   wswan:         { emulator: retroarch,          core: mednafen_wswan     }
   wswanc:        { emulator: retroarch,          core: mednafen_wswan     }
   x1:            { emulator: retroarch,          core: x1                 }

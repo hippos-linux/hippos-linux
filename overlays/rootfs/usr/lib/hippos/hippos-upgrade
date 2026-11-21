@@ -20,6 +20,7 @@ from datetime import datetime
 
 from hippos_apt import install_packages, recorded_user_packages
 from hippos_desktop_notify import DesktopNotifier
+from hippos_emulator_integration import device_arch, sync as sync_emulator_integration
 import hippos_updates
 
 VERSION_FILE      = "/usr/share/hippos/version"
@@ -41,7 +42,7 @@ KERNEL_SNAPSHOT_PREFIX = "@rootfs-kernel-"
 LOG_FILE          = "/userdata/system/logs/upgrade.log"
 PATCHES_STATE_FILE = "/userdata/system/applied-patches.json"
 
-_DEB_ARCH = {'x86_64': 'amd64', 'aarch64': 'arm64'}.get(platform.machine(), platform.machine())
+_DEB_ARCH = device_arch()
 
 _UPDATE_TARGET = platform.freedesktop_os_release().get('HIPPOS_UPDATE_TARGET', _DEB_ARCH)
 
@@ -1375,6 +1376,7 @@ def cmd_update_emulator(name, force=False):
     install_emulator(name, info, force=force)
     log(f"{name} updated to {remote}")
     prune_removed_emulators(manifest)
+    sync_emulator_integration()
     notifier.show(f"{name} updated", remote)
 
 def install_emulator(name, info, force=False):
@@ -1425,6 +1427,7 @@ def cmd_update_all_emulators():
     prune_removed_emulators(manifest)
     pending = {name: info for name, info in sorted(emulators.items()) if not emulator_up_to_date(name, info)}
     if not pending:
+        sync_emulator_integration()
         log("All emulators are up to date")
         return
     notifier.begin("Updating emulators", ", ".join(pending))
@@ -1438,6 +1441,7 @@ def cmd_update_all_emulators():
             failed.append(name)
         else:
             log(f"{name} updated to {info.get('version', '')}")
+    sync_emulator_integration()
     if failed:
         die(f"Could not update {', '.join(failed)} ({len(pending) - len(failed)} of {len(pending)} updated)")
     log(f"Updated {len(pending)} emulators")

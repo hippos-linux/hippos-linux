@@ -1,0 +1,13 @@
+[Unit]
+Description=HippOS ES systems, ES features and launcher defaults for the installed emulators
+After=local-fs.target userdata.mount
+Wants=userdata.mount
+Before=greetd.service hippos-roms-pool.service hippos-migrate.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/hippos/hippos-emulator-integration
+
+[Install]
+WantedBy=multi-user.target

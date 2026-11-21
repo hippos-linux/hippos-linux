@@ -7,13 +7,20 @@ from unittest import mock
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent
+EMULATOR_PACKAGES = REPO / 'packages' / 'emulators'
 HOTKEY_CONTEXTS = REPO / 'overlays' / 'rootfs' / 'usr' / 'share' / 'hippos' / 'hotkeys' / 'contexts'
 NON_EMULATOR_CONTEXTS = {'emulationstation', 'game-default', 'waydroid'}
 sys.path.insert(0, str(REPO / 'overlays' / 'rootfs' / 'usr' / 'lib' / 'hippos'))
 
 import emulatorlauncher_impl  # noqa: F401
 import emulatorlauncher_shared as shared
-from emulatorlauncher_registry import registered
+from emulatorlauncher_registry import load_package_launchers, registered
+
+load_package_launchers(EMULATOR_PACKAGES)
+
+
+def _hotkey_context_files() -> list[Path]:
+    return [*HOTKEY_CONTEXTS.glob('*.json'), *EMULATOR_PACKAGES.glob('*/hippos/hotkeys/*.json')]
 
 
 def _systems_by_emulator() -> dict[str, set[str]]:
@@ -67,13 +74,13 @@ class RegistryTests(unittest.TestCase):
     def test_explicit_hotkey_contexts_exist(self):
         missing = sorted(
             f"{name}: {emulator.hotkeys}" for name, emulator in registered().items()
-            if emulator.hotkeys and not (HOTKEY_CONTEXTS / f'{emulator.hotkeys}.json').is_file()
+            if emulator.hotkeys and emulator.hotkeys not in {p.stem for p in _hotkey_context_files()}
         )
         self.assertEqual(missing, [])
 
     def test_every_hotkey_context_file_is_used(self):
         used = {emulator.hotkey_context for emulator in registered().values()} | NON_EMULATOR_CONTEXTS
-        unused = sorted(p.stem for p in HOTKEY_CONTEXTS.glob('*.json') if p.stem not in used)
+        unused = sorted(p.stem for p in _hotkey_context_files() if p.stem not in used)
         self.assertEqual(unused, [])
 
 

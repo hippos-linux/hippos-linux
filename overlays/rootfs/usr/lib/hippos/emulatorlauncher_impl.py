@@ -27,7 +27,7 @@ from hippos_overlayfs import mount_overlayfs
 from hippos_bezels import prepare_bezel
 from hippos_controller_monitor import start_controller_monitor
 
-from HipposPaths import HOME, SAVES_RW
+from HipposPaths import EMULATORS_ROOT, HOME, SAVES_RW
 
 from emulatorlauncher_shared import (
     ControllerInfo,
@@ -344,6 +344,7 @@ import emulatorlauncher_cemu
 import emulatorlauncher_computers
 import emulatorlauncher_core
 import emulatorlauncher_drastic
+import emulatorlauncher_duckstation
 import emulatorlauncher_extras
 import emulatorlauncher_generic
 import emulatorlauncher_gopher64
@@ -373,7 +374,9 @@ import emulatorlauncher_xbased
 import emulatorlauncher_xemu
 import emulatorlauncher_xenia
 
-from emulatorlauncher_registry import Emulator, lookup
+from emulatorlauncher_registry import Emulator, load_package_launchers, lookup
+
+load_package_launchers(EMULATORS_ROOT)
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description='HippOS emulator launcher')

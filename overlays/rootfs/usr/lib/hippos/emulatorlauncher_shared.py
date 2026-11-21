@@ -579,11 +579,13 @@ def _require_emulator_bin_in_package(package: str, *binary_names: str) -> Path:
 
 HOTKEYS_BIN = Path('/usr/lib/hippos/hippos-hotkeys')
 
+def hotkey_context_file(name: str) -> Path:
+    candidates = [HOTKEY_CONTEXT_DIR / f'{name}.json', *sorted(EMULATORS_ROOT.glob(f'*/hippos/hotkeys/{name}.json'))]
+    return next((path for path in candidates if path.exists()), HOTKEY_CONTEXT_DIR / 'game-default.json')
+
 @contextmanager
 def hotkey_context(name: str):
-    source = HOTKEY_CONTEXT_DIR / f'{name}.json'
-    if not source.exists():
-        source = HOTKEY_CONTEXT_DIR / 'game-default.json'
+    source = hotkey_context_file(name)
     try:
         if source.exists():
             data = json.loads(source.read_text())

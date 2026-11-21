@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+import argparse
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from hippos_emulator_integration import sync
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description='Regenerate the ES system list, ES features and launcher defaults '
+                                                 'from the image and the installed emulator packages.')
+    parser.add_argument('--force', action='store_true', help='regenerate even when nothing was installed or removed')
+    parser.add_argument('--root', type=Path, default=Path('/'), help='system root to generate for (image builds)')
+    parser.add_argument('--arch', help='target architecture (default: this machine)')
+    args = parser.parse_args()
+
+    changed = sync(root=args.root, arch=args.arch, force=args.force)
+    print('emulator integration updated' if changed else 'emulator integration unchanged')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
