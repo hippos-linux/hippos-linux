@@ -52,7 +52,7 @@ class MediaCenter:
 
     def command(self) -> list[str]:
         if self.flatpak_id:
-            return ['flatpak', 'run', self.flatpak_id]
+            return hippos_flatpak_apps.run_command(self.flatpak_id)
         return [self.launcher or self.program]
 
 
