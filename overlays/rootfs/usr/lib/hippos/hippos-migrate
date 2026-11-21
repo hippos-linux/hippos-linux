@@ -126,8 +126,8 @@ if version_lt "$APPLIED" "0.6.15"; then
     fi
 fi
 
-if version_lt "$APPLIED" "0.6.16"; then
-    log "0.6.16: Supermodel-es and Supermodel-legacy are replaced by Supermodel; their NVRAM and save states are copied to it"
+if version_lt "$APPLIED" "0.7.0"; then
+    log "0.7.0: Supermodel-es and Supermodel-legacy are replaced by Supermodel; their NVRAM and save states are copied to it"
     for build in supermodel-es supermodel-legacy; do
         for data in NVRAM Saves; do
             if [[ -d "/userdata/system/configs/${build}/${data}" ]]; then
@@ -138,13 +138,13 @@ if version_lt "$APPLIED" "0.6.16"; then
         done
     done
 
-    log "0.6.16: SSH and Samba are switched in ES SERVICES (system.services); system.ssh.enabled is replaced"
+    log "0.7.0: SSH and Samba are switched in ES SERVICES (system.services); system.ssh.enabled is replaced"
     if [[ "$(hippos-settings get system.ssh.enabled 2>/dev/null || true)" == "false" ]]; then
         hippos-services disable ssh
     fi
     hippos-settings del system.ssh.enabled
 
-    log "0.6.16: launcher defaults are generated as defaults.json"
+    log "0.7.0: launcher defaults are generated as defaults.json"
     rm -f /var/lib/hippos/emulators/defaults.yml
 fi
 
