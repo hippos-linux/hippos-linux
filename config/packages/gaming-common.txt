@@ -3,10 +3,6 @@
 # Java runtime for the FreeJ2ME-Plus Java ME core
 default-jre-headless
 
-# Android emulation via Waydroid
-waydroid
-aapt
-weston
 unclutter-xfixes
 
 # Vulkan / OpenGL gaming stack (arch-specific multiarch variants in gaming-${ARCH}.txt)

@@ -656,7 +656,7 @@ def cmd_wifi(args: list[str]) -> int:
         rc, out = _nmcli(*cmd)
         print(out)
         if rc == 0:
-            subprocess.run([str(HIPPOS_SETTINGS), 'set', 'wifi.enabled', 'true'])
+            subprocess.run([str(HIPPOS_SETTINGS), 'set', 'wifi.enabled', '1'])
             subprocess.run([str(HIPPOS_SETTINGS), 'set', 'wifi.ssid', ssid])
             if password:
                 subprocess.run([str(HIPPOS_SETTINGS), 'set', 'wifi.key', password])
@@ -682,7 +682,7 @@ def cmd_wifi(args: list[str]) -> int:
         dev = _wifi_device()
         rc, out = _nmcli('dev', 'disconnect', dev)
         if rc == 0:
-            subprocess.run([str(HIPPOS_SETTINGS), 'set', 'wifi.enabled', 'false'])
+            subprocess.run([str(HIPPOS_SETTINGS), 'set', 'wifi.enabled', '0'])
         print(out)
         return rc
 

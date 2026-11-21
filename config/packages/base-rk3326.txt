@@ -1,0 +1,4 @@
+# RK3326 handheld base packages
+
+# Panel import from the original card (hippos-panel-import)
+python3-libfdt

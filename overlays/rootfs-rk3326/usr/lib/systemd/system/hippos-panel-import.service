@@ -1,0 +1,12 @@
+[Unit]
+Description=HippOS Panel Import From Original Card
+RequiresMountsFor=/boot/efi
+ConditionPathExistsGlob=/boot/efi/stock/*.dtb
+Before=greetd.service display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/hippos/hippos-panel-import
+
+[Install]
+WantedBy=multi-user.target

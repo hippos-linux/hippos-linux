@@ -31,6 +31,7 @@ QUARANTINE_ROOT = CACHE_ROOT / "quarantine"
 EXTERNAL_ROM_CONFIG = HIPPOS_CONFIG / "external-roms.conf"
 NETWORK_ROM_CONFIG = HIPPOS_CONFIG / "roms-sources.conf"
 NETWORK_CREDENTIALS_DIR = HIPPOS_CONFIG / "credentials"
+NETWORK_FSTYPES = {"nfs", "nfs4", "cifs", "smb3"}
 IGNORED_DEVICES = HIPPOS_CONFIG / "ignored-storage-devices.txt"
 PROMPTED_THIS_BOOT = Path("/run/hippos/storage-merge-prompted")
 MOUNT_COMMANDS = {"mount", "unmount", "eject", "format", "mount_network", "add_network", "remove_network", "set_network_saves"}
@@ -232,33 +233,61 @@ _ES_MEDIA_DIRS = frozenset({
 })
 _ES_SKIP_FILES = frozenset({"_info.txt", "gamelist.xml"})
 
+def network_mountpoints() -> list[str]:
+    mountpoints = []
+    with open("/proc/self/mounts", encoding="utf-8") as mounts:
+        for line in mounts:
+            _source, target, fstype = line.split()[:3]
+            if fstype in NETWORK_FSTYPES:
+                mountpoints.append(target.replace("\\040", " "))
+    return mountpoints
+
+def local_branches(root: Path, shares: list[str]) -> list[Path]:
+    try:
+        spec = os.getxattr(root / ".mergerfs", "user.mergerfs.branches").decode()
+    except OSError:
+        return [root]
+    branches = []
+    for branch in spec.split(":"):
+        real = os.path.realpath(branch.split("=", 1)[0])
+        if not any(real == share or real.startswith(share + "/") for share in shares):
+            branches.append(Path(real))
+    return branches
+
 def walk_files(roots: list[tuple[Path, str]]) -> Iterator[tuple[Path, Path, str]]:
+    shares = network_mountpoints()
     for root, kind in roots:
         if not root.exists():
             continue
-        stack = [root]
-        while stack:
-            current = stack.pop()
-            try:
-                with os.scandir(current) as entries:
-                    for entry in entries:
-                        try:
-                            if entry.is_symlink():
-                                continue
-                            if entry.is_dir(follow_symlinks=False):
-                                if entry.name.lower() in _ES_MEDIA_DIRS:
+        seen: set[Path] = set()
+        for branch in local_branches(root, shares):
+            stack = [branch]
+            while stack:
+                current = stack.pop()
+                try:
+                    with os.scandir(current) as entries:
+                        for entry in entries:
+                            try:
+                                if entry.is_symlink():
                                     continue
-                                stack.append(Path(entry.path))
+                                if entry.is_dir(follow_symlinks=False):
+                                    if entry.name.lower() in _ES_MEDIA_DIRS:
+                                        continue
+                                    stack.append(Path(entry.path))
+                                    continue
+                                if not entry.is_file(follow_symlinks=False):
+                                    continue
+                            except OSError:
                                 continue
-                            if not entry.is_file(follow_symlinks=False):
+                            if entry.name.lower() in _ES_SKIP_FILES:
                                 continue
-                        except OSError:
-                            continue
-                        if entry.name.lower() in _ES_SKIP_FILES:
-                            continue
-                        yield Path(entry.path), root, kind
-            except OSError:
-                continue
+                            path = root / Path(entry.path).relative_to(branch)
+                            if path in seen:
+                                continue
+                            seen.add(path)
+                            yield path, root, kind
+                except OSError:
+                    continue
 
 def hash_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
     h = hashlib.sha256()
@@ -1081,7 +1110,7 @@ def list_ejectable() -> list[str]:
     out = []
     for name, path, _source, fstype in mounted_media_roots():
         label = name
-        if fstype in {"nfs", "nfs4", "cifs", "smb3"}:
+        if fstype in NETWORK_FSTYPES:
             label = f"{name} ({fstype})"
         out.append(f"{label}:{path}")
 

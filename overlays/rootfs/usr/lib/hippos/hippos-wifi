@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+WIFI_READY_TIMEOUT_S=15
+
 case "${1:-}" in
     list)
         nmcli -t -f SSID dev wifi list 2>/dev/null | sort -u | grep -v '^$'
@@ -12,6 +14,11 @@ case "${1:-}" in
     enable)
         SSID="${2:-}"
         KEY="${3:-}"
+        nmcli radio wifi on
+        for _ in $(seq "${WIFI_READY_TIMEOUT_S}"); do
+            [[ "$(nmcli -t -f TYPE,STATE dev status)" =~ (^|$'\n')wifi:(disconnected|connect) ]] && break
+            sleep 1
+        done
         if [[ -n "$KEY" ]]; then
             nmcli dev wifi connect "$SSID" password "$KEY"
         else

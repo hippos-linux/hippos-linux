@@ -1,5 +1,7 @@
+# To use your device's own panel, copy the .dtb from its original card's boot partition into stock/ on this partition.
 # To use a different panel, copy its overlay to overlays/mipi-panel.dtbo on this partition.
 # To force a device tree, put its file name in fdtfile.txt as: fdtfile=rk3326-<board>.dtb
+# An R33S needs fdtfile=rk3326-gameconsole-r33s.dtb there.
 
 setenv bootpart "mmc 1:1"
 setenv fdt_addr_r 0x01f00000
@@ -9,7 +11,7 @@ setenv ramdisk_addr_r 0x0a000000
 setenv kernel_comp_addr_r 0x10000000
 
 if   test "${hwrev}" = "v10-go3"; then setenv fdtfile rk3326-odroid-go3.dtb
-elif test "${hwrev}" = "r33s";    then setenv fdtfile rk3326-gameconsole-r33s.dtb
+elif test "${hwrev}" = "r33s";    then setenv fdtfile rk3326-gameconsole-r36s.dtb
 elif test "${hwrev}" = "chi";     then setenv fdtfile rk3326-gameforce-chi.dtb
 elif test "${hwrev}" = "rg351v";  then setenv fdtfile rk3326-anbernic-rg351v.dtb
 elif test "${hwrev}" = "xu10";    then setenv fdtfile rk3326-magicx-xu10.dtb

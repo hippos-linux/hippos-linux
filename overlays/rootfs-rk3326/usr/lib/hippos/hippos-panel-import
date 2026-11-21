@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+# Turns the device tree from a handheld's original card into the panel overlay U-Boot applies.
+# Copy the .dtb from the original card's boot partition into stock/ on the HippOS boot partition;
+# the next boot writes overlays/mipi-panel.dtbo, moves the .dtb to stock/imported/ and reboots.
+#   hippos-panel-import <stock.dtb> <output.dtbo>   convert one file without rebooting
+import argparse
+import dataclasses
+import pathlib
+import subprocess
+import sys
+
+import libfdt
+
+BOOT_PARTITION = pathlib.Path("/boot/efi")
+STOCK_DIR = BOOT_PARTITION / "stock"
+PANEL_OVERLAY = BOOT_PARTITION / "overlays" / "mipi-panel.dtbo"
+DSI_FORMATS = ["rgb888", "rgb666", "rgb666_packed", "rgb565"]
+DSI_CLOCK_NON_CONTINUOUS = 0x400
+READY_DELAY_MS = 20
+SUPPORTED_BOARD = "rockchip,rk3326-odroidgo3-linux"
+GAME_REFRESH_RATES = [50 / 1.001, 50, 50.0070, 57.5, 59.7275, 60 / 1.001, 60, 60.0988, 75.47, 90, 120]
+DEFAULT_REFRESH = 60
+
+
+class StockTree:
+    def __init__(self, blob: bytes):
+        self.fdt = libfdt.Fdt(blob)
+
+    def node(self, path: str) -> int:
+        return self.fdt.path_offset(path)
+
+    def u32(self, node: int, name: str, default: int | None = None) -> int:
+        prop = self.fdt.getprop(node, name, quiet=(libfdt.NOTFOUND,))
+        if isinstance(prop, int):
+            if default is None:
+                raise SystemExit(f"stock device tree has no {name} on {self.fdt.get_name(node)}")
+            return default
+        return prop.as_uint32()
+
+    def raw(self, node: int, name: str) -> bytes:
+        return bytes(self.fdt.getprop(node, name))
+
+    def strings(self, node: int, name: str) -> list[str]:
+        return self.fdt.getprop(node, name).as_stringlist()
+
+    def children(self, node: int):
+        child = self.fdt.first_subnode(node, quiet=(libfdt.NOTFOUND,))
+        while child >= 0:
+            yield child
+            child = self.fdt.next_subnode(child, quiet=(libfdt.NOTFOUND,))
+
+
+@dataclasses.dataclass
+class Mode:
+    clock_khz: int
+    horizontal: list[int]
+    vertical: list[int]
+
+    @property
+    def refresh(self) -> float:
+        return self.clock_khz * 1000 / (sum(self.horizontal) * sum(self.vertical))
+
+    def line(self, default: bool) -> str:
+        return (f"M clock={self.clock_khz} horizontal={','.join(map(str, self.horizontal))}"
+                f" vertical={','.join(map(str, self.vertical))}" + (" default=1" if default else ""))
+
+
+def stock_modes(tree: StockTree, panel: int) -> tuple[dict[float, Mode], float]:
+    timings = tree.node(tree.fdt.get_path(panel) + "/display-timings")
+    native = tree.u32(timings, "native-mode", 0)
+    modes: dict[float, Mode] = {}
+    native_refresh = 0.0
+    for node in tree.children(timings):
+        mode = Mode(
+            round(tree.u32(node, "clock-frequency") / 1000),
+            [tree.u32(node, p) for p in ("hactive", "hfront-porch", "hsync-len", "hback-porch")],
+            [tree.u32(node, p) for p in ("vactive", "vfront-porch", "vsync-len", "vback-porch")],
+        )
+        modes.setdefault(mode.refresh, mode)
+        if tree.u32(node, "phandle", -1) == native:
+            native_refresh = mode.refresh
+    return modes, native_refresh
+
+
+def mode_for_refresh(modes: dict[float, Mode], target: float) -> Mode | None:
+    faster = [refresh for refresh in modes if refresh >= target]
+    if not faster:
+        return None
+    base = modes[min(faster)]
+    htotal, vtotal = sum(base.horizontal), sum(base.vertical)
+    vertical = base.vertical.copy()
+    vertical[1] += round(base.clock_khz * 1000 / (target * htotal)) - vtotal
+    return Mode(base.clock_khz, base.horizontal.copy(), vertical)
+
+
+def display_modes(tree: StockTree, panel: int) -> list[str]:
+    modes, native_refresh = stock_modes(tree, panel)
+    targets = [native_refresh, *(r for r in GAME_REFRESH_RATES if r != native_refresh)]
+    built = {target: mode for target in targets if target and (mode := mode_for_refresh(modes, target))}
+    default = DEFAULT_REFRESH if DEFAULT_REFRESH in built else native_refresh
+    lines: dict[str, str] = {}
+    for target, mode in built.items():
+        if target == default or mode.line(False) not in lines:
+            lines[mode.line(False)] = mode.line(target == default)
+    return list(lines.values())
+
+
+def init_sequence(tree: StockTree, panel: int) -> list[str]:
+    sequence = tree.raw(panel, "panel-init-sequence")
+    commands = []
+    while sequence:
+        wait_ms, length = sequence[1], sequence[2]
+        data = sequence[3:3 + length]
+        sequence = sequence[3 + length:]
+        commands.append(f"I seq={data.hex()}" + (f" wait={wait_ms}" if wait_ms else ""))
+    return commands
+
+
+def panel_description(tree: StockTree, panel: int) -> list[str]:
+    delays = [
+        tree.u32(panel, "prepare-delay-ms", 50),
+        tree.u32(panel, "reset-delay-ms", 50),
+        tree.u32(panel, "init-delay-ms", 50),
+        tree.u32(panel, "enable-delay-ms", 50),
+        READY_DELAY_MS,
+    ]
+    general = (
+        f"G size={tree.u32(panel, 'width-mm')},{tree.u32(panel, 'height-mm')}"
+        f" delays={','.join(map(str, delays))}"
+        f" format={DSI_FORMATS[tree.u32(panel, 'dsi,format', 0)]}"
+        f" lanes={tree.u32(panel, 'dsi,lanes')}"
+        f" flags=0x{tree.u32(panel, 'dsi,flags') | DSI_CLOCK_NON_CONTINUOUS:x}"
+    )
+    return [general, *display_modes(tree, panel), *init_sequence(tree, panel)]
+
+
+def panel_overlay(stock_blob: bytes) -> bytes:
+    tree = StockTree(stock_blob)
+    board = tree.strings(tree.node("/"), "compatible")
+    if SUPPORTED_BOARD not in board:
+        raise SystemExit(f"unsupported stock device tree ({', '.join(board)}): only R36S cards are supported")
+    dsi_path = tree.strings(tree.node("/__symbols__"), "dsi")[0]
+    panel = tree.node(dsi_path + "/panel@0")
+    description = panel_description(tree, panel)
+
+    overlay = libfdt.FdtSw()
+    overlay.finish_reservemap()
+    with overlay.add_node(""):
+        with overlay.add_node("fragment@0"):
+            overlay.property_string("target-path", dsi_path + "/panel@0")
+            with overlay.add_node("__overlay__"):
+                overlay.property_string("compatible", "rocknix,generic-dsi")
+                overlay.property("panel_description", "".join(f"{line}\0" for line in description).encode())
+    return bytes(overlay.as_fdt().as_bytearray())
+
+
+def import_from_boot_partition() -> None:
+    stock_trees = sorted(STOCK_DIR.glob("*.dtb"))
+    if len(stock_trees) != 1:
+        raise SystemExit(f"expected one .dtb in {STOCK_DIR}, found {len(stock_trees)}")
+    stock = stock_trees[0]
+    PANEL_OVERLAY.parent.mkdir(exist_ok=True)
+    PANEL_OVERLAY.write_bytes(panel_overlay(stock.read_bytes()))
+    imported = STOCK_DIR / "imported"
+    imported.mkdir(exist_ok=True)
+    stock.rename(imported / stock.name)
+    print(f"panel imported from {stock.name}, rebooting")
+    subprocess.run(["sync"], check=True)
+    subprocess.run(["systemctl", "reboot"], check=True)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("stock", nargs="?", type=pathlib.Path)
+    parser.add_argument("output", nargs="?", type=pathlib.Path)
+    args = parser.parse_args()
+    if args.stock is None:
+        import_from_boot_partition()
+        return
+    if args.output is None:
+        parser.error("give both the stock .dtb and the output .dtbo")
+    args.output.write_bytes(panel_overlay(args.stock.read_bytes()))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,5 @@
+# Android apps and games via Waydroid
+
+waydroid
+aapt
+weston

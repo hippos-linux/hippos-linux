@@ -1,4 +1,5 @@
 [Unit]
+ConditionPathExists=/usr/bin/waydroid
 Description=HippOS Waydroid first-boot initialisation
 After=network.target var-lib-waydroid.mount
 Requires=var-lib-waydroid.mount
