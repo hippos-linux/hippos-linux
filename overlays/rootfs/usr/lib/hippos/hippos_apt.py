@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -13,6 +14,10 @@ PRE_UPDATE_EXTENDED_STATES = Path('/var/lib/hippos/pre-update-apt-extended-state
 _APT = ['apt-get', '-o', 'DPkg::Lock::Timeout=300']
 _APT_INSTALL = [*_APT, 'install', '-y', '-o', 'Dpkg::Options::=--force-confold']
 _APT_ENV = {**os.environ, 'DEBIAN_FRONTEND': 'noninteractive'}
+_HIPPOS_KERNEL_PACKAGE = re.compile(r'linux-(image|headers)-.+-hippos(-lts)?')
+
+def _is_hippos_kernel(package: str) -> bool:
+    return _HIPPOS_KERNEL_PACKAGE.fullmatch(package) is not None
 
 def image_packages() -> frozenset[str] | None:
     try:
@@ -24,13 +29,14 @@ def installed_user_packages(image: frozenset[str]) -> list[str]:
     manual = subprocess.run(
         ['apt-mark', 'showmanual'], capture_output=True, text=True, check=True,
     ).stdout.split()
-    return sorted(p for p in manual if p not in image)
+    return sorted(p for p in manual if p not in image and not _is_hippos_kernel(p))
 
 def recorded_user_packages() -> list[str]:
     try:
-        return USER_PACKAGES.read_text(encoding='utf-8').split()
+        recorded = USER_PACKAGES.read_text(encoding='utf-8').split()
     except FileNotFoundError:
         return []
+    return [p for p in recorded if not _is_hippos_kernel(p)]
 
 def _deb822(path: Path) -> list[dict[str, str]]:
     try:
@@ -65,7 +71,7 @@ def pre_update_user_packages(image: frozenset[str]) -> list[str]:
         name(f) for f in _deb822(PRE_UPDATE_STATUS)
         if 'Package' in f and f.get('Status', '').endswith(' installed')
     }
-    return sorted(installed - auto - image)
+    return sorted(p for p in installed - auto - image if not _is_hippos_kernel(p))
 
 def package_files(package: str) -> list[Path]:
     result = subprocess.run(['dpkg-query', '-L', package], capture_output=True, text=True, check=False)
