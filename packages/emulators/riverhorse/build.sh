@@ -6,7 +6,7 @@ source "/work/build/common.sh"
 NAME='riverhorse'
 REPO="${RIVERHORSE_REPO:-https://github.com/thenotoriousfox/riverhorse.git}"
 REF="${RIVERHORSE_REF:-main}"
-SHA="${RIVERHORSE_SHA:-db0caadb8a2d0de20d3bd2b5366341939f59fef5}"
+SHA="${RIVERHORSE_SHA:-a528c3ec3cb0e160968aa5919c7b6e33437ff5f7}"
 
 WORK_ROOT="${WORK_ROOT:-/work/work/emulators}"
 SRC="${WORK_ROOT}/${NAME}/source"
