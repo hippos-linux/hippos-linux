@@ -52,5 +52,15 @@ fi
 xset -dpms 2>/dev/null || true
 xset s off 2>/dev/null || true
 
+if [[ "$(hippos-settings get desktop.onscreen_keyboard)" == 1 ]]; then
+    export ACCESSIBILITY_ENABLED=1 QT_ACCESSIBILITY=1 QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
+    gsettings set org.gnome.desktop.interface toolkit-accessibility true 2>/dev/null || true
+    /usr/lib/hippos/hippos-osk &
+fi
+if [[ "$(hippos-settings get desktop.controller_mouse)" == 1 ]]; then
+    trap 'hippos-controller-mouse desktop off' EXIT
+    hippos-controller-mouse desktop on || true
+fi
+
 "$SESSION_CMD" || exit
 /usr/lib/hippos/hippos logout

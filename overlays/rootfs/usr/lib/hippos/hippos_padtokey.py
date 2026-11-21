@@ -143,13 +143,45 @@ def write_maps(system: str, emulator: str, rom: Path,
         clear_maps()
         return False
     level = float(_game_setting(conf, system, rom, 'padtokey_mouse_speed') or DEFAULT_MOUSE_LEVEL)
-    data = {'mouse_speed': MOUSE_SPEED_AT_DEFAULT_LEVEL * level / DEFAULT_MOUSE_LEVEL, 'devices': devices,
-            'pointer': default_maps and bool(pointer or default_keys_files(system, emulator))}
+    store_maps(devices, level, pointer=default_maps and bool(pointer or default_keys_files(system, emulator)))
+    return True
+
+
+def write_desktop_maps() -> bool:
+    from emulatorlauncher_shared import ControllerInfo, _load_es_input_configs, _pick_es_profile
+
+    actions = merge_keys_files([POINTER_MAP])['actions_player1']
+    profiles = _load_es_input_configs()
+    devices = {}
+    for player, (path, name) in enumerate(connected_gamepads(), start=1):
+        profile = _pick_es_profile(profiles, ControllerInfo(player=player, name=name, device_path=path))
+        if profile is not None:
+            devices[path] = resolve_actions(actions, profile)
+    if not devices:
+        clear_maps()
+        return False
+    store_maps(devices, DEFAULT_MOUSE_LEVEL, pointer=True)
+    return True
+
+
+def connected_gamepads() -> list[tuple[str, str]]:
+    import pyudev
+
+    gamepads = []
+    for device in pyudev.Context().list_devices(subsystem='input', ID_INPUT_JOYSTICK='1'):
+        node = device.device_node
+        if node and node.startswith('/dev/input/event'):
+            gamepads.append((node, (device.parent.properties.get('NAME') or '').strip('"')))
+    return sorted(gamepads)
+
+
+def store_maps(devices: dict[str, list[dict]], mouse_level: float, pointer: bool) -> None:
+    data = {'mouse_speed': MOUSE_SPEED_AT_DEFAULT_LEVEL * mouse_level / DEFAULT_MOUSE_LEVEL, 'devices': devices,
+            'pointer': pointer}
     temporary = MAPS_FILE.with_suffix('.tmp')
     temporary.write_text(json.dumps(data))
     os.replace(temporary, MAPS_FILE)
     _log.info("padtokey: maps for %s", ', '.join(devices))
-    return True
 
 
 def clear_maps() -> None:

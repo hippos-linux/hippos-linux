@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Usage: hippos-controller-mouse on | off | status
+       hippos-controller-mouse desktop on | off | status
 
 Turns controller as mouse on or off for the running game. status prints
 on or off, and nothing when no game is running.
+desktop on|off turns it on or off for every connected controller, outside games;
+desktop status prints on or off.
 """
 
 import sys
 
-from hippos_padtokey import pointer_enabled, running_game, set_pointer
+from hippos_padtokey import clear_maps, pointer_enabled, reload_daemon, running_game, set_pointer, write_desktop_maps
 
 
 def main(argv: list[str]) -> int:
@@ -18,6 +21,17 @@ def main(argv: list[str]) -> int:
             return 0
         case ['on' | 'off' as state]:
             return 0 if set_pointer(state == 'on') else 1
+        case ['desktop', 'on']:
+            enabled = write_desktop_maps()
+            reload_daemon()
+            return 0 if enabled else 1
+        case ['desktop', 'status']:
+            print('on' if pointer_enabled() else 'off')
+            return 0
+        case ['desktop', 'off']:
+            clear_maps()
+            reload_daemon()
+            return 0
     print(__doc__, file=sys.stderr)
     return 2
 

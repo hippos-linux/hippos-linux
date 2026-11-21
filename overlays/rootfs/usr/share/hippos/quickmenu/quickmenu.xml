@@ -173,6 +173,12 @@
 		<feature display="Touch keyboard" if="${hippos-touchscreen-detect >/dev/null &amp;&amp; echo 1}">
 			<button display="Show / hide" action="hippos-hotkeys --send onscreen-keyboard" afterclick="close" />
 		</feature>
+		<feature display="On-screen keyboard" if='${[ "$(hippos-settings get system.session)" = desktop ] &amp;&amp; echo 1}'>
+			<button display="Show / hide" action="hippos-hotkeys --send onscreen-keyboard" afterclick="close" />
+		</feature>
+		<feature display="Controller as mouse" if='${[ "$(hippos-settings get system.session)" = desktop ] &amp;&amp; echo 1}'>
+			<switch value="${hippos-controller-mouse desktop status}" action_on="hippos-controller-mouse desktop on" action_off="hippos-controller-mouse desktop off" />
+		</feature>
 		<feature display="Volume">
 			<button display="-" action="hippos-audio setSystemVolume -5" afterclick="refresh" />
 			<progressbar display="${hippos-audio getSystemVolume}" min="0" max="100" refresh="2" />
