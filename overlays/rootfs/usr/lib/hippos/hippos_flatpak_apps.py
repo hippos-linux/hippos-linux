@@ -50,6 +50,10 @@ def _set_claimed(app_id: str, claimed: bool, game: bool = False) -> None:
         claims.write_text(''.join(f'{app}\n' for app in sorted(updated)), encoding='utf-8')
 
 
+def run_command(app_id: str) -> list[str]:
+    return ['/usr/bin/flatpak', 'run', '--device=input', app_id]
+
+
 def installed(app_id: str) -> bool:
     return subprocess.run(_flatpak('info', '--user', app_id), capture_output=True).returncode == 0
 

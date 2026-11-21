@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emulatorlauncher_impl import ControllerInfo, ESControllerProfile, LaunchContext
+    from emulatorlauncher_shared import ControllerInfo, ESProfiles, LaunchContext
 
 _log = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ def _reconfigure_padtokey(
     emulator: str,
     rom: Path,
     controllers: list[ControllerInfo],
-    profiles: list[ESControllerProfile],
+    profiles: ESProfiles,
 ) -> None:
     from hippos_padtokey import reload_daemon, write_maps
     _log.info("controller monitor: reconfiguring padtokey")
@@ -78,7 +78,7 @@ def _reconfigure_padtokey(
 
 def _monitor_loop(
     ctx: LaunchContext,
-    profiles: list[ESControllerProfile],
+    profiles: ESProfiles,
     initial_paths: list[str],
 ) -> None:
     try:
@@ -122,7 +122,7 @@ def _monitor_loop(
 
 def start_controller_monitor(
     ctx: LaunchContext,
-    profiles: list[ESControllerProfile],
+    profiles: ESProfiles,
 ) -> threading.Thread:
     initial_paths = [c.device_path for c in ctx.controllers]
     t = threading.Thread(

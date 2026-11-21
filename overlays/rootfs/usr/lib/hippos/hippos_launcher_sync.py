@@ -4,7 +4,6 @@ import json
 import os
 import re
 import shutil
-import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -184,6 +183,7 @@ def launchers_with(roms_dir: Path, tag: str) -> set[Path]:
 def reload_es() -> None:
     if APPS_INSTALLING_FLAG.exists():
         return
+    import urllib.request
     try:
         urllib.request.urlopen(_ES_RELOAD, timeout=2).close()
     except OSError:

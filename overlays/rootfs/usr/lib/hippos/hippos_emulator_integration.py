@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import hashlib
 import os
 import platform
@@ -26,7 +27,7 @@ INSTALLED_SHA256_FILE = '.hippos-sha256'
 
 ES_SYSTEMS = 'es_systems.cfg'
 ES_FEATURES = 'es_features.cfg'
-LAUNCHER_DEFAULTS = 'defaults.yml'
+LAUNCHER_DEFAULTS = 'defaults.json'
 STAMP = 'stamp'
 APPLICATIONS_EXPORT = Path('exports') / 'share' / 'applications'
 
@@ -261,7 +262,7 @@ def generate_launcher_defaults(systems_data: dict, es_systems: str, emulators: l
                 if emulator.get('name') in excluded[name] else {})}
             for emulator in system.iter('emulator') for core in emulator.iter('core')
         ]
-    return yaml.safe_dump(defaults, sort_keys=True, default_flow_style=False)
+    return json.dumps(defaults, sort_keys=True, indent=2) + '\n'
 
 
 def merge_es_features(base: Path, fragments: list[Path]) -> str:

@@ -13,6 +13,7 @@ from emulatorlauncher_shared import (
     ControllerInfo,
     ESBinding,
     ESControllerProfile,
+    ESProfiles,
     LaunchContext,
     _build_game_env,
     _conf_bool,
@@ -760,7 +761,7 @@ def _gun_type(ctx: LaunchContext) -> str:
         return gun_type
     return 'guncon'
 
-def _write_dolphin_controller_configs(ctx: LaunchContext, profiles: list[ESControllerProfile]) -> None:
+def _write_dolphin_controller_configs(ctx: LaunchContext, profiles: ESProfiles) -> None:
     if ctx.system not in ('gamecube', 'triforce'):
         return
 
@@ -798,7 +799,7 @@ def _write_dolphin_controller_configs(ctx: LaunchContext, profiles: list[ESContr
                 fh.write(f'{target} = {value}\n')
             fh.write('\n')
 
-def _write_dolphin_wii_controller_configs(ctx: LaunchContext, profiles: list[ESControllerProfile]) -> None:
+def _write_dolphin_wii_controller_configs(ctx: LaunchContext, profiles: ESProfiles) -> None:
     config_path = DOLPHIN_CONFIG_DIR / 'WiimoteNew.ini'
     config_path.parent.mkdir(parents=True, exist_ok=True)
     profile_counts: dict[str, int] = {}
@@ -859,7 +860,7 @@ def _mupen_analog_deadzone(conf: dict[str, str], key: str, default_peak: str) ->
     deadzone = round(default_value * deadzone_multiplier)
     return f'{deadzone},{deadzone}'
 
-def _write_mupen_controller_configs(ctx: LaunchContext, profiles: list[ESControllerProfile], parser: configparser.ConfigParser, conf: dict[str, str]) -> None:
+def _write_mupen_controller_configs(ctx: LaunchContext, profiles: ESProfiles, parser: configparser.ConfigParser, conf: dict[str, str]) -> None:
     for ctrl in ctx.controllers:
         profile = _pick_es_profile(profiles, ctrl)
         if profile is None:

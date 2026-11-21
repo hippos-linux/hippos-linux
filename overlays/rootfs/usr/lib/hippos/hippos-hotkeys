@@ -21,6 +21,8 @@ from evdev import ecodes
 
 from hippos_es_buttons import FALLBACK_GAMEPAD_BUTTONS, button_names, es_input_root, joystick_button_maps
 from hippos_padtokey import MOUSE_INTERVAL, PadMapper, device_maps
+import hippos_hotkeys_control
+from hippos_hotkeys_control import CONTEXT_FILE, KEYBOARD_SHOWN_FILE, PID_FILE
 
 DEVICE_NAME = "hippos hotkeys"
 
@@ -33,9 +35,6 @@ USER_HOTKEYS_FILE       = USER_DIR / 'hotkeys.json'
 DEFAULT_CONTEXT_FILE    = Path('/usr/share/hippos/hotkeys/contexts/emulationstation.json')
 COMMON_CONTEXT_FILE     = Path('/usr/share/hippos/hotkeys/common_context.json')
 USER_COMMON_CONTEXT_FILE = USER_DIR / 'common_context.json'
-CONTEXT_FILE            = Path('/run/hippos/hotkeys.context')
-PID_FILE                = Path('/run/hippos/hotkeys.pid')
-KEYBOARD_SHOWN_FILE     = Path('/run/hippos/keyboard.shown')
 
 ECODES_NAMES: dict[int, str] = {
     code: name
@@ -552,24 +551,6 @@ class HotkeyDaemon:
             for pad in pads:
                 pad.move_mouse(moment)
 
-def _read_pid() -> int:
-    return int(PID_FILE.read_text().strip())
-
-def _signal_daemon(sig: int = signal.SIGHUP) -> None:
-    try:
-        pid = _read_pid()
-    except (FileNotFoundError, ValueError):
-        return
-    try:
-        os.kill(pid, sig)
-    except ProcessLookupError:
-        pass
-    except PermissionError:
-        subprocess.run(
-            ['sudo', '-n', 'kill', f'-{signal.Signals(sig).name}', str(pid)],
-            capture_output=True,
-        )
-
 def cmd_send(action: str) -> None:
     ctx_data = load_json(CONTEXT_FILE if CONTEXT_FILE.exists() else DEFAULT_CONTEXT_FILE, {})
     all_keys = {
@@ -595,31 +576,6 @@ def cmd_send(action: str) -> None:
     send_key_combo(uinput, target)
     time.sleep(0.3)
     uinput.close()
-
-def cmd_new_context(name: str, json_str: str, disable_common: bool = False) -> None:
-    Path('/run/hippos').mkdir(parents=True, exist_ok=True)
-    data: dict[str, Any] = {'name': name, 'keys': json.loads(json_str)}
-    if disable_common:
-        data['common_disabled'] = True
-    tmp_path = CONTEXT_FILE.with_suffix('.tmp')
-    tmp_path.write_text(json.dumps(data))
-    os.replace(tmp_path, CONTEXT_FILE)
-    _signal_daemon()
-
-def cmd_default_context() -> None:
-    if CONTEXT_FILE.exists():
-        CONTEXT_FILE.unlink()
-    _signal_daemon()
-
-def cmd_reload() -> None:
-    _signal_daemon()
-
-def cmd_keyboard_shown(shown: bool) -> None:
-    if shown:
-        KEYBOARD_SHOWN_FILE.touch()
-    else:
-        KEYBOARD_SHOWN_FILE.unlink(missing_ok=True)
-    _signal_daemon(signal.SIGUSR1)
 
 def cmd_list() -> None:
     context = load_context()
@@ -679,14 +635,14 @@ if __name__ == '__main__':
     if args.send:
         cmd_send(args.send)
     elif args.new_context:
-        cmd_new_context(args.new_context[0], args.new_context[1], args.disable_common)
+        hippos_hotkeys_control.new_context(args.new_context[0], json.loads(args.new_context[1]), args.disable_common)
     elif args.default_context:
-        cmd_default_context()
+        hippos_hotkeys_control.default_context()
     elif args.reload:
-        cmd_reload()
+        hippos_hotkeys_control.reload()
     elif args.list:
         cmd_list()
     elif args.keyboard_shown:
-        cmd_keyboard_shown(args.keyboard_shown == 'on')
+        hippos_hotkeys_control.set_keyboard_shown(args.keyboard_shown == 'on')
     else:
         HotkeyDaemon(permanent=args.permanent).run()

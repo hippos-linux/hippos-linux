@@ -1,8 +1,7 @@
-import asyncio
 import sys
 import time
 import unittest
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -10,7 +9,8 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'overlays' / 'rootfs' / 'usr' / 'lib' / 'hippos'))
 
 import emulatorlauncher_impl as impl
-from emulatorlauncher_async import Parallel, in_thread
+import emulatorlauncher_power as power
+from emulatorlauncher_parallel import Parallel
 
 
 def _blocking_step(events, name, seconds=0.0, fail=False):
@@ -24,19 +24,16 @@ def _blocking_step(events, name, seconds=0.0, fail=False):
             yield name
         finally:
             events.append(f'exit {name}')
-    return in_thread(step())
+    return step()
 
 
 class HelperTests(unittest.TestCase):
     def test_steps_run_at_the_same_time(self):
         events = []
 
-        async def run():
-            started = time.perf_counter()
-            async with Parallel(_blocking_step(events, 'a', 0.2), _blocking_step(events, 'b', 0.2)) as values:
-                return values, time.perf_counter() - started
-
-        values, elapsed = asyncio.run(run())
+        started = time.perf_counter()
+        with Parallel(_blocking_step(events, 'a', 0.2), _blocking_step(events, 'b', 0.2)) as values:
+            elapsed = time.perf_counter() - started
         self.assertEqual(values, ['a', 'b'])
         self.assertLess(elapsed, 0.35)
         self.assertEqual(sorted(events), ['enter a', 'enter b', 'exit a', 'exit b'])
@@ -44,23 +41,17 @@ class HelperTests(unittest.TestCase):
     def test_failed_step_undoes_the_others(self):
         events = []
 
-        async def run():
-            async with Parallel(_blocking_step(events, 'a'), _blocking_step(events, 'b', fail=True)):
-                events.append('body')
-
         with self.assertRaisesRegex(RuntimeError, 'b failed'):
-            asyncio.run(run())
+            with Parallel(_blocking_step(events, 'a'), _blocking_step(events, 'b', fail=True)):
+                events.append('body')
         self.assertEqual(events, ['enter a', 'exit a'])
 
     def test_cleanup_runs_when_the_body_raises(self):
         events = []
 
-        async def run():
-            async with _blocking_step(events, 'a'):
-                raise ValueError('launch failed')
-
         with self.assertRaises(ValueError):
-            asyncio.run(run())
+            with Parallel(_blocking_step(events, 'a')):
+                raise ValueError('launch failed')
         self.assertEqual(events, ['enter a', 'exit a'])
 
 
@@ -85,7 +76,7 @@ class PrepareAndRunTests(unittest.TestCase):
             ev.append(f'bezel uses {ctx.rom.name} at {ctx.resolution}')
 
         patches = {
-            '_switch_video_mode': lambda conf, system: ('HDMI-1', '1920x1080'),
+            '_switch_video_mode': lambda conf, system: ('HDMI-1', '1920x1080', '1280x720'),
             '_restore_video_mode': lambda out, mode, conf: ev.append(f'video restored to {mode}'),
             '_prepare_ctx_bezel': bezel,
             '_build_hud_config': lambda conf, ctx: None,
@@ -94,7 +85,6 @@ class PrepareAndRunTests(unittest.TestCase):
             'game_power_settings': power,
             'mount_squashfs': squashfs,
             '_start_save_sync': lambda: ev.append('save sync'),
-            'subprocess': SimpleNamespace(run=lambda *a, **k: SimpleNamespace(stdout='1280x720\n')),
         }
         for name, value in patches.items():
             patcher = mock.patch.object(impl, name, value)
@@ -105,7 +95,7 @@ class PrepareAndRunTests(unittest.TestCase):
     def run_with(self, launch):
         emulator = SimpleNamespace(launch=launch, writes_to_rom=False)
         with self.assertLogs(level='INFO'):
-            return asyncio.run(impl._prepare_and_run(self.ctx, {}, emulator))
+            return impl._prepare_and_run(self.ctx, {}, emulator)
 
     def test_launch_gets_the_mounted_rom_and_teardown_runs_last(self):
         def launch(ctx):
@@ -128,6 +118,58 @@ class PrepareAndRunTests(unittest.TestCase):
             self.run_with(launch)
         for teardown in ('video restored to 1920x1080', 'power restored', 'unmounted', 'save sync'):
             self.assertIn(teardown, self.events)
+
+
+class SwitchVideoModeTests(unittest.TestCase):
+    def run_switch(self, conf):
+        calls = []
+
+        def run(cmd, **kwargs):
+            calls.append(cmd)
+            return SimpleNamespace(stdout='DSI-1\n640x480\n640x480\n')
+
+        with mock.patch.object(impl, '_HAS_SWITCHRES', False), mock.patch.object(impl.subprocess, 'run', run):
+            return impl._switch_video_mode(conf, 'gbc'), calls
+
+    def test_one_call_returns_output_original_mode_and_resolution(self):
+        state, calls = self.run_switch({})
+        self.assertEqual(state, ('DSI-1', '640x480', '640x480'))
+        self.assertEqual(calls, [['hippos-resolution', 'gameMode', '']])
+
+    def test_system_videomode_is_passed_to_game_mode(self):
+        with self.assertLogs(level='INFO'):
+            _, calls = self.run_switch({'gbc.videomode': '1280x720.60'})
+        self.assertEqual(calls, [['hippos-resolution', 'gameMode', '1280x720.60']])
+
+
+class PowerSettingsTests(unittest.TestCase):
+    def test_power_mode_runs_in_the_background_and_finishes_before_teardown(self):
+        finished = []
+
+        def slow_tool(*args):
+            time.sleep(0.3)
+            finished.append(args)
+            return SimpleNamespace(returncode=0)
+
+        with mock.patch.object(power, '_run_tool', slow_tool):
+            started = time.perf_counter()
+            with power.game_power_settings({}, 'gbc', Path('/userdata/roms/gbc/game.gbc')):
+                self.assertLess(time.perf_counter() - started, 0.2)
+            self.assertEqual(finished, [(power._POWER_MODE_TOOL, 'default')])
+
+    def test_power_mode_finishes_before_the_tdp_tool_runs(self):
+        order = []
+
+        def tool(*args):
+            if args[0] == power._POWER_MODE_TOOL:
+                time.sleep(0.2)
+            order.append(args[:2])
+            return SimpleNamespace(returncode=0)
+
+        with mock.patch.object(power, '_run_tool', tool), mock.patch.object(power, '_run_detached'):
+            with power.game_power_settings({'gbc.tdp': '15'}, 'gbc', Path('/userdata/roms/gbc/game.gbc')):
+                pass
+        self.assertEqual(order[:2], [(power._POWER_MODE_TOOL, 'default'), (power._TDP_TOOL, 'save')])
 
 
 if __name__ == '__main__':

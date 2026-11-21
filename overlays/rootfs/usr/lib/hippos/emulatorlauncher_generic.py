@@ -303,7 +303,7 @@ _RA_GUN_BTN_MAP: dict[str, str] = {
 def _write_retroarch_controller_bindings(
     cfg: '_KVConfig',
     controllers: list['ControllerInfo'],
-    profiles: list['ESControllerProfile'],
+    profiles: 'ESProfiles',
     ctx: Optional['LaunchContext'] = None,
 ) -> None:
     system   = ctx.system if ctx else ''

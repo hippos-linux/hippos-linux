@@ -3,16 +3,17 @@ from __future__ import annotations
 import json
 import logging
 import os
-import subprocess
 from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import hippos_hotkeys_control
+
 if TYPE_CHECKING:
     import evdev
-    from emulatorlauncher_shared import ControllerInfo, ESBinding, ESControllerProfile
+    from emulatorlauncher_shared import ControllerInfo, ESBinding, ESControllerProfile, ESProfiles
 
 _log = logging.getLogger(__name__)
 
@@ -21,7 +22,6 @@ SYSTEM_MAPS = Path('/usr/share/evmapy')
 MAPS_FILE   = Path('/run/hippos/padtokey.json')
 LAUNCH_FILE = Path('/run/hippos/padtokey-launch.json')
 POINTER_MAP = SYSTEM_MAPS / 'controller-as-mouse.keys'
-HOTKEYS_BIN = Path('/usr/lib/hippos/hippos-hotkeys')
 NATIVE_LINUX_APPS = ('linuxapps', ('.flatpak', '.sh'))
 
 DEFAULT_MOUSE_LEVEL = 5
@@ -126,7 +126,7 @@ def resolve_actions(actions: list[dict], profile: ESControllerProfile) -> list[d
 
 
 def write_maps(system: str, emulator: str, rom: Path,
-               controllers: list[ControllerInfo], profiles: list[ESControllerProfile],
+               controllers: list[ControllerInfo], profiles: ESProfiles,
                pointer: bool | None = None) -> bool:
     from emulatorlauncher_shared import _game_or_system_setting, _game_setting, _load_hippos_conf, _pick_es_profile
 
@@ -157,12 +157,12 @@ def clear_maps() -> None:
 
 
 def reload_daemon() -> None:
-    subprocess.run([str(HOTKEYS_BIN), '--reload'], capture_output=True)
+    hippos_hotkeys_control.reload()
 
 
 @contextmanager
 def padtokey_context(system: str, emulator: str, rom: Path,
-                     controllers: list[ControllerInfo], profiles: list[ESControllerProfile]):
+                     controllers: list[ControllerInfo], profiles: ESProfiles):
     LAUNCH_FILE.write_text(json.dumps({'system': system, 'emulator': emulator, 'rom': str(rom),
                                        'controllers': [asdict(controller) for controller in controllers]}))
     if write_maps(system, emulator, rom, controllers, profiles):

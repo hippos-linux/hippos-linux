@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import tempfile
@@ -77,7 +78,7 @@ class EmulatorIntegrationTests(unittest.TestCase):
         self.env.install('newpsx', {'requireArtifact': 'newpsx', 'systems': ['psx']})
         self.sync()
         self.assertEqual(self.env.psx_emulators(), {'newpsx': 'true', 'oldpsx': None})
-        defaults = yaml.safe_load((self.env.state / integration.LAUNCHER_DEFAULTS).read_text())
+        defaults = json.loads((self.env.state / integration.LAUNCHER_DEFAULTS).read_text())
         self.assertEqual(defaults['psx'], {'emulator': 'newpsx', 'core': 'newpsx'})
 
     def test_declared_default_falls_back_while_its_package_is_missing(self):

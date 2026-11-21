@@ -18,12 +18,8 @@ from pathlib import Path
 from shutil import copy2, which
 from typing import Optional
 
-try:
-    import yaml
-    _HAS_YAML = True
-except ImportError:
-    _HAS_YAML = False
 
+import hippos_hotkeys_control
 from hippos_onscreen_keyboard import onscreen_keyboard
 from hippos_padtokey import padtokey_context
 from emulatorlauncher_registry import lookup
@@ -141,24 +137,27 @@ def _load_effective_hippos_conf() -> dict[str, str]:
         result.update(_read_conf_file(path))
     return result
 
-def _load_yaml_defaults() -> dict:
-    if not _HAS_YAML or not DEFAULTS_FILE.exists():
-        return {}
+@cache
+def _parse_launcher_defaults(path: Path, mtime_ns: int) -> dict:
     try:
-        data = yaml.safe_load(DEFAULTS_FILE.read_text())
-        return data or {}
-    except Exception as exc:
-        _log.warning("Could not load %s: %s", DEFAULTS_FILE, exc)
+        return json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as exc:
+        _log.warning("Could not load %s: %s", path, exc)
         return {}
 
-def _get_yaml_system_options(system: str) -> dict:
-    entry = _load_yaml_defaults().get(system)
+def _load_launcher_defaults() -> dict:
+    if not DEFAULTS_FILE.exists():
+        return {}
+    return _parse_launcher_defaults(DEFAULTS_FILE, DEFAULTS_FILE.stat().st_mtime_ns)
+
+def _system_default_options(system: str) -> dict:
+    entry = _load_launcher_defaults().get(system)
     if not entry:
         return {}
     return entry.get('options') or {}
 
 def _hud_supported(system: str) -> bool:
-    return _get_yaml_system_options(system).get('hud_support', True) is not False
+    return _system_default_options(system).get('hud_support', True) is not False
 
 def configure_emulator(rom: Path) -> bool:
     return str(rom) == 'config'
@@ -313,35 +312,44 @@ def _parse_es_input_file(path: Path, mtime_ns: int) -> tuple[ESControllerProfile
         )
     return tuple(configs)
 
-def _load_es_input_configs() -> list[ESControllerProfile]:
-    es_input = next((path for path in ES_INPUT_FILES if path.exists()), None)
-    profiles: list[ESControllerProfile] = []
-    for path in (ES_PLAYERS_INPUT, es_input):
-        if path is not None and path.exists():
-            profiles.extend(_parse_es_input_file(path, path.stat().st_mtime_ns))
-    return profiles
+@dataclass(frozen=True)
+class ESProfiles:
+    launch: tuple[ESControllerProfile, ...]
+    installed_file: Optional[Path]
 
-def _pick_es_profile(
-    profiles: list[ESControllerProfile],
-    ctrl: ControllerInfo,
-) -> Optional[ESControllerProfile]:
-    normalized_name = _normalize(ctrl.name)
+    def all(self) -> tuple[ESControllerProfile, ...]:
+        if self.installed_file is None:
+            return self.launch
+        return self.launch + _parse_es_input_file(self.installed_file, self.installed_file.stat().st_mtime_ns)
+
+def _load_es_input_configs() -> ESProfiles:
+    launch = _parse_es_input_file(ES_PLAYERS_INPUT, ES_PLAYERS_INPUT.stat().st_mtime_ns) if ES_PLAYERS_INPUT.exists() else ()
+    return ESProfiles(launch, next((path for path in ES_INPUT_FILES if path.exists()), None))
+
+def _exact_es_profile(profiles: tuple[ESControllerProfile, ...], ctrl: ControllerInfo) -> Optional[ESControllerProfile]:
+    guid, name = _normalize(ctrl.guid), _normalize(ctrl.name)
+    return next((profile for profile in profiles
+                 if _normalize(profile.device_guid) == guid and _normalize(profile.device_name) == name), None)
+
+def _pick_es_profile(profiles: ESProfiles, ctrl: ControllerInfo) -> Optional[ESControllerProfile]:
+    if exact := _exact_es_profile(profiles.launch, ctrl):
+        return exact
+    candidates = profiles.all()
+    if exact := _exact_es_profile(candidates, ctrl):
+        return exact
     normalized_guid = _normalize(ctrl.guid)
     normalized_path = _normalize(ctrl.device_path)
-
-    for profile in profiles:
-        if _normalize(profile.device_guid) == normalized_guid and _normalize(profile.device_name) == normalized_name:
-            return profile
-    for profile in profiles:
+    normalized_name = _normalize(ctrl.name)
+    for profile in candidates:
         if _normalize(profile.device_guid) == normalized_guid:
             return profile
-    for profile in profiles:
+    for profile in candidates:
         if _normalize(profile.device_path) == normalized_path and normalized_path:
             return profile
-    for profile in profiles:
+    for profile in candidates:
         if _normalize(profile.device_name) == normalized_name:
             return profile
-    return profiles[0] if profiles else None
+    return candidates[0] if candidates else None
 
 def _conf_value(conf: dict[str, str], key: str, default: str = '') -> str:
     value = conf.get(key, default)
@@ -366,7 +374,7 @@ def _game_setting(conf: dict[str, str], system: str, rom: Path, name: str) -> st
     return ''
 
 def _game_or_system_setting(conf: dict[str, str], system: str, rom: Path, name: str) -> str:
-    return _game_setting(conf, system, rom, name) or str(_get_yaml_system_options(system).get(name, ''))
+    return _game_setting(conf, system, rom, name) or str(_system_default_options(system).get(name, ''))
 
 def _game_value(conf: dict[str, str], ctx: LaunchContext, key: str, default: str = '') -> str:
     return _game_setting(conf, ctx.system, ctx.rom, key) or default
@@ -577,8 +585,6 @@ def _require_emulator_bin_in_package(package: str, *binary_names: str) -> Path:
         raise EmulatorNotInstalled(package)
     return bin_path
 
-HOTKEYS_BIN = Path('/usr/lib/hippos/hippos-hotkeys')
-
 def hotkey_context_file(name: str) -> Path:
     candidates = [HOTKEY_CONTEXT_DIR / f'{name}.json', *sorted(EMULATORS_ROOT.glob(f'*/hippos/hotkeys/{name}.json'))]
     return next((path for path in candidates if path.exists()), HOTKEY_CONTEXT_DIR / 'game-default.json')
@@ -601,15 +607,8 @@ def hotkey_context(name: str):
             if ui_mode.lower() != 'full':
                 keys.pop('menu', None)
 
-            cmd = [str(HOTKEYS_BIN), '--new-context', name, json.dumps(keys)]
-            if exit_hotkey_only:
-                cmd.append('--disable-common')
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                _log.warning("hotkey context '%s' request failed (rc=%s): %s",
-                             name, result.returncode, result.stderr.strip())
-            else:
-                _log.info("hotkey context -> '%s' (keys=%s)", name, sorted(keys))
+            hippos_hotkeys_control.new_context(name, keys, disable_common=exit_hotkey_only)
+            _log.info("hotkey context -> '%s' (keys=%s)", name, sorted(keys))
         else:
             _log.warning("no hotkey context file for '%s' (%s) — daemon stays on whatever context was already active", name, source)
     except Exception as exc:
@@ -619,16 +618,9 @@ def hotkey_context(name: str):
         yield
     finally:
         try:
-            result = subprocess.run(
-                [str(HOTKEYS_BIN), '--default-context'],
-                capture_output=True, text=True,
-            )
-            if result.returncode != 0:
-                _log.warning("hotkey context reset failed (rc=%s): %s",
-                             result.returncode, result.stderr.strip())
-            else:
-                _log.info("hotkey context -> default")
-        except Exception as exc:
+            hippos_hotkeys_control.default_context()
+            _log.info("hotkey context -> default")
+        except OSError as exc:
             _log.warning("Could not reset hotkey context: %s", exc)
 
 def _wheel_proxy_command(ctrl: ControllerInfo, ctx: LaunchContext, env: dict[str, str]) -> list[str]:

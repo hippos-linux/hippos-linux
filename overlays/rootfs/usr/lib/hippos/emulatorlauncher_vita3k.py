@@ -6,8 +6,6 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-import yaml
-
 from emulatorlauncher_shared import (
     LaunchContext,
     _build_game_env,
@@ -47,6 +45,7 @@ def _migrate_old_pref_dir() -> None:
             break
 
 def _update_vita3k_config(bin_path: Path, env: dict[str, str], conf: dict[str, str], pref_dir: Path) -> None:
+    import yaml
     if not VITA3K_CONFIG_FILE.exists():
         subprocess.run([str(bin_path), '--help'], env=env, cwd=bin_path.parent,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)

@@ -37,7 +37,7 @@ USER_ES_DIR: Final = CONFIGS / 'emulationstation'
 HIPPOS_ES_DIR: Final = Path('/usr/share/emulationstation')
 EMULATORLAUNCHER_SHARE_DIR: Final = HIPPOS_SHARE_DIR / 'emulatorlauncher'
 EMULATORLAUNCHER_DATA_DIR: Final = EMULATORLAUNCHER_SHARE_DIR / 'data'
-EMULATORLAUNCHER_DEFAULTS: Final = EMULATORLAUNCHER_SHARE_DIR / 'defaults.yml'
+EMULATORLAUNCHER_DEFAULTS: Final = EMULATORLAUNCHER_SHARE_DIR / 'defaults.json'
 
 _ES_RESOURCES_DIR: Final = HIPPOS_ES_DIR / 'resources'
 

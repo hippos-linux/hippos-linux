@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import logging
 import os
 import re
@@ -13,8 +12,8 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from contextlib import AsyncExitStack, asynccontextmanager
-from typing import AsyncIterator, Optional
+from contextlib import ExitStack, contextmanager
+from typing import Iterator, Optional
 
 try:
     import hippos_switchres as _switchres
@@ -36,18 +35,18 @@ from emulatorlauncher_shared import (
     EmulatorNotInstalled,
     _HUD_CONFIG_PATH,
     _conf_bool,
-    _get_yaml_system_options,
+    _system_default_options,
     game_config_name,
     _load_es_input_configs,
     _load_hippos_conf,
-    _load_yaml_defaults,
+    _load_launcher_defaults,
     _log,
     LAUNCHER_STARTED,
     launch_clock,
     launch_step,
 )
 from emulatorlauncher_power import game_power_settings
-from emulatorlauncher_async import Parallel, in_thread, timed
+from emulatorlauncher_parallel import Parallel, timed
 
 LINDBERGH_BUNDLE_DIR = Path('/opt/emulators/linuxloader')
 
@@ -61,8 +60,8 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stderr)],
 )
 
-def _apply_yaml_options(conf: dict[str, str], system: str) -> None:
-    for key, value in _get_yaml_system_options(system).items():
+def _apply_default_options(conf: dict[str, str], system: str) -> None:
+    for key, value in _system_default_options(system).items():
         if key == 'forceNoBezel':
             conf_key = f'{system}.bezel'
             conf_val = 'none' if value else ''
@@ -157,7 +156,7 @@ def resolve_emulator_core(
         game_em   = conf.get(f'{system}["{gsname}"].emulator') or None
         game_co   = conf.get(f'{system}["{gsname}"].core')     or None
 
-    defaults = _load_yaml_defaults()
+    defaults = _load_launcher_defaults()
     sys_def  = defaults.get(system) or {}
 
     chosen_em = forced_emulator or game_em or folder_em or user_em or global_em
@@ -178,49 +177,34 @@ def _compatible_default(sys_def: dict, emulator: str, core: str, rom: Path) -> t
             return candidate['emulator'], candidate['core']
     return emulator, core
 
-def _game_output() -> str:
-    return subprocess.run(
-        ['hippos-resolution', 'currentOutput'],
-        capture_output=True, text=True, check=False,
-    ).stdout.strip()
+def _video_state(*args: str) -> tuple[str, str, str]:
+    lines = subprocess.run(['hippos-resolution', *args], capture_output=True, text=True, check=False).stdout.splitlines()
+    output, mode, resolution = (lines + ['', '', ''])[:3]
+    return output, mode, resolution
 
-def _switch_video_mode(conf: dict[str, str], system: str) -> tuple[str, str]:
-    output = _game_output()
-    original = subprocess.run(
-        ['hippos-resolution', '--screen', output, 'currentMode'],
-        capture_output=True, text=True, check=False,
-    ).stdout.strip()
-
+def _switch_video_mode(conf: dict[str, str], system: str) -> tuple[str, str, str]:
     videomode = conf.get(f'{system}.videomode') or conf.get('crt.videomode', '') or conf.get('global.videomode', '')
+    game_mode = videomode if videomode and videomode != 'default' else ''
 
     if _HAS_SWITCHRES and _switchres.is_available():
-        if videomode and videomode != 'default':
-            parsed = _switchres.parse_videomode(videomode)
+        output, original, _ = _video_state('currentState')
+        if game_mode:
+            parsed = _switchres.parse_videomode(game_mode)
             if parsed:
-                _log.info("videomode: CRT ctypes %s for '%s'", videomode, system)
+                _log.info("videomode: CRT ctypes %s for '%s'", game_mode, system)
                 if _switchres.switch_to_mode(*parsed):
-                    return output, original
+                    return output, original, _video_state('--screen', output, 'currentState')[2]
                 _log.warning("videomode: ctypes failed, falling back to subprocess")
         else:
             boot_res = conf.get('crt.boot_resolution', '640x480i')
             parsed = _switchres.parse_videomode(boot_res)
             if parsed:
                 _switchres.switch_to_mode(*parsed)
-            return output, original
+            return output, original, _video_state('--screen', output, 'currentState')[2]
 
-    if videomode and videomode != 'default':
-        _log.info("videomode: setting '%s' for system '%s'", videomode, system)
-        subprocess.run(
-            ['hippos-resolution', '--screen', output, 'applyMode', videomode],
-            check=False, stderr=subprocess.DEVNULL,
-        )
-    else:
-        subprocess.run(
-            ['hippos-resolution', '--screen', output, 'minTomaxResolution'],
-            check=False, stderr=subprocess.DEVNULL,
-        )
-
-    return output, original
+    if game_mode:
+        _log.info("videomode: setting '%s' for system '%s'", game_mode, system)
+    return _video_state('gameMode', game_mode)
 
 def _prepare_ctx_bezel(ctx: LaunchContext, conf: dict[str, str]) -> None:
     from hippos_bezels import generate_gun_help, gun_border_color
@@ -463,22 +447,21 @@ def main() -> int:
 
 def _launch(args: argparse.Namespace) -> int:
 
-    emulator, core = resolve_emulator_core(args.system, args.emulator, args.core, args.rom)
-    controllers    = _build_controllers(args)
-
-    ctx = LaunchContext(
-        system=args.system,
-        rom=args.rom,
-        emulator=emulator,
-        core=core,
-        gameinfoxml=Path(args.gameinfoxml) if args.gameinfoxml and args.gameinfoxml != '/dev/null' else None,
-        lightgun=args.lightgun,
-        wheel=args.wheel,
-        controllers=controllers,
-    )
-    ctx.rom         = _resolve_mergerfs_path(ctx.rom)
-    ctx.game_wheel  = _load_game_wheel_metadata(ctx.gameinfoxml)
-    ctx.game_gun    = _load_game_gun_metadata(ctx.gameinfoxml)
+    with launch_step('game info'):
+        emulator, core = resolve_emulator_core(args.system, args.emulator, args.core, args.rom)
+        ctx = LaunchContext(
+            system=args.system,
+            rom=args.rom,
+            emulator=emulator,
+            core=core,
+            gameinfoxml=Path(args.gameinfoxml) if args.gameinfoxml and args.gameinfoxml != '/dev/null' else None,
+            lightgun=args.lightgun,
+            wheel=args.wheel,
+            controllers=_build_controllers(args),
+        )
+        ctx.rom         = _resolve_mergerfs_path(ctx.rom)
+        ctx.game_wheel  = _load_game_wheel_metadata(ctx.gameinfoxml)
+        ctx.game_gun    = _load_game_gun_metadata(ctx.gameinfoxml)
     ctx.netplay_mode = getattr(args, 'netplaymode', '') or ''
     ctx.netplay_ip   = getattr(args, 'netplayip',   '') or ''
     ctx.netplay_port = getattr(args, 'netplayport',  '') or ''
@@ -489,7 +472,7 @@ def _launch(args: argparse.Namespace) -> int:
 
     with launch_step('settings'):
         conf = _load_hippos_conf()
-        _apply_yaml_options(conf, ctx.system)
+        _apply_default_options(conf, ctx.system)
     if not _conf_bool(conf, 'global.use_guns', True):
         ctx.lightgun = False
     if not _conf_bool(conf, 'global.use_wheels', True):
@@ -514,57 +497,52 @@ def _launch(args: argparse.Namespace) -> int:
         _log.error("No launcher registered for emulator '%s'", ctx.emulator)
         return EXIT_UNKNOWN_EMULATOR
 
-    return asyncio.run(_prepare_and_run(ctx, conf, emulator))
+    return _prepare_and_run(ctx, conf, emulator)
 
-async def _prepare_and_run(ctx: LaunchContext, conf: dict[str, str], emulator: Emulator) -> int:
-    async with AsyncExitStack() as stack:
+def _prepare_and_run(ctx: LaunchContext, conf: dict[str, str], emulator: Emulator) -> int:
+    with ExitStack() as stack:
         stack.callback(_start_save_sync)
-        *_, rom = await stack.enter_async_context(Parallel(
+        *_, rom = stack.enter_context(Parallel(
             timed('controllers', _controllers(ctx)),
             timed('display', _display(conf, ctx)),
             timed('hud', _hud(conf, ctx)),
-            timed('power', in_thread(game_power_settings(conf, ctx.system, ctx.rom))),
+            timed('power', game_power_settings(conf, ctx.system, ctx.rom)),
             timed('rom', _prepared_rom(ctx, emulator)),
         ))
         ctx.rom = rom
-        return await asyncio.to_thread(emulator.launch, ctx)
+        return emulator.launch(ctx)
 
-@asynccontextmanager
-async def _controllers(ctx: LaunchContext) -> AsyncIterator[None]:
-    profiles = await asyncio.to_thread(_load_es_input_configs)
-    start_controller_monitor(ctx, profiles)
+@contextmanager
+def _controllers(ctx: LaunchContext) -> Iterator[None]:
+    start_controller_monitor(ctx, _load_es_input_configs())
     yield
 
-@asynccontextmanager
-async def _display(conf: dict[str, str], ctx: LaunchContext) -> AsyncIterator[None]:
-    game_output, original_mode = await asyncio.to_thread(_switch_video_mode, conf, ctx.system)
+@contextmanager
+def _display(conf: dict[str, str], ctx: LaunchContext) -> Iterator[None]:
+    game_output, original_mode, resolution = _switch_video_mode(conf, ctx.system)
     try:
-        resolution = await asyncio.to_thread(
-            subprocess.run, ['hippos-resolution', '--screen', game_output, 'currentResolution'],
-            capture_output=True, text=True, check=False,
-        )
-        if m := re.match(r'(\d+)x(\d+)', resolution.stdout.strip()):
+        if m := re.match(r'(\d+)x(\d+)', resolution):
             ctx.resolution = (int(m.group(1)), int(m.group(2)))
             _log.info("videomode: game resolution %dx%d", ctx.resolution[0], ctx.resolution[1])
         with launch_step('bezel'):
-            await asyncio.to_thread(_prepare_ctx_bezel, ctx, conf)
+            _prepare_ctx_bezel(ctx, conf)
         yield
     finally:
-        await asyncio.to_thread(_restore_video_mode, game_output, original_mode, conf)
+        _restore_video_mode(game_output, original_mode, conf)
 
-@asynccontextmanager
-async def _hud(conf: dict[str, str], ctx: LaunchContext) -> AsyncIterator[None]:
-    await asyncio.to_thread(_build_hud_config, conf, ctx)
+@contextmanager
+def _hud(conf: dict[str, str], ctx: LaunchContext) -> Iterator[None]:
+    _build_hud_config(conf, ctx)
     yield
 
-@asynccontextmanager
-async def _prepared_rom(ctx: LaunchContext, emulator: Emulator) -> AsyncIterator[Path]:
+@contextmanager
+def _prepared_rom(ctx: LaunchContext, emulator: Emulator) -> Iterator[Path]:
     if ctx.rom.suffix != '.squashfs':
         yield ctx.rom
         return
-    async with in_thread(mount_squashfs(ctx.rom)) as squash_root:
+    with mount_squashfs(ctx.rom) as squash_root:
         if emulator.writes_to_rom:
-            async with in_thread(mount_overlayfs(squash_root, SAVES_RW / ctx.system / ctx.rom.stem)) as overlay:
+            with mount_overlayfs(squash_root, SAVES_RW / ctx.system / ctx.rom.stem) as overlay:
                 yield overlay
         else:
             yield squash_root

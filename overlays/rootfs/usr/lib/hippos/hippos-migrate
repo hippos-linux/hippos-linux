@@ -143,6 +143,9 @@ if version_lt "$APPLIED" "0.6.16"; then
         hippos-services disable ssh
     fi
     hippos-settings del system.ssh.enabled
+
+    log "0.6.16: launcher defaults are generated as defaults.json"
+    rm -f /var/lib/hippos/emulators/defaults.yml
 fi
 
 HIPPOS_CONFIG=/userdata/system/configs/hippos

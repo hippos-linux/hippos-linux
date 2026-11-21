@@ -4,12 +4,6 @@ import subprocess
 from pathlib import Path
 from emulatorlauncher_registry import Emulator, register
 
-try:
-    import yaml
-    _HAS_YAML = True
-except ImportError:
-    _HAS_YAML = False
-
 from emulatorlauncher_shared import (
     LaunchContext,
     _build_game_env,
@@ -62,10 +56,11 @@ _RPCS3_EVDEV_MAP = [
 ]
 
 def _write_rpcs3_config(conf: dict[str, str]) -> None:
+    import yaml
     RPCS3_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
     existing: dict = {}
-    if _HAS_YAML and RPCS3_CONFIG_YML.exists():
+    if RPCS3_CONFIG_YML.exists():
         try:
             existing = yaml.safe_load(RPCS3_CONFIG_YML.read_text()) or {}
         except Exception:
@@ -133,19 +128,7 @@ def _write_rpcs3_config(conf: dict[str, str]) -> None:
     existing['Miscellaneous']['Prevent display sleep while running games'] = True
     existing['Miscellaneous']['Show trophy popups']                = False
 
-    if _HAS_YAML:
-        RPCS3_CONFIG_YML.write_text(yaml.dump(existing, default_flow_style=False, allow_unicode=True))
-    else:
-        lines = ['---']
-        for section, items in existing.items():
-            lines.append(f'{section}:')
-            if isinstance(items, dict):
-                for k, v in items.items():
-                    if isinstance(v, bool):
-                        lines.append(f'  {k}: {str(v).lower()}')
-                    else:
-                        lines.append(f'  {k}: {v}')
-        RPCS3_CONFIG_YML.write_text('\n'.join(lines) + '\n')
+    RPCS3_CONFIG_YML.write_text(yaml.dump(existing, default_flow_style=False, allow_unicode=True))
 
     _log.info("Wrote RPCS3 config: %s", RPCS3_CONFIG_YML)
 
@@ -233,6 +216,7 @@ def _write_rpcs3_controller_config(ctx: LaunchContext) -> None:
     _log.info("Wrote RPCS3 controller config: %s", config_path)
 
 def _write_rpcs3_vfs() -> None:
+    import yaml
     RPCS3_HDD0.mkdir(parents=True, exist_ok=True)
     try:
         vfs = yaml.safe_load(RPCS3_VFS_YML.read_text()) or {}
