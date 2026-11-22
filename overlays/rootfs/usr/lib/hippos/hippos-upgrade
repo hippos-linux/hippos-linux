@@ -502,7 +502,7 @@ RPI_TRYBOOT_PREFIX = "os_prefix=try/"
 RPI_FIRMWARE_PATTERNS = ("start4*.elf", "fixup4*.dat")
 UBOOT_SCRIPT = os.path.join(EFI_MOUNT, "boot.scr")
 UBOOT_TRYBOOT_USED = os.path.join(EFI_MOUNT, "tryboot.used")
-UBOOT_DTB_GLOBS = {"rk3326": "rockchip/rk3326*.dtb"}
+UBOOT_DTB_GLOBS = {"rk3326": "rockchip/rk3326*.dtb", "rk3566": "rockchip/rk3566*.dtb"}
 SYSTEMD_REBOOT_PARAM = "/run/systemd/reboot-param"
 
 def boot_firmware():

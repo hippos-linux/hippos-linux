@@ -34,18 +34,24 @@ RUN apt-get update \
         kpartx \
         libdw-dev \
         libelf-dev \
+        libgnutls28-dev \
         libssl-dev \
         lsb-release \
         mmdebstrap \
         parted \
         python3 \
+        python3-dev \
+        python3-pyelftools \
         python3-ruamel.yaml \
+        python3-setuptools \
         python3-yaml \
         rsync \
         squashfs-tools \
+        swig \
         sudo \
         systemd-container \
         udev \
+        uuid-dev \
         xz-utils \
         zstd \
     && rm -rf /var/lib/apt/lists/*

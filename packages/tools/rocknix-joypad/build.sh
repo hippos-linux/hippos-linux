@@ -30,7 +30,7 @@ for variant in $(kernel_variants); do
     log "Building joypad drivers against kernel ${KVER} (${variant})"
     prepare_kernel_headers "${KERNEL_SOURCE_DIR}"
     kernel_module_make -C "${KERNEL_SOURCE_DIR}" M="${SRC}" clean >/dev/null 2>&1 || true
-    kernel_module_make -C "${KERNEL_SOURCE_DIR}" M="${SRC}" DEVICE=RK3326 modules
+    kernel_module_make -C "${KERNEL_SOURCE_DIR}" M="${SRC}" DEVICE="${PLATFORM^^}" modules
 
     mkdir -p "${STAGING}/lib/modules/${KVER}/extra"
     cp "${SRC}/rocknix-joypad.ko" "${SRC}/rocknix-singleadc-joypad.ko" "${STAGING}/lib/modules/${KVER}/extra/"
