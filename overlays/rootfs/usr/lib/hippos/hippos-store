@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shlex
 import shutil
 import subprocess
@@ -60,9 +61,7 @@ WINE_SOURCES = [
         "label":    "Wine-GE",
         "packager": "GloriousEggroll",
         "api":      "https://api.github.com/repos/GloriousEggroll/wine-ge-custom/releases?per_page=100",
-        "pick":     lambda a: a["name"].endswith((".tar.xz", ".tar.gz"))
-                              and "x86_64" in a["name"]
-                              and not a["name"].endswith(".sha512sum"),
+        "pick":     lambda a: a["name"].endswith((".tar.xz", ".tar.gz")),
     },
     {
         "id":       "wine-tkg",
@@ -70,7 +69,6 @@ WINE_SOURCES = [
         "packager": "Kron4ek",
         "api":      "https://api.github.com/repos/Kron4ek/Wine-Builds/releases?per_page=100",
         "pick":     lambda a: a["name"].endswith(".tar.xz")
-                              and "amd64" in a["name"]
                               and "staging" not in a["name"],
     },
     {
@@ -78,12 +76,10 @@ WINE_SOURCES = [
         "label":    "Proton-GE",
         "packager": "GloriousEggroll",
         "api":      "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases?per_page=100",
-        "pick":     lambda a: a["name"].endswith((".tar.gz",))
-                              and not a["name"].endswith(".sha512sum"),
+        "pick":     lambda a: a["name"].endswith(".tar.gz"),
     },
 ]
 
-WINE_LIST_LIMIT = 10
 
 DEB_ARCH       = {"x86_64": "amd64", "aarch64": "arm64"}.get(platform.machine(), platform.machine())
 ES_SYSTEMS_CFG = "/usr/share/emulationstation/es_systems.cfg"
@@ -127,6 +123,15 @@ def _runner_install_dir(runner_id):
     stem = runner_id.split("::", 2)[-1]
     return os.path.join(WINE_RUNNERS_DIR, stem)
 
+def _asset_machine(name):
+    if re.search(r"aarch64|arm64", name):
+        return "aarch64"
+    if re.search(r"x86_64|amd64", name):
+        return "x86_64"
+    if re.search(r"[-_.](x86|i[3-6]86)[-_.]", name):
+        return "i686"
+    return "x86_64"
+
 def load_wine_runners(force_refresh=False):
     if not force_refresh and os.path.exists(WINE_CACHE):
         age = time.time() - os.path.getmtime(WINE_CACHE)
@@ -143,7 +148,7 @@ def load_wine_runners(force_refresh=False):
             releases = _gh_get(src["api"])
             for rel in releases:
                 for asset in rel.get("assets", []):
-                    if not src["pick"](asset):
+                    if not src["pick"](asset) or _asset_machine(asset["name"]) != platform.machine():
                         continue
                     rid = _runner_id(src["id"], asset["name"])
                     runners.append({
@@ -261,12 +266,7 @@ def cmd_list():
 
     try:
         runners = load_wine_runners()
-        counts  = {}
         for runner in runners:
-            src_id = runner["category"]
-            if counts.get(src_id, 0) >= WINE_LIST_LIMIT:
-                continue
-            counts[src_id] = counts.get(src_id, 0) + 1
             _pkg_node(root,
                 pkg_id        = runner["id"],
                 title         = runner["name"],
