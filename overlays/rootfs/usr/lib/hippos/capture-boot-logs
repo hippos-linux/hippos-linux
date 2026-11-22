@@ -345,7 +345,6 @@ capture "hippos-init-journal.txt" \
 capture "hippos-storage-status.txt" \
     systemctl status \
         hippos-storage.service \
-        hippos-storage-scan.service \
         hippos-roms-pool.service \
         hippos-bios-pool.service \
         hippos-saves-pool.service \
@@ -356,7 +355,6 @@ capture "hippos-storage-status.txt" \
 capture "hippos-storage-journal.txt" \
     journalctl -b \
         -u hippos-storage.service \
-        -u hippos-storage-scan.service \
         -u hippos-roms-pool.service \
         -u hippos-bios-pool.service \
         -u hippos-saves-pool.service \

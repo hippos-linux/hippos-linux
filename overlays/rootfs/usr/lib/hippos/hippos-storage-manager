@@ -55,6 +55,7 @@ DISC_EXTS = {".cue", ".bin", ".iso", ".img", ".gdi", ".chd", ".mdf", ".nrg", ".p
 SAVE_EXTS = {".srm", ".sav", ".mcr", ".gme", ".st0", ".st1", ".state", ".vmu", ".mem", ".mc"}
 CACHE_DIR_NAMES = {"cache", "caches", "shadercache", "shader_cache", "shaders", "tmp", "thumbnails", "thumbnail"}
 CACHE_EXTS = {".cache", ".tmp", ".bak", ".old", ".log"}
+SCAN_COMMIT_EVERY = 1000
 HASHABLE_CATEGORIES = {"rom", "save", "media", "theme", "screenshot"}
 
 _HIPPOS_UID = 1000
@@ -435,8 +436,10 @@ def scan_roots(conn: sqlite3.Connection, roots: list[tuple[Path, str]], size_lim
             category=category,
             content_hash=content_hash,
         )
-        file_id = store_file(conn, scan_id, rec)
+        store_file(conn, scan_id, rec)
         file_count += 1
+        if file_count % SCAN_COMMIT_EVERY == 0:
+            conn.commit()
 
     errors += hash_same_size_files(conn, scan_id, size_limit)
 
