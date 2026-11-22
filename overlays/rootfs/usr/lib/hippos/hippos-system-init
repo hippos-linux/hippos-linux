@@ -39,22 +39,6 @@ EOF
     log "keyboard: ${KBLAYOUT}${KBVARIANT:+/${KBVARIANT}}"
 fi
 
-GOVERNOR="$(get system.cpu.governor)"
-if [[ -n "${GOVERNOR}" ]]; then
-    for gov_file in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_governor; do
-        [[ -f "${gov_file}" ]] && printf '%s' "${GOVERNOR}" > "${gov_file}" 2>/dev/null || true
-    done
-    log "cpu governor: ${GOVERNOR}"
-fi
-
-CPU_MAX_FREQ="$(get system.cpu.max_freq)"
-if [[ -n "${CPU_MAX_FREQ}" ]]; then
-    for max_file in /sys/devices/system/cpu/cpufreq/policy*/scaling_max_freq; do
-        [[ -f "${max_file}" ]] && printf '%s' "${CPU_MAX_FREQ}" > "${max_file}" 2>/dev/null || true
-    done
-    log "cpu max frequency: ${CPU_MAX_FREQ} kHz"
-fi
-
 WIFI_ENABLED="$(get wifi.enabled)"
 WIFI_SSID="$(get wifi.ssid)"
 WIFI_KEY="$(get wifi.key)"

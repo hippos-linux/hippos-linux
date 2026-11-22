@@ -202,6 +202,10 @@
 			<choice display="Balanced" action="hippos-power-mode balanced" />
 			<choice display="Power saver" action="hippos-power-mode powersaver" />
 		</feature>
+		<feature display="CPU limit" if="${hippos-cpu-limit choices}">
+			<text display="${hippos-cpu-limit get}" />
+			<choice_cmd display="${hippos-cpu-limit choices | cut -f 1}" action="hippos-cpu-limit set" action_arg="${hippos-cpu-limit choices | cut -f 2}" />
+		</feature>
 		<feature display="Handheld controller" if="${hippos-handheld available &amp;&amp; echo 1}">
 			<choice_cmd display="${hippos-handheld choices controller | cut -f 1}" action="hippos-handheld set" action_arg="${hippos-handheld choices controller | cut -f 2}" />
 		</feature>

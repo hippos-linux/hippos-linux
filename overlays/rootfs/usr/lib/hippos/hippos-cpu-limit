@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Usage: hippos-cpu-limit apply | get | choices | set <kHz>
+#   apply    applies system.cpu.governor and system.cpu.max_freq (run at boot)
+#   get      prints the current limit, e.g. "1008 MHz"
+#   choices  lists "label<TAB>kHz" for each speed this CPU supports; empty when no limit is set
+#   set      saves system.cpu.max_freq and applies it
+set -euo pipefail
+
+POLICY0=/sys/devices/system/cpu/cpufreq/policy0
+
+[[ "${1:-}" =~ ^(apply|set)$ && "${EUID}" -ne 0 ]] && exec sudo -n "$0" "$@"
+
+setting() { hippos-settings get "$1" 2>/dev/null || true; }
+
+mhz() { printf '%d MHz' "$(( $1 / 1000 ))"; }
+
+apply_max_freq() {
+    local policy
+    for policy in /sys/devices/system/cpu/cpufreq/policy*; do
+        [[ -f "${policy}/scaling_max_freq" ]] && printf '%s' "$1" > "${policy}/scaling_max_freq"
+    done
+}
+
+case "${1:-}" in
+    apply)
+        governor="$(setting system.cpu.governor)"
+        if [[ -n "${governor}" ]]; then
+            for policy in /sys/devices/system/cpu/cpufreq/policy*; do
+                [[ -f "${policy}/scaling_governor" ]] && printf '%s' "${governor}" > "${policy}/scaling_governor"
+            done
+            echo "cpu governor: ${governor}"
+        fi
+        max_freq="$(setting system.cpu.max_freq)"
+        if [[ -n "${max_freq}" ]]; then
+            apply_max_freq "${max_freq}"
+            echo "cpu max frequency: ${max_freq} kHz"
+        fi
+        ;;
+    get)
+        max_freq="$(setting system.cpu.max_freq)"
+        if [[ -n "${max_freq}" ]]; then
+            mhz "${max_freq}"
+            echo
+        fi
+        ;;
+    choices)
+        [[ -n "$(setting system.cpu.max_freq)" && -r "${POLICY0}/scaling_available_frequencies" ]] || exit 0
+        for khz in $(tr ' ' '\n' < "${POLICY0}/scaling_available_frequencies" | sort -n); do
+            (( khz >= 600000 )) && printf '%s\t%s\n' "$(mhz "${khz}")" "${khz}"
+        done
+        ;;
+    set)
+        [[ "${2:-}" =~ ^[0-9]+$ ]] || { sed -n '2,6s/^# \{0,1\}//p' "$0" >&2; exit 2; }
+        hippos-settings set system.cpu.max_freq "$2"
+        apply_max_freq "$2"
+        ;;
+    *)
+        sed -n '2,6s/^# \{0,1\}//p' "$0" >&2
+        exit 2
+        ;;
+esac

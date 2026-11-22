@@ -1,0 +1,13 @@
+[Unit]
+Description=HippOS CPU governor and frequency limit
+DefaultDependencies=no
+After=local-fs.target userdata.mount
+Before=sysinit.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/hippos/hippos-cpu-limit apply
+
+[Install]
+WantedBy=sysinit.target
