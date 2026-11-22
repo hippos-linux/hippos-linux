@@ -17,6 +17,8 @@ libgles2:amd64
 libgles2:i386
 mesa-vulkan-drivers:i386
 
+pipewire-alsa:i386
+
 # Steam (repo.steampowered.com configured in configure-rootfs.sh)
 steam-launcher
 

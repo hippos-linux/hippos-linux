@@ -3,3 +3,4 @@
 # Broadcom V3DV (VideoCore VII) + other Mesa Vulkan drivers — Raspberry Pi 5
 mesa-vulkan-drivers
 
+pipewire-alsa:armhf
