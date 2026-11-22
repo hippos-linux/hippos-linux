@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import configparser
+import ctypes
 import filecmp
 import json
 import logging
@@ -786,6 +787,49 @@ def _restore_crt_resolution() -> None:
     except Exception as exc:
         _log.warning("CRT resolution restore failed: %s", exc)
 
+PR_SET_CHILD_SUBREAPER = 36
+LEFTOVER_GRACE_S = 3
+
+def _adopt_orphaned_game_processes() -> None:
+    ctypes.CDLL(None, use_errno=True).prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0)
+
+def _child_pids() -> set[int]:
+    pids: set[int] = set()
+    for children in Path('/proc/self/task').glob('*/children'):
+        try:
+            pids.update(int(pid) for pid in children.read_text().split())
+        except OSError:
+            pass
+    return pids
+
+def _reap_children() -> None:
+    while True:
+        try:
+            pid, _ = os.waitpid(-1, os.WNOHANG)
+        except ChildProcessError:
+            return
+        if pid == 0:
+            return
+
+def _stop_leftover_game_processes() -> None:
+    leftovers = _child_pids()
+    if not leftovers:
+        return
+    _log.info("stopping %d process(es) the game left running", len(leftovers))
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        for pid in _child_pids():
+            try:
+                os.kill(pid, sig)
+            except OSError:
+                pass
+        deadline = time.monotonic() + LEFTOVER_GRACE_S
+        while _child_pids() and time.monotonic() < deadline:
+            _reap_children()
+            time.sleep(0.1)
+        _reap_children()
+        if not _child_pids():
+            return
+
 def _run_game_command(
     ctx: LaunchContext,
     cmd: list[str],
@@ -806,6 +850,7 @@ def _run_game_command(
                     keyboard = _game_or_system_setting(conf, ctx.system, ctx.rom, 'onscreen_keyboard') == '1'
                     with padtokey_context(ctx.system, ctx.emulator, ctx.rom, ctx.controllers, profiles), \
                             onscreen_keyboard(env) if keyboard else nullcontext():
+                        _adopt_orphaned_game_processes()
                         launch_clock.game_started = time.perf_counter()
                         _log.info("launch: game setup %.2fs, game starts %.2fs after launcher start",
                                   launch_clock.game_started - setup_started, launch_clock.game_started - LAUNCHER_STARTED)
@@ -816,6 +861,7 @@ def _run_game_command(
                             result.returncode = 0
                         return result
     finally:
+        _stop_leftover_game_processes()
         _restore_crt_resolution()
 
 WINE_NO_INSTALLER_PROMPTS = 'mscoree=d;mshtml=d'
