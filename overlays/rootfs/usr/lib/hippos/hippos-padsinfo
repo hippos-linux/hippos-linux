@@ -24,11 +24,11 @@ read_battery_capacity() {
 }
 
 print_xml() {
-    sdl_info=$(sdl2-jstest --infopath 2>/dev/null)
-
     printf '<?xml version="1.0"?>\n'
     printf '<pads>\n'
     for padbat in /sys/class/power_supply/*/device/input/input*/event*; do
+        [ -e "${padbat}" ] || continue
+        [ -n "${sdl_info}" ] || sdl_info=$(sdl2-jstest --infopath 2>/dev/null)
         device_path="/dev/$(read_value DEVNAME "${padbat}/uevent")"
         sdlpad="$(printf '%s' "${sdl_info}" | grep -E "^${device_path} " | cut -d ' ' -f 2)"
         if [ "${sdlpad}" ]; then
