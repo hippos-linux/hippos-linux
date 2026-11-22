@@ -356,7 +356,7 @@ def _download(url, dest_path, label):
 def _extract_tarball(archive, dest, strip_components, source_subdir):
     print("Extracting...", flush=True)
     os.makedirs(dest, exist_ok=True)
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(dir=os.path.dirname(os.path.abspath(dest)), prefix=".extract-") as tmpdir:
         try:
             with tarfile.open(archive) as tf:
                 members = []
@@ -377,12 +377,11 @@ def _extract_tarball(archive, dest, strip_components, source_subdir):
 
         for item in os.listdir(src):
             s, d = os.path.join(src, item), os.path.join(dest, item)
-            if os.path.isdir(s):
-                if os.path.exists(d):
-                    shutil.rmtree(d)
-                shutil.copytree(s, d)
-            else:
-                shutil.copy2(s, d)
+            if os.path.isdir(d) and not os.path.islink(d):
+                shutil.rmtree(d)
+            elif os.path.lexists(d) and os.path.isdir(s):
+                os.remove(d)
+            os.replace(s, d)
 
 def _extract_zip(archive, dest, strip_components):
     print("Extracting...", flush=True)
