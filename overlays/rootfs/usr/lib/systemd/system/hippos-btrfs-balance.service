@@ -1,0 +1,9 @@
+[Unit]
+Description=HippOS return nearly empty btrfs data chunks to free space
+ConditionPathIsMountPoint=/run/hippos-btrfs
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/btrfs balance start -dusage=10 /run/hippos-btrfs
+Nice=19
+IOSchedulingClass=idle

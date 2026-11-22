@@ -1,0 +1,11 @@
+[Unit]
+Description=HippOS weekly btrfs free space tidy-up
+
+[Timer]
+OnCalendar=weekly
+RandomizedDelaySec=1h
+Persistent=true
+Unit=hippos-btrfs-balance.service
+
+[Install]
+WantedBy=timers.target

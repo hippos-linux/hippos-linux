@@ -23,10 +23,11 @@ fi
 kmsg "main device: ${MAIN_DEV}"
 
 mkdir -p "${BTRFS_MNT}"
-if ! mount -t btrfs -o subvolid=5,noatime,commit=5,compress=zstd:1 "${MAIN_DEV}" "${BTRFS_MNT}"; then
+if ! mount -t btrfs -o subvolid=5,noatime "${MAIN_DEV}" "${BTRFS_MNT}"; then
     kmsg "failed to mount HippOS btrfs top-level — booting without overlay"
     exit 0
 fi
+mount -o remount,compress=zstd:1 "${BTRFS_MNT}" || kmsg "could not turn on btrfs compression"
 kmsg "HippOS btrfs top-level mounted at ${BTRFS_MNT}"
 
 ROOT_SUBVOL="@rootfs"
@@ -202,7 +203,7 @@ fi
 kmsg "overlay mounted at ${rootmnt}"
 
 mkdir -p "${rootmnt}/userdata"
-if ! mount -t btrfs -o subvol=@userdata,noatime,commit=5,compress=zstd:1 "${MAIN_DEV}" "${rootmnt}/userdata"; then
+if ! mount -t btrfs -o subvol=@userdata,noatime "${MAIN_DEV}" "${rootmnt}/userdata"; then
     kmsg "userdata mount failed — systemd will mount it from fstab"
 fi
 

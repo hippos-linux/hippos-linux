@@ -503,6 +503,9 @@ capture "btrfs-usage.txt" \
 capture "btrfs-device-stats.txt" \
     btrfs device stats /userdata
 
+capture "btrfs-scrub-status.txt" \
+    btrfs scrub status /userdata
+
 capture "btrfs-subvolumes.txt" \
     btrfs subvolume list /userdata
 

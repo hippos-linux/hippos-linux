@@ -188,6 +188,38 @@ class UpdateSpaceShortfallTests(unittest.TestCase):
         self.assertEqual(hu.update_space_shortfall(0, {"url": "x"}, False), 0)
 
 
+class UnallocatedRoomTests(unittest.TestCase):
+    GB = 1024 ** 3
+    USAGE = "Overall:\n    Device size:\t\t 512110190592\n    Device unallocated:\t\t 4294967296\n"
+
+    def test_parses_unallocated_bytes_from_btrfs_usage(self):
+        self.assertEqual(hu.parse_unallocated_bytes(self.USAGE), 4 * self.GB)
+
+    def test_enough_unallocated_space_skips_balance(self):
+        with mock.patch.object(hu, "unallocated_bytes", return_value=4 * self.GB), \
+             mock.patch.object(hu.subprocess, "run") as run:
+            self.assertTrue(hu.make_unallocated_room(1 * self.GB))
+        run.assert_not_called()
+
+    def test_balances_until_enough_space_is_unallocated(self):
+        free = iter([0, 0, 2 * self.GB])
+        with mock.patch.object(hu, "unallocated_bytes", side_effect=lambda: next(free)), \
+             mock.patch.object(hu.subprocess, "run") as run, mock.patch.object(hu, "log"):
+            self.assertTrue(hu.make_unallocated_room(1 * self.GB))
+        self.assertEqual([c.args[0][3] for c in run.call_args_list], ["-dusage=0", "-dusage=10"])
+
+    def test_reports_failure_when_balancing_frees_too_little(self):
+        with mock.patch.object(hu, "unallocated_bytes", return_value=0), \
+             mock.patch.object(hu.subprocess, "run"), mock.patch.object(hu, "log"):
+            self.assertFalse(hu.make_unallocated_room(1 * self.GB))
+
+    def test_room_covers_new_data_chunks_and_their_metadata(self):
+        self.assertEqual(hu.unallocated_room_needed({"installed_size": 16 * self.GB}), 17 * self.GB)
+
+    def test_manifest_without_installed_size_needs_no_room(self):
+        self.assertEqual(hu.unallocated_room_needed({"url": "x"}), 0)
+
+
 
 
 class FirmwareBootTests(unittest.TestCase):

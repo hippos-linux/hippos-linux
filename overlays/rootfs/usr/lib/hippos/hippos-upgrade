@@ -1025,6 +1025,31 @@ def update_space_shortfall(free_bytes, payload, archive_cached):
         needed += payload.get("size", 0)
     return max(0, needed - free_bytes)
 
+METADATA_ROOM_DIVISOR = 16
+BALANCE_DATA_USAGE_STEPS = (0, 10, 25, 50)
+
+def unallocated_room_needed(payload):
+    installed = payload.get("installed_size", 0)
+    return installed + installed // METADATA_ROOM_DIVISOR
+
+def parse_unallocated_bytes(usage_text):
+    return int(re.search(r"Device unallocated:\s+(\d+)", usage_text).group(1))
+
+def unallocated_bytes():
+    usage = subprocess.run(
+        ["btrfs", "filesystem", "usage", "-b", BTRFS_MNT],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    return parse_unallocated_bytes(usage)
+
+def make_unallocated_room(needed):
+    for usage in BALANCE_DATA_USAGE_STEPS:
+        if unallocated_bytes() >= needed:
+            return True
+        log(f"Compacting data chunks under {usage}% full to make room for the new system...")
+        subprocess.run(["btrfs", "balance", "start", f"-dusage={usage}", BTRFS_MNT], check=False)
+    return unallocated_bytes() >= needed
+
 def remove_stale_archives(keep_archive):
     for name in os.listdir(CACHE_DIR):
         path = os.path.join(CACHE_DIR, name)
@@ -1159,6 +1184,10 @@ def cmd_apply():
             shortfall_mb = (shortfall + 1024 * 1024 - 1) // (1024 * 1024)
             die(f"Not enough free space for this update — free at least "
                 f"{shortfall_mb} MB under /userdata (e.g. ROMs or media) and retry")
+
+        if not make_unallocated_room(unallocated_room_needed(payload)):
+            die("The drive has free space, but too little of it is unclaimed for the new "
+                "system's file records — free a few GB under /userdata (e.g. ROMs or media) and retry")
 
         notifier.begin(f"Downloading HippOS {remote}", "You can keep using the desktop.")
         fetch_archive(url, archive, sha256)

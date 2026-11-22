@@ -1,0 +1,10 @@
+[Unit]
+Description=HippOS check the btrfs drive for corrupted data
+ConditionPathIsMountPoint=/run/hippos-btrfs
+ConditionACPower=true
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/btrfs scrub start -B /run/hippos-btrfs
+Nice=19
+IOSchedulingClass=idle
