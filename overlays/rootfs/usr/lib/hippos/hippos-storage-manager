@@ -369,7 +369,34 @@ def store_file(conn: sqlite3.Connection, scan_id: int, rec: FileRecord) -> int:
     )
     return int(existing["id"])
 
-def scan_roots(conn: sqlite3.Connection, roots: list[tuple[Path, str]], hash_threshold: int, size_limit: int) -> dict:
+def hash_same_size_files(conn: sqlite3.Connection, scan_id: int, size_limit: int) -> int:
+    categories = tuple(sorted(HASHABLE_CATEGORIES))
+    marks = ",".join("?" * len(categories))
+    rows = conn.execute(
+        f"""
+        SELECT id, path FROM files
+         WHERE last_seen_scan_id = ?
+           AND content_hash IS NULL
+           AND size <= ?
+           AND category IN ({marks})
+           AND size IN (SELECT size FROM files
+                         WHERE last_seen_scan_id = ? AND category IN ({marks})
+                         GROUP BY size HAVING COUNT(*) > 1)
+        """,
+        (scan_id, size_limit, *categories, scan_id, *categories),
+    ).fetchall()
+    errors = 0
+    for row in rows:
+        try:
+            content_hash = hash_file(Path(row["path"]))
+        except OSError:
+            errors += 1
+            continue
+        conn.execute("UPDATE files SET content_hash=? WHERE id=?", (content_hash, row["id"]))
+    conn.commit()
+    return errors
+
+def scan_roots(conn: sqlite3.Connection, roots: list[tuple[Path, str]], size_limit: int) -> dict:
     started = int(time.time())
     cur = conn.execute(
         "INSERT INTO scans(started_at, status, roots, scanner_version, notes) VALUES(?, ?, ?, ?, ?)",
@@ -392,19 +419,8 @@ def scan_roots(conn: sqlite3.Connection, roots: list[tuple[Path, str]], hash_thr
         ftype = file_type_from_path(path)
         existing = get_existing(conn, str(path))
         content_hash = None
-        needs_hash = (
-            category in HASHABLE_CATEGORIES
-            or path.suffix.lower() in DISC_EXTS
-            or st.st_size <= hash_threshold
-        )
-        if existing and existing["size"] == st.st_size and existing["mtime"] == int(st.st_mtime_ns) and existing["content_hash"]:
+        if existing and existing["size"] == st.st_size and existing["mtime"] == int(st.st_mtime_ns):
             content_hash = existing["content_hash"]
-        elif needs_hash and st.st_size <= size_limit:
-            try:
-                content_hash = hash_file(path)
-            except OSError:
-                errors += 1
-                continue
 
         rec = FileRecord(
             path=str(path),
@@ -421,6 +437,8 @@ def scan_roots(conn: sqlite3.Connection, roots: list[tuple[Path, str]], hash_thr
         )
         file_id = store_file(conn, scan_id, rec)
         file_count += 1
+
+    errors += hash_same_size_files(conn, scan_id, size_limit)
 
     duplicate_groups = 0
     duplicate_files = 0
@@ -1562,7 +1580,7 @@ def main() -> int:
 
     if args.command == "scan":
         roots = iter_roots(args.roots)
-        summary = scan_roots(conn, roots, hash_threshold=256 * 1024 * 1024, size_limit=8 * 1024 * 1024 * 1024)
+        summary = scan_roots(conn, roots, size_limit=8 * 1024 * 1024 * 1024)
         if args.json:
             print(json.dumps(summary, indent=2))
         else:

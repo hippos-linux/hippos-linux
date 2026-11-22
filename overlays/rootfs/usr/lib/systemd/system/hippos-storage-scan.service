@@ -1,6 +1,7 @@
 [Unit]
 Description=HippOS storage scanner
 After=greetd.service
+ConditionACPower=true
 
 [Service]
 Type=oneshot
