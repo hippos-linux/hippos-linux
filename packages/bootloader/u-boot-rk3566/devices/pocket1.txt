@@ -1,0 +1,1 @@
+fdtfile=rk3566-miniloong.dtb

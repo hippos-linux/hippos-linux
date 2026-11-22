@@ -1,0 +1,1 @@
+fdtfile=rk3566-powkiddy-x55.dtb

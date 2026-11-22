@@ -1,0 +1,1 @@
+fdtfile=rk3326-batlexp-g350.dtb

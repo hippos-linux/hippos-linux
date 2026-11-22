@@ -1,0 +1,1 @@
+fdtfile=rk3326-magicx-xu-mini-m.dtb
