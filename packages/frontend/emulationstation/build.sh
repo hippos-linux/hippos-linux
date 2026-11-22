@@ -62,6 +62,6 @@ cmake --build "${BUILD_DIR}" -- -j"$(nproc)"
 log "Staging"
 rm -rf "${STAGING_DIR}"
 mkdir -p "${STAGING_DIR}"
-DESTDIR="${STAGING_DIR}" cmake --install "${BUILD_DIR}"
+DESTDIR="${STAGING_DIR}" cmake --install "${BUILD_DIR}" --strip
 
 log "Done — artifact at ${STAGING_DIR}"
