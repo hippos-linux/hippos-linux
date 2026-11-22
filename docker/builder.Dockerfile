@@ -53,6 +53,7 @@ RUN apt-get update \
         udev \
         uuid-dev \
         xz-utils \
+        zip \
         zstd \
     && rm -rf /var/lib/apt/lists/*
 

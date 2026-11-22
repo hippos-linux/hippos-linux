@@ -148,6 +148,19 @@ if version_lt "$APPLIED" "0.7.0"; then
     rm -f /var/lib/hippos/emulators/defaults.yml
 fi
 
+PORTMASTER_ZIP=/usr/share/hippos/portmaster/PortMaster.zip
+PORTMASTER_PARENT=/userdata/.local/share
+if version_lt "$APPLIED" "0.7.1" && [[ -f "$PORTMASTER_ZIP" && ! -e "$PORTMASTER_PARENT/PortMaster" ]]; then
+    log "0.7.1: PortMaster is installed for the hippos user"
+    mkdir -p "$PORTMASTER_PARENT"
+    unzip -q "$PORTMASTER_ZIP" -d "$PORTMASTER_PARENT"
+    cp "$PORTMASTER_PARENT/PortMaster/hippos/control.txt" "$PORTMASTER_PARENT/PortMaster/control.txt"
+    mkdir -p /userdata/roms/ports
+    [[ -e /userdata/roms/ports/PortMaster.sh ]] || cp "$PORTMASTER_PARENT/PortMaster/PortMaster.sh" /userdata/roms/ports/PortMaster.sh
+    chown hippos:users /userdata/.local "$PORTMASTER_PARENT"
+    chown -R hippos:users "$PORTMASTER_PARENT/PortMaster" /userdata/roms/ports/PortMaster.sh
+fi
+
 HIPPOS_CONFIG=/userdata/system/configs/hippos
 mkdir -p "${HIPPOS_CONFIG}"
 for name in external-roms.conf roms-sources.conf ignored-storage-devices.txt current-storage.conf; do
