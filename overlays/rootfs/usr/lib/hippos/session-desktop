@@ -49,6 +49,12 @@ fi
 
 /usr/lib/hippos/hippos-hotkeys --new-context desktop '{}' || true
 
+if [[ "$(hippos-settings get desktop.maximize_windows)" == 1 ]]; then
+    /usr/lib/hippos/hippos-openbox-maximize on
+else
+    /usr/lib/hippos/hippos-openbox-maximize off
+fi
+
 xset -dpms 2>/dev/null || true
 xset s off 2>/dev/null || true
 

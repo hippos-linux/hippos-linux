@@ -166,6 +166,12 @@ if version_lt "$APPLIED" "0.7.1" && [[ -L /userdata/Desktop/discover.desktop && 
     rm /userdata/Desktop/discover.desktop
 fi
 
+GTK_SETTINGS=/userdata/system/.config/gtk-3.0/settings.ini
+if version_lt "$APPLIED" "0.7.1" && grep -qx 'gtk-icon-theme-name=Adwaita' "${GTK_SETTINGS}" 2>/dev/null; then
+    log "0.7.1: GTK apps use the desktop's breeze-dark icons"
+    sed -i 's/^gtk-icon-theme-name=Adwaita$/gtk-icon-theme-name=breeze-dark/' "${GTK_SETTINGS}"
+fi
+
 if version_lt "$APPLIED" "0.7.1" \
     && grep -qx 'system.cpu.governor=schedutil' /userdata/system/hippos.conf 2>/dev/null \
     && grep -qx 'system.cpu.max_freq=1008000' /userdata/system/hippos.conf; then

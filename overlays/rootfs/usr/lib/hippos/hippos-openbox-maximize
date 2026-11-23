@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+# Usage: hippos-openbox-maximize on|off
+#   on: the desktop's Openbox opens normal windows maximized (above the taskbar); off: as they ask.
+
+import os
+import sys
+from pathlib import Path
+
+RULE = ('  <application class="*" type="normal">\n'
+        '    <maximized>yes</maximized>\n'
+        '  </application>\n')
+END = '</applications>'
+CONFIG_NAMES = ('rc.xml', 'lxqt-rc.xml')
+
+
+def set_rule(path: Path, enabled: bool) -> None:
+    try:
+        text = path.read_text(encoding='utf-8')
+    except FileNotFoundError:
+        return
+    if END not in text:
+        return
+    present = RULE in text
+    if enabled and not present:
+        text = text.replace(END, RULE + END, 1)
+    elif not enabled and present:
+        text = text.replace(RULE, '', 1)
+    else:
+        return
+    path.write_text(text, encoding='utf-8')
+
+
+def main(argv: list[str]) -> int:
+    if argv not in (['on'], ['off']):
+        print(__doc__ or 'Usage: hippos-openbox-maximize on|off', file=sys.stderr)
+        return 2
+    config = Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'openbox'
+    for name in CONFIG_NAMES:
+        set_rule(config / name, argv == ['on'])
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

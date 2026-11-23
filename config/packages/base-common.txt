@@ -16,6 +16,7 @@ tzdata
 
 # Network
 network-manager
+iproute2
 wpasupplicant
 systemd-timesyncd
 rfkill
@@ -245,6 +246,7 @@ cifs-utils
 nfs-common
 avahi-daemon
 avahi-utils
+libnss-mdns
 
 # Session tools used by HippOS outside the desktop
 dbus-user-session
