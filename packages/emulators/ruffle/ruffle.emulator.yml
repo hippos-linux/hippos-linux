@@ -1,4 +1,6 @@
 requireArtifact: ruffle
+appstream_ids:
+  - rs.ruffle.Ruffle
 features:
   - padtokeyboard
 shared_features:

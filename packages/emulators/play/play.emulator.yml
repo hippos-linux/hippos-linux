@@ -1,4 +1,6 @@
 requireArtifact: play
+appstream_ids:
+  - org.purei.Play
 features:
   - padtokeyboard
 shared_features:

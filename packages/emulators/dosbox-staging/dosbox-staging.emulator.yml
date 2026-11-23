@@ -1,4 +1,6 @@
 requireArtifact: dosbox-staging
+appstream_ids:
+  - io.github.dosbox-staging
 features:
   - padtokeyboard
 shared_features:

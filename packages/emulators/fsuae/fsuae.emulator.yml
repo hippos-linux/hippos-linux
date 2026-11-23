@@ -1,4 +1,6 @@
 requireArtifact: fsuae
+appstream_ids:
+  - net.fsuae.FS-UAE
 features:
   - padtokeyboard
 shared_features:

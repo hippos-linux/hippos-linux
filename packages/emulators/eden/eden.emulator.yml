@@ -1,4 +1,6 @@
 requireArtifact: eden
+appstream_ids:
+  - dev.eden_emu.eden
 systems:
 - switch
 features: []

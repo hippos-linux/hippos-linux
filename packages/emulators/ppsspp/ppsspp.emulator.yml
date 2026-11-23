@@ -1,4 +1,6 @@
 requireArtifact: ppsspp
+appstream_ids:
+  - org.ppsspp.PPSSPP
 shared_features:
   - powermode
   - tdp

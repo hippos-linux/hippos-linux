@@ -1,4 +1,6 @@
 requireArtifact: shadps4
+appstream_ids:
+  - net.shadps4.shadPS4
 arch: [amd64]
 features:
   - padtokeyboard

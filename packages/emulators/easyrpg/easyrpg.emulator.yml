@@ -1,4 +1,6 @@
 requireArtifact: easyrpg
+appstream_ids:
+  - org.easyrpg.player
 shared_features:
   - powermode
   - tdp

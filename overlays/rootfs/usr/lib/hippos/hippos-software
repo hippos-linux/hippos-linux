@@ -1,0 +1,860 @@
+#!/usr/bin/env python3
+# Usage: hippos-software [--updates | <file.flatpakref | file.flatpak>]
+
+from __future__ import annotations
+
+import hashlib
+import subprocess
+import sys
+import tempfile
+import threading
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Callable
+
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+gi.require_version('GdkPixbuf', '2.0')
+from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
+
+import hippos_flatpak_apps
+from hippos_apt import image_packages
+from hippos_emulator_integration import shipped_appstream_ids
+import hippos_software_index as index
+from hippos_software_index import App, Source, SystemUpdate
+from hippos_store_search import APT_PREFIX
+
+STORE = '/usr/lib/hippos/hippos-store'
+REMOTE_CACHE = index.INDEX_DIR / 'remote'
+PAGE_SIZE = 60
+HOME_POPULAR = 24
+SEARCH_PAUSE_MS = 300
+BEST_MATCH = 'Best match'
+SOURCE_FILTERS = {
+    'All sources': frozenset(),
+    'HippOS and Flathub': frozenset({'debian'}),
+    'HippOS and Debian': frozenset({'flatpak'}),
+    'HippOS only': frozenset({'flatpak', 'debian'}),
+}
+SOURCES_SETTING = 'software.sources'
+THEME_SETTING = 'software.theme'
+COMPACT_WIDTH = 1000
+FALLBACK_ICON = 'application-x-executable'
+STORE_NAME = 'HippOS Store'
+STORE_ICON = 'plasmadiscover'
+HEADER_ICON_PX = 16
+CSS = b'''
+.tile { padding: 6px; }
+.app-name { font-weight: bold; }
+.dim { opacity: 0.7; }
+.title { font-weight: bold; font-size: 150%; }
+.page-title { font-weight: bold; font-size: 130%; }
+'''
+
+
+def remote_file(url: str) -> Path | None:
+    target = REMOTE_CACHE / hashlib.sha1(url.encode()).hexdigest()
+    if target.exists():
+        return target
+    try:
+        REMOTE_CACHE.mkdir(parents=True, exist_ok=True)
+        request = urllib.request.Request(url, headers={'User-Agent': 'hippos-software/1.0'})
+        with urllib.request.urlopen(request, timeout=15) as response:
+            data = response.read()
+    except (OSError, ValueError):
+        return None
+    with tempfile.NamedTemporaryFile(dir=REMOTE_CACHE, delete=False) as temporary:
+        temporary.write(data)
+    Path(temporary.name).replace(target)
+    return target
+
+
+def scaled_pixbuf(path: Path | str, width: int, height: int) -> GdkPixbuf.Pixbuf | None:
+    try:
+        return GdkPixbuf.Pixbuf.new_from_file_at_scale(str(path), width, height, True)
+    except GLib.Error:
+        return None
+
+
+def stars(rating: int) -> str:
+    filled = round(rating / 20)
+    return '★' * filled + '☆' * (5 - filled)
+
+
+def short_count(count: int) -> str:
+    if count >= 1_000_000:
+        return f'{count / 1_000_000:.1f}M'
+    if count >= 1_000:
+        return f'{count / 1_000:.0f}k'
+    return str(count)
+
+
+def installs_text(app: App) -> str:
+    if app.installs_source == 'flatpak':
+        return f'{app.installs:,} installs last month on Flathub'
+    if app.installs_source == 'debian':
+        return f'{app.installs:,} installs reported to Debian popcon'
+    if app.installs_source == 'recomp':
+        return f'{app.installs:,} downloads on GitHub'
+    return ''
+
+
+def setting(name: str) -> str:
+    return subprocess.run(['hippos-settings', 'get', name], capture_output=True, text=True, check=False).stdout.strip()
+
+
+def saved_source_filter() -> str:
+    saved = setting(SOURCES_SETTING)
+    return saved if saved in SOURCE_FILTERS else 'All sources'
+
+
+def can_launch(app: App, source: Source) -> bool:
+    return bool(source.flatpak_id or (source.kind == 'debian' and app.desktop_id))
+
+
+def launch(app: App, source: Source) -> None:
+    if source.flatpak_id:
+        subprocess.Popen(hippos_flatpak_apps.run_command(source.flatpak_id), start_new_session=True)
+    elif info := Gio.DesktopAppInfo.new(app.desktop_id):
+        info.launch([], None)
+
+
+class Tile(Gtk.FlowBoxChild):
+    def __init__(self, app: App, icon_size: int, window: SoftwareWindow) -> None:
+        super().__init__()
+        self.app = app
+        self.get_style_context().add_class('tile')
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.image = Gtk.Image()
+        self.image.set_size_request(icon_size, icon_size)
+        window.set_icon(self.image, app, icon_size)
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        name = Gtk.Label(label=app.name, xalign=0, ellipsize=Pango.EllipsizeMode.END)
+        name.get_style_context().add_class('app-name')
+        summary = Gtk.Label(label=app.summary, xalign=0, ellipsize=Pango.EllipsizeMode.END)
+        summary.get_style_context().add_class('dim')
+        installed = next((source for source in app.sources if source.name in window.installed), None)
+        if window.included_entry(app) is not None:
+            facts = ['Included with HippOS']
+        elif installed:
+            facts = [f'Installed from {installed.label}']
+        else:
+            facts = [' · '.join(source.label for source in window.offered(app) or app.sources)]
+        if app.ratings:
+            facts.append(f'{stars(app.rating)} {app.ratings:,}')
+        if app.installs:
+            facts.append(f"{short_count(app.installs)} {'downloads' if app.installs_source == 'recomp' else 'installs'}")
+        origin = Gtk.Label(label='   '.join(facts), xalign=0, ellipsize=Pango.EllipsizeMode.END)
+        origin.get_style_context().add_class('dim')
+        for label in (name, summary, origin):
+            text.pack_start(label, False, False, 0)
+        box.pack_start(self.image, False, False, 0)
+        box.pack_start(text, True, True, 0)
+        self.add(box)
+
+
+class SoftwareWindow(Gtk.Window):
+    def __init__(self) -> None:
+        super().__init__(title=STORE_NAME)
+        self.apps: list[App] = []
+        self.installed: set[str] = set()
+        self.shipped: dict[str, str] = {}
+        self.image_packages: frozenset[str] = frozenset()
+        self.history: list[tuple[Callable[[], None], bool]] = []
+        self.current: Callable[[], None] | None = None
+        self.searching = False
+        self.pending_ref = ''
+        self.start_page = 'Home'
+        self.busy: set[str] = set()
+        self.status_labels: dict[str, Gtk.Label] = {}
+        self.grid: Gtk.FlowBox | None = None
+        self.primary_action: Gtk.Widget | None = None
+        self.sort_order = 'Most installed'
+        self.search_order = BEST_MATCH
+        self.source_filter = saved_source_filter()
+        self.dark = setting(THEME_SETTING) != 'light'
+        Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme', self.dark)
+        self.search_term = ''
+        self.search_source = 0
+        self.package_results: dict[str, list[App]] = {}
+        self.fetcher = ThreadPoolExecutor(max_workers=4)
+        display = Gdk.Display.get_default()
+        monitor = display.get_primary_monitor() or display.get_monitor(0)
+        screen = monitor.get_geometry()
+        self.compact = screen.width < COMPACT_WIDTH
+        self.icon_size = 40 if self.compact else 64
+        self.app_icon_size = 64 if self.compact else 128
+        self.set_default_size(int(screen.width * 0.8), int(screen.height * 0.8))
+        if self.compact:
+            self.maximize()
+        self.set_icon_name(STORE_ICON)
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), provider,
+                                                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.build()
+        self.connect('key-press-event', self.on_key)
+        self.connect('destroy', Gtk.main_quit)
+
+    def build(self) -> None:
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, margin=6)
+        self.back_button = Gtk.Button.new_from_icon_name('go-previous', Gtk.IconSize.BUTTON)
+        self.back_button.set_tooltip_text('Back (Esc)')
+        self.back_button.connect('clicked', lambda _: self.go_back())
+        self.search = Gtk.SearchEntry(placeholder_text='Search apps')
+        self.search.connect('search-changed', self.on_search)
+        self.search.connect('activate', lambda _: self.focus_results())
+        self.theme_button = Gtk.Button(image=self.theme_image())
+        self.theme_button.set_tooltip_text('Light or dark')
+        self.theme_button.connect('clicked', self.toggle_theme)
+        updates = Gtk.Button.new_from_icon_name('software-update-available', Gtk.IconSize.BUTTON)
+        updates.set_tooltip_text('Updates')
+        updates.connect('clicked', lambda _: self.open_sidebar_page('Updates'))
+        refresh = Gtk.Button.new_from_icon_name('view-refresh', Gtk.IconSize.BUTTON)
+        refresh.set_tooltip_text('Refresh the app lists (F5)')
+        refresh.connect('clicked', lambda _: self.load(force=True))
+        header.pack_start(self.back_button, False, False, 0)
+        header.pack_start(self.search, True, True, 0)
+        header.pack_start(updates, False, False, 0)
+        header.pack_start(self.theme_button, False, False, 0)
+        header.pack_start(refresh, False, False, 0)
+
+        self.sidebar = Gtk.ListBox(activate_on_single_click=True)
+        self.sidebar_pages: list[tuple[str, Callable[[], None]]] = [('Home', self.show_home)]
+        self.sidebar_pages += [(name, lambda name=name: self.show_category(name)) for name, _ in index.CATEGORIES]
+        self.sidebar_pages += [('Installed', self.show_installed), ('Updates', self.show_updates)]
+        for name, _ in self.sidebar_pages:
+            label = Gtk.Label(label=name, xalign=0, margin=8)
+            self.sidebar.add(label)
+        self.sidebar.connect('row-activated', self.on_sidebar)
+        sidebar_scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
+        sidebar_scroll.set_size_request(150 if self.compact else 200, -1)
+        sidebar_scroll.add(self.sidebar)
+
+        self.content = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
+        body = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        body.pack_start(sidebar_scroll, False, False, 0)
+        body.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), False, False, 0)
+        body.pack_start(self.content, True, True, 0)
+        layout = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        layout.pack_start(header, False, False, 0)
+        layout.pack_start(Gtk.Separator(), False, False, 0)
+        layout.pack_start(body, True, True, 0)
+        self.add(layout)
+
+    def theme_image(self) -> Gtk.Image:
+        image = Gtk.Image.new_from_icon_name('weather-clear-symbolic' if self.dark else 'weather-clear-night-symbolic',
+                                             Gtk.IconSize.BUTTON)
+        image.set_pixel_size(HEADER_ICON_PX)
+        return image
+
+    def toggle_theme(self, _button: Gtk.Button) -> None:
+        self.dark = not self.dark
+        Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme', self.dark)
+        self.theme_button.set_image(self.theme_image())
+        subprocess.Popen(['hippos-settings', 'set', THEME_SETTING, 'dark' if self.dark else 'light'])
+
+    def set_page(self, widget: Gtk.Widget) -> None:
+        self.grid = None
+        if child := self.content.get_child():
+            self.content.remove(child)
+        self.content.add(widget)
+        self.content.get_vadjustment().set_value(0)
+        self.back_button.set_sensitive(bool(self.history))
+        widget.show_all()
+
+    def navigate(self, page: Callable[[], None], searching: bool = False) -> None:
+        if self.current is not None and not (searching and self.searching):
+            self.history.append((self.current, self.searching))
+        self.current, self.searching = page, searching
+        page()
+
+    def go_back(self) -> None:
+        if self.history:
+            self.current, self.searching = self.history.pop()
+            self.current()
+
+    def message(self, text: str, spinner: bool = False) -> None:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, valign=Gtk.Align.CENTER, margin=24)
+        if spinner:
+            spin = Gtk.Spinner()
+            spin.start()
+            box.pack_start(spin, False, False, 0)
+        box.pack_start(Gtk.Label(label=text, wrap=True, justify=Gtk.Justification.CENTER), False, False, 0)
+        self.set_page(box)
+
+    def load(self, force: bool = False) -> None:
+        self.message('Loading apps from HippOS, Flathub and Debian…\nThe first time takes a minute.', spinner=True)
+
+        def work() -> None:
+            apps = None if force else index.load()
+            if apps is None or force or index.stale():
+                subprocess.run([sys.executable, index.__file__], check=False)
+                apps = index.load() or []
+            installed = index.installed_names(apps)
+            self.shipped = shipped_appstream_ids()
+            self.image_packages = image_packages() or frozenset()
+            GLib.idle_add(self.loaded, apps, installed)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def loaded(self, apps: list[App], installed: set[str]) -> bool:
+        self.apps, self.installed = apps, installed
+        if self.current is None:
+            self.open_sidebar_page(self.start_page)
+        else:
+            self.current()
+        if self.pending_ref:
+            self.open_ref(self.pending_ref)
+            self.pending_ref = ''
+        return False
+
+    def set_icon(self, image: Gtk.Image, app: App, size: int) -> None:
+        image.set_from_icon_name(FALLBACK_ICON, Gtk.IconSize.DIALOG)
+        image.set_pixel_size(size)
+        if not app.icon:
+            return
+        if not app.icon.startswith(('http://', 'https://')):
+            if pixbuf := scaled_pixbuf(app.icon, size, size):
+                image.set_from_pixbuf(pixbuf)
+            return
+
+        def fetched(future) -> None:
+            path = future.result()
+            if path is not None:
+                GLib.idle_add(self.apply_pixbuf, image, path, size, size)
+
+        self.fetcher.submit(remote_file, app.icon).add_done_callback(fetched)
+
+    @staticmethod
+    def apply_pixbuf(image: Gtk.Image, path: Path, width: int, height: int) -> bool:
+        if pixbuf := scaled_pixbuf(path, width, height):
+            image.set_from_pixbuf(pixbuf)
+        return False
+
+    def included_entry(self, app: App) -> str | None:
+        emulator = next((self.shipped[i.removesuffix('.desktop').lower()] for i in [*app.component_ids, app.desktop_id]
+                         if i and i.removesuffix('.desktop').lower() in self.shipped), '')
+        if emulator:
+            return f'hippos-{emulator}.desktop'
+        debian = app.source('debian')
+        if debian and debian.name[len(APT_PREFIX):] in self.image_packages:
+            return app.desktop_id
+        return None
+
+    def offered(self, app: App) -> list[Source]:
+        hidden = SOURCE_FILTERS[self.source_filter]
+        return [source for source in app.sources if ('flatpak' if source.flatpak_id else source.kind) not in hidden]
+
+    def filtered(self, apps: list[App]) -> list[App]:
+        return [app for app in apps if self.offered(app)]
+
+    def app_list(self, title: str, apps: list[App], empty: str, extra: Gtk.Widget | None = None,
+                 orders: tuple[str, ...] = (), filterable: bool = False) -> None:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin=12)
+        title_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        heading = Gtk.Label(label=title, xalign=0, ellipsize=Pango.EllipsizeMode.END)
+        heading.get_style_context().add_class('page-title')
+        title_row.pack_start(heading, True, True, 0)
+        if orders and apps:
+            chosen = self.search_order if self.searching else self.sort_order
+            order = chosen if chosen in orders else orders[0]
+            if order in index.SORTS:
+                apps = index.sort_apps(apps, order)
+            sort = Gtk.ComboBoxText()
+            for name in orders:
+                sort.append(name, name)
+            sort.set_active_id(order)
+            sort.set_tooltip_text('Sort')
+            sort.connect('changed', self.on_sort)
+            title_row.pack_start(sort, False, False, 0)
+        if filterable:
+            sources = Gtk.ComboBoxText()
+            for name in SOURCE_FILTERS:
+                sources.append(name, name)
+            sources.set_active_id(self.source_filter)
+            sources.set_tooltip_text('Sources to show')
+            sources.connect('changed', self.on_source_filter)
+            title_row.pack_start(sources, False, False, 0)
+        box.pack_start(title_row, False, False, 0)
+        if extra is not None:
+            box.pack_start(extra, False, False, 0)
+        if not apps:
+            box.pack_start(Gtk.Label(label=empty, xalign=0, wrap=True), False, False, 0)
+            self.set_page(box)
+            return
+        grid = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, activate_on_single_click=True,
+                           homogeneous=True, column_spacing=6, row_spacing=6,
+                           min_children_per_line=1, max_children_per_line=1 if self.compact else 3)
+        grid.connect('child-activated', lambda _, tile: self.navigate(lambda app=tile.app: self.show_app(app)))
+        box.pack_start(grid, False, False, 0)
+        more = Gtk.Button(label='Show more')
+        shown = [0]
+
+        def add_page() -> None:
+            for app in apps[shown[0]:shown[0] + PAGE_SIZE]:
+                grid.add(Tile(app, self.icon_size, self))
+            shown[0] += PAGE_SIZE
+            grid.show_all()
+            more.set_visible(shown[0] < len(apps))
+
+        more.connect('clicked', lambda _: add_page())
+        box.pack_start(more, False, False, 0)
+        self.set_page(box)
+        self.grid = grid
+        add_page()
+        if not self.searching:
+            self.focus_results()
+
+    def on_source_filter(self, combo: Gtk.ComboBoxText) -> None:
+        self.source_filter = combo.get_active_id()
+        subprocess.Popen(['hippos-settings', 'set', SOURCES_SETTING, self.source_filter])
+        if self.current is not None:
+            self.current()
+
+    def on_sort(self, combo: Gtk.ComboBoxText) -> None:
+        if self.searching:
+            self.search_order = combo.get_active_id()
+        else:
+            self.sort_order = combo.get_active_id()
+        if self.current is not None:
+            self.current()
+
+    def focus_results(self) -> None:
+        if self.grid is not None and (first := self.grid.get_child_at_index(0)):
+            first.grab_focus()
+
+    def show_home(self) -> None:
+        apps = self.filtered(self.apps)
+        picks = index.in_category(apps, 'HippOS picks')
+        popular = index.sort_apps([app for app in apps if app not in picks], 'Most installed')[:HOME_POPULAR]
+        self.app_list('Home', picks + popular, 'No apps yet. Check the network connection and press Refresh.',
+                      Gtk.Label(label='HippOS picks first, then the most installed apps.', xalign=0),
+                      filterable=True)
+
+    def show_category(self, name: str) -> None:
+        self.app_list(name, index.in_category(self.filtered(self.apps), name), f'No apps in {name}.',
+                      orders=tuple(index.SORTS), filterable=True)
+
+    def known_apps(self) -> list[App]:
+        return self.apps + [app for found in self.package_results.values() for app in found]
+
+    def installed_apps(self) -> list[App]:
+        return [app for app in self.apps
+                if self.included_entry(app) is not None or any(source.name in self.installed for source in app.sources)]
+
+    def show_installed(self) -> None:
+        self.app_list('Installed', self.installed_apps(), 'Nothing installed from the store yet.',
+                      orders=('Name', *[order for order in index.SORTS if order != 'Name']))
+
+    def show_updates(self) -> None:
+        self.message('Checking for updates…', spinner=True)
+
+        def work() -> None:
+            names = index.updatable_names()
+            system = index.system_updates()
+            GLib.idle_add(self.updates_found, names, system)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def updates_found(self, names: set[str], system: list[SystemUpdate]) -> bool:
+        apps = [app for app in self.known_apps() if any(source.name in names for source in app.sources)]
+        app_jobs = [self.store_job('install', next(s for s in app.sources if s.name in names)) for app in apps]
+        header = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        everything = Gtk.Button(label='Update everything', halign=Gtk.Align.START)
+        in_run_order = sorted(system, key=index.run_position)
+        everything.connect('clicked', lambda _: self.run_jobs(app_jobs + [self.system_job(u) for u in in_run_order],
+                                                              self.show_updates, restart=self.restart_needed(system)))
+        everything.set_sensitive(not self.busy)
+        if apps or system:
+            header.pack_start(everything, False, False, 0)
+        if system:
+            header.pack_start(self.section_heading('HippOS'), False, False, 0)
+            for update in system:
+                header.pack_start(self.system_row(update), False, False, 0)
+        if apps:
+            header.pack_start(self.section_heading('Apps'), False, False, 0)
+        empty = 'All apps are up to date.' if system else 'Everything is up to date.'
+        self.app_list('Updates', apps, empty, header)
+        return False
+
+    @staticmethod
+    def section_heading(text: str) -> Gtk.Label:
+        label = Gtk.Label(label=text, xalign=0)
+        label.get_style_context().add_class('app-name')
+        return label
+
+    @staticmethod
+    def restart_needed(updates: list[SystemUpdate]) -> bool:
+        return any(update.needs_restart for update in updates)
+
+    def system_row(self, update: SystemUpdate) -> Gtk.Widget:
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        title = Gtk.Label(label=update.title, xalign=0, ellipsize=Pango.EllipsizeMode.END)
+        title.get_style_context().add_class('app-name')
+        change = update.change + ('  ·  restart needed' if update.needs_restart else '')
+        detail = Gtk.Label(label=change, xalign=0, ellipsize=Pango.EllipsizeMode.END)
+        detail.get_style_context().add_class('dim')
+        status = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END)
+        status.get_style_context().add_class('dim')
+        self.status_labels[update.key] = status
+        for label in (title, detail, status):
+            text.pack_start(label, False, False, 0)
+        button = Gtk.Button(label='Update', valign=Gtk.Align.CENTER)
+        button.connect('clicked', lambda _: self.run_jobs([self.system_job(update)], self.show_updates,
+                                                          restart=update.needs_restart))
+        button.set_sensitive(update.key not in self.busy)
+        if update.key in self.busy:
+            status.set_text('Working…')
+        row.pack_start(text, True, True, 0)
+        row.pack_start(button, False, False, 0)
+        return row
+
+    def open_sidebar_page(self, name: str) -> None:
+        row = self.sidebar.get_row_at_index([page for page, _ in self.sidebar_pages].index(name))
+        self.sidebar.select_row(row)
+        self.on_sidebar(self.sidebar, row)
+
+    def on_sidebar(self, _box: Gtk.ListBox, row: Gtk.ListBoxRow) -> None:
+        self.search.set_text('')
+        self.history.clear()
+        self.current, self.searching = None, False
+        self.navigate(self.sidebar_pages[row.get_index()][1])
+
+    def on_search(self, _entry: Gtk.SearchEntry) -> None:
+        if self.search_source:
+            GLib.source_remove(self.search_source)
+        self.search_source = GLib.timeout_add(SEARCH_PAUSE_MS, self.run_search)
+
+    def run_search(self) -> bool:
+        self.search_source = 0
+        term = self.search.get_text().strip()
+        if not term:
+            if self.searching:
+                self.go_back()
+            return False
+        if not self.searching:
+            self.search_order = BEST_MATCH
+        self.search_term = term
+        self.navigate(lambda: self.show_results(term), searching=True)
+        self.search.grab_focus_without_selecting()
+        return False
+
+    def show_results(self, term: str) -> None:
+        packages = self.filtered(self.package_results.get(term, []))
+        self.app_list(f'Results for “{term}”', index.search(self.filtered(self.apps), term) + packages,
+                      'No apps found.', orders=(BEST_MATCH, *index.SORTS), filterable=True)
+        if term in self.package_results:
+            return
+
+        def work() -> None:
+            found, installed = index.package_apps(term, self.apps)
+            GLib.idle_add(add_packages, found, installed)
+
+        def add_packages(found: list[App], installed: set[str]) -> bool:
+            self.installed |= installed
+            self.package_results[term] = found
+            if found and self.searching and self.search_term == term and self.current is not None:
+                self.current()
+            return False
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def show_app(self, app: App) -> None:
+        details = index.details(app)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin=12)
+        top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        image = Gtk.Image()
+        self.set_icon(image, app, self.app_icon_size)
+        heading = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER)
+        name = Gtk.Label(label=app.name, xalign=0, wrap=True)
+        name.get_style_context().add_class('title')
+        heading.pack_start(name, False, False, 0)
+        rating = f'{stars(app.rating)}  {app.rating / 20:.1f} from {app.ratings:,} ratings' if app.ratings else ''
+        for text in (details.developer, app.summary, rating, installs_text(app)):
+            if text:
+                label = Gtk.Label(label=text, xalign=0, wrap=True)
+                label.get_style_context().add_class('dim')
+                heading.pack_start(label, False, False, 0)
+        top.pack_start(image, False, False, 0)
+        top.pack_start(heading, True, True, 0)
+        box.pack_start(top, False, False, 0)
+        box.pack_start(self.actions(app), False, False, 0)
+
+        debian = app.source('debian')
+        if details.screenshot or debian:
+            shot = Gtk.Image(halign=Gtk.Align.START)
+            box.pack_start(shot, False, False, 0)
+            width = min(800, self.content.get_allocated_width() - 40)
+
+            def screenshot() -> Path | None:
+                path = remote_file(details.screenshot) if details.screenshot else None
+                if path is None and debian:
+                    fallback = index.debian_screenshot(debian.name[len(APT_PREFIX):])
+                    path = remote_file(fallback) if fallback else None
+                return path
+
+            def fetched(future) -> None:
+                path = future.result()
+                if path is not None:
+                    GLib.idle_add(self.apply_pixbuf, shot, path, width, int(width * 0.75))
+
+            self.fetcher.submit(screenshot).add_done_callback(fetched)
+        if details.description:
+            box.pack_start(Gtk.Label(label=details.description, xalign=0, wrap=True, selectable=False), False, False, 0)
+        facts = Gtk.Grid(column_spacing=12, row_spacing=4)
+        rows = [('Licence', details.license), ('Sources', ', '.join(f'{s.label} {s.version}'.strip()
+                                                                    for s in app.sources))]
+        for row, (label, value) in enumerate(row for row in rows if row[1]):
+            facts.attach(Gtk.Label(label=label, xalign=0), 0, row, 1, 1)
+            facts.attach(Gtk.Label(label=value, xalign=0, wrap=True), 1, row, 1, 1)
+        box.pack_start(facts, False, False, 0)
+        if details.homepage:
+            link = Gtk.LinkButton(uri=details.homepage, label='Website', halign=Gtk.Align.START)
+            box.pack_start(link, False, False, 0)
+        if app.rating_id:
+            reviews = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            box.pack_start(reviews, False, False, 0)
+
+            def show_reviews(future) -> None:
+                GLib.idle_add(self.fill_reviews, reviews, future.result())
+
+            self.fetcher.submit(index.fetch_reviews, app).add_done_callback(show_reviews)
+        self.set_page(box)
+        if self.primary_action.get_sensitive():
+            self.primary_action.grab_focus()
+
+    @staticmethod
+    def fill_reviews(box: Gtk.Box, reviews: list) -> bool:
+        if not reviews or box.get_parent() is None:
+            return False
+        heading = Gtk.Label(label='Reviews', xalign=0)
+        heading.get_style_context().add_class('page-title')
+        box.pack_start(heading, False, False, 0)
+        for review in reviews:
+            title = Gtk.Label(label=f'{stars(review.rating)}  {review.summary}', xalign=0, wrap=True)
+            title.get_style_context().add_class('app-name')
+            body = Gtk.Label(label=review.description, xalign=0, wrap=True)
+            when = GLib.DateTime.new_from_unix_local(review.date).format('%-d %B %Y') if review.date else ''
+            author = Gtk.Label(label=f'{review.author}  {when}'.strip(), xalign=0)
+            author.get_style_context().add_class('dim')
+            for label in (title, body, author):
+                box.pack_start(label, False, False, 0)
+        box.show_all()
+        return False
+
+    def actions(self, app: App) -> Gtk.Widget:
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        if (entry := self.included_entry(app)) is not None:
+            row.pack_start(Gtk.Label(label='Included with HippOS'), False, False, 0)
+            info = Gio.DesktopAppInfo.new(entry) if entry else None
+            if info is not None:
+                open_button = Gtk.Button(label='Open')
+                open_button.connect('clicked', lambda _: info.launch([], None))
+                row.pack_start(open_button, False, False, 0)
+                self.primary_action = open_button
+            else:
+                self.primary_action = self.back_button
+            return row
+        installed_source = next((source for source in app.sources if source.name in self.installed), None)
+        status = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END)
+        status.get_style_context().add_class('dim')
+        if installed_source is not None:
+            row.pack_start(Gtk.Label(label=f'Installed from {installed_source.label}'), False, False, 0)
+            open_button = Gtk.Button(label='Open')
+            open_button.connect('clicked', lambda _: launch(app, installed_source))
+            remove = Gtk.Button(label='Remove')
+            remove.get_style_context().add_class('destructive-action')
+            remove.connect('clicked', lambda _: self.confirm_remove(app, installed_source))
+            if can_launch(app, installed_source):
+                row.pack_start(open_button, False, False, 0)
+            row.pack_start(remove, False, False, 0)
+            self.primary_action = open_button if can_launch(app, installed_source) else remove
+        else:
+            offered = self.offered(app) or app.sources
+            picker = Gtk.ComboBoxText()
+            for source in offered:
+                picker.append(source.name, f'{source.label} {source.version}'.strip())
+            picker.set_active(0)
+            install = Gtk.Button(label='Install')
+            install.get_style_context().add_class('suggested-action')
+            install.connect('clicked', lambda _: self.run_store(
+                'install', next(s for s in offered if s.name == picker.get_active_id()), app))
+            if len(offered) > 1:
+                row.pack_start(picker, False, False, 0)
+            else:
+                row.pack_start(Gtk.Label(label=f'From {offered[0].label}'), False, False, 0)
+            row.pack_start(install, False, False, 0)
+            self.primary_action = install
+        row.pack_start(status, True, True, 0)
+        for source in app.sources:
+            self.status_labels[source.name] = status
+        if any(source.name in self.busy for source in app.sources):
+            status.set_text('Working…')
+            for child in row.get_children():
+                child.set_sensitive(isinstance(child, Gtk.Label))
+        return row
+
+    def confirm_remove(self, app: App, source: Source) -> None:
+        dialog = Gtk.MessageDialog(transient_for=self, modal=True, message_type=Gtk.MessageType.QUESTION,
+                                   buttons=Gtk.ButtonsType.OK_CANCEL, text=f'Remove {app.name}?')
+        dialog.set_default_response(Gtk.ResponseType.OK)
+        if dialog.run() == Gtk.ResponseType.OK:
+            self.run_store('remove', source, app)
+        dialog.destroy()
+
+    def run_store(self, action: str, source: Source, app: App) -> None:
+        self.run_jobs([self.store_job(action, source)], lambda: self.refresh_app(app))
+
+    @staticmethod
+    def store_job(action: str, source: Source) -> tuple[str, list[str]]:
+        return source.name, [STORE, action, source.name]
+
+    @staticmethod
+    def system_job(update: SystemUpdate) -> tuple[str, list[str]]:
+        return update.key, [index.UPGRADE, *update.command]
+
+    def run_jobs(self, jobs: list[tuple[str, list[str]]], done: Callable[[], None], restart: bool = False) -> None:
+        self.busy |= {key for key, _ in jobs}
+        if self.current is not None:
+            self.current()
+
+        def report(name: str, text: str) -> bool:
+            status = self.status_labels.get(name)
+            if status is not None and status.get_parent() is not None:
+                status.set_text(text)
+            return False
+
+        def work() -> None:
+            failed = []
+            for key, command in jobs:
+                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                last = ''
+                for line in process.stdout:
+                    if line.strip():
+                        last = line.strip()
+                        GLib.idle_add(report, key, last)
+                if process.wait() != 0:
+                    failed.append(last or f'{command[-1]} failed')
+            installed = index.installed_names(self.known_apps())
+            GLib.idle_add(finished, installed, failed)
+
+        def finished(installed: set[str], failed: list[str]) -> bool:
+            self.installed = installed
+            self.busy -= {key for key, _ in jobs}
+            done()
+            if failed:
+                dialog = Gtk.MessageDialog(transient_for=self, modal=True, message_type=Gtk.MessageType.ERROR,
+                                           buttons=Gtk.ButtonsType.CLOSE, text='Something went wrong')
+                dialog.format_secondary_text('\n'.join(failed))
+                dialog.run()
+                dialog.destroy()
+            elif restart:
+                self.offer_restart()
+            return False
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def offer_restart(self) -> None:
+        dialog = Gtk.MessageDialog(transient_for=self, modal=True, message_type=Gtk.MessageType.QUESTION,
+                                   buttons=Gtk.ButtonsType.NONE, text='Restart to finish updating HippOS?')
+        dialog.add_buttons('Later', Gtk.ResponseType.CANCEL, 'Restart now', Gtk.ResponseType.OK)
+        dialog.set_default_response(Gtk.ResponseType.OK)
+        if dialog.run() == Gtk.ResponseType.OK:
+            subprocess.Popen(['systemctl', 'reboot'])
+        dialog.destroy()
+
+    def refresh_app(self, app: App) -> None:
+        self.current = lambda: self.show_app(app)
+        self.current()
+
+    def on_key(self, _window: Gtk.Window, event: Gdk.EventKey) -> bool:
+        alt = event.state & Gdk.ModifierType.MOD1_MASK
+        ctrl = event.state & Gdk.ModifierType.CONTROL_MASK
+        if event.keyval == Gdk.KEY_Down and self.search.has_focus():
+            self.focus_results()
+            return True
+        if event.keyval == Gdk.KEY_Escape and not self.search.has_focus():
+            self.go_back()
+            return True
+        if alt and event.keyval == Gdk.KEY_Left:
+            self.go_back()
+            return True
+        if event.keyval == Gdk.KEY_F5:
+            self.load(force=True)
+            return True
+        if ctrl and event.keyval == Gdk.KEY_f:
+            self.search.grab_focus()
+            return True
+        return False
+
+    def show_bundle(self, path: str) -> None:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin=12)
+        name = Gtk.Label(label=Path(path).name, xalign=0, wrap=True)
+        name.get_style_context().add_class('title')
+        box.pack_start(name, False, False, 0)
+        box.pack_start(Gtk.Label(label='A Flatpak bundle file. Its runtime comes from Flathub if it needs one.',
+                                 xalign=0, wrap=True), False, False, 0)
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        install = Gtk.Button(label='Install')
+        install.get_style_context().add_class('suggested-action')
+        status = Gtk.Label(xalign=0)
+        status.get_style_context().add_class('dim')
+
+        def work() -> None:
+            result = hippos_flatpak_apps.install_bundle(path)
+            installed = index.installed_names(self.apps)
+            GLib.idle_add(finished, result, installed)
+
+        def finished(result: int, installed: set[str]) -> bool:
+            self.installed = installed
+            status.set_text('Installed.' if result == 0 else 'The bundle could not be installed.')
+            return False
+
+        def start(_button: Gtk.Button) -> None:
+            install.set_sensitive(False)
+            status.set_text('Installing…')
+            threading.Thread(target=work, daemon=True).start()
+
+        install.connect('clicked', start)
+        row.pack_start(install, False, False, 0)
+        row.pack_start(status, True, True, 0)
+        box.pack_start(row, False, False, 0)
+        self.set_page(box)
+        install.grab_focus()
+
+    def open_ref(self, path: str) -> None:
+        if path.endswith('.flatpak'):
+            self.navigate(lambda: self.show_bundle(path))
+            return
+        app_id = ''
+        try:
+            for line in Path(path).read_text(encoding='utf-8', errors='replace').splitlines():
+                if line.startswith('Name='):
+                    app_id = line.partition('=')[2].strip()
+        except OSError:
+            return
+        match = next((app for app in self.apps if app.key == app_id.lower()), None)
+        if match is not None:
+            self.navigate(lambda: self.show_app(match))
+
+
+def main(argv: list[str]) -> int:
+    GLib.set_application_name(STORE_NAME)
+    Gtk.Window.set_default_icon_name(STORE_ICON)
+    window = SoftwareWindow()
+    window.show_all()
+    if argv == ['--updates']:
+        window.start_page = 'Updates'
+    else:
+        window.pending_ref = argv[0] if argv else ''
+    window.load()
+    Gtk.main()
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

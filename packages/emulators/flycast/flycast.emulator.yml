@@ -1,4 +1,6 @@
 requireArtifact: flycast
+appstream_ids:
+  - org.flycast.Flycast
 features:
   - cheevos
 shared_features:

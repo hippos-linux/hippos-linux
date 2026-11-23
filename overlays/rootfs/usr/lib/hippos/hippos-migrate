@@ -161,9 +161,13 @@ if version_lt "$APPLIED" "0.7.1" && [[ -f "$PORTMASTER_ZIP" && ! -e "$PORTMASTER
     chown -R hippos:users "$PORTMASTER_PARENT/PortMaster" /userdata/roms/ports/PortMaster.sh
 fi
 
-if version_lt "$APPLIED" "0.7.1" && [[ -L /userdata/Desktop/discover.desktop && ! -e /userdata/Desktop/discover.desktop ]]; then
-    log "0.7.1: Discover shortcut removed where Discover isn't installed"
-    rm /userdata/Desktop/discover.desktop
+if version_lt "$APPLIED" "0.7.1" && [[ -d /userdata/Desktop ]]; then
+    log "0.7.1: the desktop's Discover shortcut is replaced by HippOS Store"
+    [[ -L /userdata/Desktop/discover.desktop ]] && rm /userdata/Desktop/discover.desktop
+    if [[ ! -e /userdata/Desktop/software.desktop ]]; then
+        ln -s /usr/share/applications/hippos-software.desktop /userdata/Desktop/software.desktop
+        chown -h hippos:users /userdata/Desktop/software.desktop
+    fi
 fi
 
 GTK_SETTINGS=/userdata/system/.config/gtk-3.0/settings.ini

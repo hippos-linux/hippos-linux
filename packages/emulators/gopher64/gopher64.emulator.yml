@@ -1,4 +1,6 @@
 requireArtifact: gopher64
+appstream_ids:
+  - io.github.gopher64.gopher64
 best_effort: true
 systems:
 - n64

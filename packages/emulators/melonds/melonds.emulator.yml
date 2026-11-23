@@ -1,4 +1,6 @@
 requireArtifact: melonds
+appstream_ids:
+  - net.kuribo64.melonDS
 shared_features:
   - powermode
   - tdp

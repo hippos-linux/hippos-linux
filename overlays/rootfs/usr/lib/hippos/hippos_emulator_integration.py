@@ -87,6 +87,20 @@ def package_present(packages_root: Path | None, name: str) -> bool:
     return packages_root is None or (packages_root / name).is_dir()
 
 
+def shipped_appstream_ids(root: Path = Path('/')) -> dict[str, str]:
+    packages_root = root / PACKAGES_DIR
+    emulators = collect_emulator_ymls(sorted((root / SHARE_DIR).glob(f'*{YML_SUFFIX}')),
+                                      package_emulator_ymls(packages_root))
+    shipped = {}
+    for emulator in emulators:
+        require = emulator.data.get('requireArtifact')
+        if require is not None and not package_present(packages_root, require):
+            continue
+        for app_id in emulator.data.get('appstream_ids') or []:
+            shipped[str(app_id).removesuffix('.desktop').lower()] = emulator.name
+    return shipped
+
+
 def available_core_files(packages_root: Path | None) -> set[str] | None:
     if packages_root is None:
         return None

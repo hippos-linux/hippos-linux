@@ -1,4 +1,6 @@
 requireArtifact: pcsx2
+appstream_ids:
+  - net.pcsx2.PCSX2
 arch: [amd64]
 systems:
   - name: ps2

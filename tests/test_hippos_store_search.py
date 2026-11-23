@@ -12,7 +12,7 @@ import hippos_store_search as store_search
 class DebianResultsTests(unittest.TestCase):
     def setUp(self):
         for name, value in {
-            '_refresh_apt_lists': mock.Mock(),
+            'refresh_apt_lists': mock.Mock(),
             'image_packages': mock.Mock(return_value=frozenset({'retroarch'})),
             'search_packages': mock.Mock(return_value=[
                 ('retroarch', 'part of the system'),

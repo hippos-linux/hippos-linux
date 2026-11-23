@@ -81,6 +81,15 @@ class EmulatorIntegrationTests(unittest.TestCase):
         defaults = json.loads((self.env.state / integration.LAUNCHER_DEFAULTS).read_text())
         self.assertEqual(defaults['psx'], {'emulator': 'newpsx', 'core': 'newpsx'})
 
+    def test_store_ids_of_installed_emulators_only(self):
+        self.env.image_emulator('shipped', {'requireArtifact': 'shipped',
+                                            'appstream_ids': ['org.Example.Shipped', 'shipped.desktop']})
+        self.env.image_emulator('missing', {'requireArtifact': 'missing', 'appstream_ids': ['org.example.Missing']})
+        self.env.install('shipped')
+        self.env.install('packaged', {'requireArtifact': 'packaged', 'appstream_ids': ['org.example.Packaged']})
+        self.assertEqual(integration.shipped_appstream_ids(self.env.root),
+                         {'org.example.shipped': 'shipped', 'shipped': 'shipped', 'org.example.packaged': 'packaged'})
+
     def test_declared_default_falls_back_while_its_package_is_missing(self):
         self.sync()
         self.assertEqual(self.env.psx_emulators(), {'oldpsx': 'true'})

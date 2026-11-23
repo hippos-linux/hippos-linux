@@ -1,4 +1,7 @@
 requireArtifact: mame
+appstream_ids:
+  - org.mamedev.MAME
+  - mame.desktop
 features:
   - padtokeyboard
 shared_features:

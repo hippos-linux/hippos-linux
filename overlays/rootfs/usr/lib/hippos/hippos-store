@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import fnmatch
 import hashlib
 import json
 import os
@@ -20,25 +21,11 @@ import hippos_content_installers
 import hippos_flatpak_apps
 import hippos_store_search
 import hippos_webapps
+from hippos_store_catalog import (CACHE_DIR, DEB_ARCH, RECOMP_PREFIX, STATE_DIR, catalog_section, for_this_machine,
+                                  is_installed, load_catalog, load_recomp_catalog, load_state, recomp_linux_pattern,
+                                  save_state)
 from hippos_linux_games import add_catalog_game, remove_catalog_game, set_claimed
 
-_DEFAULT_CATALOG_URL = "https://hippos-linux.org/store/content-catalog.json"
-
-def _read_sysconf(key):
-    path = "/userdata/system/hippos.conf"
-    try:
-        for line in open(path):
-            k, _, v = line.strip().partition("=")
-            if k.strip() == key:
-                return v.strip()
-    except FileNotFoundError:
-        pass
-    return None
-
-CATALOG_URL = _read_sysconf("content.catalog_url") or _DEFAULT_CATALOG_URL
-STATE_DIR      = "/userdata/system/hippos-store"
-STATE_FILE     = os.path.join(STATE_DIR, "installed.json")
-CACHE_DIR      = os.path.join(STATE_DIR, "cache")
 WINE_CACHE     = os.path.join(STATE_DIR, "wine-runners.json")
 WINE_CACHE_TTL = 3600
 WINE_RUNNERS_DIR = "/userdata/system/wine-runners"
@@ -81,7 +68,6 @@ WINE_SOURCES = [
 ]
 
 
-DEB_ARCH       = {"x86_64": "amd64", "aarch64": "arm64"}.get(platform.machine(), platform.machine())
 ES_SYSTEMS_CFG = "/usr/share/emulationstation/es_systems.cfg"
 
 def _gh_get(url):
@@ -92,26 +78,6 @@ def _gh_get(url):
     })
     with urllib.request.urlopen(req, timeout=20) as r:
         return json.loads(r.read())
-
-def load_catalog():
-    req = urllib.request.Request(CATALOG_URL, headers={"User-Agent": "hippos-store/1.0"})
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return json.loads(resp.read().decode("utf-8"))["packages"]
-    except Exception as exc:
-        print(f"Error: could not fetch catalog: {exc}", file=sys.stderr)
-        return []
-
-def load_state():
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE) as f:
-            return json.load(f)
-    return {}
-
-def save_state(state):
-    os.makedirs(STATE_DIR, exist_ok=True)
-    with open(STATE_FILE, "w") as f:
-        json.dump(state, f, indent=2)
 
 def _runner_id(source_id, asset_name):
     stem = asset_name
@@ -181,27 +147,6 @@ CATALOG_TABS = {
     "cheats":  "Cheats",
 }
 
-def catalog_section(pkg):
-    if pkg.get("section"):
-        return pkg["section"]
-    if pkg.get("category") in ("apps", "webapps"):
-        return "Apps"
-    if pkg.get("type") == "installer":
-        return "Launchers"
-    if pkg.get("scummvm_id"):
-        return "ScummVM classics"
-    if pkg.get("category") == "ports":
-        return "Open-source games"
-    return "RetroArch"
-
-def for_this_machine(pkg):
-    arch = pkg.get("arch", "")
-    if pkg.get("type") == "deb" and DEB_ARCH not in pkg.get("deb", {}):
-        return False
-    if pkg.get("type") == "archive" and DEB_ARCH not in pkg.get("archive", {}):
-        return False
-    return not arch or arch == DEB_ARCH
-
 def system_full_names():
     names = {}
     try:
@@ -227,16 +172,6 @@ def _pkg_node(root, pkg_id, title, repository, version, description, group, pack
     ET.SubElement(node, "download_size").text     = str(download_size)
     ET.SubElement(node, "installed_size").text    = str(download_size)
     ET.SubElement(node, "preview_url").text       = preview_url
-
-def is_installed(pkg, state):
-    if pkg.get("type") == "webapp":
-        url = hippos_webapps.normalise_url(pkg.get("webapp_url", ""))
-        return any(app.url == url for app in hippos_webapps.load_webapps())
-    if pkg.get("type") == "flatpak":
-        return hippos_flatpak_apps.installed(pkg.get("flatpak_id", ""))
-    if pkg.get("type") == "script":
-        return os.path.exists(pkg["installed_path"])
-    return pkg["id"] in state
 
 def cmd_list():
     catalog = load_catalog()
@@ -437,6 +372,140 @@ def _install_archive(pkg):
         os.remove(archive)
     add_catalog_game({**pkg, "launcher_command": shlex.join(["env", "-C", dest, "./" + command[0], *command[1:]])})
 
+ELF_MAGIC = b"\x7fELF"
+RECOMP_RELEASES_CHECKED = 5
+
+
+def recomp_entry(name):
+    entry_id = name[len(RECOMP_PREFIX):]
+    entry = next((app for app in load_recomp_catalog() if app.get("id") == entry_id), None)
+    if entry is None or recomp_linux_pattern(entry) is None:
+        print(f"ERROR: recomp '{entry_id}' has no Linux build for {DEB_ARCH}", flush=True)
+        sys.exit(1)
+    return entry
+
+
+def recomp_game(entry):
+    return {"id": f"recomp-{entry['id']}", "name": entry.get("name", entry["id"]),
+            "description": entry.get("blurb", ""), "preview_url": entry.get("cover", "")}
+
+
+def _matching_asset(release, pattern):
+    return next((asset for asset in release.get("assets", []) if fnmatch.fnmatch(asset["name"].lower(), pattern)), None)
+
+
+def _recomp_release_asset(entry):
+    pattern = recomp_linux_pattern(entry).lower()
+    api = f"https://api.github.com/repos/{entry['repo']}/releases"
+    latest = _gh_get(f"{api}/latest")
+    if asset := _matching_asset(latest, pattern):
+        return latest.get("tag_name", ""), asset
+    for release in _gh_get(f"{api}?per_page={RECOMP_RELEASES_CHECKED}"):
+        if not release.get("draft") and (asset := _matching_asset(release, pattern)):
+            return release.get("tag_name", ""), asset
+    return None, None
+
+
+def _is_elf(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read(4) == ELF_MAGIC
+    except OSError:
+        return False
+
+
+def _unpack_inner_archive(dest):
+    entries = os.listdir(dest)
+    if len(entries) != 1:
+        return
+    inner = os.path.join(dest, entries[0])
+    lower = entries[0].lower()
+    if lower.endswith(".zip"):
+        _extract_zip(inner, dest, 0)
+    elif lower.endswith((".tar.gz", ".tgz", ".tar.xz", ".tar.bz2", ".tar.zst", ".tar")):
+        _extract_tarball(inner, dest, 0, "")
+    else:
+        return
+    os.remove(inner)
+
+
+def _recomp_executable(dest, entry):
+    start = os.path.splitext(((entry.get("boot") or {}).get("start") or ""))[0].lower()
+    candidates = []
+    for root, dirs, files in os.walk(dest):
+        relative = os.path.relpath(root, dest)
+        depth = 0 if relative == os.curdir else relative.count(os.sep) + 1
+        for file in files:
+            path = os.path.join(root, file)
+            appimage = file.lower().endswith(".appimage")
+            if appimage or (_is_elf(path) and not file.endswith(".so") and ".so." not in file):
+                stem = os.path.splitext(file)[0].lower()
+                candidates.append((stem != start, 0 if appimage else depth, -os.path.getsize(path), path))
+    if not candidates:
+        return None
+    path = min(candidates)[3]
+    os.chmod(path, 0o755)
+    return path
+
+
+def _install_recomp(name):
+    entry = recomp_entry(name)
+    try:
+        tag, asset = _recomp_release_asset(entry)
+    except (OSError, ValueError) as exc:
+        print(f"ERROR: could not read {entry['repo']}'s releases from GitHub ({exc}); try again later", flush=True)
+        sys.exit(1)
+    if asset is None:
+        print(f"ERROR: no Linux download in {entry['repo']}'s releases", flush=True)
+        sys.exit(1)
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    download = os.path.join(CACHE_DIR, asset["name"])
+    _download(asset["browser_download_url"], download, entry.get("name", entry["id"]))
+    game = recomp_game(entry)
+    dest = game_dir(game)
+    if os.path.isdir(dest):
+        shutil.rmtree(dest)
+    lower = asset["name"].lower()
+    if lower.endswith(".appimage"):
+        os.makedirs(dest)
+        shutil.move(download, os.path.join(dest, asset["name"]))
+    elif lower.endswith(".zip"):
+        _extract_zip(download, dest, 0)
+        os.remove(download)
+    else:
+        _extract_tarball(download, dest, 0, "")
+        os.remove(download)
+    _unpack_inner_archive(dest)
+    bundle = next((os.path.join(root, file) for root, _, files in os.walk(dest) for file in files
+                   if file.endswith(".flatpak")), None)
+    if bundle:
+        before = hippos_flatpak_apps.installed_app_ids()
+        if hippos_flatpak_apps.install_bundle(bundle) != 0:
+            print("ERROR: the game's Flatpak bundle could not be installed", flush=True)
+            sys.exit(1)
+        app_id = next(iter(hippos_flatpak_apps.installed_app_ids() - before), "")
+        shutil.rmtree(dest)
+        hippos_flatpak_apps.claim_game(app_id)
+        return {"version": tag or entry.get("version", ""), "flatpak_id": app_id}
+    executable = _recomp_executable(dest, entry)
+    if executable is None:
+        print("ERROR: no Linux program found in the download", flush=True)
+        sys.exit(1)
+    add_catalog_game({**game, "launcher_command": shlex.join(["env", "-C", os.path.dirname(executable), executable])})
+    return {"version": tag or entry.get("version", ""), "flatpak_id": ""}
+
+
+def _remove_recomp(name, installed):
+    entry_id = name[len(RECOMP_PREFIX):]
+    game = {"id": f"recomp-{entry_id}"}
+    if installed.get("flatpak_id"):
+        hippos_flatpak_apps.remove(installed["flatpak_id"])
+    if os.path.isdir(game_dir(game)):
+        print(f"Removing {game_dir(game)}...", flush=True)
+        shutil.rmtree(game_dir(game))
+    remove_catalog_game(game)
+
+
 def _install_wine_runner(pkg):
     dest = _runner_install_dir(pkg["id"])
     os.makedirs(CACHE_DIR, exist_ok=True)
@@ -618,6 +687,12 @@ def cmd_install(name):
             sys.exit(1)
         return
 
+    if name.startswith(RECOMP_PREFIX):
+        state[name] = _install_recomp(name)
+        save_state(state)
+        print("Done.", flush=True)
+        return
+
     if name.startswith("wine::"):
         runners = load_wine_runners()
         pkg = next((r for r in runners if r["id"] == name), None)
@@ -676,6 +751,12 @@ def cmd_remove(name):
         system_id = name[len("bezels-"):]
         subprocess.call(["hippos-bezelproject", "remove", system_id])
         print(f"Done: bezels for {system_id} removed.", flush=True)
+        return
+
+    if name.startswith(RECOMP_PREFIX):
+        _remove_recomp(name, state.pop(name, {}))
+        save_state(state)
+        print("Done.", flush=True)
         return
 
     if name.startswith("wine::"):

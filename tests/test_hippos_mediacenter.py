@@ -20,6 +20,7 @@ def _load(name, path):
 
 mc = _load('hippos_mediacenter', LIB / 'hippos-mediacenter')
 store = _load('hippos_store', LIB / 'hippos-store')
+import hippos_store_catalog as catalog
 
 
 class AvailabilityTests(unittest.TestCase):
@@ -39,9 +40,9 @@ class AvailabilityTests(unittest.TestCase):
 class DebCatalogTests(unittest.TestCase):
     def test_deb_item_only_shows_for_architectures_it_has(self):
         item = {'type': 'deb', 'deb': {'amd64': {'url': 'u', 'sha256': 's'}}}
-        with mock.patch.object(store, 'DEB_ARCH', 'amd64'):
+        with mock.patch.object(catalog, 'DEB_ARCH', 'amd64'):
             self.assertTrue(store.for_this_machine(item))
-        with mock.patch.object(store, 'DEB_ARCH', 'arm64'):
+        with mock.patch.object(catalog, 'DEB_ARCH', 'arm64'):
             self.assertFalse(store.for_this_machine(item))
 
 

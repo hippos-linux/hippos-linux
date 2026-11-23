@@ -1,4 +1,6 @@
 requireArtifact: supermodel
+appstream_ids:
+  - com.supermodel3.Supermodel
 features:
   - padtokeyboard
 shared_features:

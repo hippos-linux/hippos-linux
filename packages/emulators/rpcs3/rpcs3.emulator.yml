@@ -1,4 +1,6 @@
 requireArtifact: rpcs3
+appstream_ids:
+  - net.rpcs3.RPCS3
 arch: [amd64]
 shared_features:
   - powermode

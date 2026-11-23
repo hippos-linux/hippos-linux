@@ -1,3 +1,5 @@
+appstream_ids:
+  - io.github.stella_emu.Stella
 systems:
 - atari2600
 features: []

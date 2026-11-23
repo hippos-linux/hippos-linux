@@ -1,4 +1,6 @@
 requireArtifact: snes9x
+appstream_ids:
+  - com.snes9x.Snes9x
 systems:
 - snes
 features: []

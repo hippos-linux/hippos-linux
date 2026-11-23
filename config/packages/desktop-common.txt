@@ -22,6 +22,16 @@ xarchiver
 # Privilege escalation for desktop tools
 pkexec
 
+# App data (DEP-11) and its 64/128 px icons for the Software store
+appstream
+apt-config-icons-large
+
+# Location for desktop apps and the Flatpak location portal (beaconDB Wi-Fi/IP)
+geoclue-2.0
+
+# flatpak-spawn on the host for Quiver Launcher's game launches
+flatpak-xdg-utils
+
 # XDG integration
 xdg-utils
 xdg-user-dirs

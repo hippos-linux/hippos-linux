@@ -1,4 +1,6 @@
 requireArtifact: 86box
+appstream_ids:
+  - net._86box._86Box
 best_effort: true
 systems:
 - 86box

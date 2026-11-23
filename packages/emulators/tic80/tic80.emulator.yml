@@ -1,4 +1,6 @@
 requireArtifact: tic80
+appstream_ids:
+  - com.tic80.TIC_80
 systems:
 - tic80
 features: []

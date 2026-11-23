@@ -49,7 +49,7 @@ def flathub_results(term: str) -> list[SearchResult]:
             for app in hippos_flatpak_apps.search_flathub(term)[:RESULTS_PER_SOURCE]]
 
 
-def _refresh_apt_lists() -> None:
+def refresh_apt_lists() -> None:
     lists = list(APT_LISTS.glob('*_InRelease'))
     if lists and time.time() - max(p.stat().st_mtime for p in lists) < APT_LISTS_MAX_AGE_S:
         return
@@ -57,7 +57,7 @@ def _refresh_apt_lists() -> None:
 
 
 def debian_results(term: str) -> list[SearchResult]:
-    _refresh_apt_lists()
+    refresh_apt_lists()
     system = image_packages() or frozenset()
     packages = [(name, description) for name, description in search_packages(term)
                 if name not in system and not APT_NON_APP_PACKAGE.search(name)][:RESULTS_PER_SOURCE]

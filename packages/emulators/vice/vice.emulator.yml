@@ -1,4 +1,6 @@
 requireArtifact: vice
+appstream_ids:
+  - net.sf.VICE
 features:
   - padtokeyboard
 shared_features:

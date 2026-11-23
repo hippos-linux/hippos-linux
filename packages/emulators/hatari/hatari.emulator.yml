@@ -1,4 +1,7 @@
 requireArtifact: hatari
+appstream_ids:
+  - org.tuxfamily.hatari
+  - hatari.desktop
 features:
   - padtokeyboard
 shared_features:

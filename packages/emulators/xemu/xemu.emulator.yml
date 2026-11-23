@@ -1,4 +1,6 @@
 requireArtifact: xemu
+appstream_ids:
+  - app.xemu.xemu
 arch: [amd64]
 features:
   - ratio

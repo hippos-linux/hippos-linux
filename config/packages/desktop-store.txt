@@ -1,5 +1,0 @@
-# Software centre (Discover)
-plasma-discover
-plasma-discover-backend-flatpak
-flatpak-xdg-utils
-packagekit

@@ -1,4 +1,6 @@
 requireArtifact: duckstation
+appstream_ids:
+  - org.duckstation.DuckStation
 features:
   - cheevos
   - ratio

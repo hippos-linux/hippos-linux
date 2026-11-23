@@ -1,4 +1,6 @@
 requireArtifact: azahar
+appstream_ids:
+  - org.azahar_emu.Azahar
 shared_features:
   - powermode
   - tdp

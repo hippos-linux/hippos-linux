@@ -1,4 +1,7 @@
 requireArtifact: ares
+appstream_ids:
+  - dev.ares.ares
+  - ares.desktop
 systems:
 - nes
 - snes

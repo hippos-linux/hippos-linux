@@ -1,4 +1,6 @@
 requireArtifact: scummvm
+appstream_ids:
+  - org.scummvm.ScummVM
 features:
   - padtokeyboard
 shared_features:

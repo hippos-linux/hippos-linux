@@ -1,4 +1,6 @@
 requireArtifact: dosbox-x
+appstream_ids:
+  - com.dosbox_x.DOSBox-X
 features:
   - padtokeyboard
 shared_features:

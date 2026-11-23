@@ -1,4 +1,6 @@
 requireArtifact: openmsx
+appstream_ids:
+  - org.openmsx.openMSX
 features:
   - padtokeyboard
 shared_features:

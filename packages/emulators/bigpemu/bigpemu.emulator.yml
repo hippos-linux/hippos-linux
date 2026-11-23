@@ -1,4 +1,6 @@
 requireArtifact: bigpemu
+appstream_ids:
+  - com.richwhitehouse.BigPEmu
 arch: [amd64]
 features:
   - padtokeyboard

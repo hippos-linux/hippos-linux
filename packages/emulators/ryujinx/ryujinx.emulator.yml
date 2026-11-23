@@ -1,4 +1,6 @@
 requireArtifact: ryujinx
+appstream_ids:
+  - io.github.ryubing.Ryujinx
 features:
   - padtokeyboard
 shared_features:

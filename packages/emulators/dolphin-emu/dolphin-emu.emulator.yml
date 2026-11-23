@@ -1,4 +1,7 @@
 requireArtifact: dolphin-emu
+appstream_ids:
+  - org.DolphinEmu.dolphin-emu
+  - dolphin-emu.desktop
 features:
   - cheevos
   - internal_resolution

@@ -1,4 +1,6 @@
 requireArtifact: ymir
+appstream_ids:
+  - io.github.strikerx3.ymir
 features:
   - padtokeyboard
 shared_features:

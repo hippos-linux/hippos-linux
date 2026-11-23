@@ -1,4 +1,6 @@
 requireArtifact: cemu
+appstream_ids:
+  - info.cemu.Cemu
 arch: [amd64]
 shared_features:
   - powermode

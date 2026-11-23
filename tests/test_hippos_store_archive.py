@@ -23,6 +23,7 @@ def _load(name, path):
 
 
 store = _load('hippos_store', LIB / 'hippos-store')
+import hippos_store_catalog as catalog
 
 
 def _zip(path, entries):
@@ -106,8 +107,9 @@ class InstallArchiveTests(unittest.TestCase):
 
     def test_only_offered_where_there_is_a_download(self):
         pkg = self._pkg(self.sha)
-        self.assertTrue(store.for_this_machine(pkg))
-        with mock.patch.object(store, 'DEB_ARCH', 'arm64'):
+        with mock.patch.object(catalog, 'DEB_ARCH', 'amd64'):
+            self.assertTrue(store.for_this_machine(pkg))
+        with mock.patch.object(catalog, 'DEB_ARCH', 'arm64'):
             self.assertFalse(store.for_this_machine(pkg))
 
 

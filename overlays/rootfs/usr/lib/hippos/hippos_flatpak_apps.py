@@ -50,6 +50,11 @@ def _set_claimed(app_id: str, claimed: bool, game: bool = False) -> None:
         claims.write_text(''.join(f'{app}\n' for app in sorted(updated)), encoding='utf-8')
 
 
+def claim_game(app_id: str) -> None:
+    _set_claimed(app_id, False)
+    _set_claimed(app_id, True, game=True)
+
+
 def run_command(app_id: str) -> list[str]:
     return ['/usr/bin/flatpak', 'run', '--device=input', app_id]
 
@@ -80,6 +85,11 @@ def install_from_flathub(app_id: str) -> int:
     return subprocess.run(_flatpak('install', '--user', '--noninteractive', '--assumeyes', 'flathub', app_id)).returncode
 
 
+def install_bundle(path: str) -> int:
+    _add_flathub()
+    return subprocess.run(_flatpak('install', '--user', '--noninteractive', '--assumeyes', '--bundle', path)).returncode
+
+
 def update(app_id: str) -> int:
     if not valid_app_id(app_id):
         return 1
@@ -100,9 +110,19 @@ class FlathubApp:
     version: str
 
 
-def search_flathub(term: str) -> list[FlathubApp]:
+def refresh_appstream() -> None:
     _add_flathub()
     subprocess.run(_flatpak('update', '--user', '--appstream', 'flathub'), capture_output=True, check=False)
+
+
+def updates_available() -> set[str]:
+    listing = subprocess.run(_flatpak('remote-ls', '--user', '--updates', '--app', '--columns=application'),
+                             capture_output=True, text=True, check=False).stdout
+    return {app_id for app_id in listing.split() if valid_app_id(app_id)}
+
+
+def search_flathub(term: str) -> list[FlathubApp]:
+    refresh_appstream()
     listing = subprocess.run(_flatpak('search', '--user', '--columns=application,name,description,version', term),
                              capture_output=True, text=True, check=False).stdout
     apps = []

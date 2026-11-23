@@ -1,4 +1,6 @@
 requireArtifact: retroarch
+appstream_ids:
+  - org.libretro.RetroArch
 features:
   - ratio
   - rewind

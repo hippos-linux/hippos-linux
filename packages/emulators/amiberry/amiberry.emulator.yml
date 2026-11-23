@@ -1,4 +1,6 @@
 requireArtifact: amiberry
+appstream_ids:
+  - com.blitterstudio.amiberry
 features:
   - padtokeyboard
 shared_features:
