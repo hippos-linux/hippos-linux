@@ -327,6 +327,7 @@ import emulatorlauncher_azahar
 import emulatorlauncher_cemu
 import emulatorlauncher_computers
 import emulatorlauncher_core
+import emulatorlauncher_demul
 import emulatorlauncher_drastic
 import emulatorlauncher_duckstation
 import emulatorlauncher_extras

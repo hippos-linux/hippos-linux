@@ -7,7 +7,6 @@ from emulatorlauncher_shared import (
     _game_bool,
     _game_int,
     _game_value,
-    WINE_NO_INSTALLER_PROMPTS,
     LaunchContext,
     _build_game_env,
     _conf_value,
@@ -510,36 +509,6 @@ def launch_applewin(ctx: LaunchContext) -> int:
     env['XDG_CONFIG_HOME'] = str(cfg_dir)
     return _run_game_command(ctx, cmd, env).returncode
 
-_DEMUL_SYSTEMS = {
-    'hikaru':  'hikaru',
-    'gaelco':  'gaelco',
-    'cave3rd': 'cavesh3',
-}
-
-def launch_demul(ctx: LaunchContext) -> int:
-    conf = _load_hippos_conf()
-    saves_dir = SAVES / ctx.system
-    cfg_dir   = CONFIGS / 'demul'
-    saves_dir.mkdir(parents=True, exist_ok=True)
-    cfg_dir.mkdir(parents=True, exist_ok=True)
-
-    bin_path = _find_emulator_bin('demul')
-    if bin_path is None:
-        _log.error("demul: binary not found")
-        return 1
-
-    gpu = _demul_system = _DEMUL_SYSTEMS.get(ctx.system, ctx.system)
-    cmd = [
-        str(bin_path),
-        f'-run={_demul_system}',
-        f'-rom={ctx.rom.stem}',
-    ]
-
-    env = _build_game_env(conf, ctx)
-    env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(ctx.controllers)
-    env['WINEDLLOVERRIDES'] = WINE_NO_INSTALLER_PROMPTS
-    return _run_game_command(ctx, cmd, env).returncode
-
 def launch_sugarbox(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     saves_dir = SAVES / ctx.system
@@ -569,7 +538,6 @@ register(Emulator('eka2l1', launch_eka2l1, binaries=('eka2l1_qt', 'eka2l1')))
 register(Emulator('snes9x', launch_snes9x))
 register(Emulator('nanoboyadvance', launch_nanoboyadvance))
 register(Emulator('bigpemu', launch_bigpemu))
-register(Emulator('demul', launch_demul, binaries=('demul',)))
 register(Emulator('easyrpg', launch_easyrpg, binaries=('easyrpg-player', 'easyrpg')))
 register(Emulator('hypseus-singe', launch_hypseus_singe, binaries=('hypseus',)))
 register(Emulator('ikemen', launch_ikemen, binaries=('Ikemen_GO', 'ikemen')))
