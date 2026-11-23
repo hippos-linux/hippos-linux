@@ -20,9 +20,9 @@ from evdev import ecodes
 
 from hippos_es_buttons import ok_and_back
 from hippos_gamepad_reader import GamepadReader
+from hippos_hotkeys_control import set_keyboard_shown
 from hippos_session_app import claim, release, toggle
 
-HOTKEYS = '/usr/lib/hippos/hippos-hotkeys'
 SCRIPT = Path('/usr/lib/hippos/hippos-osk')
 PID_FILE = Path('/run/hippos/osk.pid')
 
@@ -30,6 +30,8 @@ COLUMNS = 13
 ROWS = 5
 WIDTH_SHARE = 2 / 3
 HEIGHT_SHARE = 1 / 3
+MIN_KEY_MM = 12
+UNLABELLED_TERMINAL_APPS = {'qterminal'}
 MARGIN_SHARE = 0.03
 HELP_SHARE = 0.12
 GAP_SHARE = 0.12
@@ -106,10 +108,6 @@ def press_key(name: str) -> None:
     subprocess.Popen(['xdotool', 'key', '--clearmodifiers', name])
 
 
-def tell_hotkeys(shown: bool) -> None:
-    subprocess.Popen([HOTKEYS, '--keyboard-shown', 'on' if shown else 'off'])
-
-
 def rgb(colour: tuple[int, int, int]) -> tuple[float, float, float]:
     return tuple(channel / 255 for channel in colour)
 
@@ -150,8 +148,9 @@ class Keyboard(Gtk.Window):
             GLib.source_remove(self.hide_source)
             self.hide_source = 0
         display = Gdk.Display.get_default()
-        screen = (display.get_primary_monitor() or display.get_monitor(0)).get_geometry()
-        width, height = int(screen.width * WIDTH_SHARE), int(screen.height * HEIGHT_SHARE)
+        monitor = display.get_primary_monitor() or display.get_monitor(0)
+        screen = monitor.get_geometry()
+        width, height = keyboard_size(screen, monitor.get_width_mm())
         margin = int(screen.height * MARGIN_SHARE)
         bottom_y = screen.y + screen.height - height - margin
         component = accessible.get_component_iface() if accessible else None
@@ -160,8 +159,8 @@ class Keyboard(Gtk.Window):
         self.resize(width, height)
         self.move(screen.x + (screen.width - width) // 2, screen.y + margin if covered else bottom_y)
         if not self.get_visible():
+            set_keyboard_shown(True)
             self.show_all()
-            tell_hotkeys(True)
         self.area.queue_draw()
 
     def toggle(self) -> bool:
@@ -180,7 +179,7 @@ class Keyboard(Gtk.Window):
         self.stop_repeat()
         if self.get_visible():
             self.hide()
-            tell_hotkeys(False)
+            set_keyboard_shown(False)
         return False
 
     def layout(self) -> tuple[float, float, float, float]:
@@ -349,16 +348,36 @@ class Keyboard(Gtk.Window):
         return False
 
 
+def keyboard_size(screen: Gdk.Rectangle, width_mm: int) -> tuple[int, int]:
+    width, height = screen.width * WIDTH_SHARE, screen.height * HEIGHT_SHARE
+    if width_mm > 0:
+        min_width = COLUMNS * MIN_KEY_MM * screen.width / width_mm
+        scale = min(max(min_width, width), screen.width) / width
+        width, height = width * scale, height * scale
+    return int(width), int(height)
+
+
+def takes_typing(accessible: Atspi.Accessible) -> bool:
+    if accessible.get_state_set().contains(Atspi.StateType.EDITABLE):
+        return True
+    role = accessible.get_role()
+    if role == Atspi.Role.TERMINAL:
+        return True
+    application = accessible.get_application()
+    return (role == Atspi.Role.FILLER and application is not None
+            and application.get_name() in UNLABELLED_TERMINAL_APPS)
+
+
 def watch_text_fields(keyboard: Keyboard) -> Atspi.EventListener:
     def on_focus(event: Atspi.Event) -> None:
         source = event.source
         try:
-            editable = source.get_state_set().contains(Atspi.StateType.EDITABLE)
+            typing = takes_typing(source)
         except GLib.Error:
             return
-        if event.detail1 and editable:
+        if event.detail1 and typing:
             keyboard.present_for(source)
-        elif event.detail1 or editable:
+        elif event.detail1 or typing:
             keyboard.request_hide()
 
     listener = Atspi.EventListener.new(on_focus)
@@ -385,7 +404,7 @@ def main(argv: list[str]) -> int:
         Gtk.main()
     finally:
         listener.deregister('object:state-changed:focused')
-        tell_hotkeys(False)
+        set_keyboard_shown(False)
         release(PID_FILE)
     return 0
 

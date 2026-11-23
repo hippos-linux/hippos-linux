@@ -36,11 +36,13 @@ def new_context(name: str, keys: dict[str, Any], disable_common: bool = False) -
     tmp_path = CONTEXT_FILE.with_suffix('.tmp')
     tmp_path.write_text(json.dumps(data))
     os.replace(tmp_path, CONTEXT_FILE)
+    KEYBOARD_SHOWN_FILE.unlink(missing_ok=True)
     signal_daemon()
 
 
 def default_context() -> None:
     CONTEXT_FILE.unlink(missing_ok=True)
+    KEYBOARD_SHOWN_FILE.unlink(missing_ok=True)
     signal_daemon()
 
 

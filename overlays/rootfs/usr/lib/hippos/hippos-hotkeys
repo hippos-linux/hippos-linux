@@ -268,7 +268,6 @@ class HotkeyDaemon:
         self.es_keyboard_map: dict[int, str] = {}
         self.combo_actions: list[dict[str, Any]] = []
         self.pad_maps: dict[str, tuple[list[dict], float]] = {}
-        self.keyboard_shown = KEYBOARD_SHOWN_FILE.exists()
         self.require_reconfig = False
         self.require_keyboard_update = False
         self._reload_all()
@@ -280,6 +279,7 @@ class HotkeyDaemon:
         self.es_button_maps, self.es_keyboard_map = load_es_button_maps()
         self.combo_actions = load_combo_actions()
         self.pad_maps = device_maps()
+        self.keyboard_shown = KEYBOARD_SHOWN_FILE.exists()
         log(f'context={self.context.get("name", "")}')
 
     def _handle_sighup(self, signum: int, frame: Any) -> None:

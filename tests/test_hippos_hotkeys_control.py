@@ -50,6 +50,14 @@ class HotkeysControlTests(unittest.TestCase):
         self.assertTrue(control.KEYBOARD_SHOWN_FILE.exists())
         self.kill.assert_called_once_with(4242, signal.SIGUSR1)
 
+    def test_a_new_context_forgets_a_keyboard_left_shown(self):
+        control.set_keyboard_shown(True)
+        control.new_context('desktop', {})
+        self.assertFalse(control.KEYBOARD_SHOWN_FILE.exists())
+        control.set_keyboard_shown(True)
+        control.default_context()
+        self.assertFalse(control.KEYBOARD_SHOWN_FILE.exists())
+
 
 class LauncherDefaultsCacheTests(unittest.TestCase):
     def test_defaults_are_parsed_once_until_the_file_changes(self):
