@@ -8,6 +8,8 @@ set -euo pipefail
 
 POLICY0=/sys/devices/system/cpu/cpufreq/policy0
 
+source /usr/lib/hippos/cpu-governor.sh
+
 [[ "${1:-}" =~ ^(apply|set)$ && "${EUID}" -ne 0 ]] && exec sudo -n "$0" "$@"
 
 setting() { hippos-settings get "$1" 2>/dev/null || true; }
@@ -25,9 +27,7 @@ case "${1:-}" in
     apply)
         governor="$(setting system.cpu.governor)"
         if [[ -n "${governor}" ]]; then
-            for policy in /sys/devices/system/cpu/cpufreq/policy*; do
-                [[ -f "${policy}/scaling_governor" ]] && printf '%s' "${governor}" > "${policy}/scaling_governor"
-            done
+            set_cpu_governor "${governor}"
             echo "cpu governor: ${governor}"
         fi
         max_freq="$(setting system.cpu.max_freq)"

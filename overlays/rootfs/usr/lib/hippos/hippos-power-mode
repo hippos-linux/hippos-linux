@@ -11,6 +11,8 @@ fi
 
 [[ "${EUID}" -ne 0 ]] && exec sudo -n "$0" "$@"
 
+source /usr/lib/hippos/cpu-governor.sh
+
 POLICY0="/sys/devices/system/cpu/cpufreq/policy0"
 EPP_PATH="/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference"
 EPP_AVAIL_PATH="/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_available_preferences"
@@ -37,15 +39,6 @@ has_epp_pref() {
     [[ -f "${EPP_AVAIL_PATH}" ]] && grep -qw "$1" "${EPP_AVAIL_PATH}" 2>/dev/null
 }
 
-set_governor() {
-    local gov="$1"
-    for policy in /sys/devices/system/cpu/cpufreq/policy*; do
-        [[ -f "${policy}/scaling_governor" ]] || continue
-        [[ "$(cat "${policy}/scaling_governor")" == "${gov}" ]] && continue
-        echo "${gov}" > "${policy}/scaling_governor" 2>/dev/null || true
-    done
-}
-
 set_epp() {
     local pref="$1"
     for cpu in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do
@@ -58,21 +51,27 @@ apply_mode() {
     local mode="$1"
     case "${mode}" in
         highperformance)
-            set_governor performance
+            set_cpu_governor performance
+            set_devfreq_governor performance
             has_epp && has_epp_pref performance && set_epp performance
             ;;
         balanced)
-            if has_governor schedutil; then set_governor schedutil
-            elif has_governor ondemand; then set_governor ondemand
-            elif has_governor conservative; then set_governor conservative
-            else set_governor powersave; fi
+            local configured
+            configured="$(hippos-settings get system.cpu.governor 2>/dev/null || true)"
+            if [[ -n "${configured}" ]] && has_governor "${configured}"; then set_cpu_governor "${configured}"
+            elif has_governor schedutil; then set_cpu_governor schedutil
+            elif has_governor ondemand; then set_cpu_governor ondemand
+            elif has_governor conservative; then set_cpu_governor conservative
+            else set_cpu_governor powersave; fi
+            set_devfreq_governor simple_ondemand
             if has_epp; then
                 if has_epp_pref default; then set_epp default
                 elif has_epp_pref performance; then set_epp performance; fi
             fi
             ;;
         powersaver)
-            set_governor powersave
+            set_cpu_governor powersave
+            set_devfreq_governor powersave
             has_epp && has_epp_pref power && set_epp power
             ;;
     esac

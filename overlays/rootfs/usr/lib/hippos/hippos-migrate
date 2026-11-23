@@ -166,6 +166,13 @@ if version_lt "$APPLIED" "0.7.1" && [[ -L /userdata/Desktop/discover.desktop && 
     rm /userdata/Desktop/discover.desktop
 fi
 
+if version_lt "$APPLIED" "0.7.1" \
+    && grep -qx 'system.cpu.governor=schedutil' /userdata/system/hippos.conf 2>/dev/null \
+    && grep -qx 'system.cpu.max_freq=1008000' /userdata/system/hippos.conf; then
+    log "0.7.1: saved copies of the old RK3326 CPU defaults removed (now ondemand, no cap)"
+    sed -i '/^system\.cpu\.governor=schedutil$/d; /^system\.cpu\.max_freq=1008000$/d' /userdata/system/hippos.conf
+fi
+
 HIPPOS_CONFIG=/userdata/system/configs/hippos
 mkdir -p "${HIPPOS_CONFIG}"
 for name in external-roms.conf roms-sources.conf ignored-storage-devices.txt current-storage.conf; do

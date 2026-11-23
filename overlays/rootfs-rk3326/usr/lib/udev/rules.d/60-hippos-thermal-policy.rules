@@ -1,0 +1,1 @@
+SUBSYSTEM=="thermal", KERNEL=="thermal_zone*", ATTR{type}=="soc-thermal|gpu-thermal", ATTR{policy}="power_allocator"

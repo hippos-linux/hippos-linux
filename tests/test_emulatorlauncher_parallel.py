@@ -157,6 +157,19 @@ class PowerSettingsTests(unittest.TestCase):
                 self.assertLess(time.perf_counter() - started, 0.2)
             self.assertEqual(finished, [(power._POWER_MODE_TOOL, 'default')])
 
+    def test_game_power_mode_default_applies_and_restores_after_the_game(self):
+        calls = []
+
+        def tool(*args):
+            calls.append(args)
+            return SimpleNamespace(returncode=0)
+
+        with mock.patch.object(power, '_run_tool', tool):
+            with power.game_power_settings({'global.game_powermode': 'highperformance'}, 'gbc',
+                                           Path('/userdata/roms/gbc/game.gbc')):
+                pass
+        self.assertEqual(calls, [(power._POWER_MODE_TOOL, 'highperformance'), (power._POWER_MODE_TOOL, 'default')])
+
     def test_power_mode_finishes_before_the_tdp_tool_runs(self):
         order = []
 

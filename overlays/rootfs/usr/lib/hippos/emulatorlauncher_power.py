@@ -28,8 +28,8 @@ def _run_detached(*args: str) -> None:
 
 @contextmanager
 def game_power_settings(conf: dict[str, str], system: str, rom: Path) -> Iterator[None]:
-    power_mode = _game_setting(conf, system, rom, 'powermode')
-    power_thread = threading.Thread(target=_run_tool, args=(_POWER_MODE_TOOL, power_mode or 'default'), daemon=True)
+    power_mode = _game_setting(conf, system, rom, 'powermode') or _conf_value(conf, 'global.game_powermode', 'default')
+    power_thread = threading.Thread(target=_run_tool, args=(_POWER_MODE_TOOL, power_mode), daemon=True)
     power_thread.start()
 
     profile = _game_setting(conf, system, rom, 'platformprofile')
@@ -69,5 +69,5 @@ def game_power_settings(conf: dict[str, str], system: str, rom: Path) -> Iterato
         if tdp_thread is not None or profile_changed:
             _run_detached(_TDP_TOOL, 'restore', str(_PROFILE_SETTLE_SECONDS if profile_changed else 0))
 
-        if power_mode:
+        if power_mode != 'default':
             _run_tool(_POWER_MODE_TOOL, 'default')
