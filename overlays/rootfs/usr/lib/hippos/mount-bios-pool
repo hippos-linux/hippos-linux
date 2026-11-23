@@ -5,7 +5,7 @@ source /usr/lib/hippos/pool-branch.sh
 
 POOL=/userdata/bios
 RW=/userdata/.bios-rw
-OPTS="cache.files=partial,dropcacheonclose=true,allow_other,use_ino,moveonenospc=false,category.create=mspmfs"
+OPTS="cache.files=partial,dropcacheonclose=true,allow_other,use_ino,moveonenospc=false,category.create=mspmfs,minfreespace=100M"
 MEDIA=/media
 
 log() { printf '[hippos-bios-pool] %s\n' "$*"; }
