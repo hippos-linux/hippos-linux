@@ -74,5 +74,5 @@ for comp in mupen64plus-ui-console mupen64plus-audio-sdl mupen64plus-input-sdl m
         "${_make_args[@]}"
 done
 
-write_artifact_version "${STAGING}" "$(date +%Y%m%d)"
+write_artifact_version "${STAGING}" "$(for comp in "${COMPONENTS[@]}"; do git -C "${SRC}/${comp}" rev-parse --short HEAD; done | sha256sum | cut -c1-12)"
 log "Done. Artifact at ${STAGING}"

@@ -47,5 +47,5 @@ tar xf "${ARCHIVE}" -C "${STAGING}/bin" --strip-components=1 2>/dev/null || \
     tar xf "${ARCHIVE}" -C "${STAGING}/bin"
 chmod +x "${STAGING}/bin/BigPEMU" 2>/dev/null || true
 
-write_artifact_version "${STAGING}" "$(date +%Y%m%d)"
+write_artifact_version "${STAGING}" "$(content_version "${STAGING}")"
 log "Done. Artifact at ${STAGING}"

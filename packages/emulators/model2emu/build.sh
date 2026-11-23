@@ -33,5 +33,5 @@ exec /opt/wine-builds/wine-tkg/bin/wine \
 LAUNCHER
 chmod +x "${STAGING}/bin/model2emu"
 
-write_artifact_version "${STAGING}" "$(date +%Y%m%d)"
+write_artifact_version "${STAGING}" "$(content_version "${STAGING}")"
 log "Done. Artifact at ${STAGING}"

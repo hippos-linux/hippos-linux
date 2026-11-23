@@ -41,5 +41,5 @@ tar xf "${ARCHIVE}" -C "${STAGING}/bin" 2>/dev/null || \
     (mkdir -p "${STAGING}/bin" && tar xf "${ARCHIVE}" -C "${STAGING}/bin" --strip-components=1)
 chmod +x "${STAGING}/bin/redream" 2>/dev/null || true
 
-write_artifact_version "${STAGING}" "$(date +%Y%m%d)"
+write_artifact_version "${STAGING}" "$(content_version "${STAGING}")"
 log "Done. Artifact at ${STAGING}"

@@ -71,7 +71,12 @@ FORCE=0
 log() { printf '[build:%s] %s\n' "${EMULATOR_NAME}" "$*"; }
 
 install_freej2me_plus() {
-    local tmp
+    local tmp stamp="${ETAG_DIR}/freej2me-plus.built"
+    if [[ "${FORCE}" -eq 0 && -f "${CORES_DIR}/freej2me_plus_libretro.so" && -f "${FREEJ2ME_PLUS_DIR}/freej2me_plus-lr.jar" \
+          && "$(cat "${stamp}" 2>/dev/null)" == "${FREEJ2ME_PLUS_VERSION}" ]]; then
+        log "FreeJ2ME-Plus ${FREEJ2ME_PLUS_VERSION} already built"
+        return
+    fi
     clone_source "${FREEJ2ME_PLUS_REPO}" "${FREEJ2ME_PLUS_VERSION}" "${FREEJ2ME_PLUS_SRC}"
     make -C "${FREEJ2ME_PLUS_SRC}/src/libretro" clean
     make -C "${FREEJ2ME_PLUS_SRC}/src/libretro" -j"$(nproc)"
@@ -83,16 +88,22 @@ install_freej2me_plus() {
     mkdir -p "${FREEJ2ME_PLUS_DIR}"
     unzip -p "${tmp}/jar.zip" freej2me_plus-lr.jar > "${FREEJ2ME_PLUS_DIR}/freej2me_plus-lr.jar"
     rm -rf "${tmp}"
+    printf '%s\n' "${FREEJ2ME_PLUS_VERSION}" > "${stamp}"
     log "Installed FreeJ2ME-Plus ${FREEJ2ME_PLUS_VERSION}"
 }
 
 install_opencdi() {
-    local tag
+    local tag stamp="${ETAG_DIR}/opencdi.built"
     tag="$(github_latest_tag "${OPENCDI_REPO}")"
+    if [[ "${FORCE}" -eq 0 && -f "${CORES_DIR}/opencdi_libretro.so" && "$(cat "${stamp}" 2>/dev/null)" == "${tag}" ]]; then
+        log "OpenCDi ${tag} already built"
+        return
+    fi
     clone_source "${OPENCDI_REPO}" "${tag}" "${OPENCDI_SRC}"
     cargo build --release --locked --package opencdi-libretro --manifest-path "${OPENCDI_SRC}/Cargo.toml"
     install -m755 "$(cargo_release_dir "${OPENCDI_SRC}")/libopencdi_libretro.so" "${CORES_DIR}/opencdi_libretro.so"
     "${STRIP:-strip}" "${CORES_DIR}/opencdi_libretro.so"
+    printf '%s\n' "${tag}" > "${stamp}"
     log "Installed OpenCDi ${tag}"
 }
 
@@ -185,4 +196,4 @@ done
 
 log "Done — ${total} available, ${downloaded} downloaded, ${skipped} skipped, ${failed} failed"
 
-write_artifact_version "${STAGING_DIR}" "$(date +%Y%m%d)"
+write_artifact_version "${STAGING_DIR}" "$(content_version "${STAGING_DIR}")"
