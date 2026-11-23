@@ -24,6 +24,7 @@ from PIL import Image, ImageDraw
 
 WIDTH, HEIGHT = 1600, 900
 JPEG_QUALITY = 84
+WORDMARK_LINE_CHARS = 14
 PLANET_CENTER = (0.93, 1.12)
 PLANET_RADIUS = 0.94
 LIGHT = np.array([-0.60, -0.56, -0.40])
@@ -500,6 +501,114 @@ LOGOS = {
     ),
 }
 
+WORDMARKS = {
+    "2048": ("2048", "GABRIELE CIRULLI"),
+    "advision": ("ADVENTURE VISION", "ENTEX"),
+    "anarch": ("ANARCH", "DRUMMYFISH"),
+    "apfm1000": ("M-1000", "APF ELECTRONICS"),
+    "atom": ("ATOM", "ACORN COMPUTERS"),
+    "bbk": ("ELECTRONIC DICTIONARY", "BBK"),
+    "beena": ("ADVANCED PICO BEENA", "SEGA"),
+    "bk": ("BK", "ELEKTRONIKA"),
+    "c20": ("VIC-20", "COMMODORE"),
+    "c64scpu": ("SUPERCPU", "CREATIVE MICRO DESIGNS"),
+    "camplynx": ("LYNX", "CAMPUTERS"),
+    "cannonball": ("CANNONBALL", "CHRIS WHITE"),
+    "cassettevision": ("CASSETTE VISION", "EPOCH"),
+    "cave3rd": ("CV1000", "CAVE"),
+    "cbm2": ("CBM-II", "COMMODORE"),
+    "cbm5x0": ("CBM 500", "COMMODORE"),
+    "cgenie": ("COLOUR GENIE", "EACA"),
+    "chip8": ("CHIP-8", ""),
+    "commanderx16": ("COMMANDER X16", "THE 8-BIT GUY"),
+    "coolbar": ("COOLBAR", "SHANGHAI COOLBAR"),
+    "cplus4": ("PLUS4", "COMMODORE"),
+    "craft": ("CRAFT", "MICHAEL FOGLEMAN"),
+    "creativision": ("CREATIVISION", "VTECH"),
+    "ctvboy": ("COMPACT VISION TV BOY", "GAKKEN"),
+    "dice": ("DICE", ""),
+    "dingoo": ("DINGOO A320", "DINGOO DIGITAL"),
+    "dinothawr": ("DINOTHAWR", "AGNES HEYER"),
+    "dragon64": ("DRAGON 64", "DRAGON DATA"),
+    "duke3d": ("DUKE NUKEM 3D", "3D REALMS"),
+    "enterprise": ("ENTERPRISE", "ENTERPRISE COMPUTERS"),
+    "gaelco": ("GAELCO", ""),
+    "galaksija": ("GALAKSIJA", "VOJA ANTONIC"),
+    "gam4980": ("LONGMAN 4980", "BBK ELECTRONICS"),
+    "gamepock": ("GAME POCKET COMPUTER", "EPOCH"),
+    "gametank": ("GAMETANK", "CLYDEWARE"),
+    "gong": ("GONG", "DAN ZAIDAN"),
+    "gp32": ("GP32", "GAMEPARK"),
+    "hyperscan": ("HYPERSCAN", "MATTEL"),
+    "ikemen": ("IKEMEN", "ELECBYTE"),
+    "jumpnbump": ("JUMP 'N BUMP", "BRAINCHILD DESIGN"),
+    "laser310": ("LASER 310", "VTECH"),
+    "mc10": ("MC-10", "TANDY RADIO SHACK"),
+    "microw8": ("MICROW8", "FANTASY"),
+    "mz2000": ("MZ-2000", "SHARP"),
+    "mz2500": ("MZ-2500", "SHARP"),
+    "mz700": ("MZ-700", "SHARP"),
+    "mz800": ("MZ-800", "SHARP"),
+    "mz80k": ("MZ-80K", "SHARP"),
+    "namco22": ("SYSTEM 22", "NAMCO"),
+    "namco2x6": ("SYSTEM 246/256", "NAMCO"),
+    "native32": ("NATIVE32", "SUNPLUS"),
+    "nuon": ("NUON", "VM LABS"),
+    "omicron": ("OMICRON", "FANTASY"),
+    "openlara": ("OPENLARA", "CORE DESIGN"),
+    "p2000t": ("P2000T", "PHILIPS"),
+    "pc60": ("PC-6000", "NEC"),
+    "pc80": ("PC-8001", "NEC"),
+    "pcw": ("PCW", "AMSTRAD"),
+    "pcxt": ("PC/XT", "IBM"),
+    "pdp1": ("PDP-1", "DEC"),
+    "pet": ("PET", "COMMODORE"),
+    "pico": ("PICO", "SEGA"),
+    "piece": ("P/ECE", "AQUAPLUS"),
+    "playdia": ("PLAYDIA", "BANDAI"),
+    "pocketstation": ("POCKETSTATION", "SONY"),
+    "pv2000": ("PV-2000", "CASIO"),
+    "pyxel": ("PYXEL", "FANTASY"),
+    "reminiscence": ("REMINISCENCE", "GREGORY MONTOIR"),
+    "rx78": ("RX-78", "BANDAI"),
+    "sc-3000": ("SC-3000", "SEGA"),
+    "segaai": ("AI COMPUTER", "SEGA"),
+    "singe": ("SINGE", ""),
+    "socrates": ("SOCRATES", "VTECH"),
+    "spmp8000": ("SPMP8000", "SUNPLUS"),
+    "superbroswar": ("SUPER MARIO WAR", ""),
+    "sv8000": ("SUPER VISION 8000", "BANDAI"),
+    "systemsp": ("SYSTEM SP", "SEGA"),
+    "tamagotchi": ("TAMAGOTCHI", "BANDAI"),
+    "thepowdertoy": ("THE POWDER TOY", "THE POWDER TOY TEAM"),
+    "thextech": ("THEXTECH", "WOHLSTAND"),
+    "ti83": ("TI-83", "TEXAS INSTRUMENTS"),
+    "tutor": ("TUTOR", "TOMY"),
+    "tvc": ("TVC", "VIDEOTON"),
+    "vaporspec": ("VAPORSPEC", "FANTASY"),
+    "vc4000": ("VC 4000", "INTERTON"),
+    "vgmplay": ("VIDEO GAME MUSIC PLAYER", ""),
+    "videopacplus": ("VIDEOPAC+", "PHILIPS"),
+    "vircon32": ("VIRCON32", "CARRA"),
+    "vis": ("VIDEO INFORMATION SYSTEM", "TANDY"),
+    "vmu": ("VISUAL MEMORY UNIT", "SEGA"),
+    "wenquxing": ("WENQUXING", "GOLDEN GLOBAL VIEW"),
+    "windows_installers": ("WINDOWS INSTALLERS", "MICROSOFT"),
+    "xegs": ("XE GAME SYSTEM", "ATARI"),
+    "xrick": ("XRICK", "BIGORNO"),
+}
+
+def wordmark(name: str, maker: str) -> Logo:
+    words, lines = name.split(), [""]
+    for word in words:
+        if lines[-1] and len(lines[-1]) + 1 + len(word) > WORDMARK_LINE_CHARS:
+            lines.append(word)
+        else:
+            lines[-1] = f"{lines[-1]} {word}".strip()
+    big = tuple(LogoLine("Sora-ExtraBold.ttf", line, 50, 0.04) for line in lines)
+    small = (LogoLine("Sora-SemiBold.ttf", maker, 20, 0.32),) if maker else ()
+    return Logo(icon=(), lines=big + small, line_gap=14)
+
 def path_bounds(paths: list[str]) -> tuple[float, float, float, float]:
     pen = BoundsPen(None)
     for d in paths:
@@ -524,10 +633,12 @@ def text_path(fonts: Path, line: LogoLine, x: float, baseline: float) -> str:
 
 def logo_paths(fonts: Path, logo: Logo, top: float) -> tuple[list[str], list[str]]:
     text_height = sum(line.cap_height for line in logo.lines) + logo.line_gap * (len(logo.lines) - 1)
-    left, icon_top, right, bottom = path_bounds(list(logo.icon))
-    scale = text_height / (bottom - icon_top)
-    icon = [transformed_path(d, (scale, 0, 0, scale, -left * scale, -icon_top * scale - top)) for d in logo.icon]
-    text_left = (right - left) * scale + text_height * 0.22
+    icon, text_left = [], 0.0
+    if logo.icon:
+        left, icon_top, right, bottom = path_bounds(list(logo.icon))
+        scale = text_height / (bottom - icon_top)
+        icon = [transformed_path(d, (scale, 0, 0, scale, -left * scale, -icon_top * scale - top)) for d in logo.icon]
+        text_left = (right - left) * scale + text_height * 0.22
     text, baseline = [], -top
     for line in logo.lines:
         baseline += line.cap_height
@@ -550,7 +661,8 @@ def logo_svg(fonts: Path, logo: Logo) -> str:
 def render_chrome(theme_dir: Path) -> None:
     assets = theme_dir / "assets"
     fonts = assets / "fonts" if (assets / "fonts").is_dir() else assets
-    for system, logo in LOGOS.items():
+    logos = {**{system: wordmark(*text) for system, text in WORDMARKS.items()}, **LOGOS}
+    for system, logo in logos.items():
         (theme_dir / "art" / f"{system}.svg").write_text(logo_svg(fonts, logo))
     Image.new("RGBA", (4, 4), (255, 255, 255, 255)).save(assets / "white.png")
 
