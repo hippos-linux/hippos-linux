@@ -92,7 +92,7 @@ if version_lt "$APPLIED" "0.6.12"; then
     fi
 
     log "0.6.12: Discover shortcut on the desktop, listed in ES Desktop Shortcuts"
-    if [[ -d /userdata/Desktop && ! -e /userdata/Desktop/discover.desktop ]]; then
+    if [[ -d /userdata/Desktop && ! -e /userdata/Desktop/discover.desktop && -e /usr/share/applications/org.kde.discover.desktop ]]; then
         ln -s /usr/share/applications/org.kde.discover.desktop /userdata/Desktop/discover.desktop
         chown -h hippos:users /userdata/Desktop/discover.desktop
     fi
@@ -159,6 +159,11 @@ if version_lt "$APPLIED" "0.7.1" && [[ -f "$PORTMASTER_ZIP" && ! -e "$PORTMASTER
     [[ -e /userdata/roms/ports/PortMaster.sh ]] || cp "$PORTMASTER_PARENT/PortMaster/PortMaster.sh" /userdata/roms/ports/PortMaster.sh
     chown hippos:users /userdata/.local "$PORTMASTER_PARENT"
     chown -R hippos:users "$PORTMASTER_PARENT/PortMaster" /userdata/roms/ports/PortMaster.sh
+fi
+
+if version_lt "$APPLIED" "0.7.1" && [[ -L /userdata/Desktop/discover.desktop && ! -e /userdata/Desktop/discover.desktop ]]; then
+    log "0.7.1: Discover shortcut removed where Discover isn't installed"
+    rm /userdata/Desktop/discover.desktop
 fi
 
 HIPPOS_CONFIG=/userdata/system/configs/hippos
