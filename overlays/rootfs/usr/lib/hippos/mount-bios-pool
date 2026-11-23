@@ -5,7 +5,7 @@ source /usr/lib/hippos/pool-branch.sh
 
 POOL=/userdata/bios
 RW=/userdata/.bios-rw
-OPTS="cache.files=off,dropcacheonclose=true,allow_other,use_ino,moveonenospc=false,category.create=mspmfs"
+OPTS="cache.files=partial,dropcacheonclose=true,allow_other,use_ino,moveonenospc=false,category.create=mspmfs"
 MEDIA=/media
 
 log() { printf '[hippos-bios-pool] %s\n' "$*"; }
@@ -23,14 +23,12 @@ add_branch() {
     branches="${branches}:${branch}=${mode}"
 }
 
-if findmnt "${POOL}" >/dev/null 2>&1; then
-    log "already mounted at ${POOL}"
-    exit 0
-fi
+mounted=false
+findmnt "${POOL}" >/dev/null 2>&1 && mounted=true
 
 mkdir -p "${RW}"
 chown 1000:1000 "${RW}"
-if [[ -d "${POOL}" && -n "$(ls -A "${POOL}" 2>/dev/null)" && -z "$(ls -A "${RW}" 2>/dev/null)" ]]; then
+if ! ${mounted} && [[ -d "${POOL}" && -n "$(ls -A "${POOL}" 2>/dev/null)" && -z "$(ls -A "${RW}" 2>/dev/null)" ]]; then
     log "migrating ${POOL} content to ${RW}"
     find "${POOL}" -mindepth 1 -maxdepth 1 -exec mv -t "${RW}" -- {} +
 fi
@@ -51,7 +49,9 @@ done
 
 log "branches: ${branches}"
 
-if mergerfs -o "${OPTS}" "${branches}" "${POOL}"; then
+if ${mounted}; then
+    update_pool_branches "${POOL}" "${branches}"
+elif mergerfs -o "${OPTS}" "${branches}" "${POOL}"; then
     log "mergerfs bios pool mounted at ${POOL}"
 else
     log "mergerfs failed — bind-mounting ${RW} directly"

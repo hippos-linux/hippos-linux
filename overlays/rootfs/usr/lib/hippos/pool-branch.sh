@@ -28,3 +28,17 @@ add_alias_branches() {
         done < <(cat "$@")
     done
 }
+
+update_pool_branches() {
+    local pool="$1" wanted="$2" current
+    if ! current="$(python3 -c 'import os, sys; print(os.getxattr(sys.argv[1], "user.mergerfs.branches").decode())' "${pool}/.mergerfs" 2>/dev/null)"; then
+        log "${pool} is not a mergerfs pool; branches left as they are"
+        return 0
+    fi
+    if [[ "${current}" == "${wanted}" ]]; then
+        log "branches unchanged"
+        return 0
+    fi
+    python3 -c 'import os, sys; os.setxattr(sys.argv[1], "user.mergerfs.branches", sys.argv[2].encode())' "${pool}/.mergerfs" "${wanted}"
+    log "branches updated: ${wanted}"
+}

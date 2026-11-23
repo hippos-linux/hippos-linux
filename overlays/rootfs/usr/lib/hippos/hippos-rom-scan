@@ -2,6 +2,8 @@
 set -euo pipefail
 
 if [[ -n "$(systemctl list-jobs --no-legend hippos-roms-pool.service)" ]]; then
+    systemctl restart --no-block hippos-roms-pool.service
+    printf '[hippos-rom-scan] pool rebuild queued behind its pending job\n'
     exit 0
 fi
 
