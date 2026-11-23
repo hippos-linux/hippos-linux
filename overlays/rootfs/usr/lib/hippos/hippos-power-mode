@@ -57,7 +57,7 @@ apply_mode() {
             ;;
         balanced)
             local configured
-            configured="$(hippos-settings get system.cpu.governor 2>/dev/null || true)"
+            configured="$(hippos-settings get system.cpu.balanced_governor 2>/dev/null || true)"
             if [[ -n "${configured}" ]] && has_governor "${configured}"; then set_cpu_governor "${configured}"
             elif has_governor schedutil; then set_cpu_governor schedutil
             elif has_governor ondemand; then set_cpu_governor ondemand
