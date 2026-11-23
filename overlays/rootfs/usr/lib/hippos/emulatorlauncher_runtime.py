@@ -312,9 +312,6 @@ def launch_wine(ctx: LaunchContext) -> int:
             __import__('logging').getLogger('hippos.emulatorlauncher').error("Unsupported Windows installer type: %s", ctx.rom)
             return 1
         mode = 'install'
-    elif ctx.system != 'windows':
-        __import__('logging').getLogger('hippos.emulatorlauncher').error("Wine launcher used for unsupported system '%s'", ctx.system)
-        return 1
 
     conf = _load_hippos_conf()
     env = _build_game_env(conf, ctx)
