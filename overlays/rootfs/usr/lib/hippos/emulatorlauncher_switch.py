@@ -49,8 +49,6 @@ def _write_switch_qt_config(cfg_dir: Path, emu_name: str) -> None:
 
 SWITCH_BIOS = BIOS / 'switch'
 SWITCH_KEY_FILES = ('prod.keys', 'title.keys')
-SWITCH_DATA_DIRS = {'citron-neo': 'citron', 'eden': 'eden'}
-
 def install_switch_keys(keys_dir: Path) -> None:
     keys_dir.mkdir(parents=True, exist_ok=True)
     for name in SWITCH_KEY_FILES:
@@ -105,10 +103,10 @@ def install_switch_firmware(registered: Path, title_folders: bool = False) -> No
         if archive is not None:
             archive.close()
 
-def _launch_switch(ctx: LaunchContext, emu_name: str) -> int:
+def launch_switch_family(ctx: LaunchContext, emu_name: str, data_dir_name: str) -> int:
     conf = _load_hippos_conf()
     saves_dir = SAVES / 'switch'
-    cfg_dir   = CONFIGS / SWITCH_DATA_DIRS[emu_name]
+    cfg_dir   = CONFIGS / data_dir_name
     cache_dir = CACHE / emu_name
     saves_dir.mkdir(parents=True, exist_ok=True)
     cfg_dir.mkdir(parents=True, exist_ok=True)
@@ -120,7 +118,7 @@ def _launch_switch(ctx: LaunchContext, emu_name: str) -> int:
         return 1
 
     _write_switch_qt_config(cfg_dir, emu_name)
-    data_dir = saves_dir / SWITCH_DATA_DIRS[emu_name]
+    data_dir = saves_dir / data_dir_name
     install_switch_keys(data_dir / 'keys')
     install_switch_firmware(data_dir / 'nand' / 'system' / 'Contents' / 'registered')
 
@@ -133,10 +131,10 @@ def _launch_switch(ctx: LaunchContext, emu_name: str) -> int:
     return _run_game_command(ctx, cmd, env).returncode
 
 def launch_citron_neo(ctx: LaunchContext) -> int:
-    return _launch_switch(ctx, 'citron-neo')
+    return launch_switch_family(ctx, 'citron-neo', 'citron')
 
 def launch_eden(ctx: LaunchContext) -> int:
-    return _launch_switch(ctx, 'eden')
+    return launch_switch_family(ctx, 'eden', 'eden')
 
 _RYUJINX_CTRL_TEMPLATE: dict = {
     'left_joycon_stick':  {'joystick': 'Left', 'invert_stick_x': False, 'invert_stick_y': False, 'rotate90_cw': False, 'stick_button': 'LeftStick'},
