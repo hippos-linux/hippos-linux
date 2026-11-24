@@ -183,6 +183,17 @@ if version_lt "$APPLIED" "0.7.1" \
     sed -i '/^system\.cpu\.governor=schedutil$/d; /^system\.cpu\.max_freq=1008000$/d' /userdata/system/hippos.conf
 fi
 
+if version_lt "$APPLIED" "0.7.2"; then
+    log "0.7.2: Discover and GNOME Software are left out in favour of HippOS Store"
+    [[ -f /userdata/system/apt-packages.list ]] && sed -i '/^plasma-discover$/d' /userdata/system/apt-packages.list
+    AUTOSTART=/userdata/system/.config/autostart
+    if [[ ! -e "${AUTOSTART}/org.gnome.Software.desktop" ]]; then
+        mkdir -p "${AUTOSTART}"
+        printf '[Desktop Entry]\nType=Application\nName=GNOME Software\nHidden=true\n' > "${AUTOSTART}/org.gnome.Software.desktop"
+        chown -R hippos:users "${AUTOSTART}"
+    fi
+fi
+
 HIPPOS_CONFIG=/userdata/system/configs/hippos
 mkdir -p "${HIPPOS_CONFIG}"
 for name in external-roms.conf roms-sources.conf ignored-storage-devices.txt current-storage.conf; do
