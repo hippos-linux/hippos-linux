@@ -194,6 +194,24 @@ if version_lt "$APPLIED" "0.7.2"; then
     fi
 fi
 
+DESKTOP_DIR=/userdata/Desktop
+if version_lt "$APPLIED" "0.7.2" && [[ -d "${DESKTOP_DIR}" ]]; then
+    log "0.7.2: HippOS desktop shortcuts are trusted launchers, not links"
+    if [[ -L "${DESKTOP_DIR}/software.desktop" ]]; then
+        cp --remove-destination /usr/share/applications/hippos-software.desktop "${DESKTOP_DIR}/software.desktop"
+        chown hippos:users "${DESKTOP_DIR}/software.desktop"
+    fi
+    shortcuts=()
+    for name in software switch-to-es; do
+        [[ -f "${DESKTOP_DIR}/${name}.desktop" ]] && shortcuts+=("${DESKTOP_DIR}/${name}.desktop")
+    done
+    if (( ${#shortcuts[@]} )); then
+        runuser -u hippos -- env HOME=/userdata \
+            dbus-run-session -- sh -c 'for shortcut; do gio set "$shortcut" metadata::trust true; done' sh "${shortcuts[@]}" \
+            >/dev/null 2>&1
+    fi
+fi
+
 HIPPOS_CONFIG=/userdata/system/configs/hippos
 mkdir -p "${HIPPOS_CONFIG}"
 for name in external-roms.conf roms-sources.conf ignored-storage-devices.txt current-storage.conf; do

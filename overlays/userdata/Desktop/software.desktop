@@ -1,1 +1,17 @@
-/usr/share/applications/hippos-software.desktop
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=HippOS Store
+GenericName=Software Centre
+Comment=Install and update apps, emulators and HippOS itself
+Exec=/usr/lib/hippos/hippos-software %f
+Icon=hippos-store
+Terminal=false
+Categories=System;PackageManager;
+MimeType=application/vnd.flatpak.ref;application/vnd.flatpak;
+Keywords=store;apps;install;update;upgrade;flatpak;flathub;
+Actions=updates;
+
+[Desktop Action updates]
+Name=Updates
+Exec=/usr/lib/hippos/hippos-software --updates
