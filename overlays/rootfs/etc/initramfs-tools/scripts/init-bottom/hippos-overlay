@@ -114,36 +114,33 @@ merge_accounts() {
     merge_secrets gshadow group
 }
 
-upper_entry() {
-    case "$1" in
-        /bin/*|/sbin/*|/lib/*|/lib32/*|/lib64/*|/libx32/*) echo "${UPPER}/usr$1" ;;
-        *) echo "${UPPER}$1" ;;
-    esac
+UPPER_PATH_AWK='
+function upper_path(path) {
+    if (path ~ /^\/usr\/local\//) return ""
+    if (path ~ /^\/(bin|sbin|lib|lib32|lib64|libx32)\//) return upper "/usr" path
+    if (path ~ /^\/(usr|opt)\//) return upper path
+    return ""
+}'
+upper_system_entries() {
+    find "${UPPER}/usr" "${UPPER}/opt" -path "${UPPER}/usr/local" -prune -o -type "$1" -print 2>/dev/null
 }
-
-system_path() {
-    case "$1" in
-        /usr/local/*) return 1 ;;
-        /usr/*|/opt/*|/bin/*|/sbin/*|/lib/*|/lib32/*|/lib64/*|/libx32/*) return 0 ;;
-    esac
-    return 1
-}
-
 remove_package_files() {
-    cat "${UPPER}"/var/lib/dpkg/info/*.md5sums 2>/dev/null | while IFS=' ' read -r _sum _path; do
-        system_path "/${_path}" || continue
-        _entry="$(upper_entry "/${_path}")"
-        [ -f "${_entry}" ] && [ ! -L "${_entry}" ] || continue
-        [ "$(md5sum < "${_entry}")" = "${_sum}  -" ] && rm -f "${_entry}"
-    done
-    cat "${UPPER}"/var/lib/dpkg/info/*.list 2>/dev/null | while IFS= read -r _path; do
-        system_path "${_path}" || continue
-        _entry="$(upper_entry "${_path}")"
-        [ -L "${_entry}" ] && rm -f "${_entry}"
-    done
+    _scratch="${UPPER}/var/lib/hippos"
+    mkdir -p "${_scratch}"
+    upper_system_entries f > "${_scratch}/upper-files"
+    cat "${UPPER}"/var/lib/dpkg/info/*.md5sums 2>/dev/null | awk -v upper="${UPPER}" "${UPPER_PATH_AWK}"'
+        NR == FNR { present[$0]; next }
+        { entry = upper_path("/" substr($0, index($0, "  ") + 2)); if (entry in present) print $1 "  " entry }
+    ' "${_scratch}/upper-files" - > "${_scratch}/upper-package-sums"
+    md5sum -c "${_scratch}/upper-package-sums" 2>/dev/null | sed -n 's/: OK$//p' | tr '\n' '\0' | xargs -0 -r rm -f
+    upper_system_entries l > "${_scratch}/upper-links"
+    cat "${UPPER}"/var/lib/dpkg/info/*.list 2>/dev/null | awk -v upper="${UPPER}" "${UPPER_PATH_AWK}"'
+        NR == FNR { present[$0]; next }
+        { entry = upper_path($0); if (entry in present) print entry }
+    ' "${_scratch}/upper-links" - | tr '\n' '\0' | xargs -0 -r rm -f
+    rm -f "${_scratch}/upper-files" "${_scratch}/upper-package-sums" "${_scratch}/upper-links"
     return 0
 }
-
 move_shadowing_files() {
     [ -d "${UPPER}/usr" ] || return 0
     _backup="system/backups/overlay-${DEPLOYMENT}"
@@ -153,13 +150,16 @@ move_shadowing_files() {
             rm -f "${_entry}"
         elif [ -f "${_entry}" ] && [ ! -L "${_entry}" ] && cmp -s "${_entry}" "${LOWER}${_rel}"; then
             rm -f "${_entry}"
+        elif [ -L "${_entry}" ] && [ -L "${LOWER}${_rel}" ] && \
+             [ "$(readlink "${_entry}")" = "$(readlink "${LOWER}${_rel}")" ]; then
+            rm -f "${_entry}"
         elif [ -e "${LOWER}${_rel}" ] || [ -L "${LOWER}${_rel}" ]; then
             mkdir -p "${BTRFS_MNT}/@userdata/${_backup}${_rel%/*}"
             mv -f "${_entry}" "${BTRFS_MNT}/@userdata/${_backup}${_rel}" && kmsg "${_rel} moved to /userdata/${_backup}"
         fi
     done
     find "${UPPER}/usr" -depth -mindepth 1 -type d ! -path "${UPPER}/usr/local" ! -path "${UPPER}/usr/local/*" \
-        -exec rmdir {} \; 2>/dev/null
+        -exec rmdir {} + 2>/dev/null
     return 0
 }
 

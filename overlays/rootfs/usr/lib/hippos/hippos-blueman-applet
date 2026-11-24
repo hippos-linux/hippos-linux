@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+compgen -G '/sys/class/bluetooth/hci*' >/dev/null || exit 0
+exec blueman-applet "$@"

@@ -12,7 +12,7 @@ fi
 
 mkdir -p /userdata/system/configs/emulationstation
 
-/usr/lib/hippos/hippos-hotkeys --default-context || true
+/usr/lib/hippos/hippos-hotkeys --default-context &
 
 export HOME=/userdata
 export XDG_RUNTIME_DIR=/run/user/1000
@@ -31,14 +31,14 @@ fi
 dbus-update-activation-environment --systemd DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS HOME XDG_SESSION_ID 2>/dev/null || true
 
 /usr/lib/hippos/hippos-display-setup
-/usr/lib/hippos/hippos-audio-setup
+/usr/lib/hippos/hippos-audio-setup &
 
 if hippos-touchscreen-detect 2>/dev/null; then
     pkill -x touchegg 2>/dev/null || true
     touchegg --daemon &
     sleep 0.5
     touchegg &
-fi
+fi &
 
 unclutter --noevents -b
 

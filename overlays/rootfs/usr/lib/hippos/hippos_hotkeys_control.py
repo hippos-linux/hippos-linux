@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import signal
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +21,8 @@ def signal_daemon(sig: int = signal.SIGHUP) -> None:
     except ProcessLookupError:
         pass
     except PermissionError:
+        import subprocess
+
         subprocess.run(
             ['sudo', '-n', 'kill', f'-{signal.Signals(sig).name}', str(pid)],
             capture_output=True,

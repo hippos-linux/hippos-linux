@@ -119,6 +119,7 @@ xserver-xorg-core
 xserver-xorg-input-libinput
 libeis1
 gir1.2-atspi-2.0
+at-spi2-core
 xinput-calibrator
 xdotool
 xinit

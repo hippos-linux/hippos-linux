@@ -1,0 +1,611 @@
+from __future__ import annotations
+
+import json
+import os
+import re
+import select
+import signal
+import subprocess
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+import errno
+
+import evdev
+import pyudev
+from evdev import ecodes
+
+from hippos_es_buttons import FALLBACK_GAMEPAD_BUTTONS, button_names, es_input_root, joystick_button_maps
+from hippos_padtokey import MOUSE_INTERVAL, PadMapper, device_maps
+import hippos_hotkeys_control
+from hippos_hotkeys_control import CONTEXT_FILE, KEYBOARD_SHOWN_FILE, PID_FILE
+
+DEVICE_NAME = "hippos hotkeys"
+HOTKEYS_COMMAND = "/usr/lib/hippos/hippos-hotkeys"
+
+SYSTEM_DIR              = Path('/usr/share/hippos/hotkeys/devices')
+USER_DIR                = Path('/userdata/system/configs/hippos-hotkeys')
+DEFAULT_MAPPING_FILE    = Path('/usr/share/hippos/hotkeys/default_mapping.json')
+USER_MAPPING_FILE       = USER_DIR / 'default_mapping.json'
+HOTKEYS_FILE            = Path('/usr/share/hippos/hotkeys/hotkeys.json')
+USER_HOTKEYS_FILE       = USER_DIR / 'hotkeys.json'
+DEFAULT_CONTEXT_FILE    = Path('/usr/share/hippos/hotkeys/contexts/emulationstation.json')
+COMMON_CONTEXT_FILE     = Path('/usr/share/hippos/hotkeys/common_context.json')
+USER_COMMON_CONTEXT_FILE = USER_DIR / 'common_context.json'
+
+ECODES_NAMES: dict[int, str] = {
+    code: name
+    for name, code in ecodes.ecodes.items()
+    if name.startswith('KEY_') or name.startswith('BTN_')
+}
+
+SDLK_SCANCODE_MASK = 1 << 30
+
+_ASCII_TO_EVDEV_NAME: dict[str, str] = {
+    ' ': 'KEY_SPACE', '-': 'KEY_MINUS', '=': 'KEY_EQUAL',
+    '[': 'KEY_LEFTBRACE', ']': 'KEY_RIGHTBRACE', '\\': 'KEY_BACKSLASH',
+    ';': 'KEY_SEMICOLON', "'": 'KEY_APOSTROPHE', '`': 'KEY_GRAVE',
+    ',': 'KEY_COMMA', '.': 'KEY_DOT', '/': 'KEY_SLASH',
+}
+for _c in 'abcdefghijklmnopqrstuvwxyz':
+    _ASCII_TO_EVDEV_NAME[_c] = f'KEY_{_c.upper()}'
+for _d in '1234567890':
+    _ASCII_TO_EVDEV_NAME[_d] = f'KEY_{_d}'
+
+_SDLK_CONTROL_TO_EVDEV_NAME: dict[int, str] = {
+    8: 'KEY_BACKSPACE', 9: 'KEY_TAB', 13: 'KEY_ENTER', 27: 'KEY_ESC', 127: 'KEY_DELETE',
+}
+
+_SDL_SCANCODE_TO_EVDEV_NAME: dict[int, str] = {
+    58: 'KEY_F1', 59: 'KEY_F2', 60: 'KEY_F3', 61: 'KEY_F4', 62: 'KEY_F5', 63: 'KEY_F6',
+    64: 'KEY_F7', 65: 'KEY_F8', 66: 'KEY_F9', 67: 'KEY_F10', 68: 'KEY_F11', 69: 'KEY_F12',
+    73: 'KEY_INSERT', 74: 'KEY_HOME', 75: 'KEY_PAGEUP', 76: 'KEY_DELETE',
+    77: 'KEY_END', 78: 'KEY_PAGEDOWN',
+    79: 'KEY_RIGHT', 80: 'KEY_LEFT', 81: 'KEY_DOWN', 82: 'KEY_UP',
+    224: 'KEY_LEFTCTRL', 225: 'KEY_LEFTSHIFT', 226: 'KEY_LEFTALT', 227: 'KEY_LEFTMETA',
+    228: 'KEY_RIGHTCTRL', 229: 'KEY_RIGHTSHIFT', 230: 'KEY_RIGHTALT', 231: 'KEY_RIGHTMETA',
+}
+
+def sdl_keycode_to_evdev(sdl_id: int) -> int | None:
+    if sdl_id & SDLK_SCANCODE_MASK:
+        name = _SDL_SCANCODE_TO_EVDEV_NAME.get(sdl_id & ~SDLK_SCANCODE_MASK)
+    elif sdl_id in _SDLK_CONTROL_TO_EVDEV_NAME:
+        name = _SDLK_CONTROL_TO_EVDEV_NAME[sdl_id]
+    elif 32 <= sdl_id <= 126:
+        name = _ASCII_TO_EVDEV_NAME.get(chr(sdl_id))
+    else:
+        name = None
+    return ecodes.ecodes.get(name) if name else None
+
+def log(msg: str) -> None:
+    print(f'[hippos-hotkeys] {msg}', flush=True)
+
+def load_json(path: Path, default: Any = None) -> Any:
+    if default is None:
+        default = {}
+    try:
+        return json.loads(path.read_text())
+    except FileNotFoundError:
+        return default
+    except Exception as exc:
+        log(f'could not load {path}: {exc}')
+        return default
+
+def device_mapping_name(device: evdev.InputDevice) -> str:
+    name = re.sub(r'[^a-zA-Z0-9_]', '', device.name.replace(' ', '_'))
+    return f'{name}-{device.info.vendor:02x}-{device.info.product:02x}.mapping'
+
+def _resolve_keys(raw: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for action, target in raw.items():
+        if isinstance(target, list):
+            codes = []
+            for t in target:
+                code = ecodes.ecodes.get(t)
+                if code is None:
+                    log(f'unknown key {t!r} in context')
+                    continue
+                codes.append(code)
+            result[action] = codes
+        elif isinstance(target, str) and target.startswith('KEY_'):
+            code = ecodes.ecodes.get(target)
+            if code is not None:
+                result[action] = code
+            else:
+                log(f'unknown key {target!r} in context')
+        else:
+            result[action] = target
+    return result
+
+def load_context() -> dict[str, Any]:
+    path = CONTEXT_FILE if CONTEXT_FILE.exists() else DEFAULT_CONTEXT_FILE
+    data = load_json(path, {})
+    if not data and path != DEFAULT_CONTEXT_FILE:
+        data = load_json(DEFAULT_CONTEXT_FILE, {})
+    return {
+        'name': data.get('name', 'emulationstation'),
+        'keys': _resolve_keys(data.get('keys', {})),
+        'common_disabled': data.get('common_disabled', False),
+    }
+
+def load_common_context() -> dict[str, Any]:
+    src = USER_COMMON_CONTEXT_FILE if USER_COMMON_CONTEXT_FILE.exists() else COMMON_CONTEXT_FILE
+    data = load_json(src, {})
+    raw = data.get('keys', data) if isinstance(data, dict) else {}
+    return _resolve_keys(raw)
+
+def load_default_mapping() -> dict[int, str]:
+    src = USER_MAPPING_FILE if USER_MAPPING_FILE.exists() else DEFAULT_MAPPING_FILE
+    data = load_json(src, {})
+    result: dict[int, str] = {}
+    for key_name, action_name in data.items():
+        code = ecodes.ecodes.get(str(key_name))
+        if code is not None:
+            result[int(code)] = str(action_name)
+    return result
+
+def load_device_action_map(device: evdev.InputDevice) -> dict[int, str]:
+    mapping_name = device_mapping_name(device)
+    for directory in (USER_DIR / 'devices', SYSTEM_DIR):
+        path = directory / mapping_name
+        if not path.exists():
+            continue
+        data = load_json(path, {})
+        result: dict[int, str] = {}
+        for key_name, action_name in data.items():
+            code = ecodes.ecodes.get(str(key_name))
+            if code is not None:
+                result[int(code)] = str(action_name)
+        log(f'device mapping {path}')
+        return result
+    return {}
+
+def load_es_button_maps() -> tuple[dict[str, dict[int, str]], dict[int, str]]:
+    root = es_input_root()
+    keyboard_map: dict[int, str] = {}
+    for config in root.findall('inputConfig') if root is not None else []:
+        if config.attrib.get('type') != 'keyboard':
+            continue
+        for node in config.findall('input'):
+            if node.attrib.get('type') != 'key':
+                continue
+            name = node.attrib.get('name')
+            sdl_id = node.attrib.get('id') or node.attrib.get('code')
+            if not name or sdl_id is None:
+                continue
+            try:
+                evdev_code = sdl_keycode_to_evdev(int(sdl_id))
+            except ValueError:
+                continue
+            if evdev_code is not None:
+                keyboard_map[evdev_code] = name
+    return joystick_button_maps(root), keyboard_map
+
+def load_combo_actions() -> list[dict[str, Any]]:
+    src = USER_HOTKEYS_FILE if USER_HOTKEYS_FILE.exists() else HOTKEYS_FILE
+    data = load_json(src, {})
+    actions = data.get('actions_player1', []) if isinstance(data, dict) else []
+    return [a for a in actions if isinstance(a, dict)]
+
+def make_uinput() -> evdev.UInput:
+    key_codes = [
+        c for c in range(ecodes.KEY_MAX)
+        if c in ECODES_NAMES and ECODES_NAMES[c].startswith('KEY_')
+    ]
+    key_codes += [ecodes.BTN_LEFT, ecodes.BTN_RIGHT, ecodes.BTN_MIDDLE]
+    return evdev.UInput(
+        name=DEVICE_NAME,
+        events={
+            ecodes.EV_KEY: key_codes,
+            ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y, ecodes.REL_WHEEL, ecodes.REL_HWHEEL],
+        },
+    )
+
+def send_keys(uinput: evdev.UInput, keys: int | list[int], begin: bool) -> None:
+    value = 1 if begin else 0
+    targets = keys if isinstance(keys, list) else [keys]
+    for code in targets:
+        uinput.write(ecodes.EV_KEY, code, value)
+        uinput.syn()
+
+def send_key_combo(uinput: evdev.UInput, keys: int | list[int]) -> None:
+    targets = keys if isinstance(keys, list) else [keys]
+    for code in targets:
+        uinput.write(ecodes.EV_KEY, code, 1)
+        uinput.syn()
+    time.sleep(0.08)
+    for code in reversed(targets):
+        uinput.write(ecodes.EV_KEY, code, 0)
+        uinput.syn()
+
+def send_mouse_reset(uinput: evdev.UInput) -> None:
+    uinput.write(ecodes.EV_REL, ecodes.REL_X, -10000)
+    uinput.write(ecodes.EV_REL, ecodes.REL_Y, -10000)
+    uinput.syn()
+    time.sleep(0.10)
+
+def has_udev_flag(udev_ctx: pyudev.Context, path: str, flag: str) -> bool:
+    try:
+        udev_device = pyudev.Devices.from_device_file(udev_ctx, path)
+    except pyudev.DeviceNotFoundError:
+        return False
+    return udev_device.properties.get(flag) == '1'
+
+def is_pure_keyboard(caps: dict[int, list[int]]) -> bool:
+    if ecodes.EV_ABS in caps or ecodes.EV_REL in caps:
+        return False
+    keys = set(caps.get(ecodes.EV_KEY, []))
+    return not any(c >= ecodes.BTN_GAMEPAD for c in keys)
+
+@dataclass(slots=True)
+class DeviceState:
+    device:     evdev.InputDevice
+    button_map: dict[int, str]
+    action_map: dict[int, str]
+    grabbed:    bool = False
+    pressed:    set[str] = field(default_factory=set)
+    consumed_keys: set[int] = field(default_factory=set)
+    active_combos: set[frozenset[str]] = field(default_factory=set)
+    pad:        PadMapper | None = None
+
+class HotkeyDaemon:
+    def __init__(self, permanent: bool = False) -> None:
+        self.permanent = permanent
+        self.uinput = make_uinput()
+        self.udev_ctx = pyudev.Context()
+        self.monitor = pyudev.Monitor.from_netlink(self.udev_ctx)
+        self.monitor.filter_by(subsystem='input')
+        self.poll = select.poll()
+        self.devices: dict[str, DeviceState] = {}
+        self.fd_to_path: dict[int, str] = {}
+        self.context: dict[str, Any] = {}
+        self.common_keys: dict[str, Any] = {}
+        self.default_map: dict[int, str] = {}
+        self.es_button_maps: dict[str, dict[int, str]] = {}
+        self.es_keyboard_map: dict[int, str] = {}
+        self.combo_actions: list[dict[str, Any]] = []
+        self.pad_maps: dict[str, tuple[list[dict], float]] = {}
+        self.require_reconfig = False
+        self.require_keyboard_update = False
+        self._reload_all()
+
+    def _reload_all(self) -> None:
+        self.context = load_context()
+        self.common_keys = load_common_context()
+        self.default_map = load_default_mapping()
+        self.es_button_maps, self.es_keyboard_map = load_es_button_maps()
+        self.combo_actions = load_combo_actions()
+        self.pad_maps = device_maps()
+        self.keyboard_shown = KEYBOARD_SHOWN_FILE.exists()
+        log(f'context={self.context.get("name", "")}')
+
+    def _handle_sighup(self, signum: int, frame: Any) -> None:
+        log('SIGHUP received, reconfig queued')
+        self.require_reconfig = True
+
+    def _handle_sigusr1(self, signum: int, frame: Any) -> None:
+        self.require_keyboard_update = True
+
+    def _update_keyboard_shown(self) -> None:
+        self.keyboard_shown = KEYBOARD_SHOWN_FILE.exists()
+        log(f'on-screen keyboard {"shown" if self.keyboard_shown else "hidden"}')
+        if self.keyboard_shown:
+            for state in self.devices.values():
+                if state.pad is not None:
+                    state.pad.release_buttons()
+
+    def _do_reconfig(self) -> None:
+        old = self.context.get('name', '')
+        self._reload_all()
+        for path in list(self.devices):
+            self._remove_device(path)
+        for dev_path in sorted(Path('/dev/input').glob('event*')):
+            self._add_device(str(dev_path))
+        log(f'reconfig done: context {old!r} -> {self.context.get("name", "")!r}, {len(self.devices)} devices')
+
+    def _resolve_action(self, action: str) -> Any:
+        result = self.context.get('keys', {}).get(action)
+        if result is not None:
+            return result
+        if not self.context.get('common_disabled', False):
+            return self.common_keys.get(action)
+        return None
+
+    def execute_action(self, action: str, begin: bool) -> bool:
+        target = self._resolve_action(action)
+        if target is None:
+            return False
+        if action == 'exit':
+            if isinstance(target, str) and not begin:
+                send_mouse_reset(self.uinput)
+            elif not isinstance(target, str) and begin:
+                send_mouse_reset(self.uinput)
+        if isinstance(target, str):
+            if not begin:
+                log(f'cmd {action}')
+                subprocess.Popen(target, shell=True, start_new_session=True)
+        else:
+            log(f'key {action} {"dn" if begin else "up"}')
+            send_keys(self.uinput, target, begin)
+        return True
+
+    def execute_combo_target(self, target: str | list[str]) -> None:
+        if isinstance(target, list):
+            if len(target) == 1:
+                target = target[0]
+            else:
+                codes = [ecodes.ecodes[t] for t in target if t in ecodes.ecodes]
+                if codes:
+                    log(f'combo -> raw multi-key {target}')
+                    send_key_combo(self.uinput, codes)
+                return
+
+        code = ecodes.ecodes.get(target)
+        if code is not None:
+            action = self.default_map.get(code)
+            if action:
+                ctx_target = self._resolve_action(action)
+                if ctx_target is not None and not isinstance(ctx_target, str):
+                    log(f'combo -> action {action!r} -> key {ctx_target}')
+                    send_key_combo(self.uinput, ctx_target)
+                    return
+                elif ctx_target is not None:
+                    log(f'combo -> action {action!r} -> cmd {ctx_target!r}')
+                    subprocess.Popen(ctx_target, shell=True, start_new_session=True)
+                    return
+                log(f'combo -> action {action!r} not bound in context {self.context.get("name", "")!r} — no-op')
+                return
+            log(f'combo -> raw key {target} (no default_mapping entry)')
+            send_key_combo(self.uinput, code)
+
+    def _add_device(self, path: str) -> None:
+        if path in self.devices:
+            return
+        try:
+            device = evdev.InputDevice(path)
+            caps = device.capabilities()
+        except OSError:
+            return
+        if ecodes.EV_KEY not in caps or device.name == DEVICE_NAME:
+            return
+        if has_udev_flag(self.udev_ctx, path, 'HIPPOS_HOTKEYS_IGNORE'):
+            log(f'ignoring {path} {device.name} (HIPPOS_HOTKEYS_IGNORE)')
+            return
+
+        action_map = load_device_action_map(device)
+        keys = set(caps.get(ecodes.EV_KEY, []))
+
+        button_map = button_names(device.name, keys, self.es_button_maps)
+
+        if not button_map and ecodes.KEY_ESC in keys and ecodes.KEY_A in keys:
+            button_map = {c: n for c, n in self.es_keyboard_map.items() if c in keys}
+
+        if not action_map:
+            action_map = dict(self.default_map)
+
+        grabbed = False
+        if has_udev_flag(self.udev_ctx, path, 'HIPPOS_HOTKEYS_NOGRAB'):
+            log(f'not grabbing {path} {device.name} (HIPPOS_HOTKEYS_NOGRAB)')
+        elif is_pure_keyboard(caps):
+            try:
+                device.grab()
+                grabbed = True
+            except OSError as exc:
+                log(f'could not grab {path} {device.name}: {exc} — hotkeys will not suppress raw passthrough here')
+
+        pad = None
+        if path in self.pad_maps:
+            entries, mouse_speed = self.pad_maps[path]
+            pad = PadMapper.build(device, entries, self.uinput, mouse_speed)
+            log(f'  padtokey: {len(pad.actions)} actions, mouse={"on" if pad.mouse_axes else "off"}, '
+                f'scroll={"on" if pad.scroll_axes else "off"}')
+
+        self.devices[path] = DeviceState(device, button_map, action_map, grabbed=grabbed, pad=pad)
+        self.fd_to_path[device.fileno()] = path
+        self.poll.register(device, select.POLLIN)
+        log(f'listening {path} {device.name}{" (grabbed)" if grabbed else ""}')
+        if button_map:
+            named = {n: ECODES_NAMES.get(c, c) for c, n in button_map.items()}
+            log(f'  button_map: {named}')
+
+    def _remove_device(self, path: str) -> None:
+        state = self.devices.pop(path, None)
+        if state is None:
+            return
+        if state.pad is not None:
+            state.pad.release_all()
+        fd = state.device.fileno()
+        self.fd_to_path.pop(fd, None)
+        try:
+            self.poll.unregister(state.device)
+            state.device.close()
+        except Exception:
+            pass
+
+    def _handle_controller_button(self, state: DeviceState, event: evdev.InputEvent) -> None:
+        name = state.button_map.get(event.code)
+        if not name:
+            return
+        names = [name]
+        select_fallback = name == 'select' and 'hotkey' not in state.button_map.values()
+        if select_fallback:
+            names.append('hotkey')
+        if event.value == 1:
+            log(f'button {ECODES_NAMES.get(event.code, event.code)} -> {names}'
+                f'{" (select-as-hotkey fallback)" if select_fallback else ""}'
+                f' [context={self.context.get("name", "")}]')
+            state.pressed.update(names)
+            for combo in self.combo_actions:
+                trigger = combo.get('trigger')
+                target  = combo.get('target')
+                if not isinstance(trigger, list) or target is None:
+                    continue
+                trigger_key = frozenset(trigger)
+                if trigger_key in state.active_combos:
+                    continue
+                if not trigger_key & set(names) or trigger_key <= set(names):
+                    continue
+                if all(b in state.pressed for b in trigger):
+                    state.active_combos.add(trigger_key)
+                    log(f'combo trigger={trigger} target={target} -> dispatching')
+                    self.execute_combo_target(target)
+        elif event.value == 0:
+            state.pressed.difference_update(names)
+            state.active_combos = {
+                trigger_key for trigger_key in state.active_combos
+                if trigger_key.issubset(state.pressed)
+            }
+
+    def _passthrough(self, event: evdev.InputEvent) -> None:
+        try:
+            self.uinput.write(event.type, event.code, event.value)
+            self.uinput.syn()
+        except OSError:
+            pass
+
+    def _handle_device(self, path: str) -> None:
+        state = self.devices.get(path)
+        if state is None:
+            return
+        try:
+            for event in state.device.read():
+                if state.pad is not None:
+                    state.pad.handle(event, buttons=not self.keyboard_shown)
+                if event.type != ecodes.EV_KEY:
+                    continue
+                if event.code in state.button_map:
+                    self._handle_controller_button(state, event)
+
+                if event.code in state.action_map and event.value in (0, 1):
+                    action = state.action_map[event.code]
+                    if not state.grabbed and self._resolve_action(action) == event.code:
+                        continue
+                    consumed = self.execute_action(action, event.value == 1)
+                    if consumed:
+                        if event.value == 1:
+                            state.consumed_keys.add(event.code)
+                        else:
+                            state.consumed_keys.discard(event.code)
+                        continue
+
+                if event.code in state.consumed_keys:
+                    if event.value == 0:
+                        state.consumed_keys.discard(event.code)
+                    continue
+
+                if state.grabbed:
+                    self._passthrough(event)
+        except OSError:
+            self._remove_device(path)
+
+    def run(self) -> None:
+        Path('/run/hippos').mkdir(parents=True, exist_ok=True)
+        if self.permanent:
+            PID_FILE.write_text(str(os.getpid()))
+        signal.signal(signal.SIGHUP, self._handle_sighup)
+        signal.signal(signal.SIGUSR1, self._handle_sigusr1)
+
+        self.monitor.start()
+        self.poll.register(self.monitor, select.POLLIN)
+        for dev_path in sorted(Path('/dev/input').glob('event*')):
+            self._add_device(str(dev_path))
+
+        log('started')
+        while True:
+            if self.require_reconfig:
+                self.require_reconfig = False
+                self._do_reconfig()
+            if self.require_keyboard_update:
+                self.require_keyboard_update = False
+                self._update_keyboard_shown()
+
+            pads = [state.pad for state in self.devices.values() if state.pad is not None]
+            timeout = int(MOUSE_INTERVAL * 1000) if any(pad.mouse_active() for pad in pads) else 1000
+            try:
+                events = self.poll.poll(timeout)
+            except select.error:
+                continue
+
+            for fd, _ in events:
+                try:
+                    if fd == self.monitor.fileno():
+                        action, udev_device = self.monitor.receive_device()
+                        node = udev_device.device_node
+                        if node and node.startswith('/dev/input/event'):
+                            if action == 'add':
+                                self._add_device(node)
+                            elif action == 'remove':
+                                self._remove_device(node)
+                    else:
+                        path = self.fd_to_path.get(fd)
+                        if path:
+                            self._handle_device(path)
+                except Exception as exc:
+                    if fd != self.monitor.fileno():
+                        log(f'event error fd={fd}: {exc}')
+
+            moment = time.monotonic()
+            for pad in pads:
+                pad.move_mouse(moment)
+
+def cmd_send(action: str) -> None:
+    ctx_data = load_json(CONTEXT_FILE if CONTEXT_FILE.exists() else DEFAULT_CONTEXT_FILE, {})
+    all_keys = {
+        **_resolve_keys(ctx_data.get('keys', {})),
+        **load_common_context(),
+    }
+    target = all_keys.get(action)
+    if target is None:
+        log(f'send: action {action!r} not in current context')
+        return
+    if isinstance(target, str):
+        subprocess.run(target, shell=True)
+        return
+    try:
+        uinput = make_uinput()
+    except PermissionError:
+        subprocess.run(
+            ['sudo', '-n', HOTKEYS_COMMAND, '--send', action],
+            capture_output=True,
+        )
+        return
+    time.sleep(0.1)
+    send_key_combo(uinput, target)
+    time.sleep(0.3)
+    uinput.close()
+
+def cmd_list() -> None:
+    context = load_context()
+    common  = load_common_context()
+    print(f"Context [{context.get('name', '')}]:")
+    for action, target in {**context.get('keys', {}), **common}.items():
+        if isinstance(target, list):
+            print(f'  {action:<22} -> {[ECODES_NAMES.get(c, str(c)) for c in target]}')
+        elif isinstance(target, int):
+            print(f'  {action:<22} -> {ECODES_NAMES.get(target, str(target))}')
+        else:
+            print(f'  {action:<22} -> [{target}]')
+
+    udev_ctx = pyudev.Context()
+    for dev_path in sorted(Path('/dev/input').glob('event*')):
+        try:
+            dev = evdev.InputDevice(str(dev_path))
+            caps = dev.capabilities()
+        except OSError:
+            continue
+        if dev.name == DEVICE_NAME or ecodes.EV_KEY not in caps:
+            continue
+        if has_udev_flag(udev_ctx, str(dev_path), 'HIPPOS_HOTKEYS_IGNORE'):
+            continue
+        action_map = load_device_action_map(dev)
+        keys = set(caps.get(ecodes.EV_KEY, []))
+        button_map = {c: n for c, n in FALLBACK_GAMEPAD_BUTTONS.items() if c in keys}
+        if not action_map and not button_map:
+            action_map = load_default_mapping()
+        if action_map or button_map:
+            print(f'\n# {dev_path} [{dev.name}]')
+            for code, act in sorted(action_map.items()):
+                print(f'  {ECODES_NAMES.get(code, str(code)):<22} -> {act}')
+            for code, btn in sorted(button_map.items()):
+                print(f'  {ECODES_NAMES.get(code, str(code)):<22} -> button:{btn}')

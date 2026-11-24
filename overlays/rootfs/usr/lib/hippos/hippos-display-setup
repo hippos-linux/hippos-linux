@@ -91,7 +91,7 @@ while IFS= read -r dev; do
                 && echo "[hippos-display-setup] touchscreen transform $ROTATION: $dev" || true
         fi
     fi
-done < <(xinput list --name-only 2>/dev/null)
+done < <(xinput list --short 2>/dev/null | awk -F'\t' '/slave +pointer/ {sub(/^id=/, "", $2); print $2}')
 
 _OVERSCAN_ON="$(hippos-settings get display.overscan.enabled 2>/dev/null || true)"
 if [[ "${_OVERSCAN_ON}" == "true" ]]; then

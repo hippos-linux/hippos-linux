@@ -11,7 +11,6 @@ import signal
 import subprocess
 import time
 import tomllib
-import xml.etree.ElementTree as ET
 from contextlib import contextmanager, nullcontext
 from functools import cache
 from dataclasses import dataclass, field
@@ -24,9 +23,13 @@ import hippos_hotkeys_control
 from hippos_onscreen_keyboard import onscreen_keyboard
 from hippos_padtokey import padtokey_context
 from emulatorlauncher_registry import lookup
+from hippos_es_input import (
+    ES_INPUT_FILES, ES_PLAYERS_INPUT, ControllerInfo, ESBinding, ESControllerProfile, ESProfiles,
+    _exact_es_profile, _load_es_input_configs, _normalize, _parse_es_input_file, _pick_es_profile,
+)
 
 from HipposPaths import (
-    CONFIGS, EMULATORLAUNCHER_DEFAULTS, EMULATORS_ROOT, HIPPOS_CONF, HIPPOS_SHARE_DIR, USER_ES_DIR,
+    CONFIGS, EMULATORLAUNCHER_DEFAULTS, EMULATORS_ROOT, HIPPOS_CONF, HIPPOS_SHARE_DIR,
 )
 
 DEFAULTS_FILE      = EMULATORLAUNCHER_DEFAULTS
@@ -39,11 +42,6 @@ HOTKEY_CONTEXT_DIR  = HIPPOS_SHARE_DIR / 'hotkeys' / 'contexts'
 
 WHEEL_PROXY_BIN     = Path('/usr/lib/hippos/hippos-wheel-proxy')
 
-ES_INPUT_FILES = (
-    USER_ES_DIR / 'es_input.cfg',
-    Path('/usr/share/emulationstation/es_input.cfg'),
-)
-ES_PLAYERS_INPUT = Path('/tmp/es_input_players.cfg')
 
 _log = logging.getLogger('emulatorlauncher')
 
@@ -68,19 +66,6 @@ def launch_step(name: str):
         _log.info("launch: %s %.2fs", name, time.perf_counter() - started)
 
 @dataclass
-class ControllerInfo:
-    player:      int
-    index:       int  = 0
-    guid:        str  = ''
-    name:        str  = ''
-    device_path: str  = ''
-    is_wheel:    bool = False
-    wheel_rotation_angle: int = 0
-    nb_buttons:  int  = 0
-    nb_hats:     int  = 0
-    nb_axes:     int  = 0
-
-@dataclass
 class LaunchContext:
     system:      str
     rom:         Path
@@ -98,20 +83,6 @@ class LaunchContext:
     netplay_ip:    str = ''
     netplay_port:  str = ''
     monitor:       int = -1
-
-@dataclass(frozen=True)
-class ESBinding:
-    name: str
-    type: str
-    code: int
-    value: int
-
-@dataclass
-class ESControllerProfile:
-    device_name: str
-    device_guid: str
-    device_path: str
-    inputs: dict[str, ESBinding]
 
 def _load_hippos_conf() -> dict[str, str]:
     return _read_conf_file(HIPPOS_CONF)
@@ -273,84 +244,6 @@ def _sdl_controller_mapping(
             mapping.append((sdl_name, value))
 
     return mapping
-
-def _normalize(value: str) -> str:
-    return ''.join(ch for ch in value.strip().casefold() if ch.isalnum())
-
-@cache
-def _parse_es_input_file(path: Path, mtime_ns: int) -> tuple[ESControllerProfile, ...]:
-    try:
-        root = ET.parse(path).getroot()
-    except ET.ParseError as exc:
-        _log.warning("Could not parse %s: %s", path, exc)
-        return ()
-
-    configs: list[ESControllerProfile] = []
-    for node in root.findall('inputConfig'):
-        if node.attrib.get('type') != 'joystick':
-            continue
-        inputs: dict[str, ESBinding] = {}
-        for input_node in node.findall('input'):
-            name = (input_node.attrib.get('name') or '').strip().lower()
-            type_name = (input_node.attrib.get('type') or '').strip().lower()
-            code_text = input_node.attrib.get('id') or input_node.attrib.get('code')
-            value_text = input_node.attrib.get('value', '0')
-            if not name or not type_name or code_text is None:
-                continue
-            try:
-                code = int(code_text)
-                value = int(value_text)
-            except ValueError:
-                continue
-            inputs[name] = ESBinding(name=name, type=type_name, code=code, value=value)
-        configs.append(
-            ESControllerProfile(
-                device_name=node.attrib.get('deviceName', ''),
-                device_guid=node.attrib.get('deviceGUID', ''),
-                device_path=node.attrib.get('devicePath', ''),
-                inputs=inputs,
-            )
-        )
-    return tuple(configs)
-
-@dataclass(frozen=True)
-class ESProfiles:
-    launch: tuple[ESControllerProfile, ...]
-    installed_file: Optional[Path]
-
-    def all(self) -> tuple[ESControllerProfile, ...]:
-        if self.installed_file is None:
-            return self.launch
-        return self.launch + _parse_es_input_file(self.installed_file, self.installed_file.stat().st_mtime_ns)
-
-def _load_es_input_configs() -> ESProfiles:
-    launch = _parse_es_input_file(ES_PLAYERS_INPUT, ES_PLAYERS_INPUT.stat().st_mtime_ns) if ES_PLAYERS_INPUT.exists() else ()
-    return ESProfiles(launch, next((path for path in ES_INPUT_FILES if path.exists()), None))
-
-def _exact_es_profile(profiles: tuple[ESControllerProfile, ...], ctrl: ControllerInfo) -> Optional[ESControllerProfile]:
-    guid, name = _normalize(ctrl.guid), _normalize(ctrl.name)
-    return next((profile for profile in profiles
-                 if _normalize(profile.device_guid) == guid and _normalize(profile.device_name) == name), None)
-
-def _pick_es_profile(profiles: ESProfiles, ctrl: ControllerInfo) -> Optional[ESControllerProfile]:
-    if exact := _exact_es_profile(profiles.launch, ctrl):
-        return exact
-    candidates = profiles.all()
-    if exact := _exact_es_profile(candidates, ctrl):
-        return exact
-    normalized_guid = _normalize(ctrl.guid)
-    normalized_path = _normalize(ctrl.device_path)
-    normalized_name = _normalize(ctrl.name)
-    for profile in candidates:
-        if _normalize(profile.device_guid) == normalized_guid:
-            return profile
-    for profile in candidates:
-        if _normalize(profile.device_path) == normalized_path and normalized_path:
-            return profile
-    for profile in candidates:
-        if _normalize(profile.device_name) == normalized_name:
-            return profile
-    return candidates[0] if candidates else None
 
 def _conf_value(conf: dict[str, str], key: str, default: str = '') -> str:
     value = conf.get(key, default)

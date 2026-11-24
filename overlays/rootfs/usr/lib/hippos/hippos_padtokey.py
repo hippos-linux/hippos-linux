@@ -13,7 +13,7 @@ import hippos_hotkeys_control
 
 if TYPE_CHECKING:
     import evdev
-    from emulatorlauncher_shared import ControllerInfo, ESBinding, ESControllerProfile, ESProfiles
+    from hippos_es_input import ControllerInfo, ESBinding, ESControllerProfile, ESProfiles
 
 _log = logging.getLogger(__name__)
 
@@ -128,7 +128,8 @@ def resolve_actions(actions: list[dict], profile: ESControllerProfile) -> list[d
 def write_maps(system: str, emulator: str, rom: Path,
                controllers: list[ControllerInfo], profiles: ESProfiles,
                pointer: bool | None = None) -> bool:
-    from emulatorlauncher_shared import _game_or_system_setting, _game_setting, _load_hippos_conf, _pick_es_profile
+    from emulatorlauncher_shared import _game_or_system_setting, _game_setting, _load_hippos_conf
+    from hippos_es_input import _pick_es_profile
 
     conf = _load_hippos_conf()
     default_maps = _game_or_system_setting(conf, system, rom, 'padtokey') != '0' if pointer is None else pointer
@@ -148,7 +149,7 @@ def write_maps(system: str, emulator: str, rom: Path,
 
 
 def write_desktop_maps() -> bool:
-    from emulatorlauncher_shared import ControllerInfo, _load_es_input_configs, _pick_es_profile
+    from hippos_es_input import ControllerInfo, _load_es_input_configs, _pick_es_profile
 
     actions = merge_keys_files([POINTER_MAP])['actions_player1']
     profiles = _load_es_input_configs()
@@ -224,7 +225,7 @@ def set_pointer(enabled: bool) -> bool:
 
 
 def reapply_running_game(pointer: bool | None = None) -> bool:
-    from emulatorlauncher_shared import ControllerInfo, _load_es_input_configs
+    from hippos_es_input import ControllerInfo, _load_es_input_configs
 
     game = running_game()
     if game is None:

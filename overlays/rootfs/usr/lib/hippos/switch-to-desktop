@@ -21,7 +21,6 @@ if [[ ! -x "${SESSION_CMD}" ]]; then
     exit 1
 fi
 
-hippos-settings set system.desktop "$DESKTOP"
-hippos-settings set system.session desktop
+hippos-settings set system.desktop "$DESKTOP" system.session desktop
 
 kill -USR1 "$(cat /run/hippos/session-loop)"

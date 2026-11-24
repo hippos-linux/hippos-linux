@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emulatorlauncher_shared import ControllerInfo, ESProfiles, LaunchContext
+    from emulatorlauncher_shared import LaunchContext
+    from hippos_es_input import ControllerInfo, ESProfiles
 
 _log = logging.getLogger(__name__)
 

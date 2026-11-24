@@ -45,9 +45,9 @@ if [[ "$(/usr/lib/hippos/hippos-planemode status 2>/dev/null)" != "on" ]]; then
 fi
 
 /usr/lib/hippos/hippos-display-setup
-/usr/lib/hippos/hippos-audio-setup
+/usr/lib/hippos/hippos-audio-setup &
 
-/usr/lib/hippos/hippos-hotkeys --new-context desktop '{}' || true
+/usr/lib/hippos/hippos-hotkeys --new-context desktop '{}' &
 
 if [[ "$(hippos-settings get desktop.maximize_windows)" == 1 ]]; then
     /usr/lib/hippos/hippos-openbox-maximize on
@@ -61,12 +61,11 @@ xset s off 2>/dev/null || true
 if [[ "$(hippos-settings get desktop.onscreen_keyboard)" == 1 ]]; then
     export ACCESSIBILITY_ENABLED=1 QT_ACCESSIBILITY=1 QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
     gsettings set org.gnome.desktop.interface toolkit-accessibility true 2>/dev/null || true
-    /usr/lib/hippos/hippos-osk &
+    nice -n 10 /usr/lib/hippos/hippos-osk &
 fi
 if [[ "$(hippos-settings get desktop.controller_mouse)" == 1 ]]; then
-    trap 'hippos-controller-mouse desktop off' EXIT
-    hippos-controller-mouse desktop on || true
+    hippos-controller-mouse desktop on &
 fi
 
 "$SESSION_CMD" || exit
-/usr/lib/hippos/hippos logout
+[[ "$(hippos-settings get system.session 2>/dev/null)" == desktop ]] && /usr/lib/hippos/hippos logout

@@ -12,7 +12,7 @@ USER_CONF      = Path('/userdata/system/hippos.conf')
 HW_DEFAULTS    = Path('/run/hippos/hardware-defaults.conf')
 DEFAULTS_CONF  = Path('/usr/share/hippos/hippos-defaults.conf')
 
-_USAGE = 'Usage: hippos-settings get <key> | set <key> <value> | del <key> | list | dump | sync'
+_USAGE = 'Usage: hippos-settings get <key> | set <key> <value> [<key> <value> ...] | del <key> | list | dump | sync'
 
 def _parse(path: Path) -> dict[str, str]:
     result: dict[str, str] = {}
@@ -56,10 +56,10 @@ def cmd_get(key: str) -> int:
             return 0
     return 1
 
-def cmd_set(key: str, value: str) -> int:
+def cmd_set(pairs: list[str]) -> int:
     with _locked(USER_CONF):
         data = _parse(USER_CONF)
-        data[key] = value
+        data.update(zip(pairs[::2], pairs[1::2]))
         _write(USER_CONF, data)
     return 0
 
@@ -102,8 +102,8 @@ def main() -> int:
     cmd, *rest = args
     if cmd == 'get' and len(rest) == 1:
         return cmd_get(rest[0])
-    if cmd == 'set' and len(rest) == 2:
-        return cmd_set(rest[0], rest[1])
+    if cmd == 'set' and rest and len(rest) % 2 == 0:
+        return cmd_set(rest)
     if cmd == 'del' and len(rest) == 1:
         return cmd_del(rest[0])
     if cmd == 'list' and not rest:

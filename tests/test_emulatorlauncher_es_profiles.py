@@ -1,3 +1,4 @@
+import os
 import sys
 import tempfile
 import unittest
@@ -7,6 +8,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'overlays' / 'rootfs' / 'usr' / 'lib' / 'hippos'))
 
 import emulatorlauncher_shared as shared  # noqa: E402
+import hippos_es_input  # noqa: E402
 
 PLAYERS = '''<inputList>
   <inputConfig type="joystick" deviceName="r36s_Gamepad" deviceGUID="19003982010000008811000088010000">
@@ -35,11 +37,13 @@ class ESProfilesTests(unittest.TestCase):
         self.installed = Path(tmp.name) / 'es_input.cfg'
         self.players.write_text(PLAYERS)
         self.installed.write_text(INSTALLED)
-        for name, value in (('ES_PLAYERS_INPUT', self.players), ('ES_INPUT_FILES', (self.installed,))):
-            patcher = mock.patch.object(shared, name, value)
+        for name, value in (('ES_PLAYERS_INPUT', self.players), ('ES_INPUT_FILES', (self.installed,)),
+                            ('PARSED_CACHE_DIR', Path(tmp.name) / 'cache')):
+            patcher = mock.patch.object(hippos_es_input, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
-        parse = mock.patch.object(shared, '_parse_es_input_file', wraps=shared._parse_es_input_file.__wrapped__)
+        parse = mock.patch.object(hippos_es_input, '_parse_es_input_file',
+                                  wraps=hippos_es_input._parse_es_input_file.__wrapped__)
         self.parse = parse.start()
         self.addCleanup(parse.stop)
 
@@ -67,6 +71,34 @@ class ESProfilesTests(unittest.TestCase):
         self.players.unlink()
         profile = shared._pick_es_profile(shared._load_es_input_configs(), controller('Unknown pad', 'ffff'))
         self.assertEqual(profile.device_name, 'Xbox 360 Controller')
+
+
+class ParsedCacheTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.installed = Path(tmp.name) / 'es_input.cfg'
+        self.installed.write_text(INSTALLED)
+        patcher = mock.patch.object(hippos_es_input, 'PARSED_CACHE_DIR', Path(tmp.name) / 'cache')
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def parse(self):
+        return hippos_es_input._parse_es_input_file.__wrapped__(self.installed, self.installed.stat().st_mtime_ns)
+
+    def test_second_parse_reads_the_cache_not_the_xml(self):
+        first = self.parse()
+        with mock.patch.object(hippos_es_input, '_parse_es_input_xml') as xml:
+            second = self.parse()
+        xml.assert_not_called()
+        self.assertEqual([p.device_name for p in second], [p.device_name for p in first])
+        self.assertEqual(second[1].normalized_name, 'r36sgamepad')
+
+    def test_changed_file_is_parsed_again(self):
+        self.parse()
+        self.installed.write_text(INSTALLED.replace('Xbox 360 Controller', 'Xbox One Controller'))
+        os.utime(self.installed, ns=(1, 1))
+        self.assertEqual(self.parse()[0].device_name, 'Xbox One Controller')
 
 
 if __name__ == '__main__':

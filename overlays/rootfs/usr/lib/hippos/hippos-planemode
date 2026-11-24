@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 
 wifi_off() { nmcli radio wifi 2>/dev/null | grep -qi "disabled"; }
-bt_blocked() { rfkill list bluetooth 2>/dev/null | grep -q "Soft blocked: yes"; }
+bt_blocked() {
+    local radio
+    for radio in /sys/class/rfkill/rfkill*; do
+        [[ -r "${radio}/type" && "$(<"${radio}/type")" == bluetooth && "$(<"${radio}/soft")" == 1 ]] && return 0
+    done
+    return 1
+}
 
 case "${1:-status}" in
     status)
-        if wifi_off && bt_blocked; then echo "on"; else echo "off"; fi
+        if bt_blocked && wifi_off; then echo "on"; else echo "off"; fi
         ;;
     enable)
         nmcli radio wifi off 2>/dev/null || true

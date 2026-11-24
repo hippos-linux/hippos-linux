@@ -5,13 +5,10 @@ from pathlib import Path
 
 from evdev import ecodes
 
+from hippos_es_input import ES_INPUT_FILES
 from hippos_padtokey import sdl_button_codes
 
 ES_SETTINGS = Path('/userdata/system/configs/emulationstation/es_settings.cfg')
-ES_INPUT_FILES = (
-    Path('/userdata/system/configs/emulationstation/es_input.cfg'),
-    Path('/usr/share/emulationstation/es_input.cfg'),
-)
 
 FALLBACK_GAMEPAD_BUTTONS = {
     ecodes.BTN_MODE:   'hotkey',

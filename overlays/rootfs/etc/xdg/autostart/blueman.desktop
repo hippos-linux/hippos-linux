@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Blueman Applet
+Comment=Blueman Bluetooth Manager
+Icon=blueman
+Exec=/usr/lib/hippos/hippos-blueman-applet
+Terminal=false
+Type=Application
+Categories=

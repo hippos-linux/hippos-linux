@@ -9,6 +9,7 @@ SESSION_PROCS="/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/cgroup.procs"
 ES_QUIT_WAIT_S=20
 xorg_pid=""
 mode_pid=""
+controller_mouse_off_pid=""
 running_mode=""
 end_requested=0
 logout_requested=0
@@ -109,6 +110,10 @@ while [[ ! -f /run/hippos/quit-action ]] && (( ! logout_requested )); do
 
     signal_mode KILL
     stop_desktop_units
+    if [[ "${mode}" == desktop ]]; then
+        hippos-controller-mouse desktop off &
+        controller_mouse_off_pid=$!
+    fi
 
     if (( ! end_requested && status != 0 )); then
         systemctl start --no-block "hippos-session-failure-capture@${mode}.service"
@@ -116,6 +121,7 @@ while [[ ! -f /run/hippos/quit-action ]] && (( ! logout_requested )); do
     (( end_requested )) || sleep 1
 done
 
+[[ -n "${controller_mouse_off_pid}" ]] && wait "${controller_mouse_off_pid}"
 kill "${xorg_pid}" 2>/dev/null
 wait "${xorg_pid}" 2>/dev/null
 if [[ -f /run/hippos/quit-action ]]; then

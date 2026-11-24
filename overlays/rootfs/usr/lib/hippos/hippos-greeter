@@ -14,6 +14,7 @@ given on the command line with HIPPOS_START_MODE set to that choice, which
 hippos-session also saves as the boot default.
 """
 import json
+import math
 import os
 import socket
 import struct
@@ -26,6 +27,8 @@ os.environ.setdefault('SDL_JOYSTICK_HIDAPI', '0')
 os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
 import pygame
 
+from hippos_es_buttons import ok_and_back
+from hippos_es_input import _load_es_input_configs, _normalize
 from hippos_theme import DEFAULT_THEME_DIR, Theme, mix
 
 USER = 'hippos'
@@ -46,9 +49,11 @@ BACKGROUND = THEME.art('assets', 'splash.jpg')
 
 PANEL_ALPHA = 225
 
-BTN_A, BTN_B, BTN_SELECT, BTN_START = 0, 1, 8, 9
+DEFAULT_BUTTON_ACTIONS = {0: 'ok', 1: 'back', 8: 'select', 9: 'start'}
+DIRECTIONS = {'up': (0, -1), 'down': (0, 1), 'left': (-1, 0), 'right': (1, 0)}
 STICK_DEADZONE = 0.5
 REPEAT_DELAY, REPEAT_INTERVAL = 0.35, 0.09
+CURSOR_BLINKS_PER_S = 2
 
 SHIFT, SPACE, DELETE, LOGIN = 'shift', 'space', 'delete', 'login'
 POWER, START_IN = 'power', 'start_in'
@@ -123,6 +128,19 @@ class Popup:
     def choose(self, index: int):
         self.on_choose(self.items[index][1])
 
+def es_button_actions(joystick) -> dict[int, str]:
+    profiles = _load_es_input_configs().all()
+    guid, name = _normalize(joystick.get_guid()), _normalize(joystick.get_name())
+    profile = (next((p for p in profiles if guid and p.normalized_guid == guid), None)
+               or next((p for p in profiles if name and p.normalized_name == name), None))
+    if profile is None:
+        return {}
+    ok, back = ok_and_back()
+    names = {ok: 'ok', back: 'back', 'start': 'start', 'select': 'select', **{d: d for d in DIRECTIONS}}
+    return {binding.code: names[binding.name] for binding in profile.inputs.values()
+            if binding.type == 'button' and binding.name in names}
+
+
 def scale_to_fill(image: pygame.Surface, w: int, h: int) -> pygame.Surface:
     scale = max(w / image.get_width(), h / image.get_height())
     scaled = pygame.transform.smoothscale(
@@ -134,14 +152,18 @@ class Greeter:
     def __init__(self, session_cmd: List[str]):
         self.session_cmd = session_cmd
         self.greetd = Greetd(os.environ['GREETD_SOCK'])
-        pygame.init()
+        pygame.display.init()
+        pygame.font.init()
+        pygame.joystick.init()
         self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
         pygame.display.set_caption('HippOS')
         self.w, self.h = self.screen.get_size()
         self.joysticks = {}
+        self.button_actions = {}
+        self.rendered_text = {}
+        self.translucent_surfaces = {}
         for i in range(pygame.joystick.get_count()):
-            j = pygame.joystick.Joystick(i)
-            self.joysticks[j.get_instance_id()] = j
+            self.add_joystick(pygame.joystick.Joystick(i))
         pygame.mouse.set_visible(False)
         pygame.key.start_text_input()
 
@@ -177,13 +199,21 @@ class Greeter:
             return surface
 
     def run(self):
-        clock = pygame.time.Clock()
         while True:
-            for event in pygame.event.get():
-                self.handle(event)
-            self.repeat_held()
             self.draw()
-            clock.tick(30)
+            event = pygame.event.wait(self.wait_ms())
+            if event.type != pygame.NOEVENT:
+                self.handle(event)
+                for event in pygame.event.get():
+                    self.handle(event)
+            self.repeat_held()
+
+    def wait_ms(self) -> int:
+        now = time.monotonic()
+        wake = (math.floor(now * CURSOR_BLINKS_PER_S) + 1) / CURSOR_BLINKS_PER_S
+        if self.held:
+            wake = min(wake, self.next_repeat)
+        return max(1, math.ceil((wake - now) * 1000))
 
     def handle(self, event):
         if event.type == pygame.TEXTINPUT and self.popup is None:
@@ -200,17 +230,24 @@ class Greeter:
                 self.move(*{pygame.K_UP: (0, -1), pygame.K_DOWN: (0, 1),
                             pygame.K_LEFT: (-1, 0), pygame.K_RIGHT: (1, 0)}[event.key])
         elif event.type == pygame.JOYBUTTONDOWN:
-            if event.button == BTN_A:
+            action = self.button_actions.get(event.instance_id, DEFAULT_BUTTON_ACTIONS).get(event.button)
+            if action == 'ok':
                 self.press_selected()
-            elif event.button == BTN_B:
+            elif action == 'back':
                 if self.popup is not None:
                     self.popup = None
                 else:
                     self.password = self.password[:-1]
-            elif event.button == BTN_START:
+            elif action == 'start':
                 self.activate()
-            elif event.button == BTN_SELECT:
+            elif action == 'select':
                 self.toggle_power_menu()
+            elif action in DIRECTIONS:
+                self.hold(DIRECTIONS[action])
+        elif event.type == pygame.JOYBUTTONUP:
+            action = self.button_actions.get(event.instance_id, DEFAULT_BUTTON_ACTIONS).get(event.button)
+            if action in DIRECTIONS and self.held == DIRECTIONS[action]:
+                self.hold(None)
         elif event.type == pygame.JOYHATMOTION:
             self.hold(event.value if event.value != (0, 0) else None, flip_y=True)
         elif event.type == pygame.JOYAXISMOTION and event.axis in (0, 1):
@@ -225,10 +262,16 @@ class Greeter:
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self.click(event.pos)
         elif event.type == pygame.JOYDEVICEADDED:
-            j = pygame.joystick.Joystick(event.device_index)
-            self.joysticks[j.get_instance_id()] = j
+            self.add_joystick(pygame.joystick.Joystick(event.device_index))
         elif event.type == pygame.JOYDEVICEREMOVED:
             self.joysticks.pop(event.instance_id, None)
+            self.button_actions.pop(event.instance_id, None)
+
+    def add_joystick(self, joystick):
+        self.joysticks[joystick.get_instance_id()] = joystick
+        actions = es_button_actions(joystick)
+        if actions:
+            self.button_actions[joystick.get_instance_id()] = actions
 
     def hold(self, direction: Optional[tuple], flip_y: bool = False):
         if direction and flip_y:
@@ -338,19 +381,18 @@ class Greeter:
         panel_w, panel_h = round(720 * u), round(720 * u)
         panel_x = round(self.w * 0.74 - panel_w / 2)
         panel_y = round((self.h - panel_h) / 2)
-        panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-        pygame.draw.rect(panel, (*PANEL, PANEL_ALPHA), panel.get_rect(), border_radius=round(24 * u))
-        self.screen.blit(panel, (panel_x, panel_y))
+        self.screen.blit(self.translucent((panel_w, panel_h), (*PANEL, PANEL_ALPHA), round(24 * u)),
+                         (panel_x, panel_y))
 
         cx = panel_x + panel_w // 2
         power = pygame.Rect(0, 0, round(120 * u), round(40 * u))
         power.topright = (panel_x + panel_w - round(20 * u), panel_y + round(20 * u))
         self.draw_control(power, 0, 0, POWER)
         y = panel_y + round(48 * u)
-        title = self.font_title.render(USER, True, TEXT)
+        title = self.text(self.font_title, USER, TEXT)
         self.screen.blit(title, title.get_rect(midtop=(cx, y)))
         y += title.get_height() + round(10 * u)
-        hint = self.font_text.render('Enter your password', True, TEXT_DIM)
+        hint = self.text(self.font_text, 'Enter your password', TEXT_DIM)
         self.screen.blit(hint, hint.get_rect(midtop=(cx, y)))
         y += hint.get_height() + round(28 * u)
 
@@ -365,14 +407,14 @@ class Greeter:
         for _ in self.password:
             pygame.draw.circle(self.screen, TEXT, (x, field.centery), radius)
             x += step
-        if int(time.monotonic() * 2) % 2 == 0:
+        if int(time.monotonic() * CURSOR_BLINKS_PER_S) % 2 == 0:
             caret = pygame.Rect(x - radius, field.centery - round(16 * u), max(2, round(2 * u)), round(32 * u))
             pygame.draw.rect(self.screen, TEXT, caret)
         self.screen.set_clip(None)
         y = field.bottom + round(14 * u)
 
         if self.message:
-            msg = self.font_small.render(self.message, True, ERROR if self.message_is_error else TEXT_DIM)
+            msg = self.text(self.font_small, self.message, ERROR if self.message_is_error else TEXT_DIM)
             self.screen.blit(msg, msg.get_rect(midtop=(cx, y)))
         y += round(40 * u)
 
@@ -382,6 +424,20 @@ class Greeter:
         if self.popup is not None:
             self.draw_popup()
         pygame.display.flip()
+
+    def text(self, font: pygame.font.Font, label: str, color) -> pygame.Surface:
+        key = (id(font), label, tuple(color))
+        if key not in self.rendered_text:
+            self.rendered_text[key] = font.render(label, True, color)
+        return self.rendered_text[key]
+
+    def translucent(self, size: tuple, rgba: tuple, radius: int = 0) -> pygame.Surface:
+        key = (size, rgba, radius)
+        if key not in self.translucent_surfaces:
+            surface = pygame.Surface(size, pygame.SRCALPHA)
+            pygame.draw.rect(surface, rgba, surface.get_rect(), border_radius=radius)
+            self.translucent_surfaces[key] = surface
+        return self.translucent_surfaces[key]
 
     def draw_control(self, rect: pygame.Rect, r: int, c: int, key: str):
         u = self.unit
@@ -400,7 +456,7 @@ class Greeter:
         else:
             label = KEY_LABELS.get(key) or self.key_char(key)
         font = self.font_small if key in KEY_LABELS or key == START_IN else self.font_key
-        text = font.render(label, True, TEXT)
+        text = self.text(font, label, TEXT)
         self.screen.blit(text, text.get_rect(center=rect.center))
         if key == START_IN:
             size = round(7 * u)
@@ -411,7 +467,7 @@ class Greeter:
 
     def draw_mode_choice(self, x0: int, y: int, width: int) -> int:
         u = self.unit
-        label = self.font_small.render('START IN', True, TEXT_DIM)
+        label = self.text(self.font_small, 'START IN', TEXT_DIM)
         self.screen.blit(label, label.get_rect(midtop=(x0 + width // 2, y)))
         y += label.get_height() + round(8 * u)
         self.draw_control(pygame.Rect(x0, y, width, round(48 * u)), CONTROL_ROWS.index([START_IN]), 0, START_IN)
@@ -436,9 +492,7 @@ class Greeter:
     def draw_footer(self):
         u = self.unit
         bar_h = round(64 * u)
-        bar = pygame.Surface((self.w, bar_h), pygame.SRCALPHA)
-        bar.fill((*INK, 200))
-        self.screen.blit(bar, (0, self.h - bar_h))
+        self.screen.blit(self.translucent((self.w, bar_h), (*INK, 200)), (0, self.h - bar_h))
         x = round(32 * u)
         for button, action in FOOTER_HINTS:
             x = self.draw_hint(button, action, x, self.h - bar_h // 2)
@@ -447,24 +501,22 @@ class Greeter:
 
     def draw_hint(self, button: str, action: str, x: int, cy: int) -> int:
         u = self.unit
-        label = self.font_badge.render(button, True, INK)
+        label = self.text(self.font_badge, button, INK)
         badge_h = round(30 * u)
         badge_w = max(badge_h, label.get_width() + round(16 * u))
         badge = pygame.Rect(x, cy - badge_h // 2, badge_w, badge_h)
         pygame.draw.rect(self.screen, TEXT_DIM, badge, border_radius=badge_h // 2)
         self.screen.blit(label, label.get_rect(center=badge.center))
-        text = self.font_small.render(action, True, TEXT_DIM)
+        text = self.text(self.font_small, action, TEXT_DIM)
         self.screen.blit(text, text.get_rect(midleft=(badge.right + round(10 * u), cy)))
         return badge.right + round(10 * u) + text.get_width() + round(36 * u)
 
     def draw_popup(self):
         u = self.unit
         popup = self.popup
-        shade = pygame.Surface((self.w, self.h), pygame.SRCALPHA)
-        shade.fill((*INK, 170))
-        self.screen.blit(shade, (0, 0))
+        self.screen.blit(self.translucent((self.w, self.h), (*INK, 170)), (0, 0))
         item_h = round(64 * u)
-        title = self.font_small.render(popup.title, True, TEXT_DIM) if popup.title else None
+        title = self.text(self.font_small, popup.title, TEXT_DIM) if popup.title else None
         title_h = title.get_height() + round(12 * u) if title else 0
         box = pygame.Rect(0, 0, round(460 * u), title_h + item_h * len(popup.items) + round(48 * u))
         box.center = (self.w // 2, self.h // 2)
@@ -477,7 +529,7 @@ class Greeter:
             rect = pygame.Rect(box.left + round(24 * u), y, box.width - round(48 * u), item_h - round(8 * u))
             if i == popup.selected:
                 pygame.draw.rect(self.screen, ACCENT, rect, border_radius=round(12 * u))
-            text = self.font_key.render(label, True, TEXT)
+            text = self.text(self.font_key, label, TEXT)
             self.screen.blit(text, text.get_rect(center=rect.center))
             self.click_targets.append((rect, ('popup_item', i)))
             y += item_h

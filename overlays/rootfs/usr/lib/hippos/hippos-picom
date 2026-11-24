@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
-backend=xrender
+GLX_FAILED="${XDG_CACHE_HOME:-${HOME}/.cache}/hippos/picom-glx-failed"
+
+[[ -e "${GLX_FAILED}" ]] && exec picom --backend xrender "$@"
+
 renderer=$(glxinfo -B 2>/dev/null | sed -n 's/^OpenGL renderer string: //p')
 if [[ -n "${renderer}" && ! "${renderer}" =~ llvmpipe|softpipe|swrast ]]; then
-    backend=glx
+    ( ulimit -c 0; exec picom --backend glx "$@" )
+    status=$?
+    case "${status}" in
+        1|134|139) mkdir -p "${GLX_FAILED%/*}" && echo "${renderer}" > "${GLX_FAILED}" ;;
+        *) exit "${status}" ;;
+    esac
 fi
-exec picom --backend "${backend}" "$@"
+exec picom --backend xrender "$@"
