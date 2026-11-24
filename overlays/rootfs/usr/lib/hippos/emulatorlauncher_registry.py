@@ -23,6 +23,7 @@ class Emulator:
     hud_wrapper: bool = False
     hotkeys: str = ''
     netplay_port: str = ''
+    netplay_announce: str = 'launcher'
 
     @property
     def binary_names(self) -> tuple[str, ...]:

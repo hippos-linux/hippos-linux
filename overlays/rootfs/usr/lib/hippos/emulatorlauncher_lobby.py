@@ -9,13 +9,13 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Iterator, Optional
 
+from emulatorlauncher_registry import Emulator
 from emulatorlauncher_shared import LaunchContext, _conf_bool, _conf_value, _log
 
 HIPPOS_LOBBY_URL = 'https://lobby.hippos-linux.org'
 HEARTBEAT_SECONDS = 30
 REQUEST_TIMEOUT_SECONDS = 5
 UPNP_DISCOVER_MS = 500
-SELF_ANNOUNCING_EMULATORS = frozenset({'libretro', 'retroarch'})
 
 
 @dataclass(frozen=True)
@@ -148,8 +148,8 @@ def lobby_room(ctx: LaunchContext) -> dict:
 
 
 @contextmanager
-def hosted_session(conf: dict[str, str], ctx: LaunchContext) -> Iterator[None]:
-    if ctx.netplay.mode != 'host' or ctx.emulator in SELF_ANNOUNCING_EMULATORS:
+def hosted_session(conf: dict[str, str], ctx: LaunchContext, emulator: Emulator) -> Iterator[None]:
+    if ctx.netplay.mode != 'host' or emulator.netplay_announce != 'launcher':
         yield
         return
     announce = _conf_bool(conf, 'global.netplay_public_announce')

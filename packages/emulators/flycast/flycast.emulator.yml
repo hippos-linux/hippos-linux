@@ -3,6 +3,7 @@ appstream_ids:
   - org.flycast.Flycast
 features:
   - cheevos
+  - netplay
 shared_features:
   - powermode
   - tdp

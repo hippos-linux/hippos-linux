@@ -18,6 +18,7 @@ from lobby_validation import LobbyError
 MAX_BODY_BYTES = 4096
 
 _ROOM_PATH = re.compile(r'/rooms/([0-9a-f]{16})')
+_CHALLENGE_PATH = re.compile(r'/rooms/([0-9a-f]{16})/challenge')
 _CHAT_PATH = re.compile(r'/chat/([^/]+)')
 
 
@@ -78,6 +79,9 @@ class LobbyHandler(BaseHTTPRequestHandler):
             if self._path() in ('/list', '/rooms'):
                 self._send(HTTPStatus.OK, self.rooms.listing())
                 return
+            if _ROOM_PATH.fullmatch(self._path()):
+                self._send(HTTPStatus.OK, self.rooms.status(self._match(_ROOM_PATH), self._token()))
+                return
             channel = self._match(_CHAT_PATH)
             after = parse_qs(urlsplit(self.path).query).get('after', ['0'])[0]
             self._send(HTTPStatus.OK, {'messages': self.chat.messages(channel, int(after) if after.isdigit() else 0)})
@@ -90,6 +94,10 @@ class LobbyHandler(BaseHTTPRequestHandler):
                 self.moderation.check(ip)
                 room = self.rooms.create(ip, self._body())
                 self._send(HTTPStatus.CREATED, {'id': room.id, 'token': room.token, 'ip': room.ip})
+                return
+            if _CHALLENGE_PATH.fullmatch(self._path()):
+                self.moderation.check(ip)
+                self._send(HTTPStatus.OK, self.rooms.challenge(self._match(_CHALLENGE_PATH), ip, self._body()))
                 return
             message = self.chat.post(ip, self._match(_CHAT_PATH), self._body())
             self._send(HTTPStatus.CREATED, message.listing())

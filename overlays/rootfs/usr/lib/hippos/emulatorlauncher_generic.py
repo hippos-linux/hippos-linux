@@ -736,8 +736,8 @@ def _write_retroarch_game_overrides(ctx: LaunchContext) -> Optional[Path]:
     _log.info("Wrote retroarch overrides: %s", cfg.path)
     return cfg.path
 
-register(Emulator('libretro', launch_libretro, hotkeys='retroarch'))
-register(Emulator('retroarch', launch_libretro))
+register(Emulator('libretro', launch_libretro, hotkeys='retroarch', netplay_announce='emulator'))
+register(Emulator('retroarch', launch_libretro, netplay_announce='emulator'))
 register(Emulator('abuse', launch_standalone))
 register(Emulator('bstone', launch_standalone))
 register(Emulator('cannonball', launch_standalone))

@@ -5,6 +5,7 @@ import secrets
 import threading
 import time
 from dataclasses import dataclass, field
+from typing import Optional
 from datetime import datetime, timezone
 from http import HTTPStatus
 
@@ -14,6 +15,8 @@ ROOM_TTL_SECONDS = 90
 MAX_ROOMS = 2000
 MAX_ROOMS_PER_IP = 4
 CREATES_PER_IP_PER_MINUTE = 10
+
+ROOM_MODES = ('listen', 'challenge')
 
 _CRC = re.compile(r'^[0-9A-Fa-f]{8}$')
 _CORE = re.compile(r'^[A-Za-z0-9_.+-]{1,64}$')
@@ -32,6 +35,8 @@ class Room:
     username: str
     has_password: bool
     upnp: bool
+    mode: str = 'listen'
+    challenger: Optional[dict] = None
     created: float = field(default_factory=time.time)
     updated: float = field(default_factory=time.time)
 
@@ -49,6 +54,7 @@ class Room:
             'has_spectate_password': False,
             'host_method': 0,
             'upnp': self.upnp,
+            'mode': self.mode,
             'frontend': 'HippOS',
             'created': _iso(self.created),
             'updated': _iso(self.updated),
@@ -67,6 +73,9 @@ def _parse_room(body: dict) -> dict:
     core_name = text_field(body, 'core_name')
     if not _CORE.match(emulator) or not _CORE.match(core_name):
         raise LobbyError(HTTPStatus.BAD_REQUEST, 'invalid emulator or core_name')
+    mode = body.get('mode', 'listen')
+    if mode not in ROOM_MODES:
+        raise LobbyError(HTTPStatus.BAD_REQUEST, 'invalid mode')
     game_crc = text_field(body, 'game_crc', required=False).upper()
     if game_crc and not _CRC.match(game_crc):
         raise LobbyError(HTTPStatus.BAD_REQUEST, 'invalid game_crc')
@@ -79,6 +88,7 @@ def _parse_room(body: dict) -> dict:
         'username': text_field(body, 'username'),
         'has_password': body.get('has_password') is True,
         'upnp': body.get('upnp') is True,
+        'mode': mode,
     }
 
 
@@ -120,6 +130,25 @@ class Rooms:
             raise LobbyError(HTTPStatus.FORBIDDEN, 'wrong token')
         return room
 
+    def status(self, room_id: str, token: str) -> dict:
+        with self._lock:
+            self._expire(self._clock())
+            return {'challenger': self._owned(room_id, token).challenger}
+
+    def challenge(self, room_id: str, ip: str, body: dict) -> dict:
+        username = text_field(body, 'username')
+        with self._lock:
+            self._expire(self._clock())
+            room = self._rooms.get(room_id)
+            if room is None:
+                raise LobbyError(HTTPStatus.NOT_FOUND, 'no such room')
+            if room.mode != 'challenge':
+                raise LobbyError(HTTPStatus.BAD_REQUEST, 'room does not take challenges')
+            if room.challenger is not None:
+                raise LobbyError(HTTPStatus.CONFLICT, 'room already taken')
+            room.challenger = {'username': username, 'ip': ip}
+            return {'ip': room.ip, 'port': room.port}
+
     def heartbeat(self, room_id: str, token: str) -> None:
         now = self._clock()
         with self._lock:
@@ -134,4 +163,5 @@ class Rooms:
     def listing(self) -> list[dict]:
         with self._lock:
             self._expire(self._clock())
-            return [r.listing() for r in sorted(self._rooms.values(), key=lambda r: r.created)]
+            open_rooms = [r for r in self._rooms.values() if r.challenger is None]
+            return [r.listing() for r in sorted(open_rooms, key=lambda r: r.created)]

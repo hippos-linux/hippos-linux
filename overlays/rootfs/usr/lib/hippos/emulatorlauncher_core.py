@@ -586,6 +586,19 @@ def _write_flycast_config(ctx: LaunchContext) -> None:
 
     _log.info("Wrote Flycast config: %s", FLYCAST_EMU_CFG)
 
+FLYCAST_GGPO_PORT = '19713'
+
+def flycast_netplay_args(netplay: NetplaySession) -> list[str]:
+    if not netplay.active:
+        return []
+    settings = {
+        'GGPO': 'yes',
+        'ActAsServer': 'yes' if netplay.mode == 'host' else 'no',
+        'server': netplay.host,
+        'EnableUPnP': 'yes',
+    }
+    return ['-config', ','.join(f'network:{key}={value}' for key, value in settings.items())]
+
 def _launch_flycast(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('flycast')
     if bin_path is None:
@@ -597,7 +610,7 @@ def _launch_flycast(ctx: LaunchContext) -> int:
     _write_flycast_controller_mapping(ctx)
 
     conf = _load_hippos_conf()
-    cmd = [str(bin_path), str(ctx.rom)]
+    cmd = [str(bin_path), *flycast_netplay_args(ctx.netplay), str(ctx.rom)]
     _log.info("Launching flycast: %s", ' '.join(cmd))
 
     env = _build_game_env(conf, ctx)
@@ -985,4 +998,4 @@ def _es_binding_to_mupen(binding: ESBinding, target: str, ctrl: ControllerInfo, 
 register(Emulator('dolphin', launch_dolphin, binaries=('dolphin-emu', 'dolphin'), packages=('dolphin-emu',)))
 register(Emulator('dolphin-emu', launch_dolphin, binaries=('dolphin-emu', 'dolphin'), hotkeys='dolphin'))
 register(Emulator('mame', launch_mame, binaries=('mame',)))
-register(Emulator('flycast', _launch_flycast))
+register(Emulator('flycast', _launch_flycast, netplay_port=FLYCAST_GGPO_PORT, netplay_announce='frontend'))

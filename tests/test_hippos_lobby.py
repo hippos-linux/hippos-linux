@@ -67,6 +67,37 @@ class RoomsTests(unittest.TestCase):
                 self.rooms.create('203.0.113.5', {**ROOM, **bad})
 
 
+class ChallengeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.rooms = rooms.Rooms(FakeClock())
+        self.room = self.rooms.create('203.0.113.5', {**ROOM, 'emulator': 'flycast', 'core_name': 'flycast',
+                                                      'port': 19713, 'mode': 'challenge'})
+
+    def test_challenger_gets_host_address_and_host_sees_challenger(self):
+        self.assertEqual(self.rooms.listing()[0]['fields']['mode'], 'challenge')
+        self.assertEqual(self.rooms.status(self.room.id, self.room.token), {'challenger': None})
+        self.assertEqual(self.rooms.challenge(self.room.id, '198.51.100.7', {'username': 'vm2'}),
+                         {'ip': '203.0.113.5', 'port': 19713})
+        self.assertEqual(self.rooms.status(self.room.id, self.room.token),
+                         {'challenger': {'username': 'vm2', 'ip': '198.51.100.7'}})
+        self.assertEqual(self.rooms.listing(), [])
+
+    def test_second_challenger_is_refused(self):
+        self.rooms.challenge(self.room.id, '198.51.100.7', {'username': 'vm2'})
+        with self.assertRaises(LobbyError) as raised:
+            self.rooms.challenge(self.room.id, '198.51.100.8', {'username': 'vm3'})
+        self.assertEqual(raised.exception.status, 409)
+
+    def test_listen_rooms_take_no_challenges(self):
+        listen = self.rooms.create('203.0.113.5', ROOM)
+        with self.assertRaises(LobbyError):
+            self.rooms.challenge(listen.id, '198.51.100.7', {'username': 'vm2'})
+
+    def test_status_needs_the_room_token(self):
+        with self.assertRaises(LobbyError):
+            self.rooms.status(self.room.id, 'wrong')
+
+
 class ChatTests(unittest.TestCase):
     def setUp(self) -> None:
         self.clock = FakeClock()
@@ -145,6 +176,14 @@ class ServerTests(unittest.TestCase):
         self.assertNotIn('token', listing[0]['fields'])
         self.assertEqual(self._request('DELETE', f'/rooms/{created["id"]}', headers=auth)[0], 204)
         self.assertEqual(self._request('GET', '/list')[1], [])
+
+    def test_challenge_over_http(self):
+        _, created = self._request('POST', '/rooms', {**ROOM, 'mode': 'challenge'}, {'X-Forwarded-For': '198.51.100.7'})
+        status, host = self._request('POST', f'/rooms/{created["id"]}/challenge', {'username': 'vm2'},
+                                     {'X-Forwarded-For': '203.0.113.9'})
+        self.assertEqual((status, host['ip']), (200, '198.51.100.7'))
+        _, room = self._request('GET', f'/rooms/{created["id"]}', headers={'Authorization': f'Bearer {created["token"]}'})
+        self.assertEqual(room['challenger']['ip'], '203.0.113.9')
 
     def test_chat_post_and_poll(self):
         status, message = self._request('POST', '/chat/global', {'username': 'fox', 'text': 'hi'})

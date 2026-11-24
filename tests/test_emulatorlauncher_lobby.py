@@ -10,8 +10,11 @@ sys.path.insert(0, str(ROOT / 'overlays' / 'rootfs' / 'usr' / 'lib' / 'hippos'))
 sys.path.insert(0, str(ROOT / 'services' / 'hippos-lobby'))
 
 import emulatorlauncher_lobby as launcher_lobby
+from emulatorlauncher_registry import Emulator
 import hippos_lobby
 from emulatorlauncher_shared import LaunchContext, NetplaySession
+
+RIVERHORSE = Emulator('riverhorse', lambda ctx: 0)
 
 GAMEINFO = '''<?xml version="1.0"?>
 <gameList><game><path>/userdata/roms/psx/ctr.chd</path><name>Crash Team Racing</name><crc32>abcd1234</crc32></game></gameList>
@@ -58,26 +61,26 @@ class HostedSessionTests(unittest.TestCase):
         return []
 
     def test_host_room_is_listed_while_playing_and_removed_after(self):
-        with launcher_lobby.hosted_session(self.conf, _host_ctx()):
+        with launcher_lobby.hosted_session(self.conf, _host_ctx(), RIVERHORSE):
             fields = self._wait_for_room()[0]['fields']
             self.assertEqual((fields['emulator'], fields['core_name'], fields['port'], fields['username'], fields['upnp']),
                              ('riverhorse', 'riverhorse', 55435, 'fox', True))
         self.assertEqual(self.rooms.listing(), [])
 
     def test_announce_off_only_maps_the_port(self):
-        with launcher_lobby.hosted_session({**self.conf, 'global.netplay_public_announce': '0'}, _host_ctx()):
+        with launcher_lobby.hosted_session({**self.conf, 'global.netplay_public_announce': '0'}, _host_ctx(), RIVERHORSE):
             pass
         self.upnp_open.assert_called_once()
         self.assertEqual(self.rooms.listing(), [])
 
-    def test_retroarch_announces_itself(self):
-        with launcher_lobby.hosted_session(self.conf, _host_ctx(emulator='libretro')):
+    def test_emulators_that_announce_themselves_are_skipped(self):
+        with launcher_lobby.hosted_session(self.conf, _host_ctx(emulator='libretro'), Emulator('libretro', lambda ctx: 0, netplay_announce='emulator')):
             pass
         self.upnp_open.assert_not_called()
 
     def test_unreachable_lobby_does_not_block_the_game(self):
         conf = {**self.conf, 'global.netplay.hipposlobby': 'http://127.0.0.1:9'}
-        with launcher_lobby.hosted_session(conf, _host_ctx()):
+        with launcher_lobby.hosted_session(conf, _host_ctx(), RIVERHORSE):
             pass
 
 

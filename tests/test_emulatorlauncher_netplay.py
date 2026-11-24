@@ -120,6 +120,22 @@ class PpssppNetplayTests(unittest.TestCase):
         self.assertEqual(emulator.netplay_port, '27312')
 
 
+class FlycastNetplayTests(unittest.TestCase):
+    def test_host_and_client_point_at_each_other(self):
+        host = core.flycast_netplay_args(NetplaySession(mode='host', host='198.51.100.7', port='19713'))
+        client = core.flycast_netplay_args(NetplaySession(mode='client', host='203.0.113.5', port='19713'))
+        self.assertEqual(host, ['-config', 'network:GGPO=yes,network:ActAsServer=yes,network:server=198.51.100.7,network:EnableUPnP=yes'])
+        self.assertIn('network:ActAsServer=no', client[1])
+        self.assertIn('network:server=203.0.113.5', client[1])
+
+    def test_no_netplay_adds_nothing(self):
+        self.assertEqual(core.flycast_netplay_args(NetplaySession()), [])
+
+    def test_flycast_is_listed_by_es_on_its_fixed_port(self):
+        emulator = impl.lookup('flycast')
+        self.assertEqual((emulator.netplay_port, emulator.netplay_announce), ('19713', 'frontend'))
+
+
 class DolphinNetplayTests(unittest.TestCase):
     def test_traversal_join_uses_the_host_code(self):
         args = core.dolphin_netplay_join_args(NetplaySession(mode='client', host='abcd1234', port='2626',

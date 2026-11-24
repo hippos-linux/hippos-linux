@@ -533,7 +533,7 @@ def _prepare_and_run(ctx: LaunchContext, conf: dict[str, str], emulator: Emulato
             timed('display', _display(conf, ctx)),
             timed('hud', _hud(conf, ctx)),
             timed('power', game_power_settings(conf, ctx.system, ctx.rom)),
-            timed('lobby', hosted_session(conf, ctx)),
+            timed('lobby', hosted_session(conf, ctx, emulator)),
             timed('rom', _prepared_rom(ctx, emulator)),
         ))
         ctx.rom = rom
