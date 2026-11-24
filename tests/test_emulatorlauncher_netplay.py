@@ -159,12 +159,13 @@ class RiverhorseNetplayTests(unittest.TestCase):
         import emulatorlauncher_riverhorse
         self.riverhorse = emulatorlauncher_riverhorse
 
-    def _args(self, version: str, mode: str = 'host', host: str = '1.2.3.4', session: str = '') -> list[str]:
+    def _args(self, version: str, mode: str = 'host', host: str = '1.2.3.4', session: str = '',
+              conf: dict[str, str] = {}) -> list[str]:
         ctx = LaunchContext(system='psx', rom=Path('game.chd'), emulator='riverhorse', core='riverhorse',
                             netplay=NetplaySession(mode=mode, host=host, port='55435', session=session, nickname='fox'))
         with tempfile.TemporaryDirectory() as root, \
                 mock.patch.object(self.riverhorse, 'EMULATORS_ROOT', Path(root)), \
-                mock.patch.object(self.riverhorse, '_load_hippos_conf', return_value={}):
+                mock.patch.object(self.riverhorse, '_load_hippos_conf', return_value=conf):
             (Path(root) / 'riverhorse').mkdir()
             (Path(root) / 'riverhorse' / 'version').write_text(version)
             return self.riverhorse._riverhorse_netplay_args(ctx)
@@ -175,6 +176,12 @@ class RiverhorseNetplayTests(unittest.TestCase):
     def test_relay_sessions_are_joined_by_code(self):
         self.assertEqual(self._args('v1.2.0', mode='client', host='52536', session='52536')[:2], ['-netplayjoin', '52536'])
         self.assertEqual(self._args('v1.2.0', mode='client')[:2], ['-netplayjoin', '1.2.3.4:55435'])
+
+    def test_public_hosts_are_published_to_the_riverhorse_list(self):
+        public = {'global.netplay_public_announce': '1'}
+        self.assertIn('-netplaypublic', self._args('v1.3.0', conf=public))
+        self.assertNotIn('-netplaypublic', self._args('v1.3.0'))
+        self.assertNotIn('-netplaypublic', self._args('v1.2.0', conf=public))
 
     def test_newer_releases_report_netplay_events(self):
         self.assertIn('-netplayevents', self._args('v1.2.1'))

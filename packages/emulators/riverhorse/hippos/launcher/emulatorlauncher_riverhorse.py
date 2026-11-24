@@ -4,10 +4,10 @@ from HipposPaths import EMULATORS_ROOT
 from emulatorlauncher_duckstation import DuckStationFamily, launch_family
 from emulatorlauncher_lobby import NetplayEventAnnouncer, launcher_hosted_session
 from emulatorlauncher_registry import Emulator, register
-from emulatorlauncher_shared import LaunchContext, _conf_value, _game_value, _load_hippos_conf, _log
+from emulatorlauncher_shared import LaunchContext, _conf_bool, _conf_value, _game_value, _load_hippos_conf, _log
 
 _DEFAULT_NETPLAY_PORT = '31200'
-_LAST_VERSION_WITHOUT_NETPLAY_EVENTS = (1, 2, 0)
+_LAST_VERSION_WITHOUT_FRONTEND_NETPLAY_OPTIONS = (1, 2, 0)
 
 
 def _riverhorse_settings(settings, conf, ctx: LaunchContext) -> None:
@@ -23,17 +23,20 @@ def _installed_version() -> tuple[int, ...]:
         return ()
 
 
-def _reports_netplay_events() -> bool:
-    return _installed_version() > _LAST_VERSION_WITHOUT_NETPLAY_EVENTS
+def _has_frontend_netplay_options() -> bool:
+    return _installed_version() > _LAST_VERSION_WITHOUT_FRONTEND_NETPLAY_OPTIONS
 
 
 def _riverhorse_netplay_args(ctx: LaunchContext) -> list[str]:
-    events_args = ['-netplayevents'] if _reports_netplay_events() else []
+    conf = _load_hippos_conf()
+    frontend_options = _has_frontend_netplay_options()
+    events_args = ['-netplayevents'] if frontend_options else []
     port = ctx.netplay_port or _DEFAULT_NETPLAY_PORT
-    nickname = _conf_value(_load_hippos_conf(), 'global.netplay.nickname', '')
+    nickname = _conf_value(conf, 'global.netplay.nickname', '')
     nickname_args = ['-netplaynick', nickname] if nickname else []
     if ctx.netplay_mode == 'host':
-        return ['-netplayhost', port, *nickname_args, *events_args]
+        public = frontend_options and _conf_bool(conf, 'global.netplay_public_announce')
+        return ['-netplayhost', port, *(['-netplaypublic'] if public else []), *nickname_args, *events_args]
     if ctx.netplay_mode in ('client', 'spectator') and (ctx.netplay.session or ctx.netplay_ip):
         spectate_args = ['-netplayspectate'] if ctx.netplay_mode == 'spectator' else []
         target = ctx.netplay.session or f'{ctx.netplay_ip}:{port}'
@@ -47,7 +50,7 @@ RIVERHORSE = DuckStationFamily('riverhorse', 'Riverhorse', ('riverhorse',), _riv
 
 def launch_riverhorse(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
-    if not _reports_netplay_events():
+    if not _has_frontend_netplay_options():
         with launcher_hosted_session(conf, ctx):
             return launch_family(RIVERHORSE, ctx)
     announcer = NetplayEventAnnouncer(conf, ctx)
