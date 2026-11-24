@@ -34,9 +34,10 @@ def _riverhorse_netplay_args(ctx: LaunchContext) -> list[str]:
     nickname_args = ['-netplaynick', nickname] if nickname else []
     if ctx.netplay_mode == 'host':
         return ['-netplayhost', port, *nickname_args, *events_args]
-    if ctx.netplay_mode in ('client', 'spectator') and ctx.netplay_ip:
+    if ctx.netplay_mode in ('client', 'spectator') and (ctx.netplay.session or ctx.netplay_ip):
         spectate_args = ['-netplayspectate'] if ctx.netplay_mode == 'spectator' else []
-        return ['-netplayjoin', f'{ctx.netplay_ip}:{port}', *nickname_args, *spectate_args, *events_args]
+        target = ctx.netplay.session or f'{ctx.netplay_ip}:{port}'
+        return ['-netplayjoin', target, *nickname_args, *spectate_args, *events_args]
     return events_args
 
 
