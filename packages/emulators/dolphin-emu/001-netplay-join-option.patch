@@ -1,0 +1,53 @@
+diff --git a/Source/Core/DolphinQt/Main.cpp b/Source/Core/DolphinQt/Main.cpp
+--- a/Source/Core/DolphinQt/Main.cpp
++++ b/Source/Core/DolphinQt/Main.cpp
+@@ -18,6 +18,7 @@
+ #include <QApplication>
+ #include <QObject>
+ #include <QPushButton>
++#include <QTimer>
+ #include <QWidget>
+ 
+ #include "Common/Config/Config.h"
+@@ -278,6 +279,9 @@ int main(int argc, char* argv[])
+     MainWindow win{Core::System::GetInstance(), std::move(boot),
+                    static_cast<const char*>(options.get("movie"))};
+ 
++    if (options.is_set("netplay_join"))
++      QTimer::singleShot(0, &win, [&win] { win.NetPlayJoin(); });
++
+ #if defined(USE_ANALYTICS) && USE_ANALYTICS
+     if (!Config::Get(Config::MAIN_ANALYTICS_PERMISSION_ASKED))
+     {
+diff --git a/Source/Core/DolphinQt/MainWindow.h b/Source/Core/DolphinQt/MainWindow.h
+--- a/Source/Core/DolphinQt/MainWindow.h
++++ b/Source/Core/DolphinQt/MainWindow.h
+@@ -94,6 +94,7 @@ public:
+   QMenu* createPopupMenu() override;
+ 
+   void ShowTriforceWindow();
++  bool NetPlayJoin();
+ 
+ signals:
+   void ReadOnlyModeChanged(bool read_only);
+@@ -194,7 +195,6 @@ private:
+ #endif  // USE_RETRO_ACHIEVEMENTS
+ 
+   void NetPlayInit();
+-  bool NetPlayJoin();
+   bool NetPlayHost(const UICommon::GameFile& game);
+   void NetPlayQuit();
+ 
+diff --git a/Source/Core/UICommon/CommandLineParse.cpp b/Source/Core/UICommon/CommandLineParse.cpp
+--- a/Source/Core/UICommon/CommandLineParse.cpp
++++ b/Source/Core/UICommon/CommandLineParse.cpp
+@@ -115,6 +115,9 @@ std::unique_ptr<optparse::OptionParser> CreateParser(ParserOptions options)
+         .action("store_true")
+         .help("Run Dolphin without the user interface (Requires --exec or --nand-title)");
+     parser->add_option("-c", "--confirm").action("store_true").help("Set Confirm on Stop");
++    parser->add_option("--netplay_join")
++        .action("store_true")
++        .help("Join the NetPlay session set in the Dolphin.NetPlay configuration");
+   }
+ 
+   parser->set_defaults("video_backend", "");

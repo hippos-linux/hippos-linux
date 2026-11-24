@@ -8,6 +8,7 @@ from functools import cache
 from pathlib import Path
 
 from emulatorlauncher_shared import (
+    NetplaySession,
     _game_bool,
     _game_value,
     ControllerInfo,
@@ -244,12 +245,27 @@ def _write_dolphin_config(ctx: LaunchContext) -> None:
     if ctx.system == 'wii':
         _write_dolphin_wii_controller_configs(ctx, profiles)
 
+def dolphin_netplay_join_args(netplay: NetplaySession) -> list[str]:
+    if netplay.session:
+        target = ['-C', 'Dolphin.NetPlay.TraversalChoice=traversal', '-C', f'Dolphin.NetPlay.HostCode={netplay.session}']
+    else:
+        target = ['-C', 'Dolphin.NetPlay.TraversalChoice=direct', '-C', f'Dolphin.NetPlay.Address={netplay.host}']
+    return [
+        *target,
+        '-C', f'Dolphin.NetPlay.ConnectPort={netplay.port}',
+        '-C', f'Dolphin.NetPlay.Nickname={netplay.nickname}',
+        '--netplay_join',
+    ]
+
 def launch_dolphin(ctx: LaunchContext) -> int:
     bin_path = _require_emulator_bin('dolphin-emu', 'dolphin')
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
     _write_dolphin_config(ctx)
     conf = _load_hippos_conf()
-    cmd = [str(bin_path), '-b', '-e', str(ctx.rom)]
+    if ctx.netplay.mode in ('client', 'spectator'):
+        cmd = [str(bin_path), *dolphin_netplay_join_args(ctx.netplay)]
+    else:
+        cmd = [str(bin_path), '-b', '-e', str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['XDG_DATA_HOME'] = str(SAVES)
     result = _run_game_command(ctx, cmd, env)

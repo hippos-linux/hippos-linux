@@ -65,6 +65,22 @@ def launch_step(name: str):
     finally:
         _log.info("launch: %s %.2fs", name, time.perf_counter() - started)
 
+NETPLAY_MODES: frozenset[str] = frozenset({'host', 'client', 'spectator'})
+NETPLAY_DEFAULT_PORT = '55435'
+NETPLAY_DEFAULT_NICKNAME = 'HippOS Player'
+
+@dataclass(frozen=True)
+class NetplaySession:
+    mode:     str = ''
+    host:     str = ''
+    port:     str = ''
+    session:  str = ''
+    nickname: str = ''
+
+    @property
+    def active(self) -> bool:
+        return self.mode in NETPLAY_MODES
+
 @dataclass
 class LaunchContext:
     system:      str
@@ -79,10 +95,20 @@ class LaunchContext:
     game_gun:      dict[str, str] = field(default_factory=dict)
     resolution:    Optional[tuple[int, int]] = None
     bezel:         Optional[Path] = None
-    netplay_mode:  str = ''
-    netplay_ip:    str = ''
-    netplay_port:  str = ''
+    netplay:       NetplaySession = field(default_factory=NetplaySession)
     monitor:       int = -1
+
+    @property
+    def netplay_mode(self) -> str:
+        return self.netplay.mode
+
+    @property
+    def netplay_ip(self) -> str:
+        return self.netplay.host
+
+    @property
+    def netplay_port(self) -> str:
+        return self.netplay.port
 
 def _load_hippos_conf() -> dict[str, str]:
     return _read_conf_file(HIPPOS_CONF)

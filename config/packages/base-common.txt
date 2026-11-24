@@ -111,6 +111,7 @@ python3-evdev
 python3-xdg
 python3-pygame
 python3-dbus
+python3-miniupnpc
 
 # X11 session
 greetd

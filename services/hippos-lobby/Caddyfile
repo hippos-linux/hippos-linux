@@ -1,0 +1,4 @@
+# Replace the host name if the lobby is served from another domain.
+lobby.hippos-linux.org {
+	reverse_proxy 127.0.0.1:8655
+}

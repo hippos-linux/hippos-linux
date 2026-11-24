@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import configparser
+from contextlib import contextmanager
+from typing import Iterator
+
 from emulatorlauncher_shared import (
     LaunchContext,
+    NetplaySession,
     _build_game_env,
     _conf_bool,
     _conf_value,
@@ -22,6 +27,7 @@ from emulatorlauncher_registry import Emulator, register
 PPSSPP_CONFIG_DIR    = CONFIGS / 'ppsspp'
 PPSSPP_INI           = PPSSPP_CONFIG_DIR / 'PSP' / 'SYSTEM' / 'ppsspp.ini'
 PPSSPP_CONTROLS_INI  = PPSSPP_CONFIG_DIR / 'PSP' / 'SYSTEM' / 'controls.ini'
+PPSSPP_ADHOC_SERVER_PORT = '27312'
 
 _PPSSPP_NKCODE = {
     'b':        189,
@@ -55,11 +61,19 @@ _PPSSPP_AXIS_MAP: dict[str, tuple[str, str]] = {
     'joystick2up':    ('RightAn.Up',    'RightAn.Down'),
 }
 
-def _write_ppsspp_config(conf: dict[str, str]) -> None:
-    PPSSPP_INI.parent.mkdir(parents=True, exist_ok=True)
+def _read_ppsspp_ini() -> configparser.ConfigParser:
     parser = _new_ini_parser()
     if PPSSPP_INI.exists():
         parser.read(PPSSPP_INI, encoding='utf-8-sig')
+    return parser
+
+def _save_ppsspp_ini(parser: configparser.ConfigParser) -> None:
+    PPSSPP_INI.parent.mkdir(parents=True, exist_ok=True)
+    with PPSSPP_INI.open('w', encoding='utf-8') as fh:
+        parser.write(fh)
+
+def _write_ppsspp_config(conf: dict[str, str]) -> None:
+    parser = _read_ppsspp_ini()
 
     for section in ('Graphics', 'SystemParam', 'General', 'Upgrade'):
         _ensure_section(parser, section)
@@ -115,9 +129,44 @@ def _write_ppsspp_config(conf: dict[str, str]) -> None:
     parser.set('Upgrade', 'UpgradeVersion',   '')
     parser.set('Upgrade', 'DismissedVersion', '')
 
-    with PPSSPP_INI.open('w', encoding='utf-8') as fh:
-        parser.write(fh)
+    _save_ppsspp_ini(parser)
     _log.info("Wrote PPSSPP config: %s", PPSSPP_INI)
+
+def ppsspp_network_settings(netplay: NetplaySession) -> dict[str, str]:
+    if not netplay.active:
+        return {}
+    hosting = netplay.mode == 'host'
+    return {
+        'EnableWlan':        'True',
+        'EnableAdhocServer': 'True' if hosting else 'False',
+        'proAdhocServer':    'localhost' if hosting else netplay.host,
+        'EnableUPnP':        'True',
+    }
+
+@contextmanager
+def _ppsspp_netplay_network(netplay: NetplaySession) -> Iterator[None]:
+    settings = ppsspp_network_settings(netplay)
+    if not settings:
+        yield
+        return
+    parser = _read_ppsspp_ini()
+    _ensure_section(parser, 'Network')
+    previous = {key: parser.get('Network', key, fallback=None) for key in settings}
+    for key, value in settings.items():
+        parser.set('Network', key, value)
+    _save_ppsspp_ini(parser)
+    _log.info("ppsspp: ad hoc %s via %s", netplay.mode, settings['proAdhocServer'])
+    try:
+        yield
+    finally:
+        parser = _read_ppsspp_ini()
+        _ensure_section(parser, 'Network')
+        for key, value in previous.items():
+            if value is None:
+                parser.remove_option('Network', key)
+            else:
+                parser.set('Network', key, value)
+        _save_ppsspp_ini(parser)
 
 def _ppsspp_axis_code(axis_id: int, direction: int) -> int:
     d = 1 if direction < 0 else 0
@@ -198,7 +247,8 @@ def launch_ppsspp(ctx: LaunchContext) -> int:
     env['SDL_GAMECONTROLLERCONFIG'] = generate_sdl_game_controller_config(
         ctx.controllers, ignore_buttons=['hotkey']
     )
-    result = _run_game_command(ctx, cmd, env)
+    with _ppsspp_netplay_network(ctx.netplay):
+        result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
-register(Emulator('ppsspp', launch_ppsspp, binaries=('PPSSPPSDL', 'ppsspp')))
+register(Emulator('ppsspp', launch_ppsspp, binaries=('PPSSPPSDL', 'ppsspp'), netplay_port=PPSSPP_ADHOC_SERVER_PORT))

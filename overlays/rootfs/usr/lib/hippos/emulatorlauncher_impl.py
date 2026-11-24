@@ -11,6 +11,7 @@ import signal
 import sys
 import time
 import xml.etree.ElementTree as ET
+from dataclasses import replace
 from pathlib import Path
 from contextlib import ExitStack, contextmanager
 from typing import Iterator, Optional
@@ -32,9 +33,14 @@ from emulatorlauncher_shared import (
     ControllerInfo,
     ESControllerProfile,
     LaunchContext,
+    NETPLAY_DEFAULT_NICKNAME,
+    NETPLAY_DEFAULT_PORT,
+    NETPLAY_MODES,
+    NetplaySession,
     EmulatorNotInstalled,
     _HUD_CONFIG_PATH,
     _conf_bool,
+    _conf_value,
     _system_default_options,
     game_config_name,
     _load_es_input_configs,
@@ -45,6 +51,7 @@ from emulatorlauncher_shared import (
     launch_clock,
     launch_step,
 )
+from emulatorlauncher_lobby import hosted_session
 from emulatorlauncher_power import game_power_settings
 from emulatorlauncher_parallel import Parallel, timed
 
@@ -387,12 +394,30 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument('-netplaymode',  type=str,  required=False)
     p.add_argument('-netplayip',    type=str,  required=False)
     p.add_argument('-netplayport',  type=str,  required=False)
+    p.add_argument('-netplaysession', type=str, required=False)
+    p.add_argument('-netplaypass',  type=str,  required=False)
     p.add_argument('-state_slot',   type=str,  required=False)
     p.add_argument('-state_filename', type=str, required=False)
     p.add_argument('-autosave',     type=str,  required=False)
     p.add_argument('-lightgun',     action='store_true')
     p.add_argument('-wheel',        action='store_true')
     return p
+
+def _netplay_session(args: argparse.Namespace) -> NetplaySession:
+    if args.netplaymode not in NETPLAY_MODES:
+        return NetplaySession()
+    conf = _load_hippos_conf()
+    if args.netplaymode == 'host':
+        port = _conf_value(conf, 'global.netplay.port', NETPLAY_DEFAULT_PORT)
+    else:
+        port = args.netplayport or NETPLAY_DEFAULT_PORT
+    return NetplaySession(
+        mode=args.netplaymode,
+        host=args.netplayip or '',
+        port=port,
+        session=args.netplaysession or '',
+        nickname=_conf_value(conf, 'global.netplay.nickname', NETPLAY_DEFAULT_NICKNAME),
+    )
 
 def _build_controllers(args: argparse.Namespace) -> list[ControllerInfo]:
     controllers = []
@@ -463,9 +488,7 @@ def _launch(args: argparse.Namespace) -> int:
         ctx.rom         = _resolve_mergerfs_path(ctx.rom)
         ctx.game_wheel  = _load_game_wheel_metadata(ctx.gameinfoxml)
         ctx.game_gun    = _load_game_gun_metadata(ctx.gameinfoxml)
-    ctx.netplay_mode = getattr(args, 'netplaymode', '') or ''
-    ctx.netplay_ip   = getattr(args, 'netplayip',   '') or ''
-    ctx.netplay_port = getattr(args, 'netplayport',  '') or ''
+    ctx.netplay      = _netplay_session(args)
     ctx.monitor      = args.monitor if args.monitor is not None else -1
 
     _log.info("system=%s emulator=%s core=%s controllers=%d",
@@ -497,6 +520,8 @@ def _launch(args: argparse.Namespace) -> int:
     if emulator is None:
         _log.error("No launcher registered for emulator '%s'", ctx.emulator)
         return EXIT_UNKNOWN_EMULATOR
+    if ctx.netplay.active and emulator.netplay_port:
+        ctx.netplay = replace(ctx.netplay, port=emulator.netplay_port)
 
     return _prepare_and_run(ctx, conf, emulator)
 
@@ -508,6 +533,7 @@ def _prepare_and_run(ctx: LaunchContext, conf: dict[str, str], emulator: Emulato
             timed('display', _display(conf, ctx)),
             timed('hud', _hud(conf, ctx)),
             timed('power', game_power_settings(conf, ctx.system, ctx.rom)),
+            timed('lobby', hosted_session(conf, ctx)),
             timed('rom', _prepared_rom(ctx, emulator)),
         ))
         ctx.rom = rom

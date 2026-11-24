@@ -1,6 +1,8 @@
 requireArtifact: ppsspp
 appstream_ids:
   - org.ppsspp.PPSSPP
+features:
+  - netplay
 shared_features:
   - powermode
   - tdp

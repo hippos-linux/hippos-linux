@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'overlays' / 'ro
 import emulatorlauncher_impl as impl
 import emulatorlauncher_power as power
 from emulatorlauncher_parallel import Parallel
+from emulatorlauncher_shared import NetplaySession
 
 
 def _blocking_step(events, name, seconds=0.0, fail=False):
@@ -90,7 +91,8 @@ class PrepareAndRunTests(unittest.TestCase):
             patcher = mock.patch.object(impl, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
-        self.ctx = SimpleNamespace(system='ports', rom=Path('/userdata/roms/ports/game.squashfs'), resolution=None)
+        self.ctx = SimpleNamespace(system='ports', rom=Path('/userdata/roms/ports/game.squashfs'), resolution=None,
+                                   netplay=NetplaySession())
 
     def run_with(self, launch):
         emulator = SimpleNamespace(launch=launch, writes_to_rom=False)

@@ -1,0 +1,16 @@
+[Unit]
+Description=HippOS netplay lobby
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/hippos-lobby/hippos_lobby.py --host 127.0.0.1 --port 8655 --trusted-proxy 127.0.0.1 --ban-list /etc/hippos-lobby/banned-ips.txt --word-filter /etc/hippos-lobby/word-filter.txt
+DynamicUser=yes
+Restart=on-failure
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

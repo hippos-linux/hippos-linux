@@ -22,6 +22,7 @@ class Emulator:
     fullscreen_flags: tuple[str, ...] = ()
     hud_wrapper: bool = False
     hotkeys: str = ''
+    netplay_port: str = ''
 
     @property
     def binary_names(self) -> tuple[str, ...]:

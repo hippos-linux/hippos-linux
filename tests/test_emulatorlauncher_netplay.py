@@ -1,0 +1,139 @@
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'overlays' / 'rootfs' / 'usr' / 'lib' / 'hippos'))
+
+import emulatorlauncher_generic as generic
+import emulatorlauncher_core as core
+import emulatorlauncher_impl as impl
+import emulatorlauncher_ppsspp as ppsspp
+from emulatorlauncher_shared import LaunchContext, NetplaySession
+
+
+def _written(netplay: NetplaySession, conf: dict[str, str]) -> dict[str, str]:
+    cfg = generic._KVConfig(Path(tempfile.mkdtemp()) / 'retroarch.cfg')
+    generic._write_retroarch_netplay(cfg, netplay, conf)
+    return cfg._data
+
+
+class RetroArchNetplayArgsTests(unittest.TestCase):
+    def test_no_netplay_adds_nothing(self):
+        self.assertEqual(generic._retroarch_netplay_args(NetplaySession()), [])
+
+    def test_host(self):
+        self.assertEqual(generic._retroarch_netplay_args(NetplaySession(mode='host', port='55500', nickname='fox')),
+                         ['--host', '--port', '55500', '--nick', 'fox'])
+
+    def test_relay_client_joins_session(self):
+        netplay = NetplaySession(mode='client', host='1.2.3.4', port='55436', session='abc123')
+        self.assertEqual(generic._retroarch_netplay_args(netplay),
+                         ['--connect', '1.2.3.4', '--port', '55436', '--mitm-session', 'abc123'])
+
+
+class RetroArchNetplayConfigTests(unittest.TestCase):
+    def test_host_writes_passwords_announce_and_relay(self):
+        conf = {
+            'global.netplay.password': 'pw',
+            'global.netplay.spectatepassword': 'view',
+            'global.netplay_public_announce': '1',
+            'global.netplay.relay': 'custom',
+            'global.netplay.customserver': 'relay.example.org',
+        }
+        data = _written(NetplaySession(mode='host'), conf)
+        self.assertEqual(data['netplay_password'], '"pw"')
+        self.assertEqual(data['netplay_spectate_password'], '"view"')
+        self.assertEqual(data['netplay_public_announce'], '"true"')
+        self.assertEqual(data['netplay_use_mitm_server'], '"true"')
+        self.assertEqual(data['netplay_mitm_server'], '"custom"')
+        self.assertEqual(data['netplay_custom_mitm_server'], '"relay.example.org"')
+        self.assertEqual(data['cheevos_hardcore_mode_enable'], '"false"')
+
+    def test_spectator_joins_without_relay(self):
+        conf = {'global.netplay.relay': 'nyc'}
+        data = _written(NetplaySession(mode='spectator', host='1.2.3.4'), conf)
+        self.assertEqual(data['netplay_start_as_spectator'], '"true"')
+        self.assertNotIn('netplay_spectate_password', data)
+        self.assertEqual(data['netplay_ip_address'], '"1.2.3.4"')
+        self.assertEqual(data['netplay_use_mitm_server'], '"false"')
+
+    def test_no_netplay_writes_nothing(self):
+        self.assertEqual(_written(NetplaySession(), {}), {})
+
+
+def _session(argv: list[str], conf: dict[str, str]) -> NetplaySession:
+    args = impl._build_parser().parse_args(['-system', 'snes', '-rom', '/userdata/roms/snes/game.sfc', *argv])
+    with mock.patch.object(impl, '_load_hippos_conf', return_value=conf):
+        return impl._netplay_session(args)
+
+
+class NetplaySessionTests(unittest.TestCase):
+    def test_es_relay_join_arguments(self):
+        netplay = _session(['-netplaymode', 'client', '-netplayport', '55436', '-netplayip', '1.2.3.4',
+                            '-netplaysession', 'abc123', '-netplaypass', 'pw'],
+                           {'global.netplay.nickname': 'fox'})
+        self.assertEqual(netplay, NetplaySession(mode='client', host='1.2.3.4', port='55436',
+                                                 session='abc123', nickname='fox'))
+        self.assertEqual(_session(['-netplaymode', 'host'], {}).nickname, 'HippOS Player')
+
+    def test_host_port_comes_from_es_setting(self):
+        self.assertEqual(_session(['-netplaymode', 'host'], {'global.netplay.port': '55500'}).port, '55500')
+        self.assertEqual(_session(['-netplaymode', 'host'], {}).port, '55435')
+
+    def test_unknown_mode_is_no_netplay(self):
+        self.assertFalse(_session(['-netplaymode', 'bogus'], {}).active)
+
+
+class PackageApiTests(unittest.TestCase):
+    def test_flat_netplay_fields_read_the_session(self):
+        ctx = LaunchContext(system='psx', rom=Path('game.chd'), emulator='riverhorse', core='riverhorse',
+                            netplay=NetplaySession(mode='client', host='1.2.3.4', port='31200'))
+        self.assertEqual((ctx.netplay_mode, ctx.netplay_ip, ctx.netplay_port), ('client', '1.2.3.4', '31200'))
+
+
+class PpssppNetplayTests(unittest.TestCase):
+    def test_host_runs_the_builtin_adhoc_server(self):
+        self.assertEqual(ppsspp.ppsspp_network_settings(NetplaySession(mode='host', port='27312')),
+                         {'EnableWlan': 'True', 'EnableAdhocServer': 'True',
+                          'proAdhocServer': 'localhost', 'EnableUPnP': 'True'})
+
+    def test_client_and_spectator_use_the_hosts_adhoc_server(self):
+        for mode in ('client', 'spectator'):
+            settings = ppsspp.ppsspp_network_settings(NetplaySession(mode=mode, host='1.2.3.4', port='27312'))
+            self.assertEqual((settings['EnableAdhocServer'], settings['proAdhocServer']), ('False', '1.2.3.4'))
+
+    def test_netplay_settings_are_restored_after_the_game(self):
+        ini = Path(tempfile.mkdtemp()) / 'ppsspp.ini'
+        ini.write_text('[Network]\nEnableWlan = False\nproAdhocServer = socom.cc\n')
+        with mock.patch.object(ppsspp, 'PPSSPP_INI', ini):
+            with ppsspp._ppsspp_netplay_network(NetplaySession(mode='client', host='1.2.3.4')):
+                self.assertIn('proAdhocServer = 1.2.3.4', ini.read_text())
+            text = ini.read_text()
+        self.assertIn('EnableWlan = False', text)
+        self.assertIn('proAdhocServer = socom.cc', text)
+        self.assertNotIn('EnableAdhocServer', text)
+
+    def test_ppsspp_hosts_on_its_adhoc_server_port(self):
+        emulator = impl.lookup('ppsspp')
+        self.assertEqual(emulator.netplay_port, '27312')
+
+
+class DolphinNetplayTests(unittest.TestCase):
+    def test_traversal_join_uses_the_host_code(self):
+        args = core.dolphin_netplay_join_args(NetplaySession(mode='client', host='abcd1234', port='2626',
+                                                             session='abcd1234', nickname='fox'))
+        self.assertIn('Dolphin.NetPlay.TraversalChoice=traversal', args)
+        self.assertIn('Dolphin.NetPlay.HostCode=abcd1234', args)
+        self.assertEqual(args[-1], '--netplay_join')
+
+    def test_direct_join_uses_the_address(self):
+        args = core.dolphin_netplay_join_args(NetplaySession(mode='client', host='1.2.3.4', port='2626', nickname='fox'))
+        self.assertIn('Dolphin.NetPlay.TraversalChoice=direct', args)
+        self.assertIn('Dolphin.NetPlay.Address=1.2.3.4', args)
+        self.assertIn('Dolphin.NetPlay.ConnectPort=2626', args)
+
+
+if __name__ == '__main__':
+    unittest.main()

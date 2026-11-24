@@ -8,6 +8,7 @@ from typing import Optional
 from emulatorlauncher_shared import (
     ControllerInfo,
     LaunchContext,
+    NetplaySession,
     _build_game_env,
     _conf_bool,
     _conf_int,
@@ -52,7 +53,7 @@ def launch_libretro(ctx: LaunchContext) -> int:
 
     conf = _load_hippos_conf()
     _write_retroarch_core_options(ctx, conf)
-    ra_cfg = _write_retroarch_config(ctx.controllers, ctx)
+    ra_cfg = _write_retroarch_config(ctx.controllers, ctx, core_dir=core_path.parent)
     ra_game_cfg = _write_retroarch_game_overrides(ctx)
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
 
@@ -62,6 +63,7 @@ def launch_libretro(ctx: LaunchContext) -> int:
         '--log-file', str(USERDATA / 'system' / 'logs' / 'retroarch.log'),
         '-L', str(core_path),
         '--config', str(ra_cfg),
+        *_retroarch_netplay_args(ctx.netplay),
     ]
     if ra_game_cfg is not None:
         cmd += ['--appendconfig', str(ra_game_cfg)]
@@ -238,20 +240,41 @@ def _set_complex_device_types(
     elif system in ('wii', 'gamecube'):
         cfg.set('input_libretro_device_p1', f'"{conf.get("controller1_wii", "1")}"')
 
-_NETPLAY_MODES: frozenset[str] = frozenset({'host', 'client', 'spectator'})
+def _retroarch_netplay_args(netplay: NetplaySession) -> list[str]:
+    if not netplay.active:
+        return []
+    args = ['--host'] if netplay.mode == 'host' else ['--connect', netplay.host]
+    args += ['--port', netplay.port]
+    if netplay.session:
+        args += ['--mitm-session', netplay.session]
+    if netplay.nickname:
+        args += ['--nick', netplay.nickname]
+    return args
 
-def _write_retroarch_netplay(cfg: _KVConfig, ctx: LaunchContext) -> None:
-    if ctx.netplay_mode not in _NETPLAY_MODES:
+def _write_retroarch_netplay(cfg: _KVConfig, netplay: NetplaySession, conf: dict[str, str]) -> None:
+    if not netplay.active:
         return
-    is_client = ctx.netplay_mode in ('client', 'spectator')
-    cfg.set('netplay_mode',              '"true"' if is_client else '"false"')
-    cfg.set('netplay_ip_port',           f'"{ctx.netplay_port}"')
-    cfg.set('netplay_delay_frames',      '"0"')
-    cfg.set('netplay_nickname',          f'"{_conf_value(_load_hippos_conf(), "global.netplay.nickname", "")}"')
-    cfg.set('netplay_client_swap_input', '"false"')
-    if is_client:
-        cfg.set('netplay_ip_address', f'"{ctx.netplay_ip}"')
-    _log.info("netplay: mode=%s ip=%s port=%s", ctx.netplay_mode, ctx.netplay_ip, ctx.netplay_port)
+    is_host = netplay.mode == 'host'
+    cfg.set('netplay_ip_port',             f'"{netplay.port}"')
+    cfg.set('netplay_nickname',            f'"{netplay.nickname}"')
+    cfg.set('netplay_start_as_spectator',  '"true"' if netplay.mode == 'spectator' else '"false"')
+    cfg.set('cheevos_hardcore_mode_enable', '"false"')
+    if is_host:
+        cfg.set('netplay_password',          f'"{_conf_value(conf, "global.netplay.password")}"')
+        cfg.set('netplay_spectate_password', f'"{_conf_value(conf, "global.netplay.spectatepassword")}"')
+        cfg.set('netplay_public_announce',   '"true"' if _conf_bool(conf, 'global.netplay_public_announce') else '"false"')
+    else:
+        cfg.set('netplay_ip_address', f'"{netplay.host}"')
+
+    relay = _conf_value(conf, 'global.netplay.relay')
+    use_relay = is_host and relay not in ('', 'none')
+    cfg.set('netplay_use_mitm_server', '"true"' if use_relay else '"false"')
+    if use_relay:
+        cfg.set('netplay_mitm_server', f'"{relay}"')
+        if relay == 'custom':
+            cfg.set('netplay_custom_mitm_server', f'"{_conf_value(conf, "global.netplay.customserver")}"')
+    _log.info("netplay: mode=%s host=%s port=%s session=%s relay=%s", netplay.mode, netplay.host,
+              netplay.port, netplay.session, relay if use_relay else 'none')
 
 _REMAPS_DIR = RA_CONFIG_DIR / 'remaps'
 
@@ -392,7 +415,7 @@ class _KVConfig:
             for key, value in self._data.items():
                 fh.write(f'{key}{self.sep}={self.sep}{value}\n')
 
-def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[LaunchContext] = None) -> Path:
+def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[LaunchContext] = None, *, core_dir: Path) -> Path:
     conf = _load_hippos_conf()
     cfg = _KVConfig(RA_CUSTOM_CFG, separator=' ')
 
@@ -406,6 +429,8 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
     cfg.set('core_options_path',        f'"{RA_CORES_CFG}"')
     cfg.set('global_core_options',      '"true"')
     cfg.set('assets_directory',         '"/usr/share/libretro/assets"')
+    cfg.set('libretro_directory',       f'"{core_dir}"')
+    cfg.set('libretro_info_path',       '"/usr/share/libretro/info"')
     cfg.set('video_shader_dir',         f'"{USER_SHADERS}"')
     cfg.set('cheat_database_path',      f'"{CHEATS}"')
     cfg.set('overlay_directory',        f'"{USER_DECORATIONS}"')
@@ -494,7 +519,6 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
 
     if ctx is not None:
         _set_libretro_device_types(cfg, ctx, conf)
-        _write_retroarch_netplay(cfg, ctx)
         _write_retroarch_remapping(cfg, ctx)
 
     cfg.set('notification_show_remap_load', '"false"')
@@ -542,6 +566,9 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
         cfg.set('ai_service_source_lang', '"0"')
         cfg.set('ai_service_url', f'"{chosen_url}&mode=Fast&output=png&target_lang={chosen_lang}"')
         cfg.set('ai_service_pause', '"true"' if _conf_bool(conf, 'global.ai_service_pause') else '"false"')
+
+    if ctx is not None:
+        _write_retroarch_netplay(cfg, ctx.netplay, conf)
 
     cfg.write()
     _log.info("Wrote retroarch config: %s", RA_CUSTOM_CFG)
