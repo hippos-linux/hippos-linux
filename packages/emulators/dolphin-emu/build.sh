@@ -20,7 +20,7 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
 PATCH_DIR="${REPO_ROOT}/packages/emulators/${NAME}"
-for patch in 001-netplay-join-option.patch; do
+for patch in 001-netplay-join-option.patch 002-netplay-host-option.patch; do
     if git -C "${SRC}" apply --reverse --check "${PATCH_DIR}/${patch}" >/dev/null 2>&1; then
         log "Patch already applied: ${patch}"
     else

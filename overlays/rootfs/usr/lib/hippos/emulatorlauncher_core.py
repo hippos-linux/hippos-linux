@@ -257,6 +257,15 @@ def dolphin_netplay_join_args(netplay: NetplaySession) -> list[str]:
         '--netplay_join',
     ]
 
+def dolphin_netplay_host_args(netplay: NetplaySession, rom: Path) -> list[str]:
+    return [
+        '-C', 'Dolphin.NetPlay.TraversalChoice=direct',
+        '-C', f'Dolphin.NetPlay.HostPort={netplay.port}',
+        '-C', 'Dolphin.NetPlay.UseUPNP=False',
+        '-C', f'Dolphin.NetPlay.Nickname={netplay.nickname}',
+        '--netplay_host', str(rom),
+    ]
+
 def launch_dolphin(ctx: LaunchContext) -> int:
     bin_path = _require_emulator_bin('dolphin-emu', 'dolphin')
     (SAVES / ctx.system).mkdir(parents=True, exist_ok=True)
@@ -264,6 +273,8 @@ def launch_dolphin(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     if ctx.netplay.mode in ('client', 'spectator'):
         cmd = [str(bin_path), *dolphin_netplay_join_args(ctx.netplay)]
+    elif ctx.netplay.mode == 'host':
+        cmd = [str(bin_path), *dolphin_netplay_host_args(ctx.netplay, ctx.rom)]
     else:
         cmd = [str(bin_path), '-b', '-e', str(ctx.rom)]
     env = _build_game_env(conf, ctx)

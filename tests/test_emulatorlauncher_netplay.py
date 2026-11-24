@@ -166,6 +166,13 @@ class DolphinNetplayTests(unittest.TestCase):
         self.assertIn('Dolphin.NetPlay.Address=1.2.3.4', args)
         self.assertIn('Dolphin.NetPlay.ConnectPort=2626', args)
 
+    def test_host_opens_a_direct_session_for_the_game(self):
+        args = core.dolphin_netplay_host_args(NetplaySession(mode='host', port='55435', nickname='fox'),
+                                              Path('/userdata/roms/gamecube/game.iso'))
+        self.assertIn('Dolphin.NetPlay.TraversalChoice=direct', args)
+        self.assertIn('Dolphin.NetPlay.HostPort=55435', args)
+        self.assertEqual(args[-2:], ['--netplay_host', '/userdata/roms/gamecube/game.iso'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,0 +1,119 @@
+diff --git a/Source/Core/DolphinQt/Main.cpp b/Source/Core/DolphinQt/Main.cpp
+index 111be57..36759f0 100644
+--- a/Source/Core/DolphinQt/Main.cpp
++++ b/Source/Core/DolphinQt/Main.cpp
+@@ -281,6 +281,11 @@ int main(int argc, char* argv[])
+ 
+     if (options.is_set("netplay_join"))
+       QTimer::singleShot(0, &win, [&win] { win.NetPlayJoin(); });
++    if (options.is_set("netplay_host"))
++    {
++      const std::string game_path = static_cast<const char*>(options.get("netplay_host"));
++      QTimer::singleShot(0, &win, [&win, game_path] { win.NetPlayHostAndStart(game_path); });
++    }
+ 
+ #if defined(USE_ANALYTICS) && USE_ANALYTICS
+     if (!Config::Get(Config::MAIN_ANALYTICS_PERMISSION_ASKED))
+diff --git a/Source/Core/DolphinQt/MainWindow.cpp b/Source/Core/DolphinQt/MainWindow.cpp
+index 688ae6f..59ed6d5 100644
+--- a/Source/Core/DolphinQt/MainWindow.cpp
++++ b/Source/Core/DolphinQt/MainWindow.cpp
+@@ -1755,6 +1755,20 @@ bool MainWindow::NetPlayHost(const UICommon::GameFile& game)
+   return NetPlayJoin();
+ }
+ 
++bool MainWindow::NetPlayHostAndStart(const std::string& path)
++{
++  const UICommon::GameFile game(path);
++  if (!game.IsValid())
++  {
++    ModalMessageBox::critical(nullptr, tr("Error"),
++                              tr("%1 is not a valid game.").arg(QString::fromStdString(path)));
++    return false;
++  }
++
++  m_netplay_dialog->StartWhenAnotherPlayerHasTheGame();
++  return NetPlayHost(game);
++}
++
+ void MainWindow::NetPlayQuit()
+ {
+   Settings::Instance().ResetNetPlayClient();
+diff --git a/Source/Core/DolphinQt/MainWindow.h b/Source/Core/DolphinQt/MainWindow.h
+index 300aea0..062f1f2 100644
+--- a/Source/Core/DolphinQt/MainWindow.h
++++ b/Source/Core/DolphinQt/MainWindow.h
+@@ -95,6 +95,7 @@ public:
+ 
+   void ShowTriforceWindow();
+   bool NetPlayJoin();
++  bool NetPlayHostAndStart(const std::string& path);
+ 
+ signals:
+   void ReadOnlyModeChanged(bool read_only);
+diff --git a/Source/Core/DolphinQt/NetPlay/NetPlayDialog.cpp b/Source/Core/DolphinQt/NetPlay/NetPlayDialog.cpp
+index c4ebae4..8faa913 100644
+--- a/Source/Core/DolphinQt/NetPlay/NetPlayDialog.cpp
++++ b/Source/Core/DolphinQt/NetPlay/NetPlayDialog.cpp
+@@ -462,6 +462,11 @@ void NetPlayDialog::OnIndexRefreshFailed(const std::string error)
+   DisplayMessage(QString::fromStdString(error), "red");
+ }
+ 
++void NetPlayDialog::StartWhenAnotherPlayerHasTheGame()
++{
++  m_start_when_another_player_has_the_game = true;
++}
++
+ void NetPlayDialog::OnStart()
+ {
+   if (!Settings::Instance().GetNetPlayClient()->DoAllPlayersHaveGame())
+@@ -688,6 +693,13 @@ void NetPlayDialog::UpdateGUI()
+   if (!server)
+     return;
+ 
++  if (m_start_when_another_player_has_the_game && m_player_count > 1 &&
++      client->DoAllPlayersHaveGame() && server->RequestStartGame())
++  {
++    m_start_when_another_player_has_the_game = false;
++    SetOptionsEnabled(false);
++  }
++
+   const bool is_local_ip_selected = m_room_box->currentIndex() > (m_use_traversal ? 1 : 0);
+   if (is_local_ip_selected)
+   {
+diff --git a/Source/Core/DolphinQt/NetPlay/NetPlayDialog.h b/Source/Core/DolphinQt/NetPlay/NetPlayDialog.h
+index 54cc111..b7fb13e 100644
+--- a/Source/Core/DolphinQt/NetPlay/NetPlayDialog.h
++++ b/Source/Core/DolphinQt/NetPlay/NetPlayDialog.h
+@@ -44,6 +44,7 @@ public:
+   ~NetPlayDialog() override;
+ 
+   void show(std::string nickname, bool use_traversal);
++  void StartWhenAnotherPlayerHasTheGame();
+   void reject() override;
+ 
+   // NetPlayUI methods
+@@ -178,6 +179,7 @@ private:
+   int m_buffer_size = 0;
+   int m_player_count = 0;
+   int m_old_player_count = 0;
++  bool m_start_when_another_player_has_the_game = false;
+   bool m_host_input_authority = false;
+ 
+   StartGameCallback m_start_game_callback;
+diff --git a/Source/Core/UICommon/CommandLineParse.cpp b/Source/Core/UICommon/CommandLineParse.cpp
+index bc6a3a8..3fb910f 100644
+--- a/Source/Core/UICommon/CommandLineParse.cpp
++++ b/Source/Core/UICommon/CommandLineParse.cpp
+@@ -118,6 +118,11 @@ std::unique_ptr<optparse::OptionParser> CreateParser(ParserOptions options)
+     parser->add_option("--netplay_join")
+         .action("store_true")
+         .help("Join the NetPlay session set in the Dolphin.NetPlay configuration");
++    parser->add_option("--netplay_host")
++        .action("store")
++        .metavar("<file>")
++        .type("string")
++        .help("Host a NetPlay session for <file> and start it once another player has the game");
+   }
+ 
+   parser->set_defaults("video_backend", "");

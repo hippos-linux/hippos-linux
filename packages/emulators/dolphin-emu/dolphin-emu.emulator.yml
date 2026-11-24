@@ -5,6 +5,7 @@ appstream_ids:
 features:
   - cheevos
   - internal_resolution
+  - netplay
 shared_features:
   - powermode
   - tdp
