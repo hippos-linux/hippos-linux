@@ -1,0 +1,59 @@
+diff --git a/src/citra_qt/citra_qt.cpp b/src/citra_qt/citra_qt.cpp
+--- a/src/citra_qt/citra_qt.cpp
++++ b/src/citra_qt/citra_qt.cpp
+@@ -75,6 +75,8 @@
+ #include "citra_qt/movie/movie_play_dialog.h"
+ #include "citra_qt/movie/movie_record_dialog.h"
+ #include "citra_qt/multiplayer/state.h"
++#include "core/hle/service/cfg/cfg.h"
++#include "network/network.h"
+ #include "citra_qt/qt_image_interface.h"
+ #include "citra_qt/qt_swizzle.h"
+ #include "citra_qt/uisettings.h"
+@@ -1374,6 +1376,7 @@
+ 
+     QStringList args = QApplication::arguments();
+     QString game_path;
++    QString multiplayer_target;
+     std::optional<bool> fullscreen_override;
+     for (int i = 1; i < args.size(); ++i) {
+         // Preserves drag/drop functionality
+@@ -1472,11 +1475,8 @@
+         }
+ 
+         if (args[i] == QStringLiteral("--multiplayer") || args[i] == QStringLiteral("-m")) {
+-            std::cout << "Warning: The --multiplayer option is not yet implemented for the Qt "
+-                         "frontend; Ignoring."
+-                      << std::endl;
+             if (i < args.size() - 1 && !args[i + 1].startsWith(QChar::fromLatin1('-'))) {
+-                i++;
++                multiplayer_target = args[++i];
+             }
+             continue;
+         }
+@@ -1543,6 +1543,25 @@
+     });
+ 
+     InitializeWidgets();
++
++    if (!multiplayer_target.isEmpty()) {
++        const qsizetype at = multiplayer_target.lastIndexOf(QChar::fromLatin1('@'));
++        const QString user = at < 0 ? QString() : multiplayer_target.left(at);
++        const QString server = multiplayer_target.mid(at + 1);
++        const std::string nickname = user.section(QChar::fromLatin1(':'), 0, 0).toStdString();
++        const std::string password = user.section(QChar::fromLatin1(':'), 1).toStdString();
++        const std::string address = server.section(QChar::fromLatin1(':'), 0, 0).toStdString();
++        const QString port_text = server.section(QChar::fromLatin1(':'), 1);
++        const u16 port = port_text.isEmpty() ? Network::DefaultRoomPort : port_text.toUShort();
++        static_cast<void>(QtConcurrent::run([this, nickname, password, address, port] {
++            if (auto room_member = Network::GetRoomMember().lock()) {
++                room_member->Join(nickname, Service::CFG::GetConsoleIdHash(system),
++                                  address.c_str(), port, 0,
++                                  Service::CFG::GetConsoleMacAddress(system), password);
++            }
++        }));
++    }
++
+     InitializeDebugWidgets();
+     InitializeRecentFileMenuActions();
+     InitializeSaveStateMenuActions();

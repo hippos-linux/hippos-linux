@@ -7,6 +7,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'overlays' / 'rootfs' / 'usr' / 'lib' / 'hippos'))
 
 import emulatorlauncher_generic as generic
+import emulatorlauncher_azahar as azahar
 import emulatorlauncher_core as core
 import emulatorlauncher_impl as impl
 import emulatorlauncher_ppsspp as ppsspp
@@ -134,6 +135,17 @@ class FlycastNetplayTests(unittest.TestCase):
     def test_flycast_is_listed_by_es_on_its_fixed_port(self):
         emulator = impl.lookup('flycast')
         self.assertEqual((emulator.netplay_port, emulator.netplay_announce), ('19713', 'frontend'))
+
+
+class AzaharNetplayTests(unittest.TestCase):
+    def test_host_joins_its_own_room_and_client_joins_the_hosts(self):
+        self.assertEqual(azahar.azahar_multiplayer_args(NetplaySession(mode='host', port='24872', nickname='fox')),
+                         ['--multiplayer', 'fox@127.0.0.1:24872'])
+        self.assertEqual(azahar.azahar_multiplayer_args(NetplaySession(mode='client', host='1.2.3.4', port='24872', nickname='vm2')),
+                         ['--multiplayer', 'vm2@1.2.3.4:24872'])
+
+    def test_azahar_hosts_on_its_room_port(self):
+        self.assertEqual(impl.lookup('azahar').netplay_port, '24872')
 
 
 class DolphinNetplayTests(unittest.TestCase):

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from typing import Optional
+import subprocess
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Iterator, Optional
 
 from emulatorlauncher_shared import (
     LaunchContext,
+    NetplaySession,
     _build_game_env,
     _conf_value,
     _ensure_section,
@@ -21,6 +25,8 @@ from emulatorlauncher_registry import Emulator, register
 
 AZAHAR_CONFIG_DIR  = CONFIGS / 'azahar-emu'
 AZAHAR_INI         = AZAHAR_CONFIG_DIR / 'qt-config.ini'
+AZAHAR_ROOM_PORT   = '24872'
+AZAHAR_ROOM_MEMBERS = '4'
 
 _AZAHAR_BUTTONS: dict[str, str] = {
     'button_a':      'a',      'button_b':     'b',
@@ -173,6 +179,32 @@ def _write_azahar_controller_config(ctx: LaunchContext) -> None:
         parser.write(fh)
     _log.info("Wrote Azahar controller config: %s", cfg_path)
 
+def azahar_multiplayer_args(netplay: NetplaySession) -> list[str]:
+    if not netplay.active:
+        return []
+    server = '127.0.0.1' if netplay.mode == 'host' else netplay.host
+    return ['--multiplayer', f'{netplay.nickname}@{server}:{netplay.port}']
+
+@contextmanager
+def _hosted_room(bin_path: Path, ctx: LaunchContext) -> Iterator[None]:
+    if ctx.netplay.mode != 'host':
+        yield
+        return
+    room = subprocess.Popen(
+        [str(bin_path.with_name('azahar-room')),
+         '--room-name', f"{ctx.netplay.nickname}'s room",
+         '--port', ctx.netplay.port,
+         '--max_members', AZAHAR_ROOM_MEMBERS,
+         '--preferred-app', ctx.rom.stem],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    _log.info("azahar: room server on port %s (pid %d)", ctx.netplay.port, room.pid)
+    try:
+        yield
+    finally:
+        room.terminate()
+        room.wait()
+
 def launch_azahar(ctx: LaunchContext) -> int:
     bin_path = _find_emulator_bin('azahar')
     if bin_path is None:
@@ -182,12 +214,13 @@ def launch_azahar(ctx: LaunchContext) -> int:
     conf = _load_hippos_conf()
     _write_azahar_config(conf)
     _write_azahar_controller_config(ctx)
-    cmd = [str(bin_path), str(ctx.rom)]
+    cmd = [str(bin_path), *azahar_multiplayer_args(ctx.netplay), str(ctx.rom)]
     env = _build_game_env(conf, ctx)
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
     env['XDG_DATA_HOME']   = str(SAVES / '3ds')
     env['SDL_JOYSTICK_HIDAPI'] = '0'
-    result = _run_game_command(ctx, cmd, env)
+    with _hosted_room(bin_path, ctx):
+        result = _run_game_command(ctx, cmd, env)
     return result.returncode
 
-register(Emulator('azahar', launch_azahar))
+register(Emulator('azahar', launch_azahar, netplay_port=AZAHAR_ROOM_PORT))
