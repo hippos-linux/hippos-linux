@@ -23,6 +23,9 @@ from emulatorlauncher_core import _gun_type
 from HipposPaths import BIOS, CONFIGS, SAVES
 from emulatorlauncher_registry import Emulator, register
 
+_MULTITAP_PAD_PORT = {2: 1, 3: 1, 4: 1, 5: 2, 6: 2, 7: 2}
+_MULTITAP_PORTS = {'Disabled': (), 'Port1Only': (1,), 'BothPorts': (1, 2)}
+
 BIOS_NAMES = {
     'PathNTSCU': ('scph5501.bin', 'scph7001.bin', 'scph1001.bin', 'scph101.bin', 'psxonpsp660.bin'),
     'PathNTSCJ': ('scph5500.bin', 'scph7000.bin', 'scph1000.bin', 'psxonpsp660.bin'),
@@ -37,6 +40,7 @@ class DuckStationFamily:
     binaries: tuple[str, ...]
     extra_settings: Callable
     extra_args: Callable[[LaunchContext], list[str]] = lambda ctx: []
+    pad_order: tuple[int, ...] = (0, 1, 2, 3, 4, 5, 6, 7)
 
     @property
     def option_prefix(self) -> str:
@@ -116,8 +120,10 @@ def _write_settings(family: DuckStationFamily, ctx: LaunchContext) -> None:
             multitap = 'BothPorts'
     settings.set('ControllerPorts', 'MultitapMode', multitap)
 
+    player_pads = [pad for pad in family.pad_order
+                   if _MULTITAP_PAD_PORT.get(pad) in (None, *_MULTITAP_PORTS[multitap])]
     for nplayer, ctrl in enumerate(ctx.controllers[:8], start=1):
-        pad_num  = f'Pad{nplayer}'
+        pad_num  = f'Pad{player_pads[nplayer - 1] + 1}'
         sdl_num  = f'SDL-{ctrl.index}'
         ctrl_key = f'{family.option_prefix}_Controller{nplayer}'
         ctrl_type = conf.get(ctrl_key, 'AnalogController')

@@ -24,6 +24,6 @@ def _riverhorse_netplay_args(ctx: LaunchContext) -> list[str]:
 
 
 RIVERHORSE = DuckStationFamily('riverhorse', 'Riverhorse', ('riverhorse',), _riverhorse_settings,
-                               _riverhorse_netplay_args)
+                               _riverhorse_netplay_args, pad_order=(0, 2, 3, 4, 1, 5, 6, 7))
 
 register(Emulator('riverhorse', lambda ctx: launch_family(RIVERHORSE, ctx)))
