@@ -83,6 +83,10 @@ class NetplaySessionTests(unittest.TestCase):
         self.assertEqual(_session(['-netplaymode', 'host'], {'global.netplay.port': '55500'}).port, '55500')
         self.assertEqual(_session(['-netplaymode', 'host'], {}).port, '55435')
 
+    def test_lobby_host_asks_to_be_listed(self):
+        self.assertTrue(_session(['-netplaymode', 'host', '-netplaylist'], {}).listed)
+        self.assertFalse(_session(['-netplaymode', 'host'], {}).listed)
+
     def test_unknown_mode_is_no_netplay(self):
         self.assertFalse(_session(['-netplaymode', 'bogus'], {}).active)
 

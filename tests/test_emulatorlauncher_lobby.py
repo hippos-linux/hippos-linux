@@ -73,6 +73,13 @@ class HostedSessionTests(unittest.TestCase):
         self.upnp_open.assert_called_once()
         self.assertEqual(self.rooms.listing(), [])
 
+    def test_lobby_hosted_game_is_listed_with_announce_off(self):
+        ctx = _host_ctx()
+        ctx.netplay = NetplaySession(mode='host', port='55435', nickname='fox', listed=True)
+        with launcher_lobby.hosted_session({**self.conf, 'global.netplay_public_announce': '0'}, ctx, RIVERHORSE):
+            self.assertEqual(self._wait_for_room()[0]['fields']['username'], 'fox')
+        self.assertEqual(self.rooms.listing(), [])
+
     def test_emulators_that_map_their_own_port_are_listed_without_upnp(self):
         retroarch = Emulator('libretro', lambda ctx: 0, netplay_upnp=False)
         with launcher_lobby.hosted_session(self.conf, _host_ctx(emulator='libretro'), retroarch):

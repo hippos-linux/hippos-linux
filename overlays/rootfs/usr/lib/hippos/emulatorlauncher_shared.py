@@ -76,6 +76,7 @@ class NetplaySession:
     port:     str = ''
     session:  str = ''
     nickname: str = ''
+    listed:   bool = False
 
     @property
     def active(self) -> bool:

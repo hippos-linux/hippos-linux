@@ -396,6 +396,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument('-netplayport',  type=str,  required=False)
     p.add_argument('-netplaysession', type=str, required=False)
     p.add_argument('-netplaypass',  type=str,  required=False)
+    p.add_argument('-netplaylist',  action='store_true', help='list the hosted game in the HippOS lobby')
     p.add_argument('-state_slot',   type=str,  required=False)
     p.add_argument('-state_filename', type=str, required=False)
     p.add_argument('-autosave',     type=str,  required=False)
@@ -417,6 +418,7 @@ def _netplay_session(args: argparse.Namespace) -> NetplaySession:
         port=port,
         session=args.netplaysession or '',
         nickname=_conf_value(conf, 'global.netplay.nickname', NETPLAY_DEFAULT_NICKNAME),
+        listed=args.netplaylist,
     )
 
 def _build_controllers(args: argparse.Namespace) -> list[ControllerInfo]:

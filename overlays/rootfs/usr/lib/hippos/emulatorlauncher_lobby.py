@@ -153,7 +153,7 @@ def hosted_session(conf: dict[str, str], ctx: LaunchContext, emulator: Emulator)
     if ctx.netplay.mode != 'host' or emulator.netplay_announce != 'launcher':
         yield
         return
-    announce = _conf_bool(conf, 'global.netplay_public_announce')
+    announce = ctx.netplay.listed or _conf_bool(conf, 'global.netplay_public_announce')
     if not announce and not emulator.netplay_upnp:
         yield
         return
