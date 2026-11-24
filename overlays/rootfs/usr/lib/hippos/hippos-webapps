@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""hippos-webapps - websites as full-screen apps in ES's Linux Apps system.
+"""hippos-webapps - websites as apps in ES's Linux Apps system and the desktop menu.
 
   hippos-webapps add --url URL [--name NAME] [--icon ICON_URL] [--description TEXT]
   hippos-webapps remove --url URL
   hippos-webapps list
   hippos-webapps sync
-  hippos-webapps dialog      form to add a web app with a controller
+  hippos-webapps dialog [--window]   form to add a web app; --window on the desktop
+  hippos-webapps import-mint         take over web apps made with Linux Mint's Web App Manager
 """
 
 from __future__ import annotations
@@ -23,37 +24,50 @@ PURPLE = '#7B3FFF'
 TEXT = '#F4F1FF'
 MUTED = '#8F88AE'
 
-STYLE = f"""
+DESIGN_WIDTH = 1920
+MIN_SCALE = 0.5
+
+
+def style(scale: float) -> str:
+    def px(size: int) -> str:
+        return f'{max(1, round(size * scale))}px'
+    return f"""
 window {{ background-color: {INK}; }}
 label {{ color: {TEXT}; font-family: Sora; }}
-label.title {{ font-size: 44px; font-weight: 800; }}
-label.hint {{ color: {MUTED}; font-size: 22px; }}
-label.field {{ font-size: 26px; font-weight: 600; }}
-entry {{ background: {FIELD}; color: {TEXT}; caret-color: {TEXT}; font-family: Sora; font-size: 30px;
-         border: 2px solid {FIELD}; border-radius: 14px; padding: 14px 18px; min-width: 900px; }}
+label.title {{ font-size: {px(44)}; font-weight: 800; }}
+label.hint {{ color: {MUTED}; font-size: {px(22)}; }}
+label.field {{ font-size: {px(26)}; font-weight: 600; }}
+entry {{ background: {FIELD}; color: {TEXT}; caret-color: {TEXT}; font-family: Sora; font-size: {px(30)};
+         border: 2px solid {FIELD}; border-radius: {px(14)}; padding: {px(14)} {px(18)}; min-width: {px(900)}; }}
 entry:focus {{ border-color: {PURPLE}; }}
-button {{ background: {FIELD}; color: {TEXT}; font-family: Sora; font-size: 28px; font-weight: 600;
-          border: none; border-radius: 14px; padding: 14px 40px; }}
+button {{ background: {FIELD}; color: {TEXT}; font-family: Sora; font-size: {px(28)}; font-weight: 600;
+          border: none; border-radius: {px(14)}; padding: {px(14)} {px(40)}; }}
 button.primary {{ background: {PURPLE}; }}
 button:hover {{ background: #2C2452; }}
 button.primary:hover {{ background: #9466FF; }}
 """
 
 
-def run_dialog() -> int:
+def run_dialog(fullscreen: bool) -> int:
     import gi
     gi.require_version('Gtk', '3.0')
     from gi.repository import GLib, Gtk, Gdk
 
+    monitor = Gdk.Display.get_default().get_monitor(0).get_geometry()
+    scale = min(1.0, max(MIN_SCALE, monitor.width / DESIGN_WIDTH))
     provider = Gtk.CssProvider()
-    provider.load_from_data(STYLE.encode())
+    provider.load_from_data(style(scale).encode())
     Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), provider,
                                              Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
     window = Gtk.Window(title='Add a web app')
-    window.fullscreen()
+    if fullscreen:
+        window.fullscreen()
+    else:
+        window.set_position(Gtk.WindowPosition.CENTER)
+        window.set_border_width(round(40 * scale))
     window.connect('destroy', Gtk.main_quit)
 
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=22, halign=Gtk.Align.CENTER,
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=round(22 * scale), halign=Gtk.Align.CENTER,
                   valign=Gtk.Align.CENTER)
     window.add(box)
 
@@ -64,22 +78,22 @@ def run_dialog() -> int:
         return widget
 
     label('Add a web app', 'title')
-    label('Any website, opened full screen with its own sign-in.', 'hint')
+    label('Any website as an app with its own sign-in.', 'hint')
     label('Address', 'field')
     url_entry = Gtk.Entry(placeholder_text='www.example.com')
     box.pack_start(url_entry, False, False, 0)
     label('Name', 'field')
-    name_entry = Gtk.Entry(placeholder_text='Shown in Linux Apps')
+    name_entry = Gtk.Entry(placeholder_text='Shown in Linux Apps and the desktop menu')
     box.pack_start(name_entry, False, False, 0)
     status = label('', 'hint')
 
-    buttons = Gtk.Box(spacing=20, halign=Gtk.Align.END)
+    buttons = Gtk.Box(spacing=round(20 * scale), halign=Gtk.Align.END)
     cancel = Gtk.Button(label='Cancel')
     save = Gtk.Button(label='Add')
     save.get_style_context().add_class('primary')
     buttons.pack_start(cancel, False, False, 0)
     buttons.pack_start(save, False, False, 0)
-    box.pack_start(buttons, False, False, 10)
+    box.pack_start(buttons, False, False, round(10 * scale))
 
     def finished(error: str) -> bool:
         if error:
@@ -131,7 +145,9 @@ def main() -> int:
     remove.add_argument('--url', required=True)
     commands.add_parser('list')
     commands.add_parser('sync')
-    commands.add_parser('dialog')
+    dialog = commands.add_parser('dialog')
+    dialog.add_argument('--window', action='store_true')
+    commands.add_parser('import-mint')
     args = parser.parse_args()
 
     if args.command == 'add':
@@ -146,8 +162,10 @@ def main() -> int:
             print(f'{app.name}\t{app.url}')
     elif args.command == 'sync':
         hippos_webapps.sync()
+    elif args.command == 'import-mint':
+        print(f'Imported {hippos_webapps.import_mint_webapps()} web app(s)')
     else:
-        return run_dialog()
+        return run_dialog(fullscreen=not args.window)
     return 0
 
 

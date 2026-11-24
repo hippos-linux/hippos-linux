@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Add a Web App
+GenericName=Web App
+Comment=Add a website as an app, in the menu and in EmulationStation
+Exec=/usr/lib/hippos/hippos-webapps dialog --window
+Icon=/usr/share/hippos/webapps/add-webapp.png
+Terminal=false
+Categories=Network;
+Keywords=web;app;website;webapp;

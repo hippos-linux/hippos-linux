@@ -212,6 +212,11 @@ if version_lt "$APPLIED" "0.7.2" && [[ -d "${DESKTOP_DIR}" ]]; then
     fi
 fi
 
+if version_lt "$APPLIED" "0.7.2" && compgen -G "/userdata/.local/share/applications/[Ww]eb[Aa]pp-*.desktop" >/dev/null; then
+    log "0.7.2: web apps from Linux Mint's Web App Manager become HippOS web apps"
+    runuser -u hippos -- env HOME=/userdata /usr/lib/hippos/hippos-webapps import-mint
+fi
+
 HIPPOS_CONFIG=/userdata/system/configs/hippos
 mkdir -p "${HIPPOS_CONFIG}"
 for name in external-roms.conf roms-sources.conf ignored-storage-devices.txt current-storage.conf; do

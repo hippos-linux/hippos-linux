@@ -23,6 +23,11 @@ WEBAPPS_BIN     = Path('/usr/lib/hippos/hippos-webapps')
 ADD_ICON        = Path('/usr/share/hippos/webapps/add-webapp.png')
 ADD_WEBAPP_URL  = 'hippos:add'
 ADD_WEBAPP_NAME = 'Add a web app'
+DESKTOP_ENTRIES = USERDATA / '.local' / 'share' / 'applications'
+DESKTOP_ENTRY_PREFIX = 'hippos-webapp-'
+DESKTOP_FALLBACK_ICON = 'applications-internet'
+MINT_PROFILES   = USERDATA / '.local' / 'share' / 'ice' / 'profiles'
+MINT_CHROMIUM_BROWSERS = ('chromium', 'chromium-browser')
 USER_AGENT      = 'Mozilla/5.0 (X11; Linux) HippOS-WebApps/1.0'
 ICON_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.svg', '.ico', '.webp')
 
@@ -62,6 +67,11 @@ def save_webapps(apps: list[WebApp]) -> None:
     temporary.replace(WEBAPPS_LIST)
 
 
+def chromium_command(chromium: str, url: str, profile: Path, *, kiosk: bool) -> list[str]:
+    return [chromium, f'--app={url}', *(['--kiosk'] if kiosk else []), f'--user-data-dir={profile}',
+            '--no-first-run', '--no-default-browser-check']
+
+
 def sync() -> bool:
     apps = load_webapps()
     games = {ADD_WEBAPP_URL: ADD_WEBAPP_NAME, **{app.url: app.name for app in apps}}
@@ -70,9 +80,61 @@ def sync() -> bool:
                                             ADD_ICON if ADD_ICON.exists() else None)}
     details |= {app.url: GameMetadata(app.name, app.description or app.url, None, Path(app.icon) if app.icon else None) for app in apps}
     changed = sync_gamelist(WEBAPPS_DIR, STATE_FILE, '.webapp', details)
+    sync_desktop_entries(apps)
     if created or updated or removed or changed:
         reload_es()
     return bool(created or updated or removed or changed)
+
+
+def _exec_arg(arg: str) -> str:
+    arg = arg.replace('%', '%%')
+    if not re.search(r'[\s"\'\\><~|&;$*?#()`]', arg):
+        return arg
+    return '"' + re.sub(r'(["`$\\])', r'\\\1', arg) + '"'
+
+
+def _exec_line(args: list[str]) -> str:
+    return ' '.join(_exec_arg(arg) for arg in args).replace('\\', '\\\\')
+
+
+def _desktop_value(value: str) -> str:
+    return ' '.join(value.split())
+
+
+def desktop_entry(app: WebApp, profile: Path) -> str:
+    return '\n'.join([
+        '[Desktop Entry]',
+        'Type=Application',
+        f'Name={_desktop_value(app.name)}',
+        f'Comment={_desktop_value(app.description or app.url)}',
+        f'Exec={_exec_line(chromium_command("chromium", app.url, profile, kiosk=False))}',
+        f'Icon={app.icon or DESKTOP_FALLBACK_ICON}',
+        'Categories=Network;',
+        'StartupNotify=true',
+        'Actions=remove;',
+        '',
+        '[Desktop Action remove]',
+        'Name=Remove web app',
+        f'Exec={_exec_line([str(WEBAPPS_BIN), "remove", "--url", app.url])}',
+        '',
+    ])
+
+
+def sync_desktop_entries(apps: list[WebApp]) -> None:
+    DESKTOP_ENTRIES.mkdir(parents=True, exist_ok=True)
+    wanted: dict[Path, str] = {}
+    for app in apps:
+        stem = _launcher_for(app.url).stem
+        if not stem:
+            continue
+        entry_id = re.sub(r'[^a-z0-9]+', '-', stem.lower()).strip('-') or 'webapp'
+        wanted[DESKTOP_ENTRIES / f'{DESKTOP_ENTRY_PREFIX}{entry_id}.desktop'] = desktop_entry(app, WEBAPP_PROFILES / stem)
+    for path in DESKTOP_ENTRIES.glob(f'{DESKTOP_ENTRY_PREFIX}*.desktop'):
+        if path not in wanted:
+            path.unlink()
+    for path, content in wanted.items():
+        if read_webapp(path) != content.strip():
+            path.write_text(content, encoding='utf-8')
 
 
 def ensure_chromium() -> None:
@@ -216,3 +278,49 @@ def remove(url: str) -> bool:
     if launcher.name:
         shutil.rmtree(WEBAPP_PROFILES / launcher.stem, ignore_errors=True)
     return True
+
+
+def _desktop_fields(path: Path) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    section = ''
+    for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
+        line = line.strip()
+        if line.startswith('['):
+            section = line
+        elif section == '[Desktop Entry]' and '=' in line:
+            key, _, value = line.partition('=')
+            fields.setdefault(key.strip(), value.strip())
+    return fields
+
+
+def import_mint_webapps() -> int:
+    found = []
+    for entry in sorted(DESKTOP_ENTRIES.glob('*.desktop')):
+        if not entry.name.lower().startswith('webapp-'):
+            continue
+        fields = _desktop_fields(entry)
+        if not fields.get('X-WebApp-URL'):
+            continue
+        url = normalise_url(fields['X-WebApp-URL'])
+        app = WebApp(fields.get('Name') or urllib.parse.urlparse(url).hostname or url, url,
+                     description=fields.get('Comment', ''))
+        icon = Path(fields.get('Icon', ''))
+        if icon.is_absolute() and icon.is_file():
+            WEBAPP_ICONS.mkdir(parents=True, exist_ok=True)
+            app.icon = str(WEBAPP_ICONS / f'{safe_filename(app.name, "webapp")}{icon.suffix.lower()}')
+            shutil.copyfile(icon, app.icon)
+        found.append((entry, entry.stem.split('-', 1)[1], fields, app))
+    if not found:
+        return 0
+    known = {app.url for app in load_webapps()}
+    save_webapps(load_webapps() + [app for *_, app in found if app.url not in known])
+    sync()
+    for entry, codename, fields, app in found:
+        profile = MINT_PROFILES / codename
+        target = WEBAPP_PROFILES / _launcher_for(app.url).stem
+        if (fields.get('X-WebApp-Browser') in MINT_CHROMIUM_BROWSERS and profile.is_dir()
+                and _launcher_for(app.url).stem and not target.exists()):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(profile, target)
+        entry.unlink()
+    return len(found)

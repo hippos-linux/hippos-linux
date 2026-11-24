@@ -146,7 +146,7 @@ def launch_webapp(ctx: LaunchContext) -> int:
         return launch_flatpak(ctx)
     if ctx.rom.suffix == '.sh':
         return launch_sh(ctx)
-    from hippos_webapps import ADD_WEBAPP_URL, WEBAPP_PROFILES, WEBAPPS_BIN, read_webapp
+    from hippos_webapps import ADD_WEBAPP_URL, WEBAPP_PROFILES, WEBAPPS_BIN, chromium_command, read_webapp
     url = read_webapp(ctx.rom)
     if url is None:
         _log.error("No address in %s", ctx.rom)
@@ -159,8 +159,7 @@ def launch_webapp(ctx: LaunchContext) -> int:
         return 1
     profile = WEBAPP_PROFILES / ctx.rom.stem
     profile.mkdir(parents=True, exist_ok=True)
-    return _run_desktop_app(ctx, [chromium, f'--app={url}', '--kiosk', f'--user-data-dir={profile}',
-                                  '--no-first-run', '--no-default-browser-check'])
+    return _run_desktop_app(ctx, chromium_command(chromium, url, profile, kiosk=True))
 
 def launch_heroic(ctx: LaunchContext) -> int:
     wrapper = Path('/usr/lib/hippos/hippos-heroic')
