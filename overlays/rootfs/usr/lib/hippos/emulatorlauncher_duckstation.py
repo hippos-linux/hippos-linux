@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 from emulatorlauncher_shared import (
     LaunchContext,
@@ -250,7 +250,8 @@ def _write_settings(family: DuckStationFamily, ctx: LaunchContext) -> None:
 
     _log.info("Wrote %s config: %s", family.display_name, family.settings_path)
 
-def launch_family(family: DuckStationFamily, ctx: LaunchContext) -> int:
+def launch_family(family: DuckStationFamily, ctx: LaunchContext,
+                  on_output_line: Optional[Callable[[str], None]] = None) -> int:
     bin_path = _find_emulator_bin(*family.binaries)
     if bin_path is None:
         _log.error("%s not found", family.display_name)
@@ -272,7 +273,7 @@ def launch_family(family: DuckStationFamily, ctx: LaunchContext) -> int:
     env = _build_game_env(conf, ctx)
     env['SDL_JOYSTICK_HIDAPI'] = '0'
     env['QT_QPA_PLATFORM'] = 'xcb'
-    result = _run_game_command(ctx, cmd, env)
+    result = _run_game_command(ctx, cmd, env, on_output_line=on_output_line)
     return result.returncode
 
 

@@ -4,6 +4,7 @@ import json
 import threading
 import urllib.error
 import urllib.request
+from urllib.parse import unquote
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -135,17 +136,44 @@ class HostedSession(threading.Thread):
         self.join()
 
 
-def lobby_room(ctx: LaunchContext) -> dict:
+def lobby_room(ctx: LaunchContext, port: int, nickname: str, has_password: bool = False) -> dict:
     game = lobby_game(ctx)
     return {
-        'port': int(ctx.netplay.port),
+        'port': port,
         'emulator': ctx.emulator,
         'core_name': ctx.core,
         'game_name': game.name,
         'game_crc': game.crc,
-        'username': ctx.netplay.nickname,
-        'has_password': False,
+        'username': nickname,
+        'has_password': has_password,
     }
+
+
+def _lobby_url(conf: dict[str, str]) -> str:
+    return _conf_value(conf, 'global.netplay.hipposlobby', HIPPOS_LOBBY_URL).rstrip('/')
+
+
+def _lists_hosted_games(conf: dict[str, str], ctx: LaunchContext) -> bool:
+    return ctx.netplay.listed or _conf_bool(conf, 'global.netplay_public_announce')
+
+
+@contextmanager
+def launcher_hosted_session(conf: dict[str, str], ctx: LaunchContext, map_port: bool = True) -> Iterator[None]:
+    announce = _lists_hosted_games(conf, ctx)
+    if ctx.netplay.mode != 'host' or (not announce and not map_port):
+        yield
+        return
+    port = int(ctx.netplay.port)
+    session = HostedSession(
+        UpnpPortMapping(port) if map_port else None,
+        _lobby_url(conf),
+        lobby_room(ctx, port, ctx.netplay.nickname) if announce else None,
+    )
+    session.start()
+    try:
+        yield
+    finally:
+        session.stop()
 
 
 @contextmanager
@@ -153,17 +181,52 @@ def hosted_session(conf: dict[str, str], ctx: LaunchContext, emulator: Emulator)
     if ctx.netplay.mode != 'host' or emulator.netplay_announce != 'launcher':
         yield
         return
-    announce = ctx.netplay.listed or _conf_bool(conf, 'global.netplay_public_announce')
-    if not announce and not emulator.netplay_upnp:
+    with launcher_hosted_session(conf, ctx, emulator.netplay_upnp):
         yield
-        return
-    session = HostedSession(
-        UpnpPortMapping(int(ctx.netplay.port)) if emulator.netplay_upnp else None,
-        _conf_value(conf, 'global.netplay.hipposlobby', HIPPOS_LOBBY_URL).rstrip('/'),
-        lobby_room(ctx) if announce else None,
-    )
-    session.start()
-    try:
-        yield
-    finally:
-        session.stop()
+
+
+def parse_netplay_event(line: str) -> Optional[tuple[str, dict[str, str]]]:
+    if not line.startswith('netplay '):
+        return None
+    event, *pairs = line[len('netplay '):].split()
+    fields = {}
+    for pair in pairs:
+        key, separator, value = pair.partition('=')
+        if separator:
+            fields[key] = unquote(value)
+    return event, fields
+
+
+class NetplayEventAnnouncer:
+    def __init__(self, conf: dict[str, str], ctx: LaunchContext) -> None:
+        self.conf = conf
+        self.ctx = ctx
+        self.session: Optional[HostedSession] = None
+
+    def __call__(self, line: str) -> None:
+        parsed = parse_netplay_event(line.strip())
+        if parsed is None:
+            return
+        event, fields = parsed
+        if event == 'hosting':
+            self._host(fields)
+        elif event == 'stopped':
+            self.close()
+
+    def _host(self, fields: dict[str, str]) -> None:
+        self.close()
+        if not fields.get('port', '').isdigit():
+            _log.warning("lobby: hosting event without a port: %s", fields)
+            return
+        port = int(fields['port'])
+        nickname = fields.get('nick') or self.ctx.netplay.nickname
+        room = None
+        if _lists_hosted_games(self.conf, self.ctx):
+            room = lobby_room(self.ctx, port, nickname, fields.get('password') == 'yes')
+        self.session = HostedSession(UpnpPortMapping(port), _lobby_url(self.conf), room)
+        self.session.start()
+
+    def close(self) -> None:
+        if self.session is not None:
+            self.session.stop()
+            self.session = None

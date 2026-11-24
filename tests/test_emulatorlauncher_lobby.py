@@ -38,6 +38,15 @@ class LobbyGameTests(unittest.TestCase):
         self.assertEqual(launcher_lobby.lobby_game(_host_ctx()), launcher_lobby.LobbyGame('ctr', ''))
 
 
+class NetplayEventTests(unittest.TestCase):
+    def test_event_fields_are_percent_decoded(self):
+        self.assertEqual(launcher_lobby.parse_netplay_event('netplay hosting port=31200 title=Ape%20Escape code='),
+                         ('hosting', {'port': '31200', 'title': 'Ape Escape', 'code': ''}))
+
+    def test_other_output_is_ignored(self):
+        self.assertIsNone(launcher_lobby.parse_netplay_event('[Info] netplay hosting port=1'))
+
+
 class HostedSessionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.server = hippos_lobby.make_server('127.0.0.1', 0)
@@ -92,6 +101,23 @@ class HostedSessionTests(unittest.TestCase):
         with launcher_lobby.hosted_session(self.conf, _host_ctx(emulator='flycast'), Emulator('flycast', lambda ctx: 0, netplay_announce='frontend')):
             pass
         self.upnp_open.assert_not_called()
+        self.assertEqual(self.rooms.listing(), [])
+
+    def test_hosting_event_lists_the_room_until_stopped(self):
+        announcer = launcher_lobby.NetplayEventAnnouncer(self.conf, _host_ctx())
+        announcer('netplay hosting port=31200 code=31583 serial=SCUS-94423 title=Ape%20Escape nick=p%201 players=2 password=no\n')
+        fields = self._wait_for_room()[0]['fields']
+        self.assertEqual((fields['port'], fields['username'], fields['has_password']), (31200, 'p 1', False))
+        announcer('netplay player-joined nick=p2 player=2\n')
+        announcer('netplay stopped\n')
+        self.assertEqual(self.rooms.listing(), [])
+
+    def test_events_are_only_listed_when_allowed(self):
+        conf = {**self.conf, 'global.netplay_public_announce': '0'}
+        announcer = launcher_lobby.NetplayEventAnnouncer(conf, _host_ctx())
+        announcer('netplay hosting port=31200 nick=p1 password=no\n')
+        announcer.close()
+        self.upnp_open.assert_called_once()
         self.assertEqual(self.rooms.listing(), [])
 
     def test_unreachable_lobby_does_not_block_the_game(self):

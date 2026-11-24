@@ -9,6 +9,7 @@ import os
 import re
 import signal
 import subprocess
+import sys
 import time
 import tomllib
 from contextlib import contextmanager, nullcontext
@@ -16,7 +17,7 @@ from functools import cache
 from dataclasses import dataclass, field
 from pathlib import Path
 from shutil import copy2, which
-from typing import Optional
+from typing import Callable, Optional
 
 
 import hippos_hotkeys_control
@@ -750,11 +751,22 @@ def _stop_leftover_game_processes() -> None:
         if not _child_pids():
             return
 
+def _run_reading_output(cmd: list[str], env: dict[str, str], cwd: Optional[Path],
+                        on_output_line: Callable[[str], None]) -> subprocess.CompletedProcess[str]:
+    with subprocess.Popen(cmd, env=env, text=True, cwd=str(cwd) if cwd is not None else None,
+                          stdout=subprocess.PIPE, bufsize=1) as process:
+        for line in process.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            on_output_line(line)
+        return subprocess.CompletedProcess(cmd, process.wait())
+
 def _run_game_command(
     ctx: LaunchContext,
     cmd: list[str],
     env: dict[str, str],
     cwd: Optional[Path] = None,
+    on_output_line: Optional[Callable[[str], None]] = None,
 ) -> subprocess.CompletedProcess[str]:
     setup_started = time.perf_counter()
     conf = _load_hippos_conf()
@@ -774,7 +786,10 @@ def _run_game_command(
                         launch_clock.game_started = time.perf_counter()
                         _log.info("launch: game setup %.2fs, game starts %.2fs after launcher start",
                                   launch_clock.game_started - setup_started, launch_clock.game_started - LAUNCHER_STARTED)
-                        result = subprocess.run(cmd, env=env, text=True, cwd=str(cwd) if cwd is not None else None)
+                        if on_output_line is None:
+                            result = subprocess.run(cmd, env=env, text=True, cwd=str(cwd) if cwd is not None else None)
+                        else:
+                            result = _run_reading_output(cmd, env, cwd, on_output_line)
                         launch_clock.game_ended = time.perf_counter()
                         _log.info("launch: game ran %.1fs", launch_clock.game_ended - launch_clock.game_started)
                         if result.returncode == -signal.SIGTERM:

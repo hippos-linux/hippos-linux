@@ -4,7 +4,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'overlays' / 'rootfs' / 'usr' / 'lib' / 'hippos'))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / 'overlays' / 'rootfs' / 'usr' / 'lib' / 'hippos'))
 
 import emulatorlauncher_generic as generic
 import emulatorlauncher_azahar as azahar
@@ -150,6 +151,30 @@ class AzaharNetplayTests(unittest.TestCase):
 
     def test_azahar_hosts_on_its_room_port(self):
         self.assertEqual(impl.lookup('azahar').netplay_port, '24872')
+
+
+class RiverhorseNetplayTests(unittest.TestCase):
+    def setUp(self) -> None:
+        sys.path.insert(0, str(ROOT / 'packages' / 'emulators' / 'riverhorse' / 'hippos' / 'launcher'))
+        import emulatorlauncher_riverhorse
+        self.riverhorse = emulatorlauncher_riverhorse
+
+    def _args(self, version: str, mode: str = 'host') -> list[str]:
+        ctx = LaunchContext(system='psx', rom=Path('game.chd'), emulator='riverhorse', core='riverhorse',
+                            netplay=NetplaySession(mode=mode, host='1.2.3.4', port='55435', nickname='fox'))
+        with tempfile.TemporaryDirectory() as root, \
+                mock.patch.object(self.riverhorse, 'EMULATORS_ROOT', Path(root)), \
+                mock.patch.object(self.riverhorse, '_load_hippos_conf', return_value={}):
+            (Path(root) / 'riverhorse').mkdir()
+            (Path(root) / 'riverhorse' / 'version').write_text(version)
+            return self.riverhorse._riverhorse_netplay_args(ctx)
+
+    def test_releases_without_netplay_events_get_no_flag(self):
+        self.assertNotIn('-netplayevents', self._args('v1.2.0'))
+
+    def test_newer_releases_report_netplay_events(self):
+        self.assertIn('-netplayevents', self._args('v1.2.1'))
+        self.assertEqual(self._args('v1.3.0', mode=''), ['-netplayevents'])
 
 
 class DolphinNetplayTests(unittest.TestCase):
