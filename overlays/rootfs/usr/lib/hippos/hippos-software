@@ -43,7 +43,7 @@ THEME_SETTING = 'software.theme'
 COMPACT_WIDTH = 1000
 FALLBACK_ICON = 'application-x-executable'
 STORE_NAME = 'HippOS Store'
-STORE_ICON = 'plasmadiscover'
+STORE_ICON = 'hippos-store'
 HEADER_ICON_PX = 16
 CSS = b'''
 .tile { padding: 6px; }
