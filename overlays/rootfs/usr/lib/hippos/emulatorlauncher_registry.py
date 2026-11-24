@@ -24,6 +24,7 @@ class Emulator:
     hotkeys: str = ''
     netplay_port: str = ''
     netplay_announce: str = 'launcher'
+    netplay_upnp: bool = True
 
     @property
     def binary_names(self) -> tuple[str, ...]:

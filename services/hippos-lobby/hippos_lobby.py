@@ -19,6 +19,7 @@ MAX_BODY_BYTES = 4096
 
 _ROOM_PATH = re.compile(r'/rooms/([0-9a-f]{16})')
 _CHALLENGE_PATH = re.compile(r'/rooms/([0-9a-f]{16})/challenge')
+_ANSWER_PATH = re.compile(r'/rooms/([0-9a-f]{16})/answer')
 _CHAT_PATH = re.compile(r'/chat/([^/]+)')
 
 
@@ -82,6 +83,9 @@ class LobbyHandler(BaseHTTPRequestHandler):
             if _ROOM_PATH.fullmatch(self._path()):
                 self._send(HTTPStatus.OK, self.rooms.status(self._match(_ROOM_PATH), self._token()))
                 return
+            if _CHALLENGE_PATH.fullmatch(self._path()):
+                self._send(HTTPStatus.OK, self.rooms.challenge_state(self._match(_CHALLENGE_PATH), self._token()))
+                return
             channel = self._match(_CHAT_PATH)
             after = parse_qs(urlsplit(self.path).query).get('after', ['0'])[0]
             self._send(HTTPStatus.OK, {'messages': self.chat.messages(channel, int(after) if after.isdigit() else 0)})
@@ -97,7 +101,11 @@ class LobbyHandler(BaseHTTPRequestHandler):
                 return
             if _CHALLENGE_PATH.fullmatch(self._path()):
                 self.moderation.check(ip)
-                self._send(HTTPStatus.OK, self.rooms.challenge(self._match(_CHALLENGE_PATH), ip, self._body()))
+                self._send(HTTPStatus.CREATED, self.rooms.challenge(self._match(_CHALLENGE_PATH), ip, self._body()))
+                return
+            if _ANSWER_PATH.fullmatch(self._path()):
+                self.rooms.answer(self._match(_ANSWER_PATH), self._token(), self._body())
+                self._send(HTTPStatus.NO_CONTENT)
                 return
             message = self.chat.post(ip, self._match(_CHAT_PATH), self._body())
             self._send(HTTPStatus.CREATED, message.listing())
@@ -111,7 +119,10 @@ class LobbyHandler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         def delete() -> None:
-            self.rooms.delete(self._match(_ROOM_PATH), self._token())
+            if _CHALLENGE_PATH.fullmatch(self._path()):
+                self.rooms.cancel_challenge(self._match(_CHALLENGE_PATH), self._token())
+            else:
+                self.rooms.delete(self._match(_ROOM_PATH), self._token())
             self._send(HTTPStatus.NO_CONTENT)
         self._handle(delete)
 

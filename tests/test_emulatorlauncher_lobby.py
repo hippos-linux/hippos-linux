@@ -73,10 +73,19 @@ class HostedSessionTests(unittest.TestCase):
         self.upnp_open.assert_called_once()
         self.assertEqual(self.rooms.listing(), [])
 
-    def test_emulators_that_announce_themselves_are_skipped(self):
-        with launcher_lobby.hosted_session(self.conf, _host_ctx(emulator='libretro'), Emulator('libretro', lambda ctx: 0, netplay_announce='emulator')):
+    def test_emulators_that_map_their_own_port_are_listed_without_upnp(self):
+        retroarch = Emulator('libretro', lambda ctx: 0, netplay_upnp=False)
+        with launcher_lobby.hosted_session(self.conf, _host_ctx(emulator='libretro'), retroarch):
+            fields = self._wait_for_room()[0]['fields']
+            self.assertEqual((fields['emulator'], fields['upnp']), ('libretro', False))
+        self.upnp_open.assert_not_called()
+        self.assertEqual(self.rooms.listing(), [])
+
+    def test_frontend_owned_rooms_are_skipped(self):
+        with launcher_lobby.hosted_session(self.conf, _host_ctx(emulator='flycast'), Emulator('flycast', lambda ctx: 0, netplay_announce='frontend')):
             pass
         self.upnp_open.assert_not_called()
+        self.assertEqual(self.rooms.listing(), [])
 
     def test_unreachable_lobby_does_not_block_the_game(self):
         conf = {**self.conf, 'global.netplay.hipposlobby': 'http://127.0.0.1:9'}

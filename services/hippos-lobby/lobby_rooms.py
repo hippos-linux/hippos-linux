@@ -12,14 +12,30 @@ from http import HTTPStatus
 from lobby_validation import LobbyError, text_field
 
 ROOM_TTL_SECONDS = 90
+CHALLENGER_TTL_SECONDS = 20
 MAX_ROOMS = 2000
 MAX_ROOMS_PER_IP = 4
 CREATES_PER_IP_PER_MINUTE = 10
 
 ROOM_MODES = ('listen', 'challenge')
+PENDING = 'pending'
+ACCEPTED = 'accepted'
+DECLINED = 'declined'
 
 _CRC = re.compile(r'^[0-9A-Fa-f]{8}$')
 _CORE = re.compile(r'^[A-Za-z0-9_.+-]{1,64}$')
+
+
+@dataclass
+class Challenger:
+    username: str
+    ip: str
+    token: str
+    seen: float
+    state: str = PENDING
+
+    def for_host(self) -> dict:
+        return {'username': self.username, 'ip': self.ip, 'state': self.state}
 
 
 @dataclass
@@ -36,7 +52,8 @@ class Room:
     has_password: bool
     upnp: bool
     mode: str = 'listen'
-    challenger: Optional[dict] = None
+    challenger: Optional[Challenger] = None
+    declined: set[str] = field(default_factory=set)
     created: float = field(default_factory=time.time)
     updated: float = field(default_factory=time.time)
 
@@ -102,6 +119,9 @@ class Rooms:
     def _expire(self, now: float) -> None:
         for room_id in [r.id for r in self._rooms.values() if now - r.updated > ROOM_TTL_SECONDS]:
             del self._rooms[room_id]
+        for room in self._rooms.values():
+            if room.challenger and room.challenger.state == PENDING and now - room.challenger.seen > CHALLENGER_TTL_SECONDS:
+                room.challenger = None
         for ip in list(self._creates):
             self._creates[ip] = [t for t in self._creates[ip] if now - t < 60]
             if not self._creates[ip]:
@@ -130,24 +150,74 @@ class Rooms:
             raise LobbyError(HTTPStatus.FORBIDDEN, 'wrong token')
         return room
 
+    def _room(self, room_id: str) -> Room:
+        room = self._rooms.get(room_id)
+        if room is None:
+            raise LobbyError(HTTPStatus.NOT_FOUND, 'no such room')
+        return room
+
     def status(self, room_id: str, token: str) -> dict:
         with self._lock:
             self._expire(self._clock())
-            return {'challenger': self._owned(room_id, token).challenger}
+            challenger = self._owned(room_id, token).challenger
+            return {'challenger': challenger.for_host() if challenger else None}
 
     def challenge(self, room_id: str, ip: str, body: dict) -> dict:
         username = text_field(body, 'username')
+        now = self._clock()
         with self._lock:
-            self._expire(self._clock())
-            room = self._rooms.get(room_id)
-            if room is None:
-                raise LobbyError(HTTPStatus.NOT_FOUND, 'no such room')
+            self._expire(now)
+            room = self._room(room_id)
             if room.mode != 'challenge':
                 raise LobbyError(HTTPStatus.BAD_REQUEST, 'room does not take challenges')
             if room.challenger is not None:
                 raise LobbyError(HTTPStatus.CONFLICT, 'room already taken')
-            room.challenger = {'username': username, 'ip': ip}
-            return {'ip': room.ip, 'port': room.port}
+            room.challenger = Challenger(username=username, ip=ip, token=secrets.token_urlsafe(24), seen=now)
+            return {'token': room.challenger.token}
+
+    def _own_challenge(self, room: Room, token: str) -> Optional[Challenger]:
+        challenger = room.challenger
+        if challenger and secrets.compare_digest(challenger.token, token):
+            return challenger
+        return None
+
+    def challenge_state(self, room_id: str, token: str) -> dict:
+        now = self._clock()
+        with self._lock:
+            self._expire(now)
+            room = self._room(room_id)
+            challenger = self._own_challenge(room, token)
+            if challenger is None:
+                if token in room.declined:
+                    return {'state': DECLINED}
+                raise LobbyError(HTTPStatus.NOT_FOUND, 'no such challenge')
+            challenger.seen = now
+            if challenger.state == ACCEPTED:
+                return {'state': ACCEPTED, 'ip': room.ip, 'port': room.port}
+            return {'state': challenger.state}
+
+    def cancel_challenge(self, room_id: str, token: str) -> None:
+        with self._lock:
+            room = self._room(room_id)
+            challenger = self._own_challenge(room, token)
+            if challenger is None or challenger.state != PENDING:
+                raise LobbyError(HTTPStatus.NOT_FOUND, 'no such challenge')
+            room.challenger = None
+
+    def answer(self, room_id: str, token: str, body: dict) -> None:
+        accept = body.get('accept')
+        if not isinstance(accept, bool):
+            raise LobbyError(HTTPStatus.BAD_REQUEST, 'accept must be true or false')
+        with self._lock:
+            self._expire(self._clock())
+            room = self._owned(room_id, token)
+            if room.challenger is None or room.challenger.state != PENDING:
+                raise LobbyError(HTTPStatus.CONFLICT, 'no challenger waiting')
+            if accept:
+                room.challenger.state = ACCEPTED
+            else:
+                room.declined.add(room.challenger.token)
+                room.challenger = None
 
     def heartbeat(self, room_id: str, token: str) -> None:
         now = self._clock()

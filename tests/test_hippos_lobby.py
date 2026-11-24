@@ -73,14 +73,48 @@ class ChallengeTests(unittest.TestCase):
         self.room = self.rooms.create('203.0.113.5', {**ROOM, 'emulator': 'flycast', 'core_name': 'flycast',
                                                       'port': 19713, 'mode': 'challenge'})
 
-    def test_challenger_gets_host_address_and_host_sees_challenger(self):
+    def _challenge(self, ip: str = '198.51.100.7', username: str = 'vm2') -> str:
+        return self.rooms.challenge(self.room.id, ip, {'username': username})['token']
+
+    def test_host_sees_pending_challenger_and_room_leaves_listing(self):
         self.assertEqual(self.rooms.listing()[0]['fields']['mode'], 'challenge')
         self.assertEqual(self.rooms.status(self.room.id, self.room.token), {'challenger': None})
-        self.assertEqual(self.rooms.challenge(self.room.id, '198.51.100.7', {'username': 'vm2'}),
-                         {'ip': '203.0.113.5', 'port': 19713})
+        token = self._challenge()
         self.assertEqual(self.rooms.status(self.room.id, self.room.token),
-                         {'challenger': {'username': 'vm2', 'ip': '198.51.100.7'}})
+                         {'challenger': {'username': 'vm2', 'ip': '198.51.100.7', 'state': 'pending'}})
+        self.assertEqual(self.rooms.challenge_state(self.room.id, token), {'state': 'pending'})
         self.assertEqual(self.rooms.listing(), [])
+
+    def test_accepted_challenger_gets_host_address(self):
+        token = self._challenge()
+        self.rooms.answer(self.room.id, self.room.token, {'accept': True})
+        self.assertEqual(self.rooms.challenge_state(self.room.id, token),
+                         {'state': 'accepted', 'ip': '203.0.113.5', 'port': 19713})
+
+    def test_declined_challenger_is_told_and_room_reopens(self):
+        token = self._challenge()
+        self.rooms.answer(self.room.id, self.room.token, {'accept': False})
+        self.assertEqual(self.rooms.challenge_state(self.room.id, token), {'state': 'declined'})
+        self.assertEqual(len(self.rooms.listing()), 1)
+        self._challenge('198.51.100.8', 'vm3')
+
+    def test_answer_needs_a_waiting_challenger(self):
+        with self.assertRaises(LobbyError) as raised:
+            self.rooms.answer(self.room.id, self.room.token, {'accept': True})
+        self.assertEqual(raised.exception.status, 409)
+
+    def test_cancelled_challenge_reopens_room(self):
+        token = self._challenge()
+        self.rooms.cancel_challenge(self.room.id, token)
+        self.assertEqual(len(self.rooms.listing()), 1)
+        with self.assertRaises(LobbyError):
+            self.rooms.challenge_state(self.room.id, token)
+
+    def test_silent_challenger_expires(self):
+        self._challenge()
+        self.rooms._clock.now += rooms.CHALLENGER_TTL_SECONDS + 1
+        self.rooms.heartbeat(self.room.id, self.room.token)
+        self.assertEqual(self.rooms.status(self.room.id, self.room.token), {'challenger': None})
 
     def test_second_challenger_is_refused(self):
         self.rooms.challenge(self.room.id, '198.51.100.7', {'username': 'vm2'})
@@ -179,11 +213,23 @@ class ServerTests(unittest.TestCase):
 
     def test_challenge_over_http(self):
         _, created = self._request('POST', '/rooms', {**ROOM, 'mode': 'challenge'}, {'X-Forwarded-For': '198.51.100.7'})
-        status, host = self._request('POST', f'/rooms/{created["id"]}/challenge', {'username': 'vm2'},
-                                     {'X-Forwarded-For': '203.0.113.9'})
-        self.assertEqual((status, host['ip']), (200, '198.51.100.7'))
-        _, room = self._request('GET', f'/rooms/{created["id"]}', headers={'Authorization': f'Bearer {created["token"]}'})
+        status, challenge = self._request('POST', f'/rooms/{created["id"]}/challenge', {'username': 'vm2'},
+                                          {'X-Forwarded-For': '203.0.113.9'})
+        self.assertEqual(status, 201)
+        host_auth = {'Authorization': f'Bearer {created["token"]}'}
+        challenger_auth = {'Authorization': f'Bearer {challenge["token"]}'}
+        _, room = self._request('GET', f'/rooms/{created["id"]}', headers=host_auth)
         self.assertEqual(room['challenger']['ip'], '203.0.113.9')
+        self.assertEqual(self._request('POST', f'/rooms/{created["id"]}/answer', {'accept': True}, host_auth)[0], 204)
+        _, state = self._request('GET', f'/rooms/{created["id"]}/challenge', headers=challenger_auth)
+        self.assertEqual((state['state'], state['ip']), ('accepted', '198.51.100.7'))
+
+    def test_challenge_cancel_over_http(self):
+        _, created = self._request('POST', '/rooms', {**ROOM, 'mode': 'challenge'})
+        _, challenge = self._request('POST', f'/rooms/{created["id"]}/challenge', {'username': 'vm2'})
+        auth = {'Authorization': f'Bearer {challenge["token"]}'}
+        self.assertEqual(self._request('DELETE', f'/rooms/{created["id"]}/challenge', headers=auth)[0], 204)
+        self.assertEqual(len(self._request('GET', '/list')[1]), 1)
 
     def test_chat_post_and_poll(self):
         status, message = self._request('POST', '/chat/global', {'username': 'fox', 'text': 'hi'})

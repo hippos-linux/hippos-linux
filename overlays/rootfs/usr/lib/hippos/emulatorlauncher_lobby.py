@@ -93,7 +93,7 @@ class UpnpPortMapping:
 
 
 class HostedSession(threading.Thread):
-    def __init__(self, port_mapping: UpnpPortMapping, lobby_url: str, room: Optional[dict]) -> None:
+    def __init__(self, port_mapping: Optional[UpnpPortMapping], lobby_url: str, room: Optional[dict]) -> None:
         super().__init__(name='lobby', daemon=True)
         self.port_mapping = port_mapping
         self.lobby_url = lobby_url
@@ -101,14 +101,15 @@ class HostedSession(threading.Thread):
         self.stopped = threading.Event()
 
     def run(self) -> None:
-        upnp = self.port_mapping.open()
+        upnp = self.port_mapping is not None and self.port_mapping.open()
         try:
             if self.room is None:
                 self.stopped.wait()
             else:
                 self._announce({**self.room, 'upnp': upnp})
         finally:
-            self.port_mapping.close()
+            if self.port_mapping is not None:
+                self.port_mapping.close()
 
     def _announce(self, room: dict) -> None:
         try:
@@ -153,8 +154,11 @@ def hosted_session(conf: dict[str, str], ctx: LaunchContext, emulator: Emulator)
         yield
         return
     announce = _conf_bool(conf, 'global.netplay_public_announce')
+    if not announce and not emulator.netplay_upnp:
+        yield
+        return
     session = HostedSession(
-        UpnpPortMapping(int(ctx.netplay.port)),
+        UpnpPortMapping(int(ctx.netplay.port)) if emulator.netplay_upnp else None,
         _conf_value(conf, 'global.netplay.hipposlobby', HIPPOS_LOBBY_URL).rstrip('/'),
         lobby_room(ctx) if announce else None,
     )
