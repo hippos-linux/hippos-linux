@@ -75,33 +75,6 @@ _apply_mode() {
     fi
 }
 
-_min_to_max() {
-    local best current
-    if _crt_active; then
-        _crt_restore
-        return 0
-    fi
-    _load_state
-    read -r best current < <(awk -v s="$PSCREEN" '
-        /^[^ ]+ connected/ { in_s=($1==s) }
-        in_s && /^[[:space:]]+[0-9]+x[0-9]+/ {
-            split($1,d,"x")
-            long = (d[1]+0 > d[2]+0) ? d[1]+0 : d[2]+0
-            short = (d[1]+0 > d[2]+0) ? d[2]+0 : d[1]+0
-            if (best == "" && long <= 1920 && short <= 1080) best = $1
-            if ($0 ~ /\*/) current = $1
-        }
-        END { print (best == "" ? "-" : best), (current == "" ? "-" : current) }
-    ' <<<"${XRANDR_STATE}")
-    if [[ "$best" == "-" ]]; then
-        xrandr --output "$PSCREEN" --auto
-    elif [[ "$best" != "$current" ]]; then
-        xrandr --output "$PSCREEN" --mode "$best"
-    else
-        return 1
-    fi
-}
-
 _print_state() {
     _load_state
     printf '%s\n%s\n%s\n' "$PSCREEN" "$(_current_mode)" "$(_current_resolution)"
@@ -152,7 +125,8 @@ case "${1:-}" in
         if [[ -n "${2:-}" && "${2}" != default ]]; then
             _apply_mode "$2"
             XRANDR_STATE=
-        elif _min_to_max; then
+        elif _crt_active; then
+            _crt_restore
             XRANDR_STATE=
         fi
         _load_state
@@ -175,7 +149,7 @@ case "${1:-}" in
         hippos-settings set display.output "$OUT" 2>/dev/null || true
         ;;
     minTomaxResolution|minTomaxResolution-secure)
-        _min_to_max || true
+        if _crt_active; then _crt_restore; fi
         ;;
     getDisplayMode)   echo "xorg" ;;
     getRotation)      echo "0" ;;
