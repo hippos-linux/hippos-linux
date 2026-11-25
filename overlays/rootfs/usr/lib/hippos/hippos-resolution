@@ -148,9 +148,16 @@ case "${1:-}" in
         xrandr --output "$OUT" --primary --auto
         hippos-settings set display.output "$OUT" 2>/dev/null || true
         ;;
-    setPrimaryOutput)
+    setPrimaryOutput|applyPrimaryOutput)
         xrandr --output "${2:-}" --primary 2>/dev/null
-        hippos-settings set display.output "${2:-}" 2>/dev/null || true
+        [[ "$1" == setPrimaryOutput ]] && hippos-settings set display.output "${2:-}" 2>/dev/null || true
+        ;;
+    primaryOutput)
+        _load_state
+        awk '/ connected primary /{print $1; exit}' <<<"${XRANDR_STATE}"
+        ;;
+    outputForMonitor)
+        xrandr --listmonitors 2>/dev/null | awk -v i="${2:-}:" '$1 == i && NF >= 4 {print $NF; exit}'
         ;;
     enableAllOutputs)
         xrandr --auto 2>/dev/null

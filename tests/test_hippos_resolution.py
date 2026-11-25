@@ -7,14 +7,16 @@ from pathlib import Path
 SCRIPT = Path(__file__).resolve().parent.parent / 'overlays/rootfs/usr/lib/hippos/hippos-resolution'
 
 
-def run_resolution(xrandr_query: str, *args: str) -> tuple[list[str], str, str]:
+def run_resolution(xrandr_query: str, *args: str, monitors: str = '') -> tuple[list[str], str, str]:
     with tempfile.TemporaryDirectory() as tmp:
         bin_dir = Path(tmp)
         calls = bin_dir / 'calls'
         settings = bin_dir / 'settings'
         (bin_dir / 'query').write_text(xrandr_query)
+        (bin_dir / 'monitors').write_text(monitors)
         (bin_dir / 'xrandr').write_text(
-            f'#!/bin/sh\n[ "$1" = --query ] && exec cat {bin_dir}/query\necho "$*" >> {calls}\n')
+            f'#!/bin/sh\n[ "$1" = --query ] && exec cat {bin_dir}/query\n'
+            f'[ "$1" = --listmonitors ] && exec cat {bin_dir}/monitors\necho "$*" >> {calls}\n')
         (bin_dir / 'hippos-settings').write_text(
             f'#!/bin/sh\n[ "$1" = set ] && echo "$*" >> {settings}\nexit 1\n')
         for tool in ('xrandr', 'hippos-settings'):
@@ -71,6 +73,24 @@ class OutputTests(unittest.TestCase):
         _, calls, settings = run_resolution(TWO_SCREENS, 'enableAllOutputs')
         self.assertEqual(calls, '--auto\n')
         self.assertEqual(settings, 'set display.output \n')
+
+    def test_applied_primary_output_is_not_saved(self):
+        _, calls, settings = run_resolution(TWO_SCREENS, 'applyPrimaryOutput', 'HDMI-1')
+        self.assertEqual(calls, '--output HDMI-1 --primary\n')
+        self.assertEqual(settings, '')
+
+    def test_primary_output_is_the_x_primary_not_the_saved_one(self):
+        lines, _, _ = run_resolution(TWO_SCREENS, 'primaryOutput')
+        self.assertEqual(lines, ['eDP-1'])
+
+    def test_monitor_index_maps_to_its_output(self):
+        monitors = ('Monitors: 2\n'
+                    ' 0: +*eDP-1 800/107x1280/171+0+0  eDP-1\n'
+                    ' 1: +HDMI-1 1920/530x1080/300+800+0  HDMI-1\n')
+        lines, _, _ = run_resolution(TWO_SCREENS, 'outputForMonitor', '1', monitors=monitors)
+        self.assertEqual(lines, ['HDMI-1'])
+        lines, _, _ = run_resolution(TWO_SCREENS, 'outputForMonitor', '2', monitors=monitors)
+        self.assertEqual(lines, [])
 
     def test_set_output_turns_the_others_off(self):
         _, calls, _ = run_resolution(TWO_SCREENS, 'setOutput', 'HDMI-1')

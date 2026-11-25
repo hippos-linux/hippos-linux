@@ -46,7 +46,7 @@ try_weston() {
     local extra_flag="$1"
     local runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
     local res
-    res="$(DISPLAY="${DISPLAY:-:0}" xrandr 2>/dev/null | awk '/\*/{print $1; exit}')"
+    res="$(hippos-resolution currentResolution 2>/dev/null)"
     local w="${res%%x*}"
     local h="${res##*x}"
     unset WAYLAND_DISPLAY

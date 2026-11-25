@@ -227,7 +227,7 @@ set_prefix_arch() {
 wine_options() {
     VDESKTOP=""
     if setting_on virtual_desktop; then
-        VDESKTOP="explorer /desktop=Wine,$(xrandr --query 2>/dev/null | awk '/\*/{print $1; exit}')"
+        VDESKTOP="explorer /desktop=Wine,$(hippos-resolution currentResolution 2>/dev/null)"
     fi
 
     if setting_off ntsync; then

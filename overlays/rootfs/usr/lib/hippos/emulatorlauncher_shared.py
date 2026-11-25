@@ -30,7 +30,7 @@ from hippos_es_input import (
 )
 
 from HipposPaths import (
-    CONFIGS, EMULATORLAUNCHER_DEFAULTS, EMULATORS_ROOT, HIPPOS_CONF, HIPPOS_SHARE_DIR,
+    CONFIGS, EMULATORLAUNCHER_DEFAULTS, EMULATORLAUNCHER_XWAYLAND, EMULATORS_ROOT, HIPPOS_CONF, HIPPOS_SHARE_DIR,
 )
 
 DEFAULTS_FILE      = EMULATORLAUNCHER_DEFAULTS
@@ -612,49 +612,28 @@ def wheel_proxy_context(ctx: LaunchContext, env: dict[str, str]):
                 except Exception:
                     pass
 
-def _xrandr_env() -> dict[str, str]:
-    env = dict(os.environ)
-    env.setdefault('DISPLAY', ':0')
-    return env
+def _hippos_resolution(*args: str) -> Optional[str]:
+    try:
+        out = subprocess.run(['hippos-resolution', *args], capture_output=True,
+                             text=True, check=False).stdout.strip()
+    except FileNotFoundError:
+        return None
+    return out or None
 
 def _connector_for_monitor(index: int) -> Optional[str]:
-    try:
-        out = subprocess.run(['xrandr', '--listmonitors'], capture_output=True,
-                             text=True, check=False, env=_xrandr_env()).stdout
-    except FileNotFoundError:
-        return None
-    for line in out.splitlines():
-        fields = line.split()
-        if len(fields) >= 4 and fields[0] == f'{index}:':
-            return fields[-1]
-    return None
-
-def _xrandr_primary() -> Optional[str]:
-    try:
-        out = subprocess.run(['xrandr', '--query'], capture_output=True,
-                             text=True, check=False, env=_xrandr_env()).stdout
-    except FileNotFoundError:
-        return None
-    for line in out.splitlines():
-        if ' connected primary ' in line:
-            return line.split()[0]
-    return None
-
-def _set_primary(connector: str) -> None:
-    subprocess.run(['xrandr', '--output', connector, '--primary'],
-                   check=False, capture_output=True, env=_xrandr_env())
+    return _hippos_resolution('outputForMonitor', str(index))
 
 @contextmanager
 def game_monitor_primary(ctx: Optional[LaunchContext]):
     connector = _connector_for_monitor(ctx.monitor) if (ctx is not None and ctx.monitor >= 0) else None
-    previous = _xrandr_primary() if connector else None
+    previous = _hippos_resolution('primaryOutput') if connector else None
     if connector and previous and connector != previous:
-        _set_primary(connector)
+        _hippos_resolution('applyPrimaryOutput', connector)
     try:
         yield
     finally:
         if connector and previous and connector != previous:
-            _set_primary(previous)
+            _hippos_resolution('applyPrimaryOutput', previous)
 
 def _gamescope_wrap(cmd: list[str], conf: dict[str, str], ctx: LaunchContext) -> list[str]:
     def setting(name: str, default: str = '') -> str:
@@ -801,6 +780,12 @@ def _run_game_command(
 
 WINE_NO_INSTALLER_PROMPTS = 'mscoree=d;mshtml=d'
 
+def _runs_on_xwayland(emulator: str) -> bool:
+    try:
+        return emulator in EMULATORLAUNCHER_XWAYLAND.read_text().split()
+    except FileNotFoundError:
+        return False
+
 def _build_game_env(conf: dict[str, str], ctx: Optional[LaunchContext] = None) -> dict[str, str]:
     env = dict(os.environ)
     if Path('/var/tmp/hippos-nvidia.prime').exists() and not Path('/dev/nvidia0').exists():
@@ -813,6 +798,9 @@ def _build_game_env(conf: dict[str, str], ctx: Optional[LaunchContext] = None) -
                 k, v = line.split('=', 1)
                 env[k] = v
     env.setdefault('DISPLAY', ':0')
+    if ctx is not None and _runs_on_xwayland(ctx.emulator):
+        env['QT_QPA_PLATFORM'] = 'xcb'
+        env['SDL_VIDEODRIVER'] = 'x11'
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
     env['HIPPOS_USE_GUNS'] = '1' if _conf_bool(conf, 'global.use_guns', True) else '0'
     env['HIPPOS_USE_WHEELS'] = '1' if _conf_bool(conf, 'global.use_wheels', True) else '0'
