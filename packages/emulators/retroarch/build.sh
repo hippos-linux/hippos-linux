@@ -6,12 +6,38 @@ source "/work/build/common.sh"
 
 EMULATOR_NAME='retroarch'
 
-# EXCLUDED_CORES: buildbot cores left out even though a system in retroarch.emulator.yml lists them; add a core's .so name to drop it.
-EXCLUDED_CORES=()
+# EXCLUDED_CORES: buildbot cores left out of the package; add a core's .so name to drop it.
+EXCLUDED_CORES=(
+    qemu_libretro.so hbmame_libretro.so linuxloader_libretro.so dosbox_libretro.so
+    nicaiemu_libretro.so pcem_libretro.so chailove_libretro.so mcsoftserve_libretro.so
+    romcleaner_libretro.so 3dengine_libretro.so pocketcdg_libretro.so radio_libretro.so
+    pokketstation_libretro.so remotejoy_libretro.so oberon_libretro.so video_processor_libretro.so
+    rpcs3_libretro.so xemu_libretro.so xenia_edge_libretro.so vita3k_libretro.so
+    citra_libretro.so citra2018_libretro.so panda3ds_libretro.so play_libretro.so pcee2_libretro.so
+    mame2015_libretro.so mame2016_libretro.so parallel_dc_libretro.so rust_dos_libretro.so
+    uzdoom_libretro.so n64emu_libretro.so
+    bsnes2014_accuracy_libretro.so bsnes2014_balanced_libretro.so bsnes2014_performance_libretro.so
+    bsnes_mercury_accuracy_libretro.so bsnes_mercury_balanced_libretro.so bsnes_mercury_performance_libretro.so
+    bsnes_cplusplus98_libretro.so mednafen_snes_libretro.so nside_sfc_balanced_libretro.so
+    snes9x2002_libretro.so snes9x2005_libretro.so
+    fbalpha_libretro.so fbalpha2012_libretro.so fbalpha2012_cps1_libretro.so fbalpha2012_cps2_libretro.so
+    fbalpha2012_cps3_libretro.so fbalpha2012_neogeo_libretro.so
+    mame2003_libretro.so mame2003_midway_libretro.so stella2023_libretro.so
+    desmume2015_libretro.so hatari2014_libretro.so dosbox_svn_libretro.so
+    fixgb_libretro.so irogb_libretro.so mesen_libretro.so fixnes_libretro.so rustynes_libretro.so
+    meteor_libretro.so vba_next_libretro.so mednafen_gba_libretro.so puae2021_libretro.so
+    yabause_libretro.so mednafen_psx_libretro.so
+    melonds_libretro.so noods_libretro.so parallel_n64_libretro.so cdi2015_libretro.so mednafen_lynx_libretro.so
+    nekop2_libretro.so crocods_libretro.so
+)
 case "${ARCH}" in
     amd64)
         LIBRETRO_ARCH="x86_64"
-        EXCLUDED_CORES+=(cemu_libretro.so)
+        EXCLUDED_CORES+=(
+            cemu_libretro.so snes9x2005_plus_libretro.so snes9x2010_libretro.so
+            mame2000_libretro.so stella2014_libretro.so quicknes_libretro.so vice_x64_libretro.so
+            race_libretro.so
+        )
         ;;
     arm64)
         LIBRETRO_ARCH="aarch64"
@@ -84,47 +110,16 @@ install_opencdi() {
 mkdir -p "${STAGING_DIR}" "${CORES_DIR}" "${ETAG_DIR}"
 
 log "Fetching buildbot index for ARCH=${ARCH} (${LIBRETRO_ARCH})..."
-BUILDBOT_CORES=$(curl -fsSL "${BUILDBOT_BASE}/" \
+AVAILABLE=$(curl -fsSL "${BUILDBOT_BASE}/" \
     | grep -o 'href="[^"]*_libretro\.so\.zip"' \
     | sed 's|href="||;s|\.zip"||' \
     | xargs -n1 basename \
-    | LC_ALL=C sort -u)
+    | sort)
 
-PACKAGED_CORES=$(python3 - "/work/packages/emulators/${EMULATOR_NAME}/${EMULATOR_NAME}.emulator.yml" "${EXCLUDED_CORES[@]}" <<'PY'
-import sys
-import yaml
-sys.path.insert(0, "/work/overlays/rootfs/usr/lib/hippos")
-from libretro_cores import LIBRETRO_CORE_ALIASES, REPLACED_CORES
-
-excluded = set(sys.argv[2:])
-packaged = set()
-for system in yaml.safe_load(open(sys.argv[1]))["systems"]:
-    cores = system.get("as_core") or []
-    for core in map(str, cores if isinstance(cores, list) else [cores]):
-        core = REPLACED_CORES.get(core, core)
-        packaged.update(f"{name}_libretro.so" for name in (core, *LIBRETRO_CORE_ALIASES.get(core, ())))
-print("\n".join(sorted(packaged - excluded)))
-PY
-)
-
-AVAILABLE="$(LC_ALL=C comm -12 <(printf '%s\n' "${BUILDBOT_CORES}") <(printf '%s\n' "${PACKAGED_CORES}"))"
-UNPACKAGED="$(LC_ALL=C comm -23 <(printf '%s\n' "${BUILDBOT_CORES}") <(printf '%s\n' "${PACKAGED_CORES}"))"
-
-while IFS= read -r core; do
-    if [[ -n "${core}" ]]; then
-        rm -f "${CORES_DIR}/${core}" "${ETAG_DIR}/${core}.etag"
-    fi
-done <<< "${UNPACKAGED}"
-
-report_unpackaged_cores() {
-    local report="${ETAG_DIR}/unpackaged-cores.txt"
-    [[ "$(cat "${report}" 2>/dev/null)" == "${UNPACKAGED}" ]] && return
-    printf '%s\n' "${UNPACKAGED}" > "${report}"
-    log "Buildbot cores not packaged: $(tr '\n' ' ' <<< "${UNPACKAGED}")"
-    discord_notify grey "RetroArch cores skipped (${ARCH})" \
-        "Buildbot cores not in retroarch.emulator.yml (or in EXCLUDED_CORES), so not downloaded:"$'\n'"$(sed 's/_libretro\.so$//' <<< "${UNPACKAGED}" | paste -sd ' ')"
-}
-report_unpackaged_cores
+for core in "${EXCLUDED_CORES[@]}"; do
+    AVAILABLE="$(grep -vxF "${core}" <<< "${AVAILABLE}" || true)"
+    rm -f "${CORES_DIR}/${core}" "${ETAG_DIR}/${core}.etag"
+done
 
 total=0
 downloaded=0
