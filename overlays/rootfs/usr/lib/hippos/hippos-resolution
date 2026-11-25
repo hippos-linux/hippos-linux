@@ -148,6 +148,14 @@ case "${1:-}" in
         xrandr --output "$OUT" --primary --auto
         hippos-settings set display.output "$OUT" 2>/dev/null || true
         ;;
+    setPrimaryOutput)
+        xrandr --output "${2:-}" --primary 2>/dev/null
+        hippos-settings set display.output "${2:-}" 2>/dev/null || true
+        ;;
+    enableAllOutputs)
+        xrandr --auto 2>/dev/null
+        hippos-settings set display.output "" 2>/dev/null || true
+        ;;
     minTomaxResolution|minTomaxResolution-secure)
         if _crt_active; then _crt_restore; fi
         ;;
