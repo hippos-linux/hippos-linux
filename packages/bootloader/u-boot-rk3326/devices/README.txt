@@ -1,7 +1,10 @@
-These handhelds are recognised automatically and need nothing else, just boot: Odroid Go 2/3/Super, Anbernic RG351M/RG351V, Powkiddy RGB10, GameForce Chi and MagicX XU10.
-The R36S and similar clones are recognised too, but also need the original card's .dtb in the stock folder for their screen (see stock/README.txt).
+Put this card in the handheld's first card slot. Games can stay on a card in the second slot.
 
-If yours is listed below instead, copy its file to the top of this partition and rename the copy to fdtfile.txt:
+Odroid Go 2/3/Super, Anbernic RG351M/RG351V, Powkiddy RGB10, GameForce Chi and MagicX XU10: nothing to do, just boot.
+
+R36S and similar clones: before the first boot, copy the .dtb from the original card into the stock folder for the screen (see stock/README.txt).
+
+If yours is listed below, copy its file to the top of this partition and rename the copy to fdtfile.txt:
   r33s.txt           R33S
   eeclone.txt        EE clone
   xu-mini-m.txt      MagicX XU-Mini M
@@ -24,3 +27,4 @@ If yours is listed below instead, copy its file to the top of this partition and
   xifan-xf45v.txt    XiFan XF45V
 
 If an EE clone's screen stays blank, also copy the .dtb from its original card into the stock folder.
+If the screen still stays blank, ask in #rk3326 on the HippOS Discord (hippos-linux.org/discord) and say which handheld you have.
