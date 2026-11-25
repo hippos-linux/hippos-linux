@@ -36,6 +36,7 @@ lcdgames;;;
 macintosh;maclc3;flop;
 megaduck;megaduck;cart;
 mz2000;mz2000;cass;'L\n'
+mz2200;mz2200;cass;'L\n'
 mz2500;mz2500;flop1;
 mz700;mz700;cass;'L\n'
 mz800;mz800;cass;'L\n'
@@ -60,6 +61,7 @@ tvgames;;;
 uzebox;uzebox;cart;
 vc4000;vc4000;cart;
 vectrex;vectrex;cart;
+vg5000;vg5k;cass;'CLOAD\n'
 vgmplay;vgmplay;quik;
 vsmile;vsmile;cart;
 xegs;xegs;cart;

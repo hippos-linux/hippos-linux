@@ -1070,6 +1070,39 @@ systems:
         choices:
           On: 1
           Off: 0
+  - name: mz2200
+    as_core: mame
+    custom_features:
+      softList:
+        group: ADVANCED OPTIONS
+        prompt: SOFTWARE LIST
+        description: Use MAME software lists to identify ROM
+        choices:
+          Don't Use (Default): none
+          Sharp MZ-2000 cassettes: mz2000_cass
+          Sharp MZ-2000 floppy disks: mz2000_flop
+      altromtype:
+        group: ADVANCED OPTIONS
+        prompt: MEDIA TYPE
+        description: Type of ROM file to load.
+        choices:
+          Cassette: cass
+          Disk (Drive 1): flop1
+          Disk (Drive 2): flop2
+      enableui:
+        group: ADVANCED OPTIONS
+        prompt: UI KEYS
+        description: Toggle with hotkey + D-pad up or Scroll Lock in-game.
+        choices:
+          Off at Start: 0
+          On at Start: 1
+      pergamecfg:
+        group: ADVANCED OPTIONS
+        prompt: CUSTOM GAME CONFIG
+        description: Enable per-game custom configuration via MAME menu.
+        choices:
+          On: 1
+          Off: 0
   - name: mz2500
     as_core: mame
     custom_features:
@@ -1673,6 +1706,30 @@ systems:
         choices:
           Don't Use (Default): none
           GCE Vectrex cartridges: vectrex
+      pergamecfg:
+        group: ADVANCED OPTIONS
+        prompt: CUSTOM GAME CONFIG
+        description: Enable per-game custom configuration via MAME menu.
+        choices:
+          On: 1
+          Off: 0
+  - name: vg5000
+    as_core: mame
+    custom_features:
+      softList:
+        group: ADVANCED OPTIONS
+        prompt: SOFTWARE LIST
+        description: Use MAME software lists to identify ROM
+        choices:
+          Don't Use (Default): none
+          Philips VG 5000 cassettes: vg5k
+      enableui:
+        group: ADVANCED OPTIONS
+        prompt: UI KEYS
+        description: Toggle with hotkey + D-pad up or Scroll Lock in-game.
+        choices:
+          Off at Start: 0
+          On at Start: 1
       pergamecfg:
         group: ADVANCED OPTIONS
         prompt: CUSTOM GAME CONFIG

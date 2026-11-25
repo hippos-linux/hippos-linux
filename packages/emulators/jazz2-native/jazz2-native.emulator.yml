@@ -1,0 +1,11 @@
+requireArtifact: jazz2-native
+arch: [amd64, arm64]
+shared_features:
+  - powermode
+  - tdp
+  - platformprofile
+  - videomode
+  - hud
+  - hud_corner
+systems:
+  - jazz2

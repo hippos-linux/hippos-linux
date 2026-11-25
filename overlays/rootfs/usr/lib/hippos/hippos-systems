@@ -616,6 +616,9 @@ systems = {
                                                 { "md5": "f8b599b75ad6ff3eeaeb58ccc0190684", "zippedFile": "mz20ipl.bin", "file": "bios/mz2000.zip"},
                                                 { "md5": "dea49b39998885631db16de1176e71b9", "zippedFile": "font.bin", "file": "bios/mz2000.zip"} ] },
 
+    "mz2200":   { "name": "Sharp MZ-2200", "biosFiles":  [ { "md5": "", "file": "bios/mz2200.zip"  },
+                                                { "md5": "", "file": "bios/mz2000.zip"  } ] },
+
     "mz2500":   { "name": "Sharp MZ-2500", "biosFiles":  [ { "md5": "", "file": "bios/mz2500.zip"  },
                                                 { "md5": "714ddaf418ccf0018e4cc7e31694b3d8", "zippedFile": "ipl.rom", "file": "bios/mz2500.zip"},
                                                 { "md5": "96f2fdff0deba58611ed4d67705b539d", "zippedFile": "cg.rom", "file": "bios/mz2500.zip"},
@@ -623,6 +626,8 @@ systems = {
                                                 { "md5": "3d5d1f6ba9d1f04378891c35663bd3a8", "zippedFile": "kanji2.rom", "file": "bios/mz2500.zip"},
                                                 { "md5": "eea42ca607369a225dbd9d11ab48bfd0", "zippedFile": "dict.rom", "file": "bios/mz2500.zip"},
                                                 { "md5": "04843d14a8e2f69a7fcaff394a8cc012", "zippedFile": "phone.rom", "file": "bios/mz2500.zip"} ] },
+
+    "vg5000":   { "name": "Philips VG 5000", "biosFiles":  [ { "md5": "", "file": "bios/vg5k.zip"  } ] },
 
     "vgmplay":   { "name": "Video Game Music Player", "biosFiles":  [ { "md5": "", "file": "bios/qsound.zip"  },
                                                 { "md5": "108b113a596e800a02fece73f784eeb0", "zippedFile": "dl-1425.bin", "file": "bios/qsound.zip"},

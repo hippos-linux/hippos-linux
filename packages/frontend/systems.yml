@@ -885,6 +885,15 @@ cgenie:
   manufacturer: EACA
   name: Colour Genie
   release: 1982
+cgenius:
+  extensions:
+  - cgenius
+  group: ports
+  hardware: engine
+  manufacturer: The Commander Genius Team
+  name: Commander Genius
+  platform: pc
+  release: 1990
 channelf:
   extensions:
   - zip
@@ -1090,6 +1099,24 @@ europar:
   name: EuroPAR
   platform: europar, arcade
   release: 2005
+fallout1-ce:
+  extensions:
+  - f1ce
+  group: ports
+  hardware: engine
+  manufacturer: Interplay
+  name: Fallout
+  platform: pc
+  release: 1997
+fallout2-ce:
+  extensions:
+  - f2ce
+  group: ports
+  hardware: engine
+  manufacturer: Interplay
+  name: Fallout 2
+  platform: pc
+  release: 1998
 fbneo:
   extensions:
   - zip
@@ -1352,6 +1379,15 @@ jaguarcd:
   platform: jaguar
   release: 1995
   theme: atarijaguarcd
+jazz2:
+  extensions:
+  - game
+  group: ports
+  hardware: engine
+  manufacturer: Epic MegaGames
+  name: Jazz Jackrabbit 2
+  platform: pc
+  release: 1998
 konami:
   extensions:
   - windowsloader
@@ -1597,6 +1633,21 @@ mz2000:
   manufacturer: Sharp
   name: Sharp MZ-2000
   release: 1982
+mz2200:
+  extensions:
+  - mzf
+  - mzt
+  - m12
+  - wav
+  - d88
+  - dsk
+  - 2d
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Sharp
+  name: Sharp MZ-2200
+  release: 1983
 mz2500:
   extensions:
   - d88
@@ -1808,6 +1859,15 @@ openbor:
   manufacturer: Ports
   name: OpenBOR
   release: null
+openjazz:
+  extensions:
+  - game
+  group: ports
+  hardware: engine
+  manufacturer: Epic MegaGames
+  name: Jazz Jackrabbit
+  platform: pc
+  release: 1994
 oricatmos:
   extensions:
   - tap
@@ -2212,6 +2272,34 @@ solarus:
   manufacturer: Solarus Team
   name: Solarus
   release: 2011
+sonic-mania:
+  extensions:
+  - sman
+  group: ports
+  hardware: engine
+  manufacturer: Sega
+  name: Sonic Mania
+  platform: pc
+  release: 2017
+sonic3-air:
+  extensions:
+  - s3air
+  group: ports
+  hardware: engine
+  manufacturer: Sega
+  name: Sonic 3 A.I.R.
+  platform: pc
+  release: 2019
+sonicretro:
+  extensions:
+  - son
+  - scd
+  group: ports
+  hardware: engine
+  manufacturer: Sega
+  name: Sonic Retro Engine
+  platform: pc
+  release: 2013
 spectravideo:
   extensions:
   - zip
@@ -2424,6 +2512,16 @@ vectrex:
   manufacturer: MB
   name: Vectrex
   release: 1982
+vg5000:
+  extensions:
+  - k7
+  - wav
+  - zip
+  - 7z
+  hardware: computer
+  manufacturer: Philips
+  name: Philips VG 5000
+  release: 1984
 vgmplay:
   extensions:
   - vgm

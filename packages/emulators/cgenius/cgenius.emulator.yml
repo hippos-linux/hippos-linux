@@ -1,0 +1,44 @@
+requireArtifact: cgenius
+arch: [amd64, arm64]
+features:
+  - padtokeyboard
+shared_features:
+  - powermode
+  - tdp
+  - platformprofile
+  - videomode
+  - hud
+  - hud_corner
+custom_features:
+  cgenius_aspect:
+    prompt: ASPECT RATIO
+    description: Shape of the picture.
+    choices:
+      4:3 (Default): "4:3"
+      16:9: "16:9"
+      16:10: "16:10"
+      Stretch to the screen: "0:0"
+  cgenius_filter:
+    prompt: VIDEO FILTER
+    description: Pixel-art upscaling filter.
+    choices:
+      None (Default): "1"
+      Scale2x: "2"
+      Scale3x: "3"
+      Scale4x: "4"
+  cgenius_quality:
+    prompt: VIDEO QUALITY
+    description: How the picture is scaled to the screen.
+    choices:
+      Sharp (Default): nearest
+      Smooth: linear
+  cgenius_render:
+    prompt: RENDER RESOLUTION
+    description: Resolution the game is drawn at before scaling.
+    choices:
+      320x200 (Default): "200"
+      320x240: "240"
+      640x360: "360"
+      640x480: "480"
+systems:
+  - cgenius

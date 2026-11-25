@@ -1,0 +1,32 @@
+requireArtifact: fallout1-ce
+arch: [amd64, arm64]
+shared_features:
+  - powermode
+  - tdp
+  - platformprofile
+  - videomode
+  - hud
+  - hud_corner
+custom_features:
+  fallout_game_difficulty:
+    prompt: GAME DIFFICULTY
+    description: Difficulty of skill checks and the game world.
+    choices:
+      Easy: "0"
+      Normal (Default): "1"
+      Hard: "2"
+  fallout_combat_difficulty:
+    prompt: COMBAT DIFFICULTY
+    description: How tough fights are.
+    choices:
+      Easy: "0"
+      Normal (Default): "1"
+      Hard: "2"
+  fallout_subtitles:
+    prompt: SUBTITLES
+    description: Show subtitles for spoken dialogue.
+    choices:
+      Off (Default): "0"
+      On: "1"
+systems:
+  - fallout1-ce
