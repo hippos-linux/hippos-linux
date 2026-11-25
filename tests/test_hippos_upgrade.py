@@ -266,7 +266,7 @@ class FirmwareBootTests(unittest.TestCase):
             FIRMWARE_TRYBOOT_DIR=str(efi / "try"),
             FIRMWARE_TRYBOOT_STATE=str(efi / "hippos-tryboot.json"),
             RPI_TRYBOOT_TXT=str(efi / "tryboot.txt"),
-            UBOOT_SCRIPT=str(efi / "boot.scr"),
+            UBOOT_SCRIPTS=(str(efi / "boot.ini"), str(efi / "boot.scr")),
             UBOOT_TRYBOOT_USED=str(efi / "tryboot.used"),
             SYSTEMD_REBOOT_PARAM=str(self.tmp / "reboot-param"),
             BTRFS_MNT=str(self.btrfs),
@@ -309,6 +309,16 @@ class FirmwareBootTests(unittest.TestCase):
         self.assertEqual((self.tmp / "reboot-param").read_text(), "0 tryboot\n")
         self.assertEqual(self._read("tryboot.txt"), "arm_64bit=1\nos_prefix=try/\nmax_framebuffers=2\n")
         self.assertEqual(self._read("config.txt"), "arm_64bit=1\nos_prefix=current/\nmax_framebuffers=2\n")
+
+    def test_u_boot_cards_with_either_boot_script_load_the_kernel(self):
+        (self.efi / "config.txt").unlink()
+        for script in ("boot.ini", "boot.scr"):
+            (self.efi / script).write_text("odroidgoa-uboot-config\n")
+            with self._patch():
+                self.assertEqual(hu.boot_firmware(), "u-boot")
+            (self.efi / script).unlink()
+        with self._patch():
+            self.assertIsNone(hu.boot_firmware())
 
     def test_update_refused_on_boot_partition_without_boot_sets(self):
         (self.efi / "config.txt").write_text("arm_64bit=1\nkernel=kernel8.img\n")

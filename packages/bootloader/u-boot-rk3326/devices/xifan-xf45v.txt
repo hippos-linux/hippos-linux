@@ -1,0 +1,1 @@
+fdtfile=rk3326-xifan-xf45v.dtb

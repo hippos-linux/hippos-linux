@@ -79,7 +79,7 @@ dd if=trust.img of=uboot.bin bs=512 seek=24512 conv=notrunc status=none
 rm -rf "${STAGING}"
 mkdir -p "${STAGING}"
 install -m644 uboot.bin "${STAGING}/uboot.bin"
-tools/mkimage -A arm64 -T script -C none -n "HippOS boot" -d "${PKG_DIR}/boot.cmd" "${STAGING}/boot.scr"
+{ printf 'odroidgoa-uboot-config\n\n'; cat "${PKG_DIR}/boot.cmd"; } > "${STAGING}/boot.ini"
 printf '%s\n' "${UBOOT_REF}" > "${STAGING}/version"
 
 log "Done. Artifact at ${STAGING}"
