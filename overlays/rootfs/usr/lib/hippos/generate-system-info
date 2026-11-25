@@ -4,6 +4,8 @@ import xml.etree.ElementTree as ET
 import os
 import sys
 
+from hippos_port_games import INSTRUCTIONS
+
 ES_SYSTEMS = "/usr/share/emulationstation/es_systems.cfg"
 ROMS_POOL  = "/userdata/roms"
 ROMS_LOCAL = "/userdata/.roms-rw"
@@ -48,6 +50,8 @@ def main():
             lines.append(f"Hardware: {hardware}")
         if extension:
             lines.append(f"Extensions: {extension}")
+        if name in INSTRUCTIONS:
+            lines.append(INSTRUCTIONS[name])
 
         info_path = os.path.join(path, "_info.txt")
         try:

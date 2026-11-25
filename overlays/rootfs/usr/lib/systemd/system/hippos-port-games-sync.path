@@ -1,0 +1,24 @@
+[Unit]
+Description=Watch the port game folders for added or removed games
+After=local-fs.target userdata.mount hippos-roms-pool.service
+
+[Path]
+PathChanged=/userdata/roms/fallout1-ce
+PathChanged=/userdata/roms/fallout2-ce
+PathChanged=/userdata/roms/sonic-mania
+PathChanged=/userdata/roms/sonic3-air
+PathChanged=/userdata/roms/sonicretro
+PathChanged=/userdata/roms/cannonball
+PathChanged=/userdata/roms/reminiscence
+PathChanged=/userdata/roms/cgenius
+PathChanged=/userdata/roms/jazz2
+PathChanged=/userdata/roms/openjazz
+PathChanged=/userdata/roms/quake2
+PathChanged=/userdata/roms/quake3
+PathChanged=/userdata/roms/doom3
+PathChanged=/userdata/roms/openlara
+PathChanged=/userdata/roms/voxatron
+Unit=hippos-port-games-sync.service
+
+[Install]
+WantedBy=multi-user.target

@@ -1,4 +1,3 @@
-requireArtifact: lexaloffle-voxatron
 systems:
 - name: voxatron
   as_core: voxatron

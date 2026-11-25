@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import tempfile
+from dataclasses import replace
+from pathlib import Path
+
+from hippos_launcher_sync import GameMetadata, launchers_with, read_state, reload_es, update_gamelist, write_state
+from hippos_port_games import (PORT_GAMES, ROMS, SYSTEMS, PortGame, download_steam_art, find_games, hidden_data_files,
+                               install_voxatron)
+
+STATE_FILE = Path('/userdata/system/port-games-launchers.json')
+MARKER_TEXT = 'hippos-port-game\n'
+
+
+def log(message: str) -> None:
+    print(f'[hippos-port-games-sync] {message}', flush=True)
+
+
+def is_our_marker(path: Path) -> bool:
+    try:
+        return path.read_text(encoding='utf-8') == MARKER_TEXT
+    except OSError:
+        return False
+
+
+def game_details(launcher: Path, game: PortGame, has_image: set[Path], scratch: Path) -> GameMetadata:
+    if game.steam_appid is None or launcher.resolve() in has_image:
+        return game.metadata
+    folder = Path(tempfile.mkdtemp(dir=scratch))
+    image, marquee = download_steam_art(game.steam_appid, folder)
+    return replace(game.metadata, image=image, marquee=marquee)
+
+
+def sync() -> int:
+    old_markers = read_state(STATE_FILE)
+    markers: dict[str, str] = {}
+    created = removed = 0
+    details_changed = False
+    if install_voxatron(ROMS / 'voxatron'):
+        log('installed the Voxatron player')
+
+    with tempfile.TemporaryDirectory() as scratch:
+        for system in SYSTEMS:
+            system_dir = ROMS / system
+            if not system_dir.is_dir():
+                continue
+            found = find_games(system_dir, tuple(game for game in PORT_GAMES if game.system == system))
+            for launcher in found:
+                if not launcher.exists():
+                    launcher.write_text(MARKER_TEXT, encoding='utf-8')
+                    created += 1
+                if is_our_marker(launcher):
+                    markers[str(launcher)] = system
+
+            for path, owner in old_markers.items():
+                marker = Path(path)
+                if owner == system and path not in markers and is_our_marker(marker):
+                    marker.unlink()
+                    removed += 1
+
+            hidden = hidden_data_files(found)
+            has_image = launchers_with(system_dir, 'image')
+            extensions = dict.fromkeys(game.extension for game in PORT_GAMES if game.system == system)
+            for extension in extensions:
+                details = {launcher: game_details(launcher, game, has_image, Path(scratch))
+                           for launcher, game in found.items() if game.extension == extension}
+                details |= {path: GameMetadata(path.stem, hidden=True)
+                            for path in hidden if path.suffix.lower() == extension}
+                details_changed |= update_gamelist(system_dir, extension, details)
+
+    write_state(STATE_FILE, markers)
+    log(f'found={len(markers)} created={created} removed={removed} details_changed={details_changed}')
+    if created or removed or details_changed:
+        reload_es()
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(sync())

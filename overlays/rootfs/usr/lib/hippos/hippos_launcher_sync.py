@@ -19,6 +19,14 @@ class GameMetadata:
     description: str | None = None
     developer: str | None = None
     image: Path | None = None
+    publisher: str | None = None
+    release_date: str | None = None
+    genre: str | None = None
+    players: str | None = None
+    marquee: Path | None = None
+    emulator: str | None = None
+    core: str | None = None
+    hidden: bool = False
 
 def safe_filename(name: str, fallback: str) -> str:
     cleaned = re.sub(r'[\\/:*?"<>|]+', ' ', name)
@@ -31,14 +39,14 @@ def _read_key(path: Path) -> str | None:
     except OSError:
         return None
 
-def _read_state(state_file: Path) -> dict[str, str]:
+def read_state(state_file: Path) -> dict[str, str]:
     try:
         data = json.loads(state_file.read_text(encoding='utf-8'))
     except (OSError, json.JSONDecodeError):
         return {}
     return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
 
-def _write_state(state_file: Path, state: dict[str, str]) -> None:
+def write_state(state_file: Path, state: dict[str, str]) -> None:
     state_file.parent.mkdir(parents=True, exist_ok=True)
     tmp = state_file.with_suffix('.json.tmp')
     tmp.write_text(json.dumps(state, indent=2, sort_keys=True) + '\n', encoding='utf-8')
@@ -53,7 +61,7 @@ def sync_launchers(
     reserved_stems: tuple[str, ...] = (),
 ) -> tuple[int, int, int]:
     roms_dir.mkdir(parents=True, exist_ok=True)
-    old_state = _read_state(state_file)
+    old_state = read_state(state_file)
     new_state: dict[str, str] = {}
     claimed: set[Path] = set()
     created = updated = removed = 0
@@ -87,7 +95,7 @@ def sync_launchers(
                 updated += 1
         new_state[key] = str(path)
 
-    _write_state(state_file, new_state)
+    write_state(state_file, new_state)
     for path in (roms_dir, state_file, *map(Path, new_state.values())):
         try:
             os.chown(path, _OWNER_UID, _OWNER_GID)
@@ -113,16 +121,20 @@ def _fill_if_empty(game: ET.Element, tag: str, value: str | None) -> bool:
     element.text = value
     return True
 
+def _image_stem(relative: str) -> str:
+    return Path(relative).with_suffix('').as_posix().removeprefix('./').replace('/', ' - ')
+
 def _remove_generated_image(roms_dir: Path, game: ET.Element, stem: str) -> None:
-    image = Path(game.findtext('image') or '')
-    if image.parent == Path('images') and image.stem == stem:
-        (roms_dir / image).unlink(missing_ok=True)
+    for tag, generated_stem in (('image', stem), ('marquee', f'{stem}-marquee')):
+        image = Path(game.findtext(tag) or '')
+        if image.parent == Path('images') and image.stem == generated_stem:
+            (roms_dir / image).unlink(missing_ok=True)
 
 def known_keys(state_file: Path) -> set[str]:
-    return set(_read_state(state_file))
+    return set(read_state(state_file))
 
 def sync_gamelist(roms_dir: Path, state_file: Path, extension: str, games: dict[str, GameMetadata]) -> bool:
-    launchers = _read_state(state_file)
+    launchers = read_state(state_file)
     return update_gamelist(roms_dir, extension,
                            {Path(launchers[key]): details for key, details in games.items() if key in launchers})
 
@@ -139,9 +151,9 @@ def update_gamelist(roms_dir: Path, extension: str, games: dict[Path, GameMetada
     changed = False
 
     for launcher, details in games.items():
-        if launcher.parent != roms_dir:
+        if not launcher.is_relative_to(roms_dir):
             continue
-        path = f'./{launcher.name}'
+        path = f'./{launcher.relative_to(roms_dir).as_posix()}'
         game = entries.get(path)
         if game is None:
             game = ET.SubElement(root, 'game')
@@ -151,16 +163,26 @@ def update_gamelist(roms_dir: Path, extension: str, games: dict[Path, GameMetada
         changed |= _fill_if_empty(game, 'name', details.name)
         changed |= _fill_if_empty(game, 'desc', details.description)
         changed |= _fill_if_empty(game, 'developer', details.developer)
-        if details.image and not (game.findtext('image') or '').strip():
-            target = Path('images') / f'{launcher.stem}{details.image.suffix}'
-            (roms_dir / 'images').mkdir(exist_ok=True)
-            shutil.copyfile(details.image, roms_dir / target)
-            _chown_to_owner(roms_dir / 'images', roms_dir / target)
-            changed |= _fill_if_empty(game, 'image', f'./{target}')
+        changed |= _fill_if_empty(game, 'publisher', details.publisher)
+        changed |= _fill_if_empty(game, 'releasedate', details.release_date)
+        changed |= _fill_if_empty(game, 'genre', details.genre)
+        changed |= _fill_if_empty(game, 'players', details.players)
+        changed |= _fill_if_empty(game, 'emulator', details.emulator)
+        changed |= _fill_if_empty(game, 'core', details.core)
+        changed |= _fill_if_empty(game, 'hidden', 'true' if details.hidden else None)
+        image_stem = _image_stem(path)
+        for tag, source, stem in (('image', details.image, image_stem),
+                                  ('marquee', details.marquee, f'{image_stem}-marquee')):
+            if source and not (game.findtext(tag) or '').strip():
+                target = Path('images') / f'{stem}{source.suffix}'
+                (roms_dir / 'images').mkdir(exist_ok=True)
+                shutil.copyfile(source, roms_dir / target)
+                _chown_to_owner(roms_dir / 'images', roms_dir / target)
+                changed |= _fill_if_empty(game, tag, f'./{target}')
 
     for path, game in entries.items():
         if path and path.endswith(extension) and not (roms_dir / path).exists():
-            _remove_generated_image(roms_dir, game, Path(path).stem)
+            _remove_generated_image(roms_dir, game, _image_stem(path))
             root.remove(game)
             changed = True
 

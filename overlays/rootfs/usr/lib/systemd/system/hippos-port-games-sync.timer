@@ -1,0 +1,9 @@
+[Unit]
+Description=HippOS port games sync after boot
+
+[Timer]
+OnBootSec=2min
+Unit=hippos-port-games-sync.service
+
+[Install]
+WantedBy=timers.target

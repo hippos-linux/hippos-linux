@@ -1,0 +1,11 @@
+[Unit]
+Description=HippOS port games sync
+After=local-fs.target userdata.mount hippos-roms-pool.service network-online.target
+Wants=userdata.mount
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+User=hippos
+ExecStart=/usr/lib/hippos/hippos-port-games-sync
+Nice=10
