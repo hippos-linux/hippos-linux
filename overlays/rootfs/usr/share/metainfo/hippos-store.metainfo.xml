@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>hippos-store</id>
+  <name>HippOS Store</name>
+  <summary>Install and update apps, emulators and HippOS itself</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer id="org.hippos-linux">
+    <name>HippOS</name>
+  </developer>
+  <description>
+    <p>The HippOS Store is where you find software for your HippOS machine. Flathub apps, Debian packages and HippOS's own picks, web apps and game ports all sit in one list, so an app that comes from more than one place shows up once and you choose where to get it.</p>
+    <p>Updates for your apps and for HippOS itself are on the Updates page, and everything you've installed, including the apps and emulators that come with HippOS, is under Installed.</p>
+    <ul>
+      <li>Browse by category, or search everything at once</li>
+      <li>Install, open and remove apps with a controller, keyboard or mouse</li>
+      <li>See what's new on the home page</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">hippos-software.desktop</launchable>
+  <url type="homepage">https://hippos-linux.org</url>
+  <categories>
+    <category>System</category>
+    <category>PackageManager</category>
+  </categories>
+</component>

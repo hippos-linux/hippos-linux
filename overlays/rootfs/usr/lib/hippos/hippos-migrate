@@ -217,6 +217,12 @@ if version_lt "$APPLIED" "0.7.2" && compgen -G "/userdata/.local/share/applicati
     runuser -u hippos -- env HOME=/userdata /usr/lib/hippos/hippos-webapps import-mint
 fi
 
+SHORTCUTS_GAMELIST=/userdata/roms/desktopshortcuts/gamelist.xml
+if version_lt "$APPLIED" "0.7.3" && [[ -f "${SHORTCUTS_GAMELIST}" ]]; then
+    log "0.7.3: the HippOS Store's games-list entry gets its full description"
+    sed -i '\|<desc>Install and update apps, emulators and HippOS itself</desc>|d' "${SHORTCUTS_GAMELIST}"
+fi
+
 HIPPOS_CONFIG=/userdata/system/configs/hippos
 mkdir -p "${HIPPOS_CONFIG}"
 for name in external-roms.conf roms-sources.conf ignored-storage-devices.txt current-storage.conf; do
