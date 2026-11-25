@@ -24,6 +24,3 @@ steam-launcher
 
 # Windows Arcade Loader
 cabextract
-
-# Lunaria
-libglfw3

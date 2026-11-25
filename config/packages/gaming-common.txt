@@ -80,3 +80,5 @@ gamescope                               # trixie-backports
 # removed — superseded by build artifacts in /opt/emulators
 basilisk2
 stella
+
+libglfw3

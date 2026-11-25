@@ -17,16 +17,7 @@ log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
 clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
 
-PATCH_DIR="${REPO_ROOT}/packages/emulators/${NAME}"
-for patch in 001-renameat2-einval-fallback.patch; do
-    if git -C "${SRC}" apply --reverse --check "${PATCH_DIR}/${patch}" >/dev/null 2>&1; then
-        log "Patch already applied: ${patch}"
-    else
-        git -C "${SRC}" apply "${PATCH_DIR}/${patch}"
-    fi
-done
-
-BUILD_PACKAGES=(libbsd-dev libunwind-dev libglfw3-dev)
+BUILD_PACKAGES=(libbsd-dev libunwind-dev libglfw3-dev libwayland-dev libegl-dev libgles-dev libasound2-dev libssl-dev zlib1g-dev)
 missing=()
 for package in "${BUILD_PACKAGES[@]}"; do
     dpkg -s "${package}${DEB_TARGET_SUFFIX}" >/dev/null 2>&1 || missing+=("${package}${DEB_TARGET_SUFFIX}")
@@ -41,7 +32,11 @@ mkdir -p "${BUILD}"
 log "Building Lunaria ${TAG}"
 make -C "${SRC}" dynarmic-build -j"$(nproc)" "${MAKE_VARS[@]}"
 make -C "${SRC}" syslib-arm64/libm.so syslib-arm64/libc-pure.so "${MAKE_VARS[@]}"
-make -C "${SRC}" x86_64 -j"$(nproc)" "${MAKE_VARS[@]}"
+case "${ARCH}" in
+    amd64) HOST_TARGET=(x86_64) ;;
+    arm64) HOST_TARGET=(all OPENH264_ARCH=linux-arm64) ;;
+esac
+make -C "${SRC}" "${HOST_TARGET[@]}" -j"$(nproc)" "${MAKE_VARS[@]}"
 
 rm -rf "${STAGING}"
 mkdir -p "${STAGING}/bin"

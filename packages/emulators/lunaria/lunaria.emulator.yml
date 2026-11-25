@@ -1,5 +1,5 @@
 requireArtifact: lunaria
-arch: [amd64]
+arch: [amd64, arm64]
 best_effort: true
 systems:
 - name: androidapps
