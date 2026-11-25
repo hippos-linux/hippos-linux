@@ -17,7 +17,10 @@ PANEL_OVERLAY = BOOT_PARTITION / "overlays" / "mipi-panel.dtbo"
 DSI_FORMATS = ["rgb888", "rgb666", "rgb666_packed", "rgb565"]
 DSI_CLOCK_NON_CONTINUOUS = 0x400
 READY_DELAY_MS = 20
-SUPPORTED_BOARD = "rockchip,rk3326-odroidgo3-linux"
+JOYPAD_NODES = {"odroidgo3-joypad"}
+BTN_SELECT = 0x2c0
+BTN_START = 0x2c1
+R36S_SELECT_START = {BTN_SELECT: (0xff270000, 9), BTN_START: (0xff270000, 12)}
 GAME_REFRESH_RATES = [50 / 1.001, 50, 50.0070, 57.5, 59.7275, 60 / 1.001, 60, 60.0988, 75.47, 90, 120]
 DEFAULT_REFRESH = 60
 
@@ -42,6 +45,25 @@ class StockTree:
 
     def strings(self, node: int, name: str) -> list[str]:
         return self.fdt.getprop(node, name).as_stringlist()
+
+    def has(self, node: int, name: str) -> bool:
+        return not isinstance(self.fdt.getprop(node, name, quiet=(libfdt.NOTFOUND,)), int)
+
+    def gpio_pin(self, node: int, name: str) -> tuple[int, int]:
+        phandle, pin = self.fdt.getprop(node, name).as_uint32_list()[:2]
+        controller = self.fdt.node_offset_by_phandle(phandle)
+        return int.from_bytes(self.raw(controller, "reg")[4:8], "big"), pin
+
+    def joypad_pins(self) -> dict[int, tuple[int, int]]:
+        pins = {}
+        for joypad in self.children(self.node("/")):
+            if self.fdt.get_name(joypad).split("@")[0] not in JOYPAD_NODES:
+                continue
+            for button in self.children(joypad):
+                code = self.u32(button, "linux,code", -1)
+                if code in R36S_SELECT_START and self.has(button, "gpios"):
+                    pins[code] = self.gpio_pin(button, "gpios")
+        return pins
 
     def children(self, node: int):
         child = self.fdt.first_subnode(node, quiet=(libfdt.NOTFOUND,))
@@ -136,9 +158,10 @@ def panel_description(tree: StockTree, panel: int) -> list[str]:
 
 def panel_overlay(stock_blob: bytes) -> bytes:
     tree = StockTree(stock_blob)
-    board = tree.strings(tree.node("/"), "compatible")
-    if SUPPORTED_BOARD not in board:
-        raise SystemExit(f"unsupported stock device tree ({', '.join(board)}): only R36S cards are supported")
+    if tree.joypad_pins() != R36S_SELECT_START:
+        model = tree.fdt.getprop(tree.node("/"), "model").as_str()
+        raise SystemExit(f"{model}: not wired like an R36S (Select/Start are not GPIO3 B1/B4), "
+                         "so its panel can't go on the R36S device tree; see devices/README.txt")
     dsi_path = tree.strings(tree.node("/__symbols__"), "dsi")[0]
     panel = tree.node(dsi_path + "/panel@0")
     description = panel_description(tree, panel)
