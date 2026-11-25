@@ -147,7 +147,7 @@ def _write_gamelist(entries: dict[str, ET.Element], dest: Path) -> None:
     parent = dest.parent.stat()
     os.chown(dest, parent.st_uid, parent.st_gid)
 
-def merge_system(system: str, rw_branch: Path, ro_branches: list[Path]) -> int:
+def merge_system(system: str, rw_branch: Path, ro_branches: list[Path], failed: set[Path]) -> int:
     system_pool_path = ROMS_POOL / system
     rw_system = rw_branch / system
     rw_xml = rw_system / 'gamelist.xml'
@@ -158,11 +158,18 @@ def merge_system(system: str, rw_branch: Path, ro_branches: list[Path]) -> int:
 
     added = 0
     for ro_branch in ro_branches:
+        if ro_branch in failed:
+            continue
         ro_system = ro_branch / system
         ro_xml = ro_system / 'gamelist.xml'
-        if not ro_xml.exists():
+        try:
+            if not ro_xml.exists():
+                continue
+            ro_entries = _parse_gamelist(ro_xml, system_pool_path, ro_system)
+        except OSError as exc:
+            _log.warning("skipping %s for the rest of this merge: %s", ro_branch, exc)
+            failed.add(ro_branch)
             continue
-        ro_entries = _parse_gamelist(ro_xml, system_pool_path, ro_system)
         for key, elem in ro_entries.items():
             if key not in rw_entries:
                 rw_entries[key] = elem
@@ -188,12 +195,17 @@ def main() -> int:
         return 0
 
     systems: set[str] = set()
+    failed: set[Path] = set()
     for ro in ro_branches:
-        if not ro.exists():
-            continue
-        for entry in ro.iterdir():
-            if entry.is_dir() and (entry / 'gamelist.xml').exists():
-                systems.add(entry.name)
+        try:
+            if not ro.exists():
+                continue
+            for entry in ro.iterdir():
+                if entry.is_dir() and (entry / 'gamelist.xml').exists():
+                    systems.add(entry.name)
+        except OSError as exc:
+            _log.warning("skipping %s: %s", ro, exc)
+            failed.add(ro)
 
     if not systems:
         _log.debug("no gamelists found in RO branches")
@@ -201,7 +213,7 @@ def main() -> int:
 
     total = 0
     for system in sorted(systems):
-        total += merge_system(system, rw_branch, ro_branches)
+        total += merge_system(system, rw_branch, ro_branches, failed)
 
     if total > 0:
         _log.info("merge complete: %d total entries added across %d systems", total, len(systems))

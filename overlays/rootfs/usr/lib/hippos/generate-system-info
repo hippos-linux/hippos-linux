@@ -5,7 +5,8 @@ import os
 import sys
 
 ES_SYSTEMS = "/usr/share/emulationstation/es_systems.cfg"
-ROMS_ROOT  = "/userdata/roms"
+ROMS_POOL  = "/userdata/roms"
+ROMS_LOCAL = "/userdata/.roms-rw"
 
 def main():
     try:
@@ -28,6 +29,8 @@ def main():
 
         if not path:
             continue
+        if os.path.commonpath([path, ROMS_POOL]) == ROMS_POOL:
+            path = ROMS_LOCAL + path[len(ROMS_POOL):]
 
         try:
             os.makedirs(path, exist_ok=True)

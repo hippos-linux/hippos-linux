@@ -40,6 +40,7 @@ ROMS_POOL = USERDATA / "roms"
 ES_API = "http://127.0.0.1:1234"
 SUPPORTED_FORMATS = {"btrfs", "ext4", "exfat"}
 EFI_SYSTEM_PARTITION_TYPES = {"c12a7328-f81f-11d2-ba4b-00a0c93ec93b", "0xef"}
+HIPPOS_PARTITION_NAMES = {"EFI", "Tools", "HippOS"}
 
 DEFAULT_ROOTS = [
     (USERDATA / "roms", "rom"),
@@ -1072,15 +1073,20 @@ def block_devices() -> list[dict[str, str]]:
     visit(data.get("blockdevices") or [])
     return rows
 
+def system_disks() -> set[str]:
+    disks = set()
+    for mountpoint in ("/", "/boot", "/boot/efi", "/userdata"):
+        source = run_text(["findmnt", "-n", "-o", "SOURCE", mountpoint]).strip().split("[", 1)[0]
+        if source.startswith("/dev/"):
+            disks.add(parent_disk(Path(source).name))
+    return disks
+
 def is_system_device(devname: str) -> bool:
     dev = f"/dev/{devname}"
     if run_text(["lsblk", "-dno", "PARTTYPE", dev]).strip().lower() in EFI_SYSTEM_PARTITION_TYPES:
         return True
-    for mountpoint in ("/", "/boot", "/boot/efi", "/userdata"):
-        source = run_text(["findmnt", "-n", "-o", "SOURCE", mountpoint]).strip()
-        if source and source == dev:
-            return True
-    return False
+    return (run_text(["lsblk", "-dno", "PARTLABEL", dev]).strip() in HIPPOS_PARTITION_NAMES
+            and parent_disk(devname) in system_disks())
 
 def has_child_partitions(devname: str) -> bool:
     names = run_text(["lsblk", "-lnro", "NAME", f"/dev/{devname}"]).splitlines()
@@ -1221,7 +1227,6 @@ def cmd_merge(mount_path: str) -> int:
         EXTERNAL_ROM_CONFIG.parent.mkdir(parents=True, exist_ok=True)
         EXTERNAL_ROM_CONFIG.write_text("\n".join(lines) + "\n", encoding="utf-8")
     rebuild_and_reload()
-    subprocess.run(["/usr/lib/hippos/hippos-merge-gamelists"], check=False)
     return 0
 
 def merge_request(devname: str, mount_path: Path) -> Optional[str]:

@@ -108,4 +108,4 @@ find "${POOL}" -mindepth 1 -maxdepth 1 -type d | while read -r d; do
         chown 1000:1000 "${rw_dir}"
     fi
 done
-/usr/lib/hippos/hippos-merge-gamelists || true
+systemctl start --no-block hippos-merge-gamelists.service

@@ -1,0 +1,9 @@
+[Unit]
+Description=HippOS merge game lists from external ROM drives into the ROM pool
+After=hippos-roms-pool.service
+Requisite=hippos-roms-pool.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/hippos/hippos-merge-gamelists
+TimeoutStartSec=600
