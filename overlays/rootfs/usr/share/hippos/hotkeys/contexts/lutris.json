@@ -1,7 +1,7 @@
 {
   "name": "lutris",
   "keys": {
-    "exit": "pkill -TERM -f '[l]utris-wrapper' || pkill -TERM -f 'lutris:[r]ungameid' || DISPLAY=:0 xdotool key alt+F4",
+    "exit": "pkill -TERM -f '[l]utris-wrapper' || pkill -TERM -f 'lutris:[r]ungameid' || /usr/lib/hippos/hippos-hotkeys --press KEY_LEFTALT KEY_F4",
     "screenshot": "KEY_SYSRQ"
   }
 }

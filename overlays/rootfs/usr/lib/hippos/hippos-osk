@@ -20,7 +20,7 @@ from evdev import ecodes
 
 from hippos_es_buttons import ok_and_back
 from hippos_gamepad_reader import GamepadReader
-from hippos_hotkeys_control import set_keyboard_shown
+from hippos_hotkeys_control import press_keys, set_keyboard_shown
 from hippos_session_app import claim, release, toggle
 
 SCRIPT = Path('/usr/lib/hippos/hippos-osk')
@@ -104,8 +104,6 @@ def type_text(text: str) -> None:
     subprocess.Popen(['xdotool', 'type', '--clearmodifiers', '--delay', '0', '--', text])
 
 
-def press_key(name: str) -> None:
-    subprocess.Popen(['xdotool', 'key', '--clearmodifiers', name])
 
 
 def rgb(colour: tuple[int, int, int]) -> tuple[float, float, float]:
@@ -252,11 +250,11 @@ class Keyboard(Gtk.Window):
         self.flash = key
         GLib.timeout_add(FLASH_MS, self.end_flash, key)
         if key.action == 'delete':
-            press_key('BackSpace')
+            press_keys(['KEY_BACKSPACE'])
         elif key.action == 'space':
             type_text(' ')
         elif key.action == 'ok':
-            press_key('Return')
+            press_keys(['KEY_ENTER'])
             self.hide_now()
         elif key.action == 'close':
             self.hide_now()

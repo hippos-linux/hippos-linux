@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 import errno
+import grp
+import socket
 
 import evdev
 import pyudev
@@ -19,10 +21,9 @@ from evdev import ecodes
 from hippos_es_buttons import FALLBACK_GAMEPAD_BUTTONS, button_names, es_input_root, joystick_button_maps
 from hippos_padtokey import MOUSE_INTERVAL, PadMapper, device_maps
 import hippos_hotkeys_control
-from hippos_hotkeys_control import CONTEXT_FILE, KEYBOARD_SHOWN_FILE, PID_FILE
+from hippos_hotkeys_control import CONTEXT_FILE, KEYBOARD_SHOWN_FILE, KEYS_SOCKET, PID_FILE
 
 DEVICE_NAME = "hippos hotkeys"
-HOTKEYS_COMMAND = "/usr/lib/hippos/hippos-hotkeys"
 
 SYSTEM_DIR              = Path('/usr/share/hippos/hotkeys/devices')
 USER_DIR                = Path('/userdata/system/configs/hippos-hotkeys')
@@ -219,6 +220,20 @@ def send_key_combo(uinput: evdev.UInput, keys: int | list[int]) -> None:
         uinput.write(ecodes.EV_KEY, code, 0)
         uinput.syn()
 
+def open_keys_socket() -> socket.socket:
+    KEYS_SOCKET.unlink(missing_ok=True)
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    sock.bind(str(KEYS_SOCKET))
+    os.chown(KEYS_SOCKET, 0, grp.getgrnam('users').gr_gid)
+    os.chmod(KEYS_SOCKET, 0o660)
+    return sock
+
+def key_codes(names: list[str]) -> list[int] | None:
+    codes = [ecodes.ecodes.get(name) for name in names if name.startswith('KEY_')]
+    if not names or len(codes) != len(names) or None in codes:
+        return None
+    return codes
+
 def send_mouse_reset(uinput: evdev.UInput) -> None:
     uinput.write(ecodes.EV_REL, ecodes.REL_X, -10000)
     uinput.write(ecodes.EV_REL, ecodes.REL_Y, -10000)
@@ -268,6 +283,7 @@ class HotkeyDaemon:
         self.pad_maps: dict[str, tuple[list[dict], float]] = {}
         self.require_reconfig = False
         self.require_keyboard_update = False
+        self.keys_socket: socket.socket | None = None
         self._reload_all()
 
     def _reload_all(self) -> None:
@@ -286,6 +302,15 @@ class HotkeyDaemon:
 
     def _handle_sigusr1(self, signum: int, frame: Any) -> None:
         self.require_keyboard_update = True
+
+    def _press_requested_keys(self) -> None:
+        names = self.keys_socket.recv(256).decode(errors='replace').split()
+        codes = key_codes(names)
+        if codes is None:
+            log(f'press: ignoring {names!r}')
+            return
+        log(f'press {"+".join(names)}')
+        send_key_combo(self.uinput, codes)
 
     def _update_keyboard_shown(self) -> None:
         self.keyboard_shown = KEYBOARD_SHOWN_FILE.exists()
@@ -503,6 +528,8 @@ class HotkeyDaemon:
         Path('/run/hippos').mkdir(parents=True, exist_ok=True)
         if self.permanent:
             PID_FILE.write_text(str(os.getpid()))
+            self.keys_socket = open_keys_socket()
+            self.poll.register(self.keys_socket, select.POLLIN)
         signal.signal(signal.SIGHUP, self._handle_sighup)
         signal.signal(signal.SIGUSR1, self._handle_sigusr1)
 
@@ -529,7 +556,9 @@ class HotkeyDaemon:
 
             for fd, _ in events:
                 try:
-                    if fd == self.monitor.fileno():
+                    if self.keys_socket is not None and fd == self.keys_socket.fileno():
+                        self._press_requested_keys()
+                    elif fd == self.monitor.fileno():
                         action, udev_device = self.monitor.receive_device()
                         node = udev_device.device_node
                         if node and node.startswith('/dev/input/event'):
@@ -562,18 +591,9 @@ def cmd_send(action: str) -> None:
     if isinstance(target, str):
         subprocess.run(target, shell=True)
         return
-    try:
-        uinput = make_uinput()
-    except PermissionError:
-        subprocess.run(
-            ['sudo', '-n', HOTKEYS_COMMAND, '--send', action],
-            capture_output=True,
-        )
-        return
-    time.sleep(0.1)
-    send_key_combo(uinput, target)
-    time.sleep(0.3)
-    uinput.close()
+    codes = target if isinstance(target, list) else [target]
+    if not hippos_hotkeys_control.press_keys([ECODES_NAMES[code] for code in codes]):
+        log(f'send: hotkeys daemon not running, {action!r} not sent')
 
 def cmd_list() -> None:
     context = load_context()

@@ -1,6 +1,7 @@
 import json
 import os
 import signal
+import socket
 import sys
 import tempfile
 import unittest
@@ -57,6 +58,51 @@ class HotkeysControlTests(unittest.TestCase):
         control.set_keyboard_shown(True)
         control.default_context()
         self.assertFalse(control.KEYBOARD_SHOWN_FILE.exists())
+
+
+
+class PressKeysTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        patcher = mock.patch.object(control, 'KEYS_SOCKET', Path(tmp.name) / 'hotkeys.sock')
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_keys_reach_the_daemon_socket_in_one_message(self):
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as daemon:
+            daemon.bind(str(control.KEYS_SOCKET))
+            self.assertTrue(control.press_keys(['KEY_LEFTALT', 'KEY_F4']))
+            self.assertEqual(daemon.recv(256), b'KEY_LEFTALT KEY_F4')
+
+    def test_no_daemon_reports_failure(self):
+        self.assertFalse(control.press_keys(['KEY_ENTER']))
+
+
+class KeyCodesTests(unittest.TestCase):
+    def test_key_names_become_codes(self):
+        import hippos_hotkeys_daemon as daemon
+        from evdev import ecodes
+        self.assertEqual(daemon.key_codes(['KEY_LEFTCTRL', 'KEY_Q']), [ecodes.KEY_LEFTCTRL, ecodes.KEY_Q])
+
+    def test_daemon_presses_requested_keys_on_its_own_device(self):
+        import hippos_hotkeys_daemon as daemon
+        from evdev import ecodes
+        client, server = socket.socketpair(socket.AF_UNIX, socket.SOCK_DGRAM)
+        self.addCleanup(client.close)
+        self.addCleanup(server.close)
+        hotkeys = daemon.HotkeyDaemon.__new__(daemon.HotkeyDaemon)
+        hotkeys.keys_socket, hotkeys.uinput = server, mock.Mock()
+        client.send(b'KEY_LEFTALT KEY_F4')
+        with mock.patch.object(daemon, 'send_key_combo') as combo, mock.patch.object(daemon, 'log'):
+            hotkeys._press_requested_keys()
+        combo.assert_called_once_with(hotkeys.uinput, [ecodes.KEY_LEFTALT, ecodes.KEY_F4])
+
+    def test_unknown_or_non_key_names_are_refused(self):
+        import hippos_hotkeys_daemon as daemon
+        self.assertIsNone(daemon.key_codes([]))
+        self.assertIsNone(daemon.key_codes(['KEY_LEFTALT', 'KEY_NOPE']))
+        self.assertIsNone(daemon.key_codes(['BTN_LEFT']))
 
 
 class LauncherDefaultsCacheTests(unittest.TestCase):

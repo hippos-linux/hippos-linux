@@ -1,7 +1,7 @@
 {
   "name": "citron-neo",
   "keys": {
-    "exit": "/usr/lib/hippos/hippos-close-game ctrl+q",
+    "exit": "/usr/lib/hippos/hippos-close-game KEY_LEFTCTRL+KEY_Q",
     "menu": "KEY_F2",
     "save_state": "KEY_F5",
     "restore_state": "KEY_F8",

@@ -2,7 +2,7 @@
 set -u
 
 CLOSE_GRACE_SECONDS=8
-CLOSE_KEY="${1:-alt+F4}"
+CLOSE_KEYS="${1:-KEY_LEFTALT+KEY_F4}"
 
 exec 9>/run/hippos/close-game.lock
 flock -n 9 || exit 0
@@ -24,7 +24,7 @@ wait_for_launcher() {
     done
 }
 
-DISPLAY=:0 xdotool key "${CLOSE_KEY}"
+/usr/lib/hippos/hippos-hotkeys --press ${CLOSE_KEYS//+/ }
 wait_for_launcher
 kill -TERM $(descendants "${launcher}") 2>/dev/null
 wait_for_launcher

@@ -13,6 +13,8 @@ def main() -> None:
                         help='Write PID file for context switching via SIGHUP')
     parser.add_argument('--send', metavar='ACTION',
                         help='Send a named action and exit')
+    parser.add_argument('--press', nargs='+', metavar='KEY',
+                        help='Press keys together through the daemon, e.g. KEY_LEFTALT KEY_F4')
     parser.add_argument('--new-context', nargs=2, metavar=('NAME', 'JSON'),
                         help='Switch to a new hotkey context')
     parser.add_argument('--disable-common', action='store_true',
@@ -35,6 +37,8 @@ def main() -> None:
         hippos_hotkeys_control.reload()
     elif args.keyboard_shown:
         hippos_hotkeys_control.set_keyboard_shown(args.keyboard_shown == 'on')
+    elif args.press:
+        raise SystemExit(0 if hippos_hotkeys_control.press_keys(args.press) else 1)
     else:
         import hippos_hotkeys_daemon
         if args.send:

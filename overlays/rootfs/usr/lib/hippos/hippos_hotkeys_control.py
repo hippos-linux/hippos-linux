@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import os
 import signal
+import socket
 from pathlib import Path
 from typing import Any
 
 CONTEXT_FILE        = Path('/run/hippos/hotkeys.context')
 PID_FILE            = Path('/run/hippos/hotkeys.pid')
 KEYBOARD_SHOWN_FILE = Path('/run/hippos/keyboard.shown')
+KEYS_SOCKET         = Path('/run/hippos/hotkeys.sock')
 
 
 def signal_daemon(sig: int = signal.SIGHUP) -> None:
@@ -57,3 +59,12 @@ def set_keyboard_shown(shown: bool) -> None:
     else:
         KEYBOARD_SHOWN_FILE.unlink(missing_ok=True)
     signal_daemon(signal.SIGUSR1)
+
+
+def press_keys(names: list[str]) -> bool:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
+        try:
+            sock.sendto(' '.join(names).encode(), str(KEYS_SOCKET))
+        except OSError:
+            return False
+    return True
