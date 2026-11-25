@@ -413,7 +413,6 @@ def launch_snes9x(ctx: LaunchContext) -> int:
 
     conf = _load_effective_hippos_conf()
     env = _build_game_env(conf, ctx)
-    env['QT_QPA_PLATFORM'] = 'xcb'
     return _run_game_command(ctx, [str(bin_path), str(ctx.rom)], env).returncode
 
 def launch_nanoboyadvance(ctx: LaunchContext) -> int:
@@ -434,7 +433,6 @@ def launch_nanoboyadvance(ctx: LaunchContext) -> int:
 
     conf = _load_effective_hippos_conf()
     env = _build_game_env(conf, ctx)
-    env['QT_QPA_PLATFORM'] = 'xcb'
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
     return _run_game_command(ctx, [str(bin_path), str(ctx.rom)], env).returncode
 
@@ -483,7 +481,6 @@ def launch_eka2l1(ctx: LaunchContext) -> int:
     conf = _load_effective_hippos_conf()
     env = _build_game_env(conf, ctx)
     env['XDG_DATA_HOME'] = str(CONFIGS)
-    env['QT_QPA_PLATFORM'] = 'xcb'
     return _run_game_command(ctx, cmd, env).returncode
 
 def launch_applewin(ctx: LaunchContext) -> int:

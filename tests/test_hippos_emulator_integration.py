@@ -81,6 +81,12 @@ class EmulatorIntegrationTests(unittest.TestCase):
         defaults = json.loads((self.env.state / integration.LAUNCHER_DEFAULTS).read_text())
         self.assertEqual(defaults['psx'], {'emulator': 'newpsx', 'core': 'newpsx'})
 
+    def test_emulators_marked_xwayland_are_listed_for_the_launcher(self):
+        self.env.image_emulator('oldpsx', {'requireArtifact': 'oldpsx', 'systems': ['psx'], 'display': 'xwayland'})
+        self.env.install('newpsx', {'requireArtifact': 'newpsx', 'systems': ['psx']})
+        self.sync()
+        self.assertEqual((self.env.state / integration.XWAYLAND_EMULATORS).read_text(), 'oldpsx\n')
+
     def test_store_ids_of_installed_emulators_only(self):
         self.env.image_emulator('shipped', {'requireArtifact': 'shipped',
                                             'appstream_ids': ['org.Example.Shipped', 'shipped.desktop']})

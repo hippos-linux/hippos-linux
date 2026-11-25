@@ -4,3 +4,4 @@ appstream_ids:
 systems:
 - snes
 features: []
+display: xwayland

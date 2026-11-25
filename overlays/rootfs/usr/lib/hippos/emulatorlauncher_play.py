@@ -184,7 +184,6 @@ def launch_play(ctx: LaunchContext) -> int:
     env['XDG_CONFIG_HOME'] = str(PLAY_CONFIG_DIR)
     env['XDG_DATA_HOME'] = str(PLAY_CONFIG_DIR)
     env['XDG_CACHE_HOME'] = str(CACHE)
-    env['QT_QPA_PLATFORM'] = 'xcb'
     result = _run_game_command(ctx, cmd, env)
     return result.returncode
 

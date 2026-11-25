@@ -2,3 +2,4 @@ requireArtifact: nanoboyadvance
 systems:
 - gba
 features: []
+display: xwayland

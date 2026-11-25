@@ -13,3 +13,4 @@ shared_features:
   - bezel.resize_tattoo
 systems:
   - ngage
+display: xwayland

@@ -117,7 +117,6 @@ def launch_supermodel(ctx: LaunchContext) -> int:
     cmd.extend(['-log-output=/userdata/system/logs/Supermodel.log', str(ctx.rom)])
 
     env = _build_game_env(conf, ctx)
-    env['SDL_VIDEODRIVER'] = 'x11'
     env['SDL_JOYSTICK_HIDAPI'] = '0'
     result = _run_game_command(ctx, cmd, env, cwd=run_dir)
     return result.returncode

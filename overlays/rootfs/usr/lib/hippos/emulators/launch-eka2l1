@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 . /usr/lib/hippos/emulator-env
 export XDG_DATA_HOME=/userdata/system/configs
-export QT_QPA_PLATFORM=xcb
+use_display_setting eka2l1
 exec /opt/emulators/eka2l1/bin/eka2l1_qt "$@"

@@ -142,3 +142,4 @@ custom_features:
       Enabled: true
 systems:
   - wiiu
+display: xwayland

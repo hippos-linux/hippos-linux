@@ -3,3 +3,8 @@ export XDG_CONFIG_HOME=/userdata/system/configs
 export XDG_DATA_HOME=/userdata
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
 export DISPLAY="${DISPLAY:-:0}"
+
+use_display_setting() {
+    grep -qxF "$1" /usr/share/hippos/emulatorlauncher/xwayland-emulators 2>/dev/null || return 0
+    export QT_QPA_PLATFORM=xcb SDL_VIDEODRIVER=x11
+}

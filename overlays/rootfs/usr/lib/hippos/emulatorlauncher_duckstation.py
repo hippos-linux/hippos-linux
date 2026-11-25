@@ -272,7 +272,6 @@ def launch_family(family: DuckStationFamily, ctx: LaunchContext,
 
     env = _build_game_env(conf, ctx)
     env['SDL_JOYSTICK_HIDAPI'] = '0'
-    env['QT_QPA_PLATFORM'] = 'xcb'
     result = _run_game_command(ctx, cmd, env, on_output_line=on_output_line)
     return result.returncode
 

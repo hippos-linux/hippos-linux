@@ -200,3 +200,4 @@ custom_features:
       Zulu: 45
 systems:
   - switch
+display: xwayland

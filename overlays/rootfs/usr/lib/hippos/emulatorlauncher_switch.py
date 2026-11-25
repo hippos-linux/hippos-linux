@@ -127,7 +127,6 @@ def launch_switch_family(ctx: LaunchContext, emu_name: str, data_dir_name: str) 
     env['XDG_CONFIG_HOME'] = str(CONFIGS)
     env['XDG_DATA_HOME']   = str(saves_dir)
     env['XDG_CACHE_HOME']  = str(cache_dir)
-    env['QT_QPA_PLATFORM'] = 'xcb'
     return _run_game_command(ctx, cmd, env).returncode
 
 def launch_citron_neo(ctx: LaunchContext) -> int:

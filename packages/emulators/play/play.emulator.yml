@@ -81,3 +81,4 @@ systems:
     exclude_extensions:
       - m3u
   - namco2x6
+display: xwayland

@@ -55,3 +55,4 @@ custom_features:
     preset: switchauto
 systems:
   - psvita
+display: xwayland

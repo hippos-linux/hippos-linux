@@ -28,6 +28,7 @@ INSTALLED_SHA256_FILE = '.hippos-sha256'
 ES_SYSTEMS = 'es_systems.cfg'
 ES_FEATURES = 'es_features.cfg'
 LAUNCHER_DEFAULTS = 'defaults.json'
+XWAYLAND_EMULATORS = 'xwayland-emulators'
 STAMP = 'stamp'
 APPLICATIONS_EXPORT = Path('exports') / 'share' / 'applications'
 
@@ -279,6 +280,10 @@ def generate_launcher_defaults(systems_data: dict, es_systems: str, emulators: l
     return json.dumps(defaults, sort_keys=True, indent=2) + '\n'
 
 
+def generate_xwayland_emulators(emulators: list[EmulatorYml]) -> str:
+    return ''.join(f'{emulator.name}\n' for emulator in emulators if emulator.data.get('display') == 'xwayland')
+
+
 def merge_es_features(base: Path, fragments: list[Path]) -> str:
     tree = ET.parse(base)
     root = tree.getroot()
@@ -332,6 +337,7 @@ def generate(share_dir: Path, packages_root: Path, state_dir: Path, arch: str) -
     changed |= write_if_changed(state_dir / ES_FEATURES, merge_es_features(share_dir / BASE_FEATURES_FILE, fragments))
     changed |= write_if_changed(state_dir / LAUNCHER_DEFAULTS,
                                 generate_launcher_defaults(systems_data, es_systems, emulators))
+    write_if_changed(state_dir / XWAYLAND_EMULATORS, generate_xwayland_emulators(emulators))
     export_applications(packages_root, state_dir / APPLICATIONS_EXPORT)
     return changed
 
