@@ -499,6 +499,65 @@ LOGOS = {
         lines=(LogoLine("Sora-SemiBold.ttf", "MR.", 20, 0.32), LogoLine("Sora-ExtraBold.ttf", "BOOM", 50, 0.04)),
         line_gap=13,
     ),
+    "rgs": Logo(
+        icon=(
+            "M50 2A18 18 0 1 1 50 38A18 18 0 1 1 50 2Z" "M43 9A6 6 0 1 0 43 21A6 6 0 1 0 43 9Z",
+            "M45 36H55V68H45Z",
+            "M26 62H74L90 94H10Z" "M66 72A5 5 0 1 0 66 82A5 5 0 1 0 66 72Z",
+        ),
+        lines=(LogoLine("Sora-ExtraBold.ttf", "RGS", 50, 0.08), LogoLine("Sora-SemiBold.ttf", "PIXEL NOSTALGIA", 20, 0.32)),
+        line_gap=14,
+    ),
+    "auto-wheel": Logo(
+        icon=(
+            "M50 2A48 48 0 1 1 50 98A48 48 0 1 1 50 2Z" "M50 11A39 39 0 1 0 50 89A39 39 0 1 0 50 11Z",
+            "M10 45H90V55H10Z",
+            "M45 50H55V90H45Z",
+            "M50 36A14 14 0 1 1 50 64A14 14 0 1 1 50 36Z" "M50 44A6 6 0 1 0 50 56A6 6 0 1 0 50 44Z",
+        ),
+        lines=(LogoLine("Sora-ExtraBold.ttf", "WHEEL", 50, 0.06), LogoLine("Sora-SemiBold.ttf", "GAMES", 20, 0.42)),
+        line_gap=14,
+    ),
+    "auto-lightgun": Logo(
+        icon=(
+            "M10 22H92A6 6 0 0 1 98 28V40A6 6 0 0 1 92 46H10A6 6 0 0 1 4 40V28A6 6 0 0 1 10 22Z",
+            "M8 14H16V22H8Z",
+            "M66 46H96L100 90A4 4 0 0 1 96 94H76A4 4 0 0 1 72 90Z",
+            "M42 46H64V58A11 11 0 0 1 53 69A11 11 0 0 1 42 58Z" "M48 46H58V57A5 5 0 0 1 48 57Z",
+        ),
+        lines=(LogoLine("Sora-ExtraBold.ttf", "LIGHT GUN", 50, 0.04), LogoLine("Sora-SemiBold.ttf", "GAMES", 20, 0.42)),
+        line_gap=14,
+    ),
+    "auto-trackball": Logo(
+        icon=(
+            "M50 10A32 32 0 1 1 50 74A32 32 0 1 1 50 10Z" "M38 22A8 8 0 1 0 38 38A8 8 0 1 0 38 22Z",
+            "M8 60H18.8A36 36 0 0 0 81.2 60H92A6 6 0 0 1 98 66V86A6 6 0 0 1 92 92H8A6 6 0 0 1 2 86V66A6 6 0 0 1 8 60Z",
+        ),
+        lines=(LogoLine("Sora-ExtraBold.ttf", "TRACKBALL", 50, 0.04), LogoLine("Sora-SemiBold.ttf", "GAMES", 20, 0.42)),
+        line_gap=14,
+    ),
+    "auto-spinner": Logo(
+        icon=(
+            polygon([(50 + r * np.sin(np.radians(a)), 50 - r * np.cos(np.radians(a)))
+                     for a, r in zip(np.arange(0, 360, 7.5), [48, 42] * 24)])
+            + "M50 20A30 30 0 1 0 50 80A30 30 0 1 0 50 20Z",
+            "M50 28A22 22 0 1 1 50 72A22 22 0 1 1 50 28Z" "M46 32H54V48H46Z",
+        ),
+        lines=(LogoLine("Sora-ExtraBold.ttf", "SPINNER", 50, 0.04), LogoLine("Sora-SemiBold.ttf", "GAMES", 20, 0.42)),
+        line_gap=14,
+    ),
+    "auto-verticalarcade": Logo(
+        icon=(
+            "M28 2H72A6 6 0 0 1 78 8V92A6 6 0 0 1 72 98H28A6 6 0 0 1 22 92V8A6 6 0 0 1 28 2Z"
+            "M31 10H69V80H31Z"
+            "M44 86A4 4 0 1 0 44 94A4 4 0 1 0 44 86Z" "M56 86A4 4 0 1 0 56 94A4 4 0 1 0 56 86Z",
+            "M50 52L60 72H40Z",
+            "M48 32H52V44H48Z",
+            "M48 16H52V26H48Z",
+        ),
+        lines=(LogoLine("Sora-ExtraBold.ttf", "VERTICAL", 50, 0.04), LogoLine("Sora-SemiBold.ttf", "ARCADE", 20, 0.42)),
+        line_gap=14,
+    ),
 }
 
 WORDMARKS = {
