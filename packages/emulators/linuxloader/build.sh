@@ -7,7 +7,8 @@ source "${REPO_ROOT}/build/common.sh"
 
 NAME='linuxloader'
 REPO='https://github.com/aderumier/linuxloader.git'
-TAG="${LINUXLOADER_TAG:-$(github_latest_tag "${REPO}")}"
+REF="${LINUXLOADER_REF:-rawthrills}"
+SHA="${LINUXLOADER_SHA:-f8fcf37572bd5fd375572c23e53bc9b82d7846c1}"
 
 WORK_ROOT="${WORK_ROOT:-${REPO_ROOT}/work/emulators}"
 ARTIFACT_ROOT="${ARTIFACT_ROOT:-${REPO_ROOT}/artifacts}"
@@ -18,9 +19,18 @@ IMAGE_NAME="hippos-${NAME}-builder"
 
 log() { printf '[build:%s] %s\n' "${NAME}" "$*"; }
 
-clone_source "${REPO}" "${TAG}" "${SRC}" --submodules
-patch="${SCRIPT_DIR}/001-linux-build.patch"
-git -C "${SRC}" apply --reverse --check "${patch}" >/dev/null 2>&1 || git -C "${SRC}" apply "${patch}"
+if [[ -d "${SRC}/.git" && "$(git -C "${SRC}" rev-parse HEAD 2>/dev/null)" != "${SHA}" ]]; then
+    rm -rf "${SRC}"
+fi
+if [[ ! -d "${SRC}/.git" ]]; then
+    log "Cloning ${REPO} at ${SHA:0:12}"
+    git clone --depth=1 --branch "${REF}" "${REPO}" "${SRC}"
+    if [[ "$(git -C "${SRC}" rev-parse HEAD)" != "${SHA}" ]]; then
+        git -C "${SRC}" fetch --depth=1 origin "${SHA}"
+        git -C "${SRC}" checkout --quiet "${SHA}"
+    fi
+    git -C "${SRC}" submodule update --init --recursive
+fi
 sudo chown -R "$(id -u):$(id -g)" "${WORK_ROOT}/${NAME}" "${STAGING}" 2>/dev/null || true
 mkdir -p "${BUILD}" "${STAGING}/bin"
 
@@ -48,10 +58,12 @@ docker cp "${cid}:/output/build-linux" "${BUILD}/output/build-linux"
 docker rm -f "${cid}" >/dev/null 2>&1 || true
 trap - EXIT
 
-cp -a "${BUILD}/output/build-linux/." "${STAGING}/"
-found="$(find "${STAGING}" -maxdepth 3 -name 'linuxloader' -type f -perm /111 -print -quit 2>/dev/null || true)"
+found="$(find "${BUILD}/output/build-linux" -maxdepth 3 -name 'linuxloader' -type f -perm /111 -print -quit 2>/dev/null || true)"
 [[ -n "${found}" ]] || die "linuxloader binary was not produced"
-[[ -x "${STAGING}/bin/linuxloader" ]] || cp "${found}" "${STAGING}/bin/linuxloader"
+rm -rf "${STAGING}"
+mkdir -p "${STAGING}/bin"
+cp -a "${BUILD}/output/build-linux/." "${STAGING}/"
+install -m755 "${found}" "${STAGING}/bin/linuxloader"
 
-write_artifact_version "${STAGING}" "${TAG}"
+write_artifact_version "${STAGING}" "${SHA:0:12}"
 log "Done. Artifact at ${STAGING}"
