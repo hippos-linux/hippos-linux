@@ -15,11 +15,11 @@
 
 ## ℹ️ About
 
-HippOS is a Debian-based gaming OS for x86 PCs and Raspberry Pi 4/5. Power it on and you are in EmulationStation — no desktop, no login screen, no configuration required. Your games, saves, and settings live on a separate persistent `@userdata` btrfs subvolume that survives every OS update.
+HippOS is a Debian-based gaming OS for x86 PCs and handhelds, Raspberry Pi 4/5, and RK3326 handhelds such as the R36S. Power it on and you are in EmulationStation — no desktop, no login screen, no configuration required. Your games, saves, and settings live on a separate persistent `@userdata` btrfs subvolume that survives every OS update.
 
 It ships 85+ emulators built from source, covering 280+ systems — from Atari 2600 to PS4, arcade cabinets to Windows PC arcade hardware — all navigated with a controller from the couch.
 
-Visit **[hippos-linux.org](https://hippos-linux.org)** for downloads and release notes, and **[wiki.hippos-linux.org](https://wiki.hippos-linux.org)** for documentation.
+Visit **[hippos-linux.org](https://hippos-linux.org)** for downloads and release notes, and **[hippos-linux.org/docs](https://hippos-linux.org/docs/)** for documentation.
 
 ---
 
@@ -32,10 +32,12 @@ Visit **[hippos-linux.org](https://hippos-linux.org)** for downloads and release
 | x86-64 (NVIDIA GPU) | ✅ Drivers built from source |
 | Raspberry Pi 5 | ✅ Full |
 | Raspberry Pi 4 | ✅ Full |
-| Handheld PC | ✅ Full (InputPlumber for built-in controls) |
+| PC handhelds (Steam Deck, ROG Ally, Legion Go, AYANEO…) | ✅ Full (InputPlumber for built-in controls) |
+| RK3326 handhelds (R36S and clones, RG351M/V, Odroid Go 2/3/Super, RGB10…) | 🧪 Experimental |
 
 > [!NOTE]
 > Xbox, Xbox 360, and PS3 emulation are not available on Raspberry Pi. The Pi 5 does not have sufficient GPU resources for these.
+> RK3326 handhelds run systems up to PlayStation and most handheld systems.
 
 ---
 
@@ -112,7 +114,7 @@ Install **Kodi, Jellyfin, Emby Theater, or Plex HTPC** directly from the main me
 | Other | ScummVM, BigPEmu, xroar, x16emu, EasyRPG, IKEMEN GO, TIC-80, Quiver, vpinball, and more |
 
 > [!NOTE]
-> Many emulators require BIOS files placed in `/userdata/bios/`. Refer to the [wiki](https://wiki.hippos-linux.org) for per-system BIOS requirements.
+> Many emulators require BIOS files placed in `/userdata/bios/`. Refer to the [docs](https://hippos-linux.org/docs/) for per-system BIOS requirements.
 
 ---
 
@@ -121,9 +123,13 @@ Install **Kodi, Jellyfin, Emby Theater, or Plex HTPC** directly from the main me
 > [!WARNING]
 > Flashing an image will erase all data on the target drive. Back up anything important before proceeding.
 
-1. Download the latest image from **[hippos-linux.org](https://hippos-linux.org)**
-2. Flash the `.img.zst` to a USB drive or install to an internal disk
-3. Boot
+1. Download the image for your hardware from **[hippos-linux.org](https://hippos-linux.org)**: PC and PC handhelds, Raspberry Pi, or RK3326 handhelds
+2. Flash the `.img.zst` to a USB drive or microSD card
+3. RK3326 handhelds only: set up the screen. The R36S and its clones need the `.dtb` from the original card copied into `stock/` on the HippOS card; some other models need a file from `devices/`. See the **[RK3326 guide](https://hippos-linux.org/docs/devices/rk3326/)**
+4. Boot. On a PC, Secure Boot must be off. RK3326 handhelds boot from the first card slot
+5. Optionally, on a PC, install to an internal disk from **System Settings**
+
+The full **[install guide](https://hippos-linux.org/install)** covers each step.
 
 ---
 
@@ -131,7 +137,7 @@ Install **Kodi, Jellyfin, Emby Theater, or Plex HTPC** directly from the main me
 
 - **Bug reports and feature requests**: [GitHub Issues](https://github.com/hippos-linux/hippos-linux/issues)
 - **Downloads**: [hippos-linux.org](https://hippos-linux.org)
-- **Documentation**: [wiki.hippos-linux.org](https://wiki.hippos-linux.org)
+- **Documentation**: [hippos-linux.org/docs](https://hippos-linux.org/docs/)
 
 ---
 
