@@ -6,4 +6,3 @@ systems:
   - name: ps2
     exclude_extensions:
       - m3u
-display: xwayland

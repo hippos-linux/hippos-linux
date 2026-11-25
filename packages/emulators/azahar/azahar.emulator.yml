@@ -124,4 +124,3 @@ custom_features:
       On: 1
 systems:
   - 3ds
-display: xwayland

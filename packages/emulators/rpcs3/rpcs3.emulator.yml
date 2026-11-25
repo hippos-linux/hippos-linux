@@ -447,4 +447,3 @@ custom_features:
     preset: switchon
 systems:
   - ps3
-display: xwayland

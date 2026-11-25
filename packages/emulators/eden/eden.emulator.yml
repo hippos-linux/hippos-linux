@@ -4,4 +4,3 @@ appstream_ids:
 systems:
 - switch
 features: []
-display: xwayland

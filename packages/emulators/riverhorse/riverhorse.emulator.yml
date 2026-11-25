@@ -334,4 +334,3 @@ custom_features:
       Enabled: '1'
 systems:
   - psx
-display: xwayland
