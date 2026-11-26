@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+MIN_BRIGHTNESS=1
+
 case "${1:-boot}" in
     get)
         val="$(brightnessctl -q --class=backlight get 2>/dev/null || true)"
@@ -18,6 +20,16 @@ case "${1:-boot}" in
         brightnessctl -q --class=backlight set "${PCT}%" 2>/dev/null || true
         hippos-settings set display.brightness "${PCT}" 2>/dev/null || true
         ;;
+    change)
+        STEP="${2:-}"
+        if [[ ! "${STEP}" =~ ^[+-][0-9]+$ ]]; then
+            printf 'Usage: %s change +N|-N\n' "$0" >&2; exit 1
+        fi
+        CUR="$("$0" get)"
+        NEW=$(( ${CUR:-50} + STEP ))
+        NEW=$(( NEW < MIN_BRIGHTNESS ? MIN_BRIGHTNESS : (NEW > 100 ? 100 : NEW) ))
+        "$0" set "${NEW}"
+        ;;
     boot)
         PCT="$(hippos-settings get display.brightness 2>/dev/null || true)"
         if [[ -n "${PCT}" ]]; then
@@ -25,6 +37,6 @@ case "${1:-boot}" in
         fi
         ;;
     *)
-        printf 'Usage: %s get|set <0-100>|boot\n' "$0" >&2; exit 1
+        printf 'Usage: %s get|set <0-100>|change +N|-N|boot\n' "$0" >&2; exit 1
         ;;
 esac
