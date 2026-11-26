@@ -18,7 +18,9 @@ from emulatorlauncher_shared import (
 )
 from emulatorlauncher_registry import Emulator, register
 
-from HipposPaths import BIOS, CACHE, CONFIGS, SAVES, USERDATA
+from HipposPaths import BIOS, CACHE, CONFIGS, ROMS, SAVES, USERDATA
+
+SWITCH_ADDONS = ROMS / 'switch_update'
 
 def _write_switch_qt_config(cfg_dir: Path, emu_name: str) -> None:
     cfg_file = cfg_dir / 'qt-config.ini'
@@ -43,9 +45,21 @@ def _write_switch_qt_config(cfg_dir: Path, emu_name: str) -> None:
         cfg.set('UI', exit_key, 'Home+Plus')
     cfg.set('UI', r'Shortcuts\Main%20Window\Fullscreen\Controller_KeySeq', '')
 
+    _add_external_content_dir(cfg, SWITCH_ADDONS)
+
     cfg_file.parent.mkdir(parents=True, exist_ok=True)
     with cfg_file.open('w') as fh:
         cfg.write(fh)
+
+def _add_external_content_dir(cfg: configparser.RawConfigParser, directory: Path) -> None:
+    if not cfg.has_section('Paths'):
+        cfg.add_section('Paths')
+    size = int(cfg.get('Paths', r'external_content_dirs\size', fallback='0') or 0)
+    dirs = [cfg.get('Paths', rf'external_content_dirs\{i}\path', fallback='') for i in range(1, size + 1)]
+    if str(directory) in dirs:
+        return
+    cfg.set('Paths', rf'external_content_dirs\{size + 1}\path', str(directory))
+    cfg.set('Paths', r'external_content_dirs\size', str(size + 1))
 
 SWITCH_BIOS = BIOS / 'switch'
 SWITCH_KEY_FILES = ('prod.keys', 'title.keys')
@@ -182,6 +196,7 @@ def launch_ryujinx(ctx: LaunchContext) -> int:
             pass
     cfg['start_fullscreen'] = True
     cfg['docked_mode']      = True
+    cfg['autoload_dirs'] = sorted({*cfg.get('autoload_dirs', []), str(SWITCH_ADDONS)})
     cfg['input_config']     = []
 
     for nplayer, ctrl in enumerate(ctx.controllers[:8], start=1):
