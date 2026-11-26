@@ -1,13 +1,22 @@
 import importlib.machinery
 import importlib.util
+import pwd
+import os
+import signal
 import sys
+import tempfile
 import unittest
+import urllib.error
+import xml.etree.ElementTree as ET
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT_PATH = ROOT / 'overlays' / 'rootfs' / 'usr' / 'lib' / 'hippos' / 'hippos-quickmenu'
 sys.path.insert(0, str(SCRIPT_PATH.parent))
 DEFAULT_MENU = ROOT / 'overlays' / 'rootfs' / 'usr' / 'share' / 'hippos' / 'quickmenu' / 'quickmenu.xml'
+
+import hippos_session_app as session_app  # noqa: E402
 
 
 def _load_hippos_quickmenu():
@@ -21,68 +30,89 @@ def _load_hippos_quickmenu():
 
 qm = _load_hippos_quickmenu()
 
-
-class ParseMenuTests(unittest.TestCase):
-    def test_default_menu_has_header_and_tabs(self):
-        menu = qm.parse_menu(DEFAULT_MENU.read_text())
-        self.assertEqual(len(menu.header), 2)
-        self.assertEqual([row.label for row in menu.footer], ["CPU", "GPU", "Screen"])
-        self.assertEqual([page.title for page in menu.pages], ['Game', 'Keys', 'Gun', 'System', 'Outputs', 'Record'])
-        self.assertTrue(menu.pages[0].condition)
-
-    def test_choice_cmd_joins_the_choice_list(self):
-        menu = qm.parse_menu('''<features><hgroup display="S"><feature display="Out">
-            <choice display="Auto" action="a"/><choice_cmd display="${x}" action="set" action_arg="${y}"/>
-        </feature></hgroup></features>''')
-        control = menu.pages[0].rows[0].controls[0]
-        self.assertEqual(control.kind, 'choices')
-        self.assertEqual(len(control.choices), 1)
-        self.assertEqual(control.sources[0]['action'], 'set')
-
-    def test_choices_are_collected_into_one_control(self):
-        menu = qm.parse_menu('''<features><hgroup display="S"><feature display="Mode">
-            <text display="x"/><choice display="A" action="a"/><choice display="B" action="b"/>
-        </feature></hgroup></features>''')
-        controls = menu.pages[0].rows[0].controls
-        self.assertEqual([control.kind for control in controls], ['text', 'choices'])
-        self.assertEqual([choice['action'] for choice in controls[1].choices], ['a', 'b'])
-
-    def test_row_condition_is_kept(self):
-        menu = qm.parse_menu('<features><hgroup display="S"><feature display="B" if="${x}"/></hgroup></features>')
-        self.assertEqual(menu.pages[0].rows[0].condition, '${x}')
+SESSION_USER = pwd.struct_passwd(('hippos', 'x', 1000, 100, '', '/userdata', '/bin/bash'))
 
 
-class ExpressionTests(unittest.TestCase):
-    def test_command_inside_text(self):
-        text = 'Now: ${echo "a}b"} today'
-        self.assertEqual(qm.expression_command('${df -h | awk \'{print $4}\'}'), "df -h | awk '{print $4}'")
-        self.assertEqual(qm.fill_expression('Now: ${date}!', '12:00'), 'Now: 12:00!')
-        self.assertIsNone(qm.expression_command('plain'))
-        self.assertTrue(qm.expression_command(text))
+class DefaultMenuTests(unittest.TestCase):
+    def test_tabs_are_listed_in_order(self):
+        root = ET.parse(DEFAULT_MENU).getroot()
+        tabs = [tab.get('target') for tab in root.iter('tab')]
+        self.assertEqual(tabs, ['Game', 'Keys', 'Gun', 'System', 'Outputs', 'Record'])
 
-    def test_is_true(self):
-        for value in ('1', 'true', 'on', ' yes\n'):
-            self.assertTrue(qm.is_true(value))
-        for value in ('', 'off', '0', 'false'):
-            self.assertFalse(qm.is_true(value))
 
-    def test_command_choices_pair_labels_and_quoted_values(self):
-        source = {'display': '${printf "Speakers\\nHead phones"}', 'action': 'hippos-audio set',
-                  'action_arg': "${printf 'alsa.a\\nalsa b'}"}
-        self.assertEqual(qm.command_choices(source),
-                         [('Speakers', 'hippos-audio set alsa.a'), ('Head phones', "hippos-audio set 'alsa b'")])
+class SessionEnvTests(unittest.TestCase):
+    def env(self, session_type: str, inherited: dict[str, str], published: dict[str, str]) -> dict[str, str]:
+        with mock.patch.object(session_app.pwd, 'getpwnam', return_value=SESSION_USER), \
+                mock.patch.object(session_app, 'session_type', return_value=session_type), \
+                mock.patch.object(session_app, 'published_env', return_value=published), \
+                mock.patch.dict(session_app.os.environ, inherited, clear=True):
+            return session_app.session_env()
 
-    def test_command_choices_without_values_use_labels(self):
-        self.assertEqual(qm.command_choices({'display': '${printf "HDMI-1"}', 'action': 'pick'}),
-                         [('HDMI-1', 'pick HDMI-1')])
+    def test_x11_session_drops_a_stray_wayland_socket(self):
+        env = self.env('x11', {'HOME': '/root', 'WAYLAND_DISPLAY': 'waydroid-0'}, {})
+        self.assertNotIn('WAYLAND_DISPLAY', env)
+        self.assertEqual(env['HOME'], '/userdata')
+        self.assertEqual(env['DISPLAY'], ':0')
 
-    def test_height_pixels(self):
-        self.assertEqual(qm.height_pixels('25%', 1080), 270)
-        self.assertEqual(qm.height_pixels('120', 1080), 120)
-        self.assertEqual(qm.height_pixels('', 1000), 100)
+    def test_wayland_session_uses_the_published_socket(self):
+        env = self.env('wayland', {'HOME': '/root'}, {'WAYLAND_DISPLAY': 'wayland-1'})
+        self.assertEqual(env['WAYLAND_DISPLAY'], 'wayland-1')
 
-    def test_run_command_returns_trimmed_output(self):
-        self.assertEqual(qm.run_command('echo " hi "'), 'hi')
+    def test_wayland_socket_from_the_caller_wins(self):
+        env = self.env('wayland', {'WAYLAND_DISPLAY': 'wayland-0'}, {'WAYLAND_DISPLAY': 'wayland-1'})
+        self.assertEqual(env['WAYLAND_DISPLAY'], 'wayland-0')
+
+
+class ControlCenterPidTests(unittest.TestCase):
+    def test_finds_the_control_center_by_its_arguments(self):
+        with tempfile.TemporaryDirectory() as proc:
+            for pid, args in (('100', [b'/usr/bin/emulationstation']),
+                              ('200', [b'emulationstation', b'--controlcenter']),
+                              ('self', [b'python3'])):
+                Path(proc, pid).mkdir()
+                Path(proc, pid, 'cmdline').write_bytes(b'\0'.join(args) + b'\0')
+            user = pwd.struct_passwd(('hippos', 'x', os.getuid(), 100, '', '/userdata', '/bin/bash'))
+            with mock.patch.object(qm, 'PROC', Path(proc)), mock.patch.object(qm.pwd, 'getpwnam', return_value=user):
+                self.assertEqual(qm.control_center_pid(), 200)
+
+
+class ToggleTests(unittest.TestCase):
+    def setUp(self):
+        patches = {
+            'urlopen': mock.patch.object(qm.urllib.request, 'urlopen', side_effect=urllib.error.URLError('down')),
+            'pid': mock.patch.object(qm, 'control_center_pid', return_value=None),
+            'kill': mock.patch.object(qm.os, 'kill'),
+            'popen': mock.patch.object(qm.subprocess, 'Popen'),
+            'env': mock.patch.object(qm, 'session_env', return_value={'HOME': '/userdata', 'DISPLAY': ':0'}),
+            'euid': mock.patch.object(qm.os, 'geteuid', return_value=0),
+        }
+        self.mocks = {name: patch.start() for name, patch in patches.items()}
+        self.addCleanup(mock.patch.stopall)
+
+    def test_es_in_front_shows_it_in_process(self):
+        self.mocks['urlopen'].side_effect = None
+        qm.toggle()
+        self.mocks['kill'].assert_not_called()
+        self.mocks['popen'].assert_not_called()
+
+    def test_running_control_center_is_signalled(self):
+        self.mocks['pid'].return_value = 4321
+        qm.toggle()
+        self.mocks['kill'].assert_called_once_with(4321, signal.SIGUSR1)
+        self.mocks['popen'].assert_not_called()
+
+    def test_starts_as_the_session_user_on_x11(self):
+        qm.toggle()
+        command = self.mocks['popen'].call_args.args[0]
+        kwargs = self.mocks['popen'].call_args.kwargs
+        self.assertEqual(command, ['runuser', '-u', 'hippos', '--', 'emulationstation', '--controlcenter'])
+        self.assertEqual(kwargs['cwd'], '/userdata')
+        self.assertNotIn('SDL_VIDEODRIVER', kwargs['env'])
+
+    def test_starts_on_native_wayland_in_a_wayland_session(self):
+        self.mocks['env'].return_value = {'HOME': '/userdata', 'DISPLAY': ':0', 'WAYLAND_DISPLAY': 'wayland-0'}
+        qm.toggle()
+        self.assertEqual(self.mocks['popen'].call_args.kwargs['env']['SDL_VIDEODRIVER'], 'wayland')
 
 
 if __name__ == '__main__':

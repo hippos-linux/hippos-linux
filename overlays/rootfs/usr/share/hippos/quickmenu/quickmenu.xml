@@ -1,8 +1,8 @@
 <!-- Copy to /userdata/system/configs/quickmenu/quickmenu.xml to change the quick menu.
      ${command} runs a shell command and shows its output; refresh="N" re-runs it every N seconds.
      if="${command}" shows a row or tab only when the command prints something; it is checked when the menu opens and after each action.
-     afterclick="close" hides the menu after the action, "refresh" re-reads every value,
-     "rescreen" moves the menu to the screen chosen in the System tab.
+     afterclick="bcc_close" hides the menu after the action, "bcc_refresh" re-reads every value,
+     "bcc_rescreen" moves the menu to the screen chosen in the System tab.
      progressbar takes showvalue="true" to print its percentage inside the bar.
      keypicker opens a keyboard; the chosen key codes (several for a combination, "none" when cleared) are added to action,
      display gives the current key codes separated by spaces.
@@ -16,13 +16,25 @@
 			<text display='${cat /sys/class/power_supply/BAT*/capacity 2>/dev/null | head -1 | sed "s/$/%/"}' refresh="30" />
 			<text display='${date +%H:%M}' refresh="10" />
 		</feature>
-		<feature display='${S=$(curl -s http://127.0.0.1:1234/runningGame | jq -r ".systemName // empty"); F=$([ -n "$S" ] &amp;&amp; curl -s http://127.0.0.1:1234/systems | jq -r --arg s "$S" ".[] | select(.name == \$s) | .fullname"); [ -n "$F" ] &amp;&amp; printf "%s  ·  " "$F"; hippos-info}' />
+		<feature>
+			<text display='${S=$(curl -s http://127.0.0.1:1234/runningGame | jq -r ".systemName // empty"); F=$([ -n "$S" ] &amp;&amp; curl -s http://127.0.0.1:1234/systems | jq -r --arg s "$S" ".[] | select(.name == \$s) | .fullname"); [ -n "$F" ] &amp;&amp; printf "%s  ·  " "$F"; hippos-info}' />
+		</feature>
 	</vgroup>
 
-	<hgroup name="Game" display="Game" if='${curl -s http://127.0.0.1:1234/runningGame | jq -r ".name // empty"}'>
+	<feature>
+		<tab display="Game" target="Game" if='${curl -s http://127.0.0.1:1234/runningGame | jq -r ".name // empty"}' />
+		<tab display="Keys" target="Keys" if='${curl -s http://127.0.0.1:1234/runningGame | jq -r ".name // empty"}' />
+		<tab display="Gun" target="Gun" if="${[ -f /var/run/hippos/gun_help.png ] &amp;&amp; curl -s http://127.0.0.1:1234/runningGame | jq -r '.name // empty'}" />
+		<tab display="System" target="System" />
+		<tab display="Outputs" target="Outputs" />
+		<tab display="Record" target="Record" />
+	</feature>
+
+	<hgroup name="Game" display="Game">
 		<feature>
 			<img display='${M=$(curl -s http://127.0.0.1:1234/runningGame | jq -r ".marquee // empty"); [ -n "$M" ] &amp;&amp; echo "http://127.0.0.1:1234$M"}' height="8%" refresh="5" />
-			<img display='${T=$(curl -s http://127.0.0.1:1234/runningGame | jq -r ".thumbnail // .image // empty"); [ -n "$T" ] &amp;&amp; echo "http://127.0.0.1:1234$T"}' height="16%" refresh="5" />
+			<img display='${T=$(curl -s http://127.0.0.1:1234/runningGame | jq -r ".thumbnail // empty"); [ -n "$T" ] &amp;&amp; echo "http://127.0.0.1:1234$T"}' height="16%" refresh="5" />
+			<img display='${T=$(curl -s http://127.0.0.1:1234/runningGame | jq -r ".image // empty"); [ -n "$T" ] &amp;&amp; echo "http://127.0.0.1:1234$T"}' height="16%" refresh="5" />
 			<qrcode display='${C=$(curl -s http://127.0.0.1:1234/runningGame | jq -r ".cheevosId // empty"); [ -n "$C" ] &amp;&amp; [ "$C" != 0 ] &amp;&amp; echo "https://retroachievements.org/game/$C"}' height="16%" refresh="5" />
 		</feature>
 		<feature display="Playing for">
@@ -41,29 +53,29 @@
 			<switch value="${hippos-controller-mouse status}" action_on="hippos-controller-mouse on" action_off="hippos-controller-mouse off" />
 		</feature>
 		<feature display="On-screen keyboard">
-			<button display="Show / hide" action="hippos-hotkeys --send onscreen-keyboard" afterclick="close" />
+			<button display="Show / hide" action="hippos-hotkeys --send onscreen-keyboard" afterclick="bcc_close" />
 		</feature>
 		<feature display="Save state">
-			<button display="Save" action="hippos-hotkeys --send save_state" afterclick="close" />
+			<button display="Save" action="hippos-hotkeys --send save_state" afterclick="bcc_close" />
 		</feature>
 		<feature display="Load state">
-			<button display="Load" action="hippos-hotkeys --send restore_state" afterclick="close" />
+			<button display="Load" action="hippos-hotkeys --send restore_state" afterclick="bcc_close" />
 		</feature>
 		<feature display="Reset game">
-			<button_confirm display="Reset" action="hippos-hotkeys --send reset" afterclick="close" />
+			<button_confirm display="Reset" action="hippos-hotkeys --send reset" afterclick="bcc_close" />
 		</feature>
 		<feature display="Quit game">
-			<button_confirm display="Quit" action="hippos-hotkeys --send exit" afterclick="close" />
+			<button_confirm display="Quit" action="hippos-hotkeys --send exit" afterclick="bcc_close" />
 		</feature>
 		<feature display="Game not responding?">
-			<button_confirm display="Force quit" action="/usr/lib/hippos/hippos-close-game" afterclick="close" />
+			<button_confirm display="Force quit" action="/usr/lib/hippos/hippos-close-game" afterclick="bcc_close" />
 		</feature>
 	</hgroup>
 
-	<hgroup name="Keys" display="Keys" if='${curl -s http://127.0.0.1:1234/runningGame | jq -r ".name // empty"}'>
+	<hgroup name="Keys" display="Keys">
 		<feature display="Keyboard keys sent by player 1's controller in this game" />
 		<feature display="Back to the system's keys" if="${hippos-padtokey edited}">
-			<button_confirm display="Reset" action="hippos-padtokey reset" afterclick="refresh" />
+			<button_confirm display="Reset" action="hippos-padtokey reset" afterclick="bcc_refresh" />
 		</feature>
 		<feature display="Bottom button">
 			<text display="${hippos-padtokey get b}" />
@@ -163,7 +175,7 @@
 		</feature>
 	</hgroup>
 
-	<hgroup name="Gun" display="Gun" if="${[ -f /var/run/hippos/gun_help.png ] &amp;&amp; curl -s http://127.0.0.1:1234/runningGame | jq -r '.name // empty'}">
+	<hgroup name="Gun" display="Gun">
 		<feature>
 			<img display="/var/run/hippos/gun_help.png" height="45%" />
 		</feature>
@@ -171,23 +183,23 @@
 
 	<hgroup name="System" display="System">
 		<feature display="Touch keyboard" if="${hippos-touchscreen-detect >/dev/null &amp;&amp; echo 1}">
-			<button display="Show / hide" action="hippos-hotkeys --send onscreen-keyboard" afterclick="close" />
+			<button display="Show / hide" action="hippos-hotkeys --send onscreen-keyboard" afterclick="bcc_close" />
 		</feature>
 		<feature display="On-screen keyboard" if='${[ "$(hippos-settings get system.session)" = desktop ] &amp;&amp; echo 1}'>
-			<button display="Show / hide" action="hippos-hotkeys --send onscreen-keyboard" afterclick="close" />
+			<button display="Show / hide" action="hippos-hotkeys --send onscreen-keyboard" afterclick="bcc_close" />
 		</feature>
 		<feature display="Controller as mouse" if='${[ "$(hippos-settings get system.session)" = desktop ] &amp;&amp; echo 1}'>
 			<switch value="${hippos-controller-mouse desktop status}" action_on="hippos-controller-mouse desktop on" action_off="hippos-controller-mouse desktop off" />
 		</feature>
 		<feature display="Volume">
-			<button display="-" action="hippos-audio setSystemVolume -5" afterclick="refresh" />
-			<progressbar display="${hippos-audio getSystemVolume}" min="0" max="100" refresh="2" />
-			<button display="+" action="hippos-audio setSystemVolume +5" afterclick="refresh" />
+			<button display="-" action="hippos-audio setSystemVolume -5" afterclick="bcc_refresh" />
+			<progressbar display="${hippos-audio getSystemVolume}" min="0" max="100" refresh="2" action_set="hippos-audio setSystemVolume {value}" />
+			<button display="+" action="hippos-audio setSystemVolume +5" afterclick="bcc_refresh" />
 		</feature>
 		<feature display="Brightness" if="${hippos-brightness get}">
-			<button display="-" action='hippos-brightness set $(( $(hippos-brightness get) > 10 ? $(hippos-brightness get) - 10 : 1 ))' afterclick="refresh" />
-			<progressbar display="${hippos-brightness get}" min="0" max="100" refresh="2" />
-			<button display="+" action='hippos-brightness set $(( $(hippos-brightness get) &lt; 90 ? $(hippos-brightness get) + 10 : 100 ))' afterclick="refresh" />
+			<button display="-" action="hippos-brightness change -10" afterclick="bcc_refresh" />
+			<progressbar display="${hippos-brightness get}" min="0" max="100" refresh="2" action_set="hippos-brightness set {value}" />
+			<button display="+" action="hippos-brightness change +10" afterclick="bcc_refresh" />
 		</feature>
 		<feature display="Mute sound">
 			<switch value="${hippos-audio getSystemMute}" action_on="hippos-audio setSystemVolume mute" action_off="hippos-audio setSystemVolume unmute" refresh="2" />
@@ -214,11 +226,11 @@
 		</feature>
 		<feature display="Menu screen" if='${[ "$(hippos-resolution listOutputs | wc -l)" -gt 1 ] &amp;&amp; echo 1}'>
 			<text display='${S=$(hippos-settings get quickmenu.screen); echo "${S:-Auto}"}' refresh="2" />
-			<choice display="Auto" action="hippos-settings del quickmenu.screen" afterclick="rescreen" />
-			<choice_cmd display="${hippos-resolution listOutputs}" action="hippos-settings set quickmenu.screen" afterclick="rescreen" />
+			<choice display="Auto" action="hippos-settings del quickmenu.screen" afterclick="bcc_rescreen" />
+			<choice_cmd display="${hippos-resolution listOutputs}" action="hippos-settings set quickmenu.screen" afterclick="bcc_rescreen" />
 		</feature>
 		<feature display="Game not responding?">
-			<button_confirm display="Force quit" action="/usr/lib/hippos/hippos-close-game" afterclick="close" />
+			<button_confirm display="Force quit" action="/usr/lib/hippos/hippos-close-game" afterclick="bcc_close" />
 		</feature>
 		<feature display="IP address">
 			<text display='${hostname -I | cut -d" " -f1}' refresh="5" />
@@ -245,7 +257,7 @@
 
 	<hgroup name="Record" display="Record">
 		<feature display="Recording">
-			<switch value="${hippos-record is_running}" action_on="hippos-record start" action_off="hippos-record stop" afterclick="close" refresh="2" />
+			<switch value="${hippos-record is_running}" action_on="hippos-record start" action_off="hippos-record stop" afterclick="bcc_close" refresh="2" />
 		</feature>
 		<feature display="Quality">
 			<text display="${hippos-record get-quality}" refresh="2" />
@@ -265,7 +277,7 @@
 		</feature>
 		<feature display="Screenshot">
 			<text display='${echo "after $(cat "$XDG_RUNTIME_DIR/quickmenu-screenshot-delay" 2>/dev/null || echo 2) s"}' refresh="1" />
-			<button display="Take" action='(sleep "$(cat "$XDG_RUNTIME_DIR/quickmenu-screenshot-delay" 2>/dev/null || echo 2)"; hippos-screenshot) >/dev/null 2>&amp;1 &amp;' afterclick="close" />
+			<button display="Take" action='(sleep "$(cat "$XDG_RUNTIME_DIR/quickmenu-screenshot-delay" 2>/dev/null || echo 2)"; hippos-screenshot) >/dev/null 2>&amp;1 &amp;' afterclick="bcc_close" />
 			<choice display="Immediately" action='echo 0 > "$XDG_RUNTIME_DIR/quickmenu-screenshot-delay"' />
 			<choice display="After 2 seconds" action='echo 2 > "$XDG_RUNTIME_DIR/quickmenu-screenshot-delay"' />
 			<choice display="After 5 seconds" action='echo 5 > "$XDG_RUNTIME_DIR/quickmenu-screenshot-delay"' />

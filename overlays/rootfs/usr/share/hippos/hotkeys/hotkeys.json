@@ -58,7 +58,7 @@
       "trigger": ["hotkey", "a"],
       "type": "key",
       "target": ["KEY_CONTEXT_MENU"],
-      "description": "Control center"
+      "description": "Quick menu"
     },
     {
       "trigger": ["hotkey", "pagedown"],

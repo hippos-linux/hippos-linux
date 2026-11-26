@@ -223,6 +223,17 @@ if version_lt "$APPLIED" "0.7.3" && [[ -f "${SHORTCUTS_GAMELIST}" ]]; then
     sed -i '\|<desc>Install and update apps, emulators and HippOS itself</desc>|d' "${SHORTCUTS_GAMELIST}"
 fi
 
+USER_QUICKMENU=/userdata/system/configs/quickmenu/quickmenu.xml
+if version_lt "$APPLIED" "0.7.3" && [[ -f "${USER_QUICKMENU}" ]]; then
+    log "0.7.3: quick menu afterclick values are bcc_close, bcc_refresh and bcc_rescreen"
+    sed -i -E 's/afterclick="(close|refresh|rescreen)"/afterclick="bcc_\1"/g' "${USER_QUICKMENU}"
+fi
+
+if version_lt "$APPLIED" "0.7.3" && grep -q '^quickmenu\.es=' /userdata/system/hippos.conf 2>/dev/null; then
+    log "0.7.3: the quick menu is always EmulationStation's, quickmenu.es is dropped"
+    sed -i '/^quickmenu\.es=/d' /userdata/system/hippos.conf
+fi
+
 HIPPOS_CONFIG=/userdata/system/configs/hippos
 mkdir -p "${HIPPOS_CONFIG}"
 for name in external-roms.conf roms-sources.conf ignored-storage-devices.txt current-storage.conf; do

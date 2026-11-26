@@ -66,11 +66,13 @@ class EditTests(unittest.TestCase):
         self.assertEqual(cli.get(self.rom, 'a'), '')
 
 
+KEY_LAYOUT = LIB.parent.parent / 'share' / 'hippos' / 'quickmenu' / 'keys.json'
+
+
 class KeyPickerTests(unittest.TestCase):
     def test_keyboard_offers_exactly_the_editor_keys(self):
-        import hippos_keypicker as picker
-        offered = {key for rows in (picker.MAIN_ROWS, picker.NAV_ROWS, picker.EXTRA_ROWS)
-                   for row in rows for _label, key, _width in row if key}
+        layout = json.loads(KEY_LAYOUT.read_text())
+        offered = {key for rows in layout.values() for row in rows for _label, key, _width in row if key}
         self.assertEqual(offered, set(cli.KEYS) | {'none'})
 
 

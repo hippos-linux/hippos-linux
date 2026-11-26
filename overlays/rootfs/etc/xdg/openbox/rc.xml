@@ -29,5 +29,14 @@
       <fullscreen>no</fullscreen>
       <maximized>yes</maximized>
     </application>
+    <application class="es-controlcenter">
+      <fullscreen>no</fullscreen>
+      <layer>above</layer>
+      <focus>yes</focus>
+      <position force="yes">
+        <x>center</x>
+        <y>center</y>
+      </position>
+    </application>
   </applications>
 </openbox_config>
