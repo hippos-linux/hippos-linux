@@ -41,35 +41,24 @@ fi
 
 WIFI_ENABLED="$(get wifi.enabled)"
 WIFI_SSID="$(get wifi.ssid)"
-WIFI_KEY="$(get wifi.key)"
 WIFI_COUNTRY="$(get wifi.country)"
 
 if [[ -n "${WIFI_COUNTRY}" ]]; then
     iw reg set "${WIFI_COUNTRY}" 2>/dev/null || true
 fi
 
-wifi_profile_saved() {
-    local name type
-    while IFS=: read -r name type; do
-        [[ "${type}" == "802-11-wireless" ]] || continue
-        [[ "$(nmcli -g 802-11-wireless.ssid connection show "${name}" 2>/dev/null)" == "${WIFI_SSID}" ]] && return 0
-    done < <(nmcli -t -f NAME,TYPE connection show 2>/dev/null)
-    return 1
-}
-
 if [[ ("${WIFI_ENABLED}" == "true" || "${WIFI_ENABLED}" == "1") && -n "${WIFI_SSID}" ]] \
         && [[ "$(nmcli radio wifi 2>/dev/null)" == enabled ]]; then
-    if wifi_profile_saved; then
-        log "wifi: '${WIFI_SSID}' saved, NetworkManager connects it"
-    elif [[ -n "${WIFI_KEY}" ]]; then
+    /usr/lib/hippos/hippos-wifi configure >/dev/null 2>&1 || true
+    if [[ -z "$(/usr/lib/hippos/hippos-wifi connected)" ]]; then
         log "wifi: connecting to '${WIFI_SSID}'"
-        nmcli dev wifi connect "${WIFI_SSID}" password "${WIFI_KEY}" 2>/dev/null \
-            || nmcli connection up "${WIFI_SSID}" 2>/dev/null || true
-    else
-        log "wifi: connecting to '${WIFI_SSID}'"
-        nmcli dev wifi connect "${WIFI_SSID}" 2>/dev/null \
-            || nmcli connection up "${WIFI_SSID}" 2>/dev/null || true
+        /usr/lib/hippos/hippos-wifi connect "${WIFI_SSID}" >/dev/null 2>&1 || true
     fi
+fi
+
+/usr/lib/hippos/hippos-gameforce restore >/dev/null 2>&1 || true
+if [[ -e /sys/class/leds/blue:power && "$(get option_powerled)" == off ]]; then
+    echo 0 > /sys/class/leds/blue:power/brightness
 fi
 
 SUSPENDMODE="$(get system.suspendmode)"

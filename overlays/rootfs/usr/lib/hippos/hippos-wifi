@@ -3,6 +3,75 @@ set -euo pipefail
 
 WIFI_READY_TIMEOUT_S=15
 
+security_of() {
+    local line
+    while IFS= read -r line; do
+        [[ "${line#*:}" == "$1" ]] && { printf '%s\n' "${line%%:*}"; return; }
+    done < <(nmcli -t -e no -f SECURITY,SSID dev wifi list 2>/dev/null)
+    return 0
+}
+
+remove_profiles_for() {
+    local type uuid
+    while IFS=: read -r type uuid; do
+        [[ "$type" == 802-11-wireless ]] || continue
+        if [[ "$(nmcli -e no -g 802-11-wireless.ssid connection show uuid "$uuid" 2>/dev/null)" == "$1" ]]; then
+            nmcli connection delete uuid "$uuid" >/dev/null
+        fi
+    done < <(nmcli -t -f TYPE,UUID connection show 2>/dev/null)
+}
+
+profile_for() {
+    local type uuid
+    while IFS=: read -r type uuid; do
+        [[ "$type" == 802-11-wireless ]] || continue
+        [[ "$(nmcli -e no -g 802-11-wireless.ssid connection show uuid "$uuid" 2>/dev/null)" == "$1" ]] || continue
+        [[ -z "$2" || -n "$(nmcli -g 802-11-wireless-security.key-mgmt connection show uuid "$uuid" 2>/dev/null)" ]] || continue
+        printf '%s\n' "$uuid"
+        return 0
+    done < <(nmcli -t -f TYPE,UUID connection show 2>/dev/null)
+    return 1
+}
+
+add_profile() {
+    local ssid="$1" key="$2" key_mgmt=wpa-psk security
+    security="$(security_of "$ssid")"
+    [[ "$security" == *WPA3* && "$security" != *WPA2* && "$security" != *WPA1* ]] && key_mgmt=sae
+    remove_profiles_for "$ssid"
+    nmcli connection add type wifi con-name "$ssid" ssid "$ssid" \
+        wifi-sec.key-mgmt "$key_mgmt" wifi-sec.psk "$key" >/dev/null
+}
+
+connect_with_key() {
+    local ssid="$1" key="$2" security
+    security="$(security_of "$ssid")"
+    if [[ "$security" == *802.1X* || "$security" == WEP* ]]; then
+        nmcli dev wifi connect "$ssid" password "$key"
+        return
+    fi
+    add_profile "$ssid" "$key"
+    nmcli connection up id "$ssid"
+}
+
+saved_networks() {
+    hippos-settings list 2>/dev/null | while IFS= read -r line; do
+        [[ "$line" =~ ^(wifi[0-9]*)\.ssid=(.+)$ ]] || continue
+        printf '%s\t%s\n' "${BASH_REMATCH[2]}" "$(hippos-settings get "${BASH_REMATCH[1]}.key")"
+    done
+}
+
+configure_saved() {
+    local ssid key
+    while IFS=$'\t' read -r ssid key; do
+        profile_for "$ssid" "$key" >/dev/null && continue
+        if [[ -n "$key" ]]; then
+            add_profile "$ssid" "$key"
+        else
+            nmcli connection add type wifi con-name "$ssid" ssid "$ssid" >/dev/null
+        fi
+    done < <(saved_networks)
+}
+
 case "${1:-}" in
     list)
         nmcli -t -f SSID dev wifi list 2>/dev/null | sort -u | grep -v '^$'
@@ -20,17 +89,29 @@ case "${1:-}" in
             sleep 1
         done
         if [[ -n "$KEY" ]]; then
-            nmcli dev wifi connect "$SSID" password "$KEY"
+            connect_with_key "$SSID" "$KEY"
         else
             nmcli dev wifi connect "$SSID"
         fi
+        ;;
+    connected)
+        nmcli -t -e no -f ACTIVE,SSID dev wifi list 2>/dev/null | sed -n 's/^yes://p' | head -n1
+        ;;
+    configure)
+        configure_saved
+        ;;
+    connect)
+        configure_saved
+        nmcli dev wifi rescan 2>/dev/null || true
+        UUID="$(profile_for "${2:?ssid}" "")" || exit 1
+        nmcli connection up uuid "$UUID" >/dev/null
         ;;
     disable)
         DEV=$(nmcli -t -f DEVICE,TYPE dev status 2>/dev/null | awk -F: '$2=="wifi"{print $1; exit}')
         nmcli dev disconnect "${DEV:-wlan0}" 2>/dev/null || true
         ;;
     *)
-        echo "Usage: $0 list|scanlist|enable <ssid> [key]|disable" >&2
+        echo "Usage: $0 list|scanlist|connected|configure|connect <ssid>|enable <ssid> [key]|disable" >&2
         exit 1
         ;;
 esac
