@@ -49,8 +49,8 @@ amd_gpu() {
 nvidia_query() {
     local value
     command -v nvidia-smi >/dev/null || return
-    value="$(nvidia-smi --query-gpu="$1" --format=csv,noheader,nounits 2>/dev/null)" || return
-    head -1 <<<"${value}" | tr -d ' '
+    value="$(nvidia-smi --query-gpu="$1" --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' ')" || return
+    [[ "${value}" =~ ^[0-9]+$ ]] && echo "${value}"
 }
 
 gpu_usage() {
