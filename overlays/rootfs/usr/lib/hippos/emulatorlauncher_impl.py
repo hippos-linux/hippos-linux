@@ -39,6 +39,7 @@ from emulatorlauncher_shared import (
     EmulatorNotInstalled,
     _HUD_CONFIG_PATH,
     _conf_bool,
+    _game_bool,
     _conf_value,
     _system_default_options,
     game_config_name,
@@ -362,6 +363,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument('-autosave',     type=str,  required=False)
     p.add_argument('-lightgun',     action='store_true')
     p.add_argument('-wheel',        action='store_true')
+    p.add_argument('-trackball',    action='store_true')
+    p.add_argument('-spinner',      action='store_true')
     return p
 
 def _netplay_session(args: argparse.Namespace) -> NetplaySession:
@@ -463,6 +466,8 @@ def _launch(args: argparse.Namespace) -> int:
         ctx.lightgun = False
     if not _conf_bool(conf, 'global.use_wheels', True):
         ctx.wheel = False
+    for name, flagged in (('trackball', args.trackball), ('spinner', args.spinner)):
+        setattr(ctx, name, _game_bool(conf, ctx, f'use_{name}s', _conf_bool(conf, f'global.use_{name}s', flagged)))
 
     if ctx.lightgun:
         os.environ['HIPPOS_LIGHTGUN'] = '1'

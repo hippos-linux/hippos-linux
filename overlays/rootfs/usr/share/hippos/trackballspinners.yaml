@@ -1,0 +1,17 @@
+# Known trackballs and spinners. Add your own from Controllers > Trackballs and spinners,
+# they are saved in /userdata/system/configs/hippos/trackballspinners.yaml.
+# vendor and product are required; version and interface only when one device id covers several controls.
+- {name: Generic Trackball, type: trackball, vendor: 0x1241, product: 0x1111, version: 0x111, interface: 0, axis: [REL_X, REL_Y]}
+- {name: Generic Trackball, type: trackball, vendor: 0x1241, product: 0x1111, version: 0x110, interface: 0, axis: [REL_X, REL_Y]}
+- {name: Generic Spinner 1, type: spinner, vendor: 0x1241, product: 0x1111, version: 0x111, interface: 0, axis: [REL_X]}
+- {name: Generic Spinner 2, type: spinner, vendor: 0x1241, product: 0x1111, version: 0x111, interface: 0, axis: [REL_Y]}
+- {name: Generic Spinner 1, type: spinner, vendor: 0x1241, product: 0x1111, version: 0x110, axis: [REL_X]}
+- {name: Generic Spinner 2, type: spinner, vendor: 0x1241, product: 0x1111, version: 0x110, axis: [REL_Y]}
+- {name: Ultimarc U-Trak, type: trackball, vendor: 0xd209, product: 0x15a1, axis: [REL_X, REL_Y]}
+- {name: Logitech USB Trackball, type: trackball, vendor: 0x046d, product: 0xc408, axis: [REL_X, REL_Y]}
+- {name: GRS LED Trackball, type: trackball, vendor: 0x32be, product: 0x1540, axis: [REL_X, REL_Y]}
+- {name: Cypress enCoReII Trackball, type: trackball, vendor: 0x04b4, product: 0x120f, version: 0x111, axis: [REL_X, REL_Y]}
+- {name: GGG TurboTwist 2 Spinner, type: spinner, vendor: 0xfafa, product: 0x0060, version: 0x110, axis: [REL_X]}
+- {name: TS-DOT-02 Spinner, type: spinner, vendor: 0x32be, product: 0x1521, version: 0x111, axis: [REL_X]}
+- {name: TS-RT-JK Spinner, type: spinner, vendor: 0x32be, product: 0x2010, version: 0x111, axis: [REL_X]}
+- {name: 'TS-RT-JK Spinner #1', type: spinner, vendor: 0x32be, product: 0x2011, version: 0x111, axis: [REL_X]}

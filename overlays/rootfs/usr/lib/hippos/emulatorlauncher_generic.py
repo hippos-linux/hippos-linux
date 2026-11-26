@@ -691,8 +691,10 @@ def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> N
     RA_CORES_CFG.write_text('\n'.join(lines) + '\n')
     _log.info("core options: wrote %d entries for core '%s'", len(opts), core)
 
+RETROARCH_MOUSE_PLAYERS = 4
+
 def _write_retroarch_game_overrides(ctx: LaunchContext) -> Optional[Path]:
-    if not ctx.lightgun and not ctx.wheel:
+    if not (ctx.lightgun or ctx.wheel or ctx.trackball or ctx.spinner):
         return None
 
     cfg = _KVConfig(Path(f'/tmp/hippos-retroarch-{os.getpid()}-override.cfg'), separator=' ')
@@ -728,6 +730,17 @@ def _write_retroarch_game_overrides(ctx: LaunchContext) -> Optional[Path]:
             cfg.set('reicast_analog_stick_deadzone', '"0%"')
         if ctx.core == 'beetle-saturn':
             cfg.set('beetle_saturn_analog_stick_deadzone', '"0%"')
+
+    for control_type, enabled in (('trackball', ctx.trackball), ('spinner', ctx.spinner)):
+        if not enabled:
+            continue
+        import hippos_trackballs_spinners
+        indexes = hippos_trackballs_spinners.mouse_indexes(control_type)
+        if indexes:
+            for player in range(1, RETROARCH_MOUSE_PLAYERS + 1):
+                index = indexes[player - 1] if player <= len(indexes) else -1
+                cfg.set(f'input_player{player}_mouse_index', f'"{index}"')
+            _log.info("%s mouse indexes: %s", control_type, indexes)
 
     cfg.write()
     _log.info("Wrote retroarch overrides: %s", cfg.path)

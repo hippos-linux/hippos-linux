@@ -93,6 +93,8 @@ class LaunchContext:
     gameinfoxml:  Optional[Path] = None
     lightgun:    bool = False
     wheel:       bool = False
+    trackball:   bool = False
+    spinner:     bool = False
     controllers: list[ControllerInfo] = field(default_factory=list)
     game_wheel:    dict[str, str] = field(default_factory=dict)
     game_gun:      dict[str, str] = field(default_factory=dict)
