@@ -1,6 +1,5 @@
 from __future__ import annotations
 import os
-import configparser
 from dataclasses import replace
 from pathlib import Path
 from typing import Optional
@@ -30,8 +29,6 @@ from emulatorlauncher_shared import (
 from libretro_cores import REPLACED_CORES, core_file_names
 
 from HipposPaths import BIOS, CHEATS, CONFIGS, EMULATORS_ROOT, SAVES, SCREENSHOTS, USERDATA, USER_DECORATIONS, USER_SHADERS
-import hippos_dosbox_pure_ddrive
-import hippos_win9x
 from emulatorlauncher_registry import Emulator, lookup, register
 
 def launch_libretro(ctx: LaunchContext) -> int:
@@ -394,13 +391,11 @@ class _KVConfig:
     def _load(self) -> None:
         if not self.path.exists():
             return
-        try:
-            parser = configparser.RawConfigParser()
-            parser.optionxform = str
-            parser.read_string('[DEFAULT]\n' + self.path.read_text(encoding='latin1'))
-            self._data = dict(parser.items('DEFAULT'))
-        except Exception as exc:
-            _log.warning("Could not read %s: %s", self.path, exc)
+        for line in self.path.read_text(encoding='latin1').splitlines():
+            key, separator, value = line.partition('=')
+            key = key.strip()
+            if separator and key and not key.startswith(('#', ';')):
+                self._data[key] = value.strip()
 
     def set(self, key: str, value: str) -> None:
         self._data[key] = value
@@ -648,6 +643,8 @@ def _write_retroarch_core_options(ctx: LaunchContext, conf: dict[str, str]) -> N
         opts['mame_media_type']           = _get('mame_media_type', 'rom')
 
     elif core == 'dosbox_pure' and ctx.system == 'win98':
+        import hippos_dosbox_pure_ddrive
+        import hippos_win9x
         opts['dosbox_pure_bootos_ramdisk'] = _game_setting(conf, ctx.system, ctx.rom, 'dosbox_pure_bootos_ramdisk') or 'diff'
         free_space = _game_setting(conf, ctx.system, ctx.rom, 'dosbox_pure_bootos_dfreespace')
         if free_space in ('', 'auto'):

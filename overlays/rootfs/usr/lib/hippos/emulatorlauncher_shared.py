@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import configparser
 import ctypes
 import filecmp
 import json
@@ -17,8 +16,10 @@ from functools import cache
 from dataclasses import dataclass, field
 from pathlib import Path
 from shutil import copy2, which
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
+if TYPE_CHECKING:
+    import configparser
 
 import hippos_hotkeys_control
 from hippos_onscreen_keyboard import onscreen_keyboard
@@ -330,6 +331,7 @@ def _conf_bool(conf: dict[str, str], key: str, default: bool = False) -> bool:
     return value.lower() in ('1', 'true', 'on', 'enabled', 'yes')
 
 def _new_ini_parser() -> configparser.ConfigParser:
+    import configparser
     parser = configparser.ConfigParser(interpolation=None)
     parser.optionxform = str
     return parser

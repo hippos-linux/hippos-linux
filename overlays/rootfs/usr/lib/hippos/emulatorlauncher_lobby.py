@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 import threading
-import urllib.error
-import urllib.request
 from urllib.parse import unquote
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
@@ -44,6 +42,8 @@ def lobby_game(ctx: LaunchContext) -> LobbyGame:
 
 
 def _lobby_request(method: str, url: str, body: Optional[dict] = None, token: str = '') -> Optional[dict]:
+    import urllib.error
+    import urllib.request
     headers = {'Content-Type': 'application/json'}
     if token:
         headers['Authorization'] = f'Bearer {token}'

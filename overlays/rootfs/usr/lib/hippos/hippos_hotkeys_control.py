@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import signal
-import socket
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +61,7 @@ def set_keyboard_shown(shown: bool) -> None:
 
 
 def press_keys(names: list[str]) -> bool:
+    import socket
     with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
         try:
             sock.sendto(' '.join(names).encode(), str(KEYS_SOCKET))

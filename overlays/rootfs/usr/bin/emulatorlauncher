@@ -3,6 +3,13 @@ import logging
 import os
 import sys
 
+GAME_NICENESS = -4
+
+try:
+    os.setpriority(os.PRIO_PROCESS, 0, GAME_NICENESS)
+except PermissionError:
+    pass
+
 sys.path.insert(0, '/usr/lib/hippos')
 
 from emulatorlauncher_impl import main

@@ -13,7 +13,7 @@ import time
 import xml.etree.ElementTree as ET
 from dataclasses import replace
 from pathlib import Path
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 from typing import Iterator, Optional
 
 try:
@@ -24,10 +24,9 @@ except ImportError:
 
 from hippos_squashfs import mount_squashfs
 from hippos_overlayfs import mount_overlayfs
-from hippos_bezels import prepare_bezel
 from hippos_controller_monitor import start_controller_monitor
 
-from HipposPaths import EMULATORS_ROOT, HOME, SAVES_RW
+from HipposPaths import EMULATORLAUNCHER_MODULE_INDEX, EMULATORS_ROOT, HOME, SAVES_RW
 
 from emulatorlauncher_shared import (
     ControllerInfo,
@@ -51,7 +50,6 @@ from emulatorlauncher_shared import (
     launch_clock,
     launch_step,
 )
-from emulatorlauncher_lobby import hosted_session
 from emulatorlauncher_power import game_power_settings
 from emulatorlauncher_parallel import Parallel, timed
 
@@ -214,7 +212,7 @@ def _switch_video_mode(conf: dict[str, str], system: str) -> tuple[str, str, str
     return _video_state('gameMode', game_mode)
 
 def _prepare_ctx_bezel(ctx: LaunchContext, conf: dict[str, str]) -> None:
-    from hippos_bezels import generate_gun_help, gun_border_color
+    from hippos_bezels import generate_gun_help, gun_border_color, prepare_bezel
     if ctx.resolution is None:
         return
     sys_bezel  = conf.get(f'{ctx.system}.bezel')
@@ -328,47 +326,9 @@ def _build_hud_config(conf: dict[str, str], ctx: LaunchContext) -> Optional[Path
     _log.info("hud: config written (%s mode, %s)", mode, position)
     return _HUD_CONFIG_PATH
 
-import emulatorlauncher_86box
-import emulatorlauncher_ares
-import emulatorlauncher_azahar
-import emulatorlauncher_cemu
-import emulatorlauncher_computers
-import emulatorlauncher_core
-import emulatorlauncher_demul
-import emulatorlauncher_drastic
-import emulatorlauncher_duckstation
-import emulatorlauncher_extras
-import emulatorlauncher_generic
-import emulatorlauncher_gopher64
-import emulatorlauncher_gsplus
-import emulatorlauncher_lunaria
-import emulatorlauncher_melonds
-import emulatorlauncher_mesen2
-import emulatorlauncher_misc
-import emulatorlauncher_model2emu
-import emulatorlauncher_openbor
-import emulatorlauncher_pcsx2
-import emulatorlauncher_play
-import emulatorlauncher_ports
-import emulatorlauncher_ppsspp
-import emulatorlauncher_rpcs3
-import emulatorlauncher_runtime
-import emulatorlauncher_shadps4
-import emulatorlauncher_sheepshaver
-import emulatorlauncher_stella
-import emulatorlauncher_supermodel
-import emulatorlauncher_switch
-import emulatorlauncher_vita3k
-import emulatorlauncher_vpinball
-import emulatorlauncher_waydroid
-import emulatorlauncher_windowsarcadeloader
-import emulatorlauncher_xbased
-import emulatorlauncher_xemu
-import emulatorlauncher_xenia
+from emulatorlauncher_registry import Emulator, lookup, use_launcher_sources
 
-from emulatorlauncher_registry import Emulator, load_package_launchers, lookup
-
-load_package_launchers(EMULATORS_ROOT)
+use_launcher_sources(EMULATORS_ROOT, EMULATORLAUNCHER_MODULE_INDEX)
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description='HippOS emulator launcher')
@@ -530,12 +490,16 @@ def _launch(args: argparse.Namespace) -> int:
 def _prepare_and_run(ctx: LaunchContext, conf: dict[str, str], emulator: Emulator) -> int:
     with ExitStack() as stack:
         stack.callback(_start_save_sync)
+        lobby = nullcontext()
+        if ctx.netplay.mode == 'host':
+            from emulatorlauncher_lobby import hosted_session
+            lobby = hosted_session(conf, ctx, emulator)
         *_, rom = stack.enter_context(Parallel(
             timed('controllers', _controllers(ctx)),
             timed('display', _display(conf, ctx)),
             timed('hud', _hud(conf, ctx)),
             timed('power', game_power_settings(conf, ctx.system, ctx.rom)),
-            timed('lobby', hosted_session(conf, ctx, emulator)),
+            timed('lobby', lobby),
             timed('rom', _prepared_rom(ctx, emulator)),
         ))
         ctx.rom = rom

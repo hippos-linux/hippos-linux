@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
-import pickle
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
@@ -114,11 +112,13 @@ def _parse_es_input_xml(path: Path) -> tuple[ESControllerProfile, ...]:
 
 
 def _parsed_cache_file(path: Path) -> Path:
+    import hashlib
     return PARSED_CACHE_DIR / f"{hashlib.sha1(str(path).encode()).hexdigest()[:16]}.pickle"
 
 
 @cache
 def _parse_es_input_file(path: Path, mtime_ns: int) -> tuple[ESControllerProfile, ...]:
+    import pickle
     key = (PARSED_CACHE_VERSION, str(path), mtime_ns, path.stat().st_size)
     cache_file = _parsed_cache_file(path)
     try:

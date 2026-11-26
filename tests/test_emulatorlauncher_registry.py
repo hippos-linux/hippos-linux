@@ -14,9 +14,9 @@ sys.path.insert(0, str(REPO / 'overlays' / 'rootfs' / 'usr' / 'lib' / 'hippos'))
 
 import emulatorlauncher_impl  # noqa: F401
 import emulatorlauncher_shared as shared
-from emulatorlauncher_registry import load_package_launchers, registered
+from emulatorlauncher_registry import registered, use_launcher_sources
 
-load_package_launchers(EMULATOR_PACKAGES)
+use_launcher_sources(EMULATOR_PACKAGES, None)
 
 
 def _hotkey_context_files() -> list[Path]:
