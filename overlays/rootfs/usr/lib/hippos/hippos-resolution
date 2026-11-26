@@ -188,6 +188,9 @@ case "${1:-}" in
         vrr_mode=$(nvidia-settings -t -q "[dpy:${PSCREEN}]/DisplayVRRMode" 2>/dev/null)
         [[ "$vrr_mode" == 1 || "$vrr_mode" == 2 ]]
         ;;
+    supportHdr)
+        exit 1
+        ;;
     setRotation|setDPI|setReflection|forceMode|supportSystemRotation|supportSystemReflection)
         exit 0
         ;;

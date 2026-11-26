@@ -71,9 +71,11 @@ def cmd_del(key: str) -> int:
             _write(USER_CONF, data)
     return 0
 
+def merged() -> dict[str, str]:
+    return {**_parse(DEFAULTS_CONF), **_parse(HW_DEFAULTS), **_parse(USER_CONF)}
+
 def cmd_list() -> int:
-    merged = {**_parse(DEFAULTS_CONF), **_parse(HW_DEFAULTS), **_parse(USER_CONF)}
-    for k, v in sorted(merged.items()):
+    for k, v in sorted(merged().items()):
         print(f'{k}={v}')
     return 0
 

@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Usage: hippos-mitigations status | on | off
+# status prints 1 when CPU vulnerability mitigations are on at next boot, 0 when off.
+set -euo pipefail
+
+DROP_IN=/etc/default/grub.d/40-mitigations.cfg
+
+[[ "${1:-}" == on || "${1:-}" == off ]] && [[ "${EUID}" -ne 0 ]] && exec sudo "$0" "$@"
+
+next_boot_args() {
+    bash -c 'GRUB_CMDLINE_LINUX=""; GRUB_CMDLINE_LINUX_DEFAULT=""
+        for f in /etc/default/grub /etc/default/grub.d/*.cfg; do [ -f "$f" ] && . "$f"; done
+        printf "%s %s\n" "$GRUB_CMDLINE_LINUX" "$GRUB_CMDLINE_LINUX_DEFAULT"'
+}
+
+case "${1:-}" in
+    status)
+        [[ " $(next_boot_args) " == *" mitigations=off "* ]] && echo 0 || echo 1
+        ;;
+    on)
+        rm -f "${DROP_IN}"
+        /usr/lib/hippos/hippos-upgrade update-grub
+        ;;
+    off)
+        mkdir -p "${DROP_IN%/*}"
+        printf 'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT mitigations=off"\n' > "${DROP_IN}"
+        /usr/lib/hippos/hippos-upgrade update-grub
+        ;;
+    *)
+        echo "Usage: $0 status|on|off" >&2
+        exit 1
+        ;;
+esac

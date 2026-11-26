@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Usage: hippos-gameforce buttonColorLed off|red|green|blue|white|purple|yellow|cyan
+#        hippos-gameforce powerLed off|on|heartbeat
+#        hippos-gameforce restore
+# GameForce Chi button and power LEDs. ES saves the choices as color_rgb and option_powerled in hippos.conf.
+set -euo pipefail
+
+LEDS=/sys/class/leds
+
+[[ "${EUID}" -ne 0 ]] && exec sudo -n "$0" "$@"
+[[ -e "${LEDS}/heartbeat" && -e "${LEDS}/red" ]] || exit 0
+
+button_colour() {
+    local rgb
+    case "$1" in
+        off) rgb="0 0 0" ;; red) rgb="1 0 0" ;; green) rgb="0 1 0" ;; blue) rgb="0 0 1" ;;
+        white) rgb="1 1 1" ;; purple) rgb="1 0 1" ;; yellow) rgb="1 1 0" ;; cyan) rgb="0 1 1" ;;
+        *) echo "unknown colour: $1" >&2; return 1 ;;
+    esac
+    read -r r g b <<<"${rgb}"
+    echo "${r}" > "${LEDS}/red/brightness"
+    echo "${g}" > "${LEDS}/green/brightness"
+    echo "${b}" > "${LEDS}/blue/brightness"
+}
+
+power_led() {
+    case "$1" in
+        heartbeat) echo heartbeat > "${LEDS}/heartbeat/trigger" ;;
+        on)  echo none > "${LEDS}/heartbeat/trigger"; echo 1 > "${LEDS}/heartbeat/brightness" ;;
+        off) echo none > "${LEDS}/heartbeat/trigger"; echo 0 > "${LEDS}/heartbeat/brightness" ;;
+        *) echo "unknown power LED mode: $1" >&2; return 1 ;;
+    esac
+}
+
+case "${1:-}" in
+    buttonColorLed) button_colour "${2:?colour}" ;;
+    powerLed)       power_led "${2:?mode}" ;;
+    restore)
+        button_colour "$(hippos-settings get color_rgb 2>/dev/null || echo off)"
+        power_led "$(hippos-settings get option_powerled 2>/dev/null || echo heartbeat)"
+        ;;
+    *) sed -n '2,4s/^# //p' "$0" >&2; exit 1 ;;
+esac

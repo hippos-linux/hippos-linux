@@ -1,0 +1,13 @@
+[Unit]
+Description=HippOS handheld LED effects and battery colours
+After=multi-user.target
+ConditionPathExists=/sys/class/leds
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/hippos/hippos_led.py daemon
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,2 +1,2 @@
-SUBSYSTEM=="leds", ACTION=="add", KERNEL=="*multicolor*|*:rgb:*|rgb:[lr][0-9]*|[lr]:[rgb][0-9]*", \
+SUBSYSTEM=="leds", ACTION=="add", KERNEL=="*multicolor*|*:rgb:*|rgb:[lr][0-9]*|[lr]:[rgb][0-9]*|blue:power", \
   RUN+="/bin/sh -c 'for a in brightness multi_intensity; do f=/sys%p/$$a; [ -e $$f ] && chgrp video $$f && chmod g+w $$f; done; exit 0'"
