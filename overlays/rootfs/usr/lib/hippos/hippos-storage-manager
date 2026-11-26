@@ -17,6 +17,10 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import xml.etree.ElementTree as ET
+import zipfile
+import zlib
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator, Optional
@@ -58,6 +62,9 @@ CACHE_DIR_NAMES = {"cache", "caches", "shadercache", "shader_cache", "shaders", 
 CACHE_EXTS = {".cache", ".tmp", ".bak", ".old", ".log"}
 SCAN_COMMIT_EVERY = 1000
 HASHABLE_CATEGORIES = {"rom", "save", "media", "theme", "screenshot"}
+ES_SYSTEMS_FILES = [Path("/usr/share/emulationstation/es_systems.cfg")]
+USER_ES_SYSTEMS_DIR = SYSTEM / "configs" / "emulationstation"
+ROM_IDENTITY_PREFIXES = ("rom:", "zip:")
 
 _HIPPOS_UID = 1000
 _HIPPOS_GID = 1000
@@ -371,8 +378,100 @@ def store_file(conn: sqlite3.Connection, scan_id: int, rec: FileRecord) -> int:
     )
     return int(existing["id"])
 
+def game_extensions() -> dict[str, set[str]]:
+    files = list(ES_SYSTEMS_FILES) + sorted(USER_ES_SYSTEMS_DIR.glob("es_systems_*.cfg"))
+    extensions: dict[str, set[str]] = {}
+    for file in files:
+        try:
+            root = ET.parse(file).getroot()
+        except (OSError, ET.ParseError):
+            continue
+        for system in root.iter("system"):
+            folder = Path(system.findtext("path") or "").name
+            exts = (system.findtext("extension") or "").lower().split()
+            if folder and exts:
+                extensions.setdefault(folder, set()).update(exts)
+    return extensions
+
+def is_game_file(path: Path, size: int, extensions: dict[str, set[str]]) -> bool:
+    if size <= 0:
+        return False
+    try:
+        system = path.relative_to(ROMS_POOL).parts[0]
+    except (ValueError, IndexError):
+        return False
+    return path.suffix.lower() in extensions.get(system, set())
+
+def crc_identity(size: int, crc: int) -> str:
+    return f"rom:{size:x}:{crc & 0xFFFFFFFF:08x}"
+
+def zip_identity(path: Path) -> Optional[str]:
+    with zipfile.ZipFile(path) as archive:
+        members = sorted((info.file_size, info.CRC) for info in archive.infolist() if not info.is_dir())
+    if not members:
+        return None
+    if len(members) == 1:
+        return crc_identity(*members[0])
+    return "zip:" + ",".join(f"{size:x}:{crc:08x}" for size, crc in members)
+
+def file_crc_identity(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    crc = 0
+    size = 0
+    with path.open("rb") as fh:
+        while data := fh.read(chunk_size):
+            crc = zlib.crc32(data, crc)
+            size += len(data)
+    return crc_identity(size, crc)
+
+def identity_size(identity: str) -> Optional[int]:
+    if not identity.startswith("rom:"):
+        return None
+    return int(identity.split(":")[1], 16)
+
+def hash_game_files(conn: sqlite3.Connection, scan_id: int, size_limit: int) -> int:
+    extensions = game_extensions()
+    rows = conn.execute(
+        "SELECT id, path, size, content_hash FROM files WHERE last_seen_scan_id = ? AND category = 'rom'",
+        (scan_id,),
+    ).fetchall()
+    errors = 0
+    loose = []
+    zip_sizes: Counter[int] = Counter()
+    for row in rows:
+        path = Path(row["path"])
+        cached = row["content_hash"] if (row["content_hash"] or "").startswith(ROM_IDENTITY_PREFIXES) else None
+        identity = None
+        if is_game_file(path, int(row["size"]), extensions):
+            if path.suffix.lower() == ".zip":
+                try:
+                    identity = cached or zip_identity(path)
+                except (OSError, zipfile.BadZipFile):
+                    errors += 1
+            else:
+                loose.append(row)
+                identity = cached
+        if identity and path.suffix.lower() == ".zip" and (size := identity_size(identity)) is not None:
+            zip_sizes[size] += 1
+        conn.execute("UPDATE files SET content_hash=? WHERE id=?", (identity, row["id"]))
+
+    loose_sizes = Counter(int(row["size"]) for row in loose)
+    for row in loose:
+        if (row["content_hash"] or "").startswith(ROM_IDENTITY_PREFIXES):
+            continue
+        size = int(row["size"])
+        if size > size_limit or zip_sizes[size] + loose_sizes[size] < 2:
+            continue
+        try:
+            identity = file_crc_identity(Path(row["path"]))
+        except OSError:
+            errors += 1
+            continue
+        conn.execute("UPDATE files SET content_hash=? WHERE id=?", (identity, row["id"]))
+    conn.commit()
+    return errors
+
 def hash_same_size_files(conn: sqlite3.Connection, scan_id: int, size_limit: int) -> int:
-    categories = tuple(sorted(HASHABLE_CATEGORIES))
+    categories = tuple(sorted(HASHABLE_CATEGORIES - {"rom"}))
     marks = ",".join("?" * len(categories))
     rows = conn.execute(
         f"""
@@ -443,6 +542,7 @@ def scan_roots(conn: sqlite3.Connection, roots: list[tuple[Path, str]], size_lim
             conn.commit()
 
     errors += hash_same_size_files(conn, scan_id, size_limit)
+    errors += hash_game_files(conn, scan_id, size_limit)
 
     duplicate_groups = 0
     duplicate_files = 0
