@@ -634,6 +634,9 @@ capture_shell "edid.txt" \
 capture_shell "xrandr.txt" \
     'DISPLAY=:0 xrandr 2>&1 || echo "xrandr not available"'
 
+capture_shell "xrandr-prop.txt" \
+    'DISPLAY=:0 xrandr --prop 2>&1 || echo "xrandr not available"'
+
 capture_shell "glxinfo.txt" \
     '[[ -f /run/hippos/prime.env ]] && . /run/hippos/prime.env; DISPLAY=:0 glxinfo -B 2>&1 || echo "glxinfo not available"'
 
