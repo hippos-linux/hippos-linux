@@ -97,12 +97,21 @@ def missing_packages(packages: list[str]) -> list[str]:
 
 def install_packages(packages: list[str], root: str | None = None) -> tuple[bool, list[str]]:
     prefix = ['chroot', root] if root else []
-    updated = subprocess.run([*prefix, *_APT, 'update'], env=_APT_ENV).returncode == 0
+    updated = subprocess.run([*prefix, *_APT, 'update', '--error-on=any'], env=_APT_ENV).returncode == 0
     if subprocess.run([*prefix, *_APT_INSTALL, *packages], env=_APT_ENV).returncode == 0:
         return updated, []
     failed = [p for p in packages
               if subprocess.run([*prefix, *_APT_INSTALL, p], env=_APT_ENV).returncode != 0]
     return updated, failed
+
+def has_candidate(package: str) -> bool:
+    policy = subprocess.run(['apt-cache', 'policy', package], capture_output=True, text=True, check=False).stdout
+    match = re.search(r'^\s*Candidate: (\S+)', policy, re.M)
+    return match is not None and match.group(1) != '(none)'
+
+def wait_for_network(poll_seconds: int = 300) -> None:
+    while subprocess.run(['nm-online', '-q', '-t', str(poll_seconds)], check=False).returncode != 0:
+        pass
 
 def search_packages(term: str) -> list[tuple[str, str]]:
     listing = subprocess.run(['apt-cache', 'search', '--names-only', term],

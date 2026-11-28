@@ -15,12 +15,16 @@ from hippos_apt import (
     RESTORE_PENDING,
     USER_PACKAGES,
     image_packages,
+    has_candidate,
     install_packages,
     installed_user_packages,
     missing_packages,
     pre_update_user_packages,
     recorded_user_packages,
+    wait_for_network,
 )
+
+RETRY_SOON = 75
 
 def record() -> int:
     image = image_packages()
@@ -42,13 +46,20 @@ def restore() -> int:
             packages = pre_update_user_packages(image)
     packages = missing_packages(packages)
     if packages:
+        print('Waiting for a network connection to reinstall your apt packages', flush=True)
+        wait_for_network()
         print(f'Reinstalling {len(packages)} apt package(s): {" ".join(packages)}', flush=True)
         updated, failed = install_packages(packages)
-        if not updated and len(failed) == len(packages):
-            print('apt-get update failed and nothing installed; will retry on next boot', file=sys.stderr)
+        if failed and not updated:
+            print(f'Package lists could not be downloaded; retrying soon: {" ".join(failed)}', file=sys.stderr)
+            return RETRY_SOON
+        dropped = [p for p in failed if not has_candidate(p)]
+        retried = [p for p in failed if p not in dropped]
+        if dropped:
+            print(f'No longer available from apt, dropped: {" ".join(dropped)}', file=sys.stderr)
+        if retried:
+            print(f'Could not be installed, retrying on the next boot: {" ".join(retried)}', file=sys.stderr)
             return 1
-        if failed:
-            print(f'No longer installable, dropped: {" ".join(failed)}', file=sys.stderr)
     RESTORE_PENDING.unlink(missing_ok=True)
     PRE_UPDATE_STATUS.unlink(missing_ok=True)
     PRE_UPDATE_EXTENDED_STATES.unlink(missing_ok=True)

@@ -5,6 +5,9 @@ After=network.target local-fs.target hippos-apt-update.service
 [Service]
 Type=simple
 ExecStart=/usr/lib/hippos/hippos-apt-packages boot
+Restart=on-failure
+RestartSec=5min
+RestartPreventExitStatus=1
 StandardOutput=journal
 StandardError=journal
 
