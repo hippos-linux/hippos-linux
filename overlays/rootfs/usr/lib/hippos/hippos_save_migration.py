@@ -7,9 +7,10 @@ import shutil
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from HipposPaths import RETROARCH_ROOT
 from libretro_cores import core_file_names
 
-INFO_DIR = Path('/usr/share/libretro/info')
+INFO_DIR = RETROARCH_ROOT / 'info'
 ES_SYSTEMS = Path('/usr/share/emulationstation/es_systems.cfg')
 SAVES = Path('/userdata/saves')
 ROMS = Path('/userdata/roms')

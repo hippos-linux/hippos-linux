@@ -37,6 +37,9 @@ FREEJ2ME_PLUS_SRC="${WORK_ROOT:-/work/work/emulators}/freej2me-plus/source"
 FREEJ2ME_PLUS_DIR="${STAGING_DIR}/freej2me"
 
 OPENCDI_REPO='https://github.com/sigsantilio/opencdi'
+RETROARCH_REPO='https://github.com/libretro/RetroArch'
+RETROARCH_SRC="${WORK_ROOT:-/work/work/emulators}/retroarch/source"
+CORE_INFO_URL='https://buildbot.libretro.com/assets/frontend/info.zip'
 OPENCDI_SRC="${WORK_ROOT:-/work/work/emulators}/opencdi/source"
 
 FORCE=0
@@ -81,7 +84,54 @@ install_opencdi() {
     log "Installed OpenCDi ${tag}"
 }
 
+install_retroarch() {
+    local tag stamp="${ETAG_DIR}/retroarch.built" filters
+    tag="$(github_latest_tag "${RETROARCH_REPO}")"
+    if [[ "${FORCE}" -eq 0 && -x "${STAGING_DIR}/bin/retroarch" && "$(cat "${stamp}" 2>/dev/null)" == "${tag}" ]]; then
+        log "RetroArch ${tag} already built"
+        return
+    fi
+    clone_source "${RETROARCH_REPO}" "${tag}" "${RETROARCH_SRC}"
+    (
+        cd "${RETROARCH_SRC}"
+        make clean >/dev/null 2>&1 || true
+        ./configure --prefix=/usr --disable-qt --disable-jack --disable-v4l2 \
+            --disable-update_cores --disable-update_assets --disable-update_core_info
+        make -j"$(nproc)"
+        make -C libretro-common/audio/dsp_filters clean
+        make -C libretro-common/audio/dsp_filters -j"$(nproc)" compiler="${CC:-gcc}"
+        make -C gfx/video_filters clean
+        make -C gfx/video_filters -j"$(nproc)" compiler="${CC:-gcc}"
+    )
+    install -Dm755 "${RETROARCH_SRC}/retroarch" "${STAGING_DIR}/bin/retroarch"
+    "${STRIP:-strip}" "${STAGING_DIR}/bin/retroarch"
+    filters="${STAGING_DIR}/filters"
+    rm -rf "${filters}"
+    mkdir -p "${filters}/audio" "${filters}/video"
+    install -m644 "${RETROARCH_SRC}"/libretro-common/audio/dsp_filters/*.dsp "${filters}/audio/"
+    install -m755 "${RETROARCH_SRC}"/libretro-common/audio/dsp_filters/*.so "${filters}/audio/"
+    install -m644 "${RETROARCH_SRC}"/gfx/video_filters/*.filt "${filters}/video/"
+    install -m755 "${RETROARCH_SRC}"/gfx/video_filters/*.so "${filters}/video/"
+    "${STRIP:-strip}" "${filters}"/audio/*.so "${filters}"/video/*.so
+    printf '%s\n' "${tag}" > "${stamp}"
+    log "Installed RetroArch ${tag}"
+}
+
+install_core_info() {
+    local tmp
+    tmp="$(mktemp -d)"
+    curl -fsSL "${CORE_INFO_URL}" -o "${tmp}/info.zip"
+    rm -rf "${STAGING_DIR}/info"
+    mkdir -p "${STAGING_DIR}/info"
+    unzip -q "${tmp}/info.zip" '*.info' -d "${STAGING_DIR}/info"
+    rm -rf "${tmp}"
+    log "Installed $(find "${STAGING_DIR}/info" -name '*.info' | wc -l) core info files"
+}
+
 mkdir -p "${STAGING_DIR}" "${CORES_DIR}" "${ETAG_DIR}"
+
+install_retroarch
+install_core_info
 
 log "Fetching buildbot index for ARCH=${ARCH} (${LIBRETRO_ARCH})..."
 BUILDBOT_CORES=$(curl -fsSL "${BUILDBOT_BASE}/" \
@@ -112,7 +162,7 @@ UNPACKAGED="$(LC_ALL=C comm -23 <(printf '%s\n' "${BUILDBOT_CORES}") <(printf '%
 
 while IFS= read -r core; do
     if [[ -n "${core}" ]]; then
-        rm -f "${CORES_DIR}/${core}" "${ETAG_DIR}/${core}.etag"
+        rm -f "${CORES_DIR}/${core}" "${ETAG_DIR}/${core}.etag" "${ETAG_DIR}/${core}.build"
     fi
 done <<< "${UNPACKAGED}"
 
@@ -129,6 +179,7 @@ report_unpackaged_cores
 total=0
 downloaded=0
 skipped=0
+rebuilt=0
 failed=0
 
 while IFS= read -r so_name; do
@@ -137,6 +188,7 @@ while IFS= read -r so_name; do
 
     dest="${CORES_DIR}/${so_name}"
     etag_file="${ETAG_DIR}/${so_name}.etag"
+    build_file="${ETAG_DIR}/${so_name}.build"
 
     if [[ "${FORCE}" -eq 0 ]]; then
         remote_etag=$(curl -fsSI "${BUILDBOT_BASE}/${so_name}.zip" \
@@ -160,21 +212,28 @@ while IFS= read -r so_name; do
             -D "${headers}" \
             -o "${tmp}"; then
 
-        if unzip -p "${tmp}" "${so_name}" > "${dest}" 2>/dev/null \
-            || unzip -p "${tmp}" > "${dest}" 2>/dev/null; then
+        if unzip -p "${tmp}" "${so_name}" > "${tmp}.so" 2>/dev/null \
+            || unzip -p "${tmp}" > "${tmp}.so" 2>/dev/null; then
 
             new_etag=$(grep -i '^etag:' "${headers}" | tr -d '\r' | awk '{print $2}' || true)
             [[ -n "${new_etag}" ]] && echo -n "${new_etag}" > "${etag_file}"
 
-            downloaded=$(( downloaded + 1 ))
-            log "  OK: ${so_name}"
+            build="$(python3 "/work/packages/emulators/${EMULATOR_NAME}/core-build-identity.py" "${tmp}.so")"
+            if [[ -f "${dest}" && "${build}" == "$(cat "${build_file}" 2>/dev/null)" ]]; then
+                rebuilt=$(( rebuilt + 1 ))
+                log "  same source, keeping the current build: ${so_name}"
+            else
+                mv "${tmp}.so" "${dest}"
+                echo -n "${build}" > "${build_file}"
+                downloaded=$(( downloaded + 1 ))
+                log "  OK: ${so_name}"
+            fi
         else
             log "  WARN: could not extract ${so_name}"
-            rm -f "${dest}"
             failed=$(( failed + 1 ))
         fi
 
-        rm -f "${tmp}" "${headers}"
+        rm -f "${tmp}" "${tmp}.so" "${headers}"
     else
         rm -f "${tmp}" "${headers}"
         log "  WARN: download failed for ${so_name}"
@@ -199,6 +258,6 @@ for core in "${CORES_DIR}"/*.so; do
     fi
 done
 
-log "Done — ${total} available, ${downloaded} downloaded, ${skipped} skipped, ${failed} failed"
+log "Done — ${total} available, ${downloaded} updated, ${rebuilt} rebuilt from the same source, ${skipped} unchanged, ${failed} failed"
 
 write_artifact_version "${STAGING_DIR}" "$(content_version "${STAGING_DIR}")"

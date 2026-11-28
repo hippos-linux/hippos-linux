@@ -46,9 +46,8 @@ mesa-va-drivers
 mesa-vdpau-drivers
 vainfo
 
-# RetroArch + core info (cores come from the retroarch build artifact)
-retroarch
-libretro-core-info
+# RetroArch menu assets
+retroarch-assets
 
 # Emulator runtime libraries
 libserialport0                          # amiberry

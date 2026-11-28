@@ -14,6 +14,7 @@ from emulatorlauncher_shared import (
     _conf_value,
     _game_setting,
     _load_es_input_configs,
+    _load_effective_hippos_conf,
     _load_hippos_conf,
     _log,
     _pick_es_profile,
@@ -28,7 +29,7 @@ from emulatorlauncher_shared import (
 
 from libretro_cores import REPLACED_CORES, core_file_names
 
-from HipposPaths import BIOS, CHEATS, CONFIGS, EMULATORS_ROOT, SAVES, SCREENSHOTS, USERDATA, USER_DECORATIONS, USER_SHADERS
+from HipposPaths import BIOS, CHEATS, CONFIGS, EMULATORS_ROOT, RETROARCH_ROOT, SAVES, SCREENSHOTS, USERDATA, USER_DECORATIONS, USER_SHADERS
 from emulatorlauncher_registry import Emulator, lookup, register
 
 def launch_libretro(ctx: LaunchContext) -> int:
@@ -96,7 +97,7 @@ RA_CONFIG_DIR = CONFIGS / 'retroarch'
 RA_CUSTOM_CFG = RA_CONFIG_DIR / 'retroarchcustom.cfg'
 RA_CORES_CFG  = RA_CONFIG_DIR / 'cores' / 'retroarch-core-options.cfg'
 
-RETROARCH_BIN = Path('/usr/bin/retroarch')
+RETROARCH_BIN = RETROARCH_ROOT / 'bin' / 'retroarch'
 
 LIBRETRO_RATIO_INDEXES: tuple[str, ...] = (
     '4/3', '16/9', '16/10', '16/15', '21/9', '1/1', '2/1', '3/2', '3/4',
@@ -107,7 +108,7 @@ LIBRETRO_RATIO_INDEXES: tuple[str, ...] = (
 LAUNCH_FILE_SUFFIX = '.libretro'
 
 CORE_SEARCH_PATHS = [
-    EMULATORS_ROOT / 'retroarch' / 'cores',
+    RETROARCH_ROOT / 'cores',
     Path('/usr/lib/x86_64-linux-gnu/libretro'),
     Path('/usr/lib/aarch64-linux-gnu/libretro'),
     Path('/usr/lib/libretro'),
@@ -400,6 +401,9 @@ class _KVConfig:
     def set(self, key: str, value: str) -> None:
         self._data[key] = value
 
+    def unset(self, key: str) -> None:
+        self._data.pop(key, None)
+
     def clear_prefix(self, prefix: str) -> None:
         for k in [k for k in self._data if k.startswith(prefix)]:
             del self._data[k]
@@ -409,6 +413,13 @@ class _KVConfig:
         with self.path.open('w') as fh:
             for key, value in self._data.items():
                 fh.write(f'{key}{self.sep}={self.sep}{value}\n')
+
+def _set_menu_driver(cfg: _KVConfig, conf: dict[str, str]) -> None:
+    menu_driver = _conf_value(conf, 'global.retroarch.menu_driver')
+    if menu_driver:
+        cfg.set('menu_driver', f'"{menu_driver}"')
+    else:
+        cfg.unset('menu_driver')
 
 def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[LaunchContext] = None, *, core_dir: Path) -> Path:
     conf = _load_hippos_conf()
@@ -425,7 +436,10 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
     cfg.set('global_core_options',      '"true"')
     cfg.set('assets_directory',         '"/usr/share/libretro/assets"')
     cfg.set('libretro_directory',       f'"{core_dir}"')
-    cfg.set('libretro_info_path',       '"/usr/share/libretro/info"')
+    cfg.set('libretro_info_path',       f'"{RETROARCH_ROOT / 'info'}"')
+    cfg.set('core_info_cache_enable',   '"false"')
+    cfg.set('audio_filter_dir',         f'"{RETROARCH_ROOT / 'filters' / 'audio'}"')
+    cfg.set('video_filter_dir',         f'"{RETROARCH_ROOT / 'filters' / 'video'}"')
     cfg.set('video_shader_dir',         f'"{USER_SHADERS}"')
     cfg.set('cheat_database_path',      f'"{CHEATS}"')
     cfg.set('overlay_directory',        f'"{USER_DECORATIONS}"')
@@ -475,6 +489,8 @@ def _write_retroarch_config(controllers: list[ControllerInfo], ctx: Optional[Lau
         cfg.set('video_shader', f'"{USER_SHADERS}/{shaderset}.{shader_ext}"')
     else:
         cfg.set('video_shader_enable', '"false"')
+
+    _set_menu_driver(cfg, _load_effective_hippos_conf())
 
     if Path('/etc/switchres.ini').exists():
         cfg.set('crt_switch_resolution',          '"4"')

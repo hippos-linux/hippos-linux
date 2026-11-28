@@ -13,6 +13,7 @@ HIPPOS_SHARE_DIR: Final = Path('/usr/share/hippos')
 DATAINIT_DIR: Final = HIPPOS_SHARE_DIR / 'datainit'
 USERDATA: Final = Path('/userdata')
 EMULATORS_ROOT: Final = Path('/opt/emulators')
+RETROARCH_ROOT: Final = EMULATORS_ROOT / 'retroarch'
 
 HOME_INIT: Final = DATAINIT_DIR / 'system'
 CONF_INIT: Final = HOME_INIT / 'configs'

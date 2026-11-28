@@ -71,6 +71,25 @@ def _session(argv: list[str], conf: dict[str, str]) -> NetplaySession:
         return impl._netplay_session(args)
 
 
+class RetroArchMenuDriverTests(unittest.TestCase):
+    def config(self, text: str = '') -> 'generic._KVConfig':
+        path = Path(tempfile.mkdtemp()) / 'retroarch.cfg'
+        path.write_text(text)
+        return generic._KVConfig(path)
+
+    def test_the_chosen_menu_is_written(self):
+        cfg = self.config()
+        generic._set_menu_driver(cfg, {'global.retroarch.menu_driver': 'rgui'})
+        cfg.write()
+        self.assertIn('menu_driver = "rgui"', cfg.path.read_text())
+
+    def test_auto_leaves_the_menu_to_retroarch(self):
+        cfg = self.config('menu_driver = "rgui"\nvideo_fullscreen = "true"\n')
+        generic._set_menu_driver(cfg, {'global.retroarch.menu_driver': ''})
+        cfg.write()
+        self.assertEqual(cfg.path.read_text(), 'video_fullscreen = "true"\n')
+
+
 class NetplaySessionTests(unittest.TestCase):
     def test_es_relay_join_arguments(self):
         netplay = _session(['-netplaymode', 'client', '-netplayport', '55436', '-netplayip', '1.2.3.4',
