@@ -16,6 +16,10 @@ ES_INPUT_FILES = (
 ES_PLAYERS_INPUT = Path('/tmp/es_input_players.cfg')
 PARSED_CACHE_DIR = CACHE / 'hippos' / 'es-input'
 PARSED_CACHE_VERSION = 1
+SYS_CLASS_INPUT = Path('/sys/class/input')
+ABS_HAT0X = 0x10
+ABS_HAT3Y = 0x17
+ABS_MISC = 0x28
 
 _log = logging.getLogger('emulatorlauncher')
 
@@ -32,6 +36,30 @@ class ControllerInfo:
     nb_buttons:  int  = 0
     nb_hats:     int  = 0
     nb_axes:     int  = 0
+
+    def _sysfs_device_attr(self, attr: str) -> Optional[str]:
+        if not self.device_path:
+            return None
+        try:
+            return (SYS_CLASS_INPUT / Path(os.path.realpath(self.device_path)).name / 'device' / attr).read_text().strip()
+        except OSError:
+            _log.debug("No sysfs %s for %s", attr, self.device_path)
+            return None
+
+    @property
+    def evdev_name(self) -> str:
+        return self._sysfs_device_attr('name') or self.name
+
+    @property
+    def evdev_abs_codes(self) -> tuple[int, ...]:
+        bitmap = self._sysfs_device_attr('capabilities/abs')
+        if not bitmap:
+            return ()
+        codes = []
+        for word_index, word in enumerate(reversed(bitmap.split())):
+            bits = int(word, 16)
+            codes += [word_index * 64 + bit for bit in range(64) if bits >> bit & 1]
+        return tuple(codes)
 
 
 @dataclass(frozen=True)

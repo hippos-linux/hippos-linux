@@ -27,12 +27,12 @@ from emulatorlauncher_shared import (
     _load_hippos_conf,
     _log,
     _new_ini_parser,
-    _normalize,
     _pick_es_profile,
     _run_game_command,
     _require_emulator_bin,
 )
 
+from hippos_es_input import ABS_HAT0X, ABS_HAT3Y, ABS_MISC
 from HipposPaths import BIOS, CONFIGS, EMULATORLAUNCHER_DATA_DIR, SAVES, SCREENSHOTS, USERDATA
 from emulatorlauncher_registry import Emulator, register
 
@@ -811,9 +811,9 @@ def _write_dolphin_controller_configs(ctx: LaunchContext, profiles: ESProfiles) 
     with config_path.open('w', encoding='utf-8') as fh:
         for ctrl in ctx.controllers:
             profile = _pick_es_profile(profiles, ctrl)
-            name_key = _normalize(ctrl.name)
-            nsamepad = profile_counts.get(name_key, 0)
-            profile_counts[name_key] = nsamepad + 1
+            device_name = ctrl.evdev_name
+            nsamepad = profile_counts.get(device_name, 0)
+            profile_counts[device_name] = nsamepad + 1
             if profile is None:
                 _log.warning("No ES input profile matched controller %s (%s)", ctrl.name, ctrl.guid)
                 continue
@@ -821,7 +821,7 @@ def _write_dolphin_controller_configs(ctx: LaunchContext, profiles: ESProfiles) 
             mapping = DOLPHIN_WHEEL_MAPPING if ctrl.is_wheel and ctx.system in ('gamecube', 'triforce') else DOLPHIN_GC_MAPPING
             section = f'GCPad{ctrl.player}'
             fh.write(f'[{section}]\n')
-            fh.write(f'Device = evdev/{nsamepad}/{ctrl.name}\n')
+            fh.write(f'Device = evdev/{nsamepad}/{device_name}\n')
             if ctrl.is_wheel and ctx.system in ('gamecube', 'triforce'):
                 fh.write('Rumble/Motor = Constant\n')
                 fh.write('Rumble/Motor/Range = -100.\n')
@@ -846,16 +846,16 @@ def _write_dolphin_wii_controller_configs(ctx: LaunchContext, profiles: ESProfil
     with config_path.open('w', encoding='utf-8') as fh:
         for ctrl in ctx.controllers:
             profile = _pick_es_profile(profiles, ctrl)
-            name_key = _normalize(ctrl.name)
-            nsamepad = profile_counts.get(name_key, 0)
-            profile_counts[name_key] = nsamepad + 1
+            device_name = ctrl.evdev_name
+            nsamepad = profile_counts.get(device_name, 0)
+            profile_counts[device_name] = nsamepad + 1
             if profile is None:
                 _log.warning("No ES input profile matched controller %s (%s)", ctrl.name, ctrl.guid)
                 continue
 
             section = f'Wiimote{ctrl.player}'
             fh.write(f'[{section}]\n')
-            fh.write(f'Device = evdev/{nsamepad}/{ctrl.name}\n')
+            fh.write(f'Device = evdev/{nsamepad}/{device_name}\n')
             fh.write('Source = 1\n')
             fh.write('Extension = Nunchuk\n')
 
@@ -940,21 +940,42 @@ def _write_mupen_controller_configs(ctx: LaunchContext, profiles: ESProfiles, pa
         if parser.has_section(section):
             parser.remove_section(section)
 
+def _dolphin_axis_numbers(abs_codes: tuple[int, ...]) -> dict[int, int]:
+    return {code: number for number, code in enumerate(code for code in abs_codes if code < ABS_MISC)}
+
+def _dolphin_axis(ctrl: ControllerInfo, sdl_axis: int) -> Optional[int]:
+    abs_codes = ctrl.evdev_abs_codes
+    sdl_axis_codes = [code for code in abs_codes if not ABS_HAT0X <= code <= ABS_HAT3Y]
+    if sdl_axis >= len(sdl_axis_codes):
+        return sdl_axis
+    return _dolphin_axis_numbers(abs_codes).get(sdl_axis_codes[sdl_axis])
+
+def _dolphin_hat_axis(ctrl: ControllerInfo, hat: int, vertical: bool) -> Optional[int]:
+    abs_codes = ctrl.evdev_abs_codes
+    offset = 2 * hat + int(vertical)
+    if not abs_codes:
+        return ctrl.nb_axes + offset
+    return _dolphin_axis_numbers(abs_codes).get(ABS_HAT0X + offset)
+
 def _es_binding_to_dolphin(binding: ESBinding, target: str, ctrl: ControllerInfo, profile: ESControllerProfile) -> Optional[str]:
     if binding.type == 'button':
         return f'`Button {binding.code}`'
 
     if binding.type == 'hat':
-        hat_base = ctrl.nb_axes + binding.code * 2
-        if binding.value in (1, 4):
-            return f'`Axis {hat_base + 1}{"-" if binding.value == 1 else "+"}`'
-        return f'`Axis {hat_base}{"-" if binding.value == 8 else "+"}`'
+        vertical = binding.value in (1, 4)
+        axis = _dolphin_hat_axis(ctrl, binding.code, vertical)
+        if axis is None:
+            return None
+        return f'`Axis {axis}{"-" if binding.value in (1, 8) else "+"}`'
 
     if binding.type == 'axis':
         prefix = 'Full ' if target in {'Triggers/L-Analog', 'Triggers/R-Analog'} else ''
+        axis = _dolphin_axis(ctrl, binding.code)
+        if axis is None:
+            return None
         if binding.value < 0:
-            return f'`{prefix}Axis {binding.code}-`'
-        return f'`{prefix}Axis {binding.code}+`'
+            return f'`{prefix}Axis {axis}-`'
+        return f'`{prefix}Axis {axis}+`'
 
     if binding.type == 'key':
         return f'`Button {binding.code}`'

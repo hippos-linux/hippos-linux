@@ -55,6 +55,18 @@ _RPCS3_EVDEV_MAP = [
     ('joystick2left','Right Stick Left',None,           'ABS_RX',    'RX-'),
 ]
 
+_RPCS3_SDL_MAP = (
+    ('Left Stick Left', 'LS X-'), ('Left Stick Down', 'LS Y-'),
+    ('Left Stick Right', 'LS X+'), ('Left Stick Up', 'LS Y+'),
+    ('Right Stick Left', 'RS X-'), ('Right Stick Down', 'RS Y-'),
+    ('Right Stick Right', 'RS X+'), ('Right Stick Up', 'RS Y+'),
+    ('Start', 'Start'), ('Select', 'Back'), ('PS Button', 'Guide'),
+    ('Square', 'West'), ('Cross', 'South'), ('Circle', 'East'), ('Triangle', 'North'),
+    ('Left', 'Left'), ('Down', 'Down'), ('Right', 'Right'), ('Up', 'Up'),
+    ('R1', 'RB'), ('R2', 'RT'), ('R3', 'RS'),
+    ('L1', 'LB'), ('L2', 'LT'), ('L3', 'LS'),
+)
+
 def _write_rpcs3_config(conf: dict[str, str]) -> None:
     import yaml
     RPCS3_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -137,13 +149,15 @@ def _write_rpcs3_controller_config(ctx: LaunchContext) -> None:
     conf      = _load_hippos_conf()
     profiles  = _load_es_input_configs()
     ds3_count = ds4_count = ds5_count = 1
+    evdev_counts: dict[str, int] = {}
+    sdl_counts: dict[str, int] = {}
 
     config_path = _RPCS3_INPUT_DIR / 'Default.yml'
     with config_path.open('w', encoding='utf-8-sig') as f:
         for nplayer, ctrl in enumerate(ctx.controllers[:7], start=1):
             guid = ctrl.guid.lower()
             ctrl_type = conf.get(f'rpcs3_controller{nplayer}', '')
-            rumble    = 'false' if not _conf_bool(conf, f'rpcs3_rumble{nplayer}', True) else 'true'
+            rumble    = 100 if _conf_bool(conf, f'rpcs3_rumble{nplayer}', True) else 0
 
             if guid in _RPCS3_SONY_GUIDS and ctrl_type == 'Sony':
                 ds3_guids = list(_RPCS3_SONY_GUIDS)[:4]
@@ -181,17 +195,20 @@ def _write_rpcs3_controller_config(ctx: LaunchContext) -> None:
                     '    Left Stick Deadzone: 40',  '    Right Stick Deadzone: 40',
                     '    Left Trigger Threshold: 0','    Right Trigger Threshold: 0',
                     '    Left Stick Multiplier: 100','    Right Stick Multiplier: 100',
-                    f'    Enable Large Vibration Motor: {rumble}',
-                    f'    Enable Small Vibration Motor: {rumble}',
+                    f'    Large Vibration Motor Multiplier: {rumble}',
+                    f'    Small Vibration Motor Multiplier: {rumble}',
                 ):
                     f.write(line + '\n')
                 f.write('  Buddy Device: ""\n')
 
-            else:
+            elif ctrl_type == 'Evdev':
                 profile = _pick_es_profile(profiles, ctrl)
+                evdev_name = ctrl.evdev_name
+                evdev_count = evdev_counts[evdev_name] = evdev_counts.get(evdev_name, 0) + 1
+                device = evdev_name if evdev_count == 1 else f'{evdev_count}. {evdev_name}'
                 f.write(f'Player {nplayer} Input:\n')
                 f.write('  Handler: Evdev\n')
-                f.write(f'  Device: {ctrl.device_path or "/dev/input/js0"}\n')
+                f.write(f'  Device: "{device}"\n')
                 f.write('  Config:\n')
                 f.write('    Start: Start\n')
                 f.write('    Select: Select\n')
@@ -209,8 +226,20 @@ def _write_rpcs3_controller_config(ctx: LaunchContext) -> None:
 
                 f.write('    Left Stick Deadzone: 30\n')
                 f.write('    Right Stick Deadzone: 30\n')
-                f.write(f'    Enable Large Vibration Motor: {rumble}\n')
-                f.write(f'    Enable Small Vibration Motor: {rumble}\n')
+                f.write(f'    Large Vibration Motor Multiplier: {rumble}\n')
+                f.write(f'    Small Vibration Motor Multiplier: {rumble}\n')
+                f.write('  Buddy Device: ""\n')
+
+            else:
+                sdl_count = sdl_counts[ctrl.name] = sdl_counts.get(ctrl.name, 0) + 1
+                f.write(f'Player {nplayer} Input:\n')
+                f.write('  Handler: SDL\n')
+                f.write(f'  Device: "{ctrl.name} {sdl_count}"\n')
+                f.write('  Config:\n')
+                for cfg_name, sdl_input in _RPCS3_SDL_MAP:
+                    f.write(f'    {cfg_name}: {sdl_input}\n')
+                f.write(f'    Large Vibration Motor Multiplier: {rumble}\n')
+                f.write(f'    Small Vibration Motor Multiplier: {rumble}\n')
                 f.write('  Buddy Device: ""\n')
 
     _log.info("Wrote RPCS3 controller config: %s", config_path)

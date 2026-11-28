@@ -112,19 +112,29 @@ def _write_cemu_controller_profiles(ctx: LaunchContext) -> None:
     for old in CEMU_CONTROLLER_PROFILES.glob('controller*.xml'):
         old.unlink(missing_ok=True)
 
+    same_guid_rank: dict[int, int] = {}
+    guid_seen: dict[str, int] = {}
+    for ctrl in sorted(ctx.controllers, key=lambda pad: pad.index):
+        same_guid_rank[ctrl.index] = guid_seen.get(ctrl.guid, 0)
+        guid_seen[ctrl.guid] = same_guid_rank[ctrl.index] + 1
+
     for idx, ctrl in enumerate(ctx.controllers[:5]):
         controller_type = 'Wii U GamePad' if idx == 0 else 'Wii U Pro Controller'
         btn_map = _CEMU_GAMEPAD_BUTTONS if idx == 0 else _CEMU_PRO_BUTTONS
 
-        root = ET.Element('emulatedController')
+        root = ET.Element('emulated_controller')
         ET.SubElement(root, 'type').text = controller_type
-        ET.SubElement(root, 'api').text = 'SDLController'
-        ET.SubElement(root, 'controllerIndex').text = str(ctrl.index)
-        ET.SubElement(root, 'rumble').text = 'false'
-        ET.SubElement(root, 'deadzone').text = '0.25'
-        ET.SubElement(root, 'range').text = '1'
+        controller = ET.SubElement(root, 'controller')
+        ET.SubElement(controller, 'api').text = 'SDLController'
+        ET.SubElement(controller, 'uuid').text = f'{same_guid_rank[ctrl.index]}_{ctrl.guid}'
+        ET.SubElement(controller, 'display_name').text = ctrl.name
+        ET.SubElement(controller, 'rumble').text = '0'
+        for analog_name in ('axis', 'rotation', 'trigger'):
+            analog = ET.SubElement(controller, analog_name)
+            ET.SubElement(analog, 'deadzone').text = '0.25'
+            ET.SubElement(analog, 'range').text = '1'
 
-        mappings = ET.SubElement(root, 'mappings')
+        mappings = ET.SubElement(controller, 'mappings')
         for mapping_id, btn_id in btn_map.items():
             entry = ET.SubElement(mappings, 'entry')
             ET.SubElement(entry, 'mapping').text = mapping_id
