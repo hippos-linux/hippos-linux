@@ -30,6 +30,7 @@ case "${1:-}" in
         pw="${2:-}"
         [[ -n "${pw}" ]] || { echo "Usage: hippos-config setRootPassword <password>" >&2; exit 1; }
         printf 'root:%s\nhippos:%s\n' "${pw}" "${pw}" | chpasswd
+        printf '%s\n%s\n' "${pw}" "${pw}" | smbpasswd -s -a hippos
         touch /userdata/system/.root-password-custom
         ;;
     overscan)

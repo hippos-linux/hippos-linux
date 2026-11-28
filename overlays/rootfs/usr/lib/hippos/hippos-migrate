@@ -234,6 +234,12 @@ if version_lt "$APPLIED" "0.7.3" && grep -q '^quickmenu\.es=' /userdata/system/h
     sed -i '/^quickmenu\.es=/d' /userdata/system/hippos.conf
 fi
 
+if version_lt "$APPLIED" "0.7.4" && [[ ! -f /userdata/system/.root-password-custom ]] \
+        && ! pdbedit -u hippos >/dev/null 2>&1; then
+    log "0.7.4: Samba share login hippos / linux for Windows, which refuses guest shares"
+    printf 'linux\nlinux\n' | smbpasswd -s -a hippos >/dev/null
+fi
+
 HIPPOS_CONFIG=/userdata/system/configs/hippos
 mkdir -p "${HIPPOS_CONFIG}"
 for name in external-roms.conf roms-sources.conf ignored-storage-devices.txt current-storage.conf; do
