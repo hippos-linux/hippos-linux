@@ -73,7 +73,8 @@ cat > /etc/systemd/logind.conf.d/hippos-power.conf <<EOF
 HandlePowerKey=${LOGIND_ACTION}
 HandlePowerKeyLongPress=poweroff
 HandleLidSwitch=suspend
-HandleLidSwitchExternalPower=ignore
+HandleLidSwitchExternalPower=suspend
+HandleLidSwitchDocked=ignore
 EOF
 systemctl kill -s HUP systemd-logind 2>/dev/null || true
 log "power button: ${LOGIND_ACTION}"

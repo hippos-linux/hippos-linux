@@ -37,7 +37,9 @@ polkit.addRule(function(action, subject) {
 polkit.addRule(function(action, subject) {
     var powerActions = [
         "org.freedesktop.login1.power-off-ignore-inhibit",
-        "org.freedesktop.login1.reboot-ignore-inhibit"
+        "org.freedesktop.login1.reboot-ignore-inhibit",
+        "org.freedesktop.login1.suspend-ignore-inhibit",
+        "org.freedesktop.login1.hibernate-ignore-inhibit"
     ];
     if (powerActions.indexOf(action.id) >= 0 && subject.user == "hippos") {
         return polkit.Result.YES;
