@@ -1,0 +1,2 @@
+event=button/lid.*
+action=/usr/bin/systemd-run --no-block /usr/lib/hippos/hippos-display-hotplug

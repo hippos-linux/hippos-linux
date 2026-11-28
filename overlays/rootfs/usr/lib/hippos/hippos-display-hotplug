@@ -21,4 +21,14 @@ if [[ "$(hippos-settings get system.session 2>/dev/null)" == desktop ]]; then
 fi
 
 echo "[hippos-display-hotplug] display change detected, re-applying display config"
-exec /usr/lib/hippos/hippos-display-setup
+es_output="$(awk '/ (dis)?connected primary [0-9]+x[0-9]+\+/ {print $1; exit}' <<< "${xrandr_state}")"
+/usr/lib/hippos/hippos-display-setup
+
+[[ -n "${es_output}" && "$(hippos-settings get system.session 2>/dev/null)" != desktop ]] || exit 0
+xrandr 2>/dev/null | grep -qE "^${es_output} connected (primary )?[0-9]+x[0-9]+\+" && exit 0
+if [[ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:1234/runningGame)" == 201 ]]; then
+    echo "[hippos-display-hotplug] ${es_output} is off, restarting EmulationStation on the new screen"
+    hippos restart session
+else
+    echo "[hippos-display-hotplug] ${es_output} is off but a game is running, leaving EmulationStation where it is"
+fi

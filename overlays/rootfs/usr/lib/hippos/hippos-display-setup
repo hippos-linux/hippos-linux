@@ -27,8 +27,52 @@ case "${ROTATE}" in
     *)     ROTATION="normal"   ;;
 esac
 
-_OUTPUT_CONFIGURED="$OUTPUT"
-OUTPUT="${OUTPUT:-$(xrandr 2>/dev/null | awk '/ connected/ {print $1; exit}')}"
+DRM_SYSFS="${DRM_SYSFS:-/sys/class/drm}"
+
+internal_panel_output() {
+    local xrandr_state="$1" name edid
+    name=$(awk '/^(eDP|LVDS|DSI)[^ ]* connected/ {print $1; exit}' <<< "$xrandr_state")
+    if [[ -n "$name" ]]; then
+        echo "$name"
+        return
+    fi
+    for edid in "$DRM_SYSFS"/card*-eDP-*/edid "$DRM_SYSFS"/card*-LVDS-*/edid "$DRM_SYSFS"/card*-DSI-*/edid; do
+        [[ -s "$edid" ]] || continue
+        name=$(xrandr --prop 2>/dev/null | awk -v want="$(od -An -v -tx1 "$edid" | tr -d ' \n' | cut -c1-256)" '
+            /^[^ \t]/ { output = ($2 == "connected") ? $1 : ""; in_edid = 0; edid = "" }
+            output != "" && /^\tEDID:/ { in_edid = 1; next }
+            in_edid && /^\t\t[0-9a-f]+$/ { edid = edid $1; if (substr(edid, 1, 256) == want) { print output; exit } next }
+            { in_edid = 0 }')
+        if [[ -n "$name" ]]; then
+            echo "$name"
+            return
+        fi
+    done
+}
+
+lid_closed() {
+    [[ "$(busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \
+            org.freedesktop.login1.Manager LidClosed 2>/dev/null)" == "b true" ]]
+}
+
+XRANDR_STATE="$(xrandr 2>/dev/null)"
+INTERNAL_PANEL="$(internal_panel_output "$XRANDR_STATE")"
+EXTERNAL_OUTPUT=$(awk -v panel="$INTERNAL_PANEL" '/ connected/ && $1 != panel {print $1; exit}' <<< "$XRANDR_STATE")
+PANEL_OFF=false
+if [[ -n "$INTERNAL_PANEL" && -n "$EXTERNAL_OUTPUT" && "${_CRT_ENABLED}" != "true" && "${_CRT_ACTIVE}" != "true" ]] \
+        && [[ "$(hippos-settings get system.session 2>/dev/null)" != desktop ]] && lid_closed; then
+    PANEL_OFF=true
+fi
+
+if [[ -n "$OUTPUT" ]] && ! grep -q "^${OUTPUT} connected" <<< "$XRANDR_STATE"; then
+    echo "[hippos-display-setup] configured output '$OUTPUT' not connected, using the first connected output"
+    OUTPUT=""
+fi
+OUTPUT="${OUTPUT:-$(awk '/ connected/ {print $1; exit}' <<< "$XRANDR_STATE")}"
+if [[ "$PANEL_OFF" == true && "$OUTPUT" == "$INTERNAL_PANEL" ]]; then
+    echo "[hippos-display-setup] lid closed, using $EXTERNAL_OUTPUT instead of $INTERNAL_PANEL"
+    OUTPUT="$EXTERNAL_OUTPUT"
+fi
 
 if [[ "${_CRT_ENABLED}" != "true" && "${_CRT_ACTIVE}" != "true" ]]; then
     [[ "$RES" == max-* ]] && RES="${RES#max-}"
@@ -58,6 +102,15 @@ if [[ "${_CRT_ENABLED}" != "true" && "${_CRT_ACTIVE}" != "true" ]]; then
     fi
 fi
 
+if [[ "$PANEL_OFF" == true ]]; then
+    xrandr --output "$INTERNAL_PANEL" --off 2>/dev/null \
+        && echo "[hippos-display-setup] lid closed, $INTERNAL_PANEL off"
+elif [[ -n "$INTERNAL_PANEL" && "$INTERNAL_PANEL" != "$OUTPUT" ]] \
+        && grep -qE "^${INTERNAL_PANEL} connected (primary )?\(" <<< "$XRANDR_STATE"; then
+    xrandr --output "$INTERNAL_PANEL" --preferred --right-of "$OUTPUT" 2>/dev/null \
+        && echo "[hippos-display-setup] lid open, $INTERNAL_PANEL back on"
+fi
+
 case "$(hippos-settings get display.rgb_range 2>/dev/null || true)" in
     limited) RGB_RANGE="Limited 16:235" ;;
     auto)    RGB_RANGE="Automatic" ;;
@@ -75,8 +128,6 @@ case "$ROTATION" in
     inverted) TOUCH_MATRIX="-1 0 1 0 -1 1 0 0 1" ;;
     *)        TOUCH_MATRIX=""                      ;;
 esac
-
-INTERNAL_PANEL=$(xrandr 2>/dev/null | awk '/^(eDP|LVDS|DSI)[^ ]* connected/ {print $1; exit}')
 
 while IFS= read -r dev; do
     if xinput list-props "$dev" 2>/dev/null | grep -q "Coordinate Transformation Matrix"; then
