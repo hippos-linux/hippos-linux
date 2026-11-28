@@ -202,7 +202,7 @@
 		</feature>
 		<feature display="Brightness" if="${hippos-brightness get}">
 			<button display="-" action="hippos-brightness change -10" afterclick="bcc_refresh" />
-			<progressbar display="${hippos-brightness get}" min="0" max="100" refresh="2" action_set="hippos-brightness set {value}" />
+			<progressbar display="${hippos-brightness get}" min="1" max="100" refresh="2" action_set="hippos-brightness set {value}" />
 			<button display="+" action="hippos-brightness change +10" afterclick="bcc_refresh" />
 		</feature>
 		<feature display="Mute sound">

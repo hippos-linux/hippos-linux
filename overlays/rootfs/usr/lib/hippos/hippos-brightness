@@ -2,6 +2,11 @@
 
 MIN_BRIGHTNESS=1
 
+clamp() {
+    local pct="$1"
+    echo $(( pct < MIN_BRIGHTNESS ? MIN_BRIGHTNESS : (pct > 100 ? 100 : pct) ))
+}
+
 case "${1:-boot}" in
     get)
         val="$(brightnessctl -q --class=backlight get 2>/dev/null || true)"
@@ -14,9 +19,10 @@ case "${1:-boot}" in
         ;;
     set)
         PCT="${2:-}"
-        if [[ -z "${PCT}" ]]; then
+        if [[ ! "${PCT}" =~ ^[0-9]+$ ]]; then
             printf 'Usage: %s set <0-100>\n' "$0" >&2; exit 1
         fi
+        PCT="$(clamp "${PCT}")"
         brightnessctl -q --class=backlight set "${PCT}%" 2>/dev/null || true
         hippos-settings set display.brightness "${PCT}" 2>/dev/null || true
         ;;
@@ -26,14 +32,12 @@ case "${1:-boot}" in
             printf 'Usage: %s change +N|-N\n' "$0" >&2; exit 1
         fi
         CUR="$("$0" get)"
-        NEW=$(( ${CUR:-50} + STEP ))
-        NEW=$(( NEW < MIN_BRIGHTNESS ? MIN_BRIGHTNESS : (NEW > 100 ? 100 : NEW) ))
-        "$0" set "${NEW}"
+        "$0" set "$(clamp $(( ${CUR:-50} + STEP )))"
         ;;
     boot)
         PCT="$(hippos-settings get display.brightness 2>/dev/null || true)"
-        if [[ -n "${PCT}" ]]; then
-            brightnessctl -q --class=backlight set "${PCT}%" 2>/dev/null || true
+        if [[ "${PCT}" =~ ^[0-9]+$ ]]; then
+            brightnessctl -q --class=backlight set "$(clamp "${PCT}")%" 2>/dev/null || true
         fi
         ;;
     *)
