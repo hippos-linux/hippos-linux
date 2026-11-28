@@ -33,7 +33,7 @@ def main() -> int:
 
     for yml_path in sorted(PROFILES_DIR.glob('*.yml')):
         try:
-            profile = yaml.safe_load(yml_path.read_text(encoding='utf-8')) or {}
+            profile = yaml.load(yml_path.read_text(encoding='utf-8'), Loader=yaml.CSafeLoader) or {}
         except Exception as exc:
             print(f'[hippos-hardware-init] warning: skipping {yml_path.name}: {exc}', file=sys.stderr)
             continue

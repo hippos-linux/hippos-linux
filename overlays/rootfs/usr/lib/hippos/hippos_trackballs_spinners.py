@@ -95,7 +95,7 @@ def input_nodes() -> list[InputNode]:
 
 def _load_db(path: Path) -> list[dict]:
     try:
-        return yaml.safe_load(path.read_text()) or []
+        return yaml.load(path.read_text(), Loader=yaml.CSafeLoader) or []
     except FileNotFoundError:
         return []
 

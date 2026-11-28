@@ -54,7 +54,7 @@ def device_arch() -> str:
 
 def load_yaml(path: Path) -> dict:
     with path.open(encoding='utf-8') as f:
-        return yaml.safe_load(f) or {}
+        return yaml.load(f, Loader=yaml.CSafeLoader) or {}
 
 
 def read_emulator_yml(path: Path) -> EmulatorYml:

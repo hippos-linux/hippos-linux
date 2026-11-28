@@ -49,7 +49,7 @@ def _update_vita3k_config(bin_path: Path, env: dict[str, str], conf: dict[str, s
     if not VITA3K_CONFIG_FILE.exists():
         subprocess.run([str(bin_path), '--help'], env=env, cwd=bin_path.parent,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-    config = yaml.safe_load(VITA3K_CONFIG_FILE.read_text()) or {}
+    config = yaml.load(VITA3K_CONFIG_FILE.read_text(), Loader=yaml.CSafeLoader) or {}
     config['pref-path'] = f'{pref_dir}/'
     config['initial-setup'] = False
     config['show-welcome'] = False

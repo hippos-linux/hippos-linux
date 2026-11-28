@@ -62,7 +62,7 @@ def _write_rpcs3_config(conf: dict[str, str]) -> None:
     existing: dict = {}
     if RPCS3_CONFIG_YML.exists():
         try:
-            existing = yaml.safe_load(RPCS3_CONFIG_YML.read_text()) or {}
+            existing = yaml.load(RPCS3_CONFIG_YML.read_text(), Loader=yaml.CSafeLoader) or {}
         except Exception:
             existing = {}
 
@@ -219,7 +219,7 @@ def _write_rpcs3_vfs() -> None:
     import yaml
     RPCS3_HDD0.mkdir(parents=True, exist_ok=True)
     try:
-        vfs = yaml.safe_load(RPCS3_VFS_YML.read_text()) or {}
+        vfs = yaml.load(RPCS3_VFS_YML.read_text(), Loader=yaml.CSafeLoader) or {}
     except (OSError, yaml.YAMLError):
         vfs = {}
     vfs['/dev_hdd0/'] = f'{RPCS3_HDD0}/'
