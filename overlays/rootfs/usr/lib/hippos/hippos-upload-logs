@@ -8,15 +8,15 @@ echo "HippOS Log Uploader"
 echo "==================="
 
 TOKEN="$(hippos-settings get updates.token 2>/dev/null || true)"
-if [[ -z "${TOKEN}" ]]; then
-    echo "Error: No beta token configured."
+if [[ -n "${TOKEN}" ]]; then
+    echo "Token:  ${TOKEN:0:8}…"
+    echo "Server: ${UPLOAD_URL}"
+else
+    echo "No beta token configured, the logs will only be saved on this device."
     echo "Set it in EmulationStation under UPDATES & DOWNLOADS > ACCESS TOKEN,"
     echo "or add 'updates.token=<your-token>' to /userdata/system/hippos.conf"
     echo "Your token was sent by DM when you received the Early Access role."
-    exit 1
 fi
-echo "Token:  ${TOKEN:0:8}…"
-echo "Server: ${UPLOAD_URL}"
 echo ""
 
 if [[ $# -gt 0 ]]; then
@@ -60,10 +60,18 @@ echo " done"
 echo -n "  Boot capture...        "
 if [[ -d /userdata/system/logs/boot/latest ]]; then
     cp -rL /userdata/system/logs/boot/latest "${LOGS}/boot-capture"
-    _count="$(find /userdata/system/logs/boot/latest -type f | wc -l)"
+    _count="$(find /userdata/system/logs/boot/latest/ -type f | wc -l)"
     echo " ${_count} file(s)"
 else
     echo " directory not found"
+fi
+
+echo -n "  OS update log...       "
+if [[ -f /userdata/system/logs/upgrade.log ]]; then
+    tail -n 5000 /userdata/system/logs/upgrade.log > "${LOGS}/upgrade.log"
+    echo "done"
+else
+    echo "not found"
 fi
 
 BUNDLE="${WORK}/hippos-logs.tar.gz"
@@ -71,6 +79,18 @@ echo -n "  Bundling...            "
 tar -czf "${BUNDLE}" -C "${WORK}" logs/
 _size="$(du -sh "${BUNDLE}" | cut -f1)"
 echo "${_size}"
+
+SAVED_BUNDLE="/userdata/system/logs/hippos-logs-$(date +%Y%m%d-%H%M%S).tar.gz"
+save_bundle() {
+    mkdir -p "${SAVED_BUNDLE%/*}"
+    cp "${BUNDLE}" "${SAVED_BUNDLE}"
+    echo ""
+    echo "Logs saved to ${SAVED_BUNDLE}"
+    echo "Copy that file to a USB stick or over the network share and send it in."
+    exit 1
+}
+
+[[ -n "${TOKEN}" ]] || save_bundle
 
 echo ""
 echo -n "Uploading... "
@@ -81,40 +101,20 @@ HTTP_STATUS="$(curl -s -o /dev/null -w "%{http_code}" \
     -F "logs=@${BUNDLE};type=application/gzip" \
     --max-time 120 2>/dev/null || true)"
 
+if [[ "${HTTP_STATUS}" == "200" ]]; then
+    echo "done"
+    echo ""
+    echo "Logs uploaded."
+    exit 0
+fi
+
+echo "failed"
+echo ""
 case "${HTTP_STATUS}" in
-    200)
-        echo "done"
-        echo ""
-        echo "Logs uploaded."
-        ;;
-    401)
-        echo "failed"
-        echo ""
-        echo "Error: Invalid token. Check updates.token in /userdata/system/hippos.conf"
-        exit 1
-        ;;
-    404)
-        echo "failed"
-        echo ""
-        echo "Error: Token not recognised — your beta access may have been revoked."
-        exit 1
-        ;;
-    413)
-        echo "failed"
-        echo ""
-        echo "Error: Log bundle too large. Try again after clearing old logs."
-        exit 1
-        ;;
-    000)
-        echo "failed"
-        echo ""
-        echo "Error: Could not reach upload server. Check your internet connection."
-        exit 1
-        ;;
-    *)
-        echo "failed"
-        echo ""
-        echo "Error: Unexpected response (HTTP ${HTTP_STATUS})."
-        exit 1
-        ;;
+    401) echo "Error: Invalid token. Check updates.token in /userdata/system/hippos.conf" ;;
+    404) echo "Error: Token not recognised — your beta access may have been revoked." ;;
+    413) echo "Error: Log bundle too large. Try again after clearing old logs." ;;
+    000) echo "Error: Could not reach upload server. Check your internet connection." ;;
+    *)   echo "Error: Unexpected response (HTTP ${HTTP_STATUS})." ;;
 esac
+save_bundle
