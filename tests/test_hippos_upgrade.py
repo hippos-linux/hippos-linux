@@ -434,5 +434,44 @@ class PruneRemovedEmulatorsTests(unittest.TestCase):
         self.assertEqual(self.remaining(), ["dropped", "held-back", "kept", "kept.new", "user-copied"])
 
 
+class EmulatorBuildLabelTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        package = self.root / "cgenius"
+        package.mkdir()
+        (package / "version").write_text("v3.6.4\n")
+        (package / hu.INSTALLED_SHA256_FILE).write_text("old\n")
+        for name, value in {"EMULATORS_DIR": str(self.root), "current_version": lambda: "0.7.3"}.items():
+            patcher = mock.patch.object(hu, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def emulator_update(self, entry):
+        manifest = {"version": "0.7.3", "payloads": {"emulators": {"cgenius": entry}}}
+        return [u for u in hu.available_updates(manifest) if u.kind == "emulator"]
+
+    def test_a_rebuild_of_the_same_version_shows_its_build(self):
+        [update] = self.emulator_update({"version": "v3.6.4", "sha256": "new", "build": 2})
+        self.assertEqual((update.installed, update.available), ("v3.6.4", "v3.6.4 build 2"))
+
+    def test_the_installed_build_is_shown_once_recorded(self):
+        (self.root / "cgenius" / hu.INSTALLED_BUILD_FILE).write_text("2\n")
+        [update] = self.emulator_update({"version": "v3.6.4", "sha256": "new", "build": 3})
+        self.assertEqual((update.installed, update.available), ("v3.6.4 build 2", "v3.6.4 build 3"))
+
+    def test_a_first_build_shows_the_plain_version(self):
+        [update] = self.emulator_update({"version": "v3.7.0", "sha256": "new", "build": 1})
+        self.assertEqual((update.installed, update.available), ("v3.6.4", "v3.7.0"))
+
+    def test_the_same_tarball_is_not_offered(self):
+        self.assertEqual(self.emulator_update({"version": "v3.6.4", "sha256": "old", "build": 2}), [])
+
+    def test_a_manifest_without_builds_still_works(self):
+        [update] = self.emulator_update({"version": "v3.6.4", "sha256": "new"})
+        self.assertEqual((update.installed, update.available), ("v3.6.4", "v3.6.4"))
+
+
 if __name__ == "__main__":
     unittest.main()

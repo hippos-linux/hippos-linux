@@ -938,8 +938,9 @@ def available_updates(manifest):
             updates.append(AvailableUpdate("frontend", name, installed, info.get("version", ""), ("update-frontend", name)))
     for name, info in sorted(manifest_emulators(manifest).items()):
         if not emulator_up_to_date(name, info):
-            updates.append(AvailableUpdate("emulator", name, installed_emulator_version(name) or "",
-                                           info.get("version", ""), ("update-emulator", name)))
+            installed = emulator_label(installed_emulator_version(name) or "", installed_emulator_build(name))
+            available = emulator_label(info.get("version", ""), info.get("build", 1))
+            updates.append(AvailableUpdate("emulator", name, installed, available, ("update-emulator", name)))
     applied = applied_patch_ids()
     for patch in manifest_patches(manifest):
         if patch.get("id") and patch["id"] not in applied:
@@ -1370,6 +1371,16 @@ def installed_emulator_version(name):
         return None
 
 INSTALLED_SHA256_FILE = ".hippos-sha256"
+INSTALLED_BUILD_FILE = ".hippos-build"
+
+def installed_emulator_build(name):
+    try:
+        return int(open(os.path.join(EMULATORS_DIR, name, INSTALLED_BUILD_FILE)).read().strip())
+    except (FileNotFoundError, ValueError):
+        return 1
+
+def emulator_label(version, build):
+    return f"{version} build {build}" if version and build > 1 else version
 
 def emulator_up_to_date(name, info):
     try:
@@ -1462,6 +1473,8 @@ def install_emulator(name, info, force=False):
     )
     with open(os.path.join(staging, INSTALLED_SHA256_FILE), "w") as f:
         f.write(sha256 + "\n")
+    with open(os.path.join(staging, INSTALLED_BUILD_FILE), "w") as f:
+        f.write(f"{info.get('build', 1)}\n")
     runtime = os.path.join(dest, "current")
     if os.path.isdir(runtime):
         os.rename(runtime, os.path.join(staging, "current"))
