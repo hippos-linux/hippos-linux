@@ -73,6 +73,7 @@ cloudflare-r2-token.txt
 discord-announce-webhook.txt
 r2-access-key.txt
 r2-secret-key.txt
+update-signing-key.pem
 dev-token.txt
 keys/*.txt
 .asura_index.json

@@ -99,6 +99,9 @@ while [[ ! -f /run/hippos/quit-action ]] && (( ! logout_requested )); do
     end_requested=0
     "/usr/lib/hippos/session-${mode}" &
     mode_pid=$!
+    if [[ "${mode}" == desktop ]]; then
+        sudo -n /usr/lib/hippos/hippos-upgrade boot-success &
+    fi
     while kill -0 "${mode_pid}" 2>/dev/null; do wait "${mode_pid}"; done
     wait "${mode_pid}"; status=$?
     echo "hippos-session: ${mode} ended (${status})"

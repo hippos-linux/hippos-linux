@@ -8,6 +8,7 @@ dbus
 udev
 sudo
 login
+openssl
 # Put into the initramfs by initramfs-tools (BUSYBOX=auto). klibc alone has no
 # rm/cp, which the hippos-overlay deployment-change reset needs.
 busybox

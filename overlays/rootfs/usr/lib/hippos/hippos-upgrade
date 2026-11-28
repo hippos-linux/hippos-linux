@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import base64
 import fcntl
 import hashlib
 import json
@@ -11,6 +12,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import traceback
 import urllib.error
 import urllib.request
@@ -50,6 +52,7 @@ MANIFEST_URLS = [
     f"https://hippos-linux.org/api/update/manifest-{_UPDATE_TARGET}.json",
 ]
 DEV_MANIFEST_URL = f"https://hippos-linux.org/api/update/manifest-{_UPDATE_TARGET}-dev.json"
+UPDATE_KEYS_DIR = "/usr/share/hippos/update-keys"
 
 _log_fh = None
 _log_stream = sys.stdout
@@ -144,7 +147,8 @@ def _fetch_first_manifest(urls):
         try:
             req = _make_request(url)
             with urllib.request.urlopen(req, timeout=15) as r:
-                return json.loads(r.read())
+                body = r.read()
+                signature = r.headers.get("X-HippOS-Signature", "")
         except urllib.error.HTTPError as e:
             if e.code == 401:
                 die("Beta access token is invalid or has been revoked. "
@@ -154,7 +158,30 @@ def _fetch_first_manifest(urls):
         except Exception as e:
             log(f"Manifest fetch failed for {url}: {e}")
             continue
+        if not signed_by_hippos(body, signature):
+            log(f"Manifest from {url} has no valid HippOS signature — ignoring it")
+            continue
+        return json.loads(body)
     return None
+
+def signed_by_hippos(body, signature):
+    try:
+        raw_signature = base64.b64decode(signature, validate=True)
+    except ValueError:
+        return False
+    if not raw_signature:
+        return False
+    with tempfile.TemporaryDirectory() as tmp:
+        body_path, signature_path = os.path.join(tmp, "manifest"), os.path.join(tmp, "signature")
+        with open(body_path, "wb") as f:
+            f.write(body)
+        with open(signature_path, "wb") as f:
+            f.write(raw_signature)
+        return any(
+            subprocess.run(["openssl", "pkeyutl", "-verify", "-pubin", "-inkey", key, "-rawin",
+                            "-in", body_path, "-sigfile", signature_path],
+                           capture_output=True).returncode == 0
+            for key in sorted(glob.glob(os.path.join(UPDATE_KEYS_DIR, "*.pem"))))
 
 def ver_tuple(v):
     base, _, pre = v.lstrip("v").partition("-")
@@ -847,9 +874,11 @@ def sha256_file(path):
 class DownloadError(Exception):
     pass
 
-def fetch_archive(url, archive, sha256="", timeout=None):
+def fetch_archive(url, archive, sha256, timeout=None):
+    if not sha256:
+        raise DownloadError(f"The manifest has no checksum for {os.path.basename(archive)} — not downloading it")
     if os.path.exists(archive):
-        if not sha256 or sha256_file(archive) == sha256:
+        if sha256_file(archive) == sha256:
             return
         os.remove(archive)
 
@@ -870,11 +899,10 @@ def fetch_archive(url, archive, sha256="", timeout=None):
         except OSError as e:
             raise DownloadError(f"Download interrupted ({e}) — check your connection and free space, then retry") from e
 
-        if sha256:
-            log("Verifying checksum...")
-            if sha256_file(part) != sha256:
-                raise DownloadError("SHA256 mismatch — download may be corrupt")
-            log("Checksum OK")
+        log("Verifying checksum...")
+        if sha256_file(part) != sha256:
+            raise DownloadError("SHA256 mismatch — download may be corrupt")
+        log("Checksum OK")
 
         os.replace(part, archive)
     finally:
@@ -1550,8 +1578,8 @@ def cmd_apply_patches():
         dest = p.get("dest", "")
         url  = p.get("url", "")
         sha256 = p.get("sha256", "")
-        if not pid or not dest or not url:
-            log(f"Patch entry missing id/dest/url — skipping")
+        if not pid or not dest or not url or not sha256:
+            log(f"Patch entry missing id/dest/url/sha256 — skipping")
             continue
         if pid in applied:
             log(f"Patch {pid}: already applied — skipping")
@@ -1562,12 +1590,11 @@ def cmd_apply_patches():
         req = _make_request(url)
         with urllib.request.urlopen(req, timeout=60) as resp, open(tmp, "wb") as f:
             f.write(resp.read())
-        if sha256:
-            log("Verifying checksum...")
-            if sha256_file(tmp) != sha256:
-                os.remove(tmp)
-                die(f"Patch {pid}: SHA256 mismatch — aborting")
-            log("Checksum OK")
+        log("Verifying checksum...")
+        if sha256_file(tmp) != sha256:
+            os.remove(tmp)
+            die(f"Patch {pid}: SHA256 mismatch — aborting")
+        log("Checksum OK")
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         orig_mode = None
         try:
@@ -1595,6 +1622,8 @@ def cmd_update_grub():
         umount_toplevel()
 
 def cmd_boot_success():
+    if not os.path.ismount(EFI_MOUNT):
+        subprocess.run(["systemctl", "start", "boot-efi.mount"], check=False, capture_output=True)
     if os.path.exists(EFI_GRUBENV):
         subprocess.run(["grub-editenv", EFI_GRUBENV, "unset", "boot_counter"], check=False)
     if firmware_loads_kernel():
