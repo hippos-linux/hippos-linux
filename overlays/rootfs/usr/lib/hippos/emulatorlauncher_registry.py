@@ -138,7 +138,10 @@ def _save_index(sources: list[Path]) -> None:
     tmp = _sources.index_file.with_name(f'.{_sources.index_file.name}.{os.getpid()}')
     try:
         _sources.index_file.parent.mkdir(parents=True, exist_ok=True)
-        tmp.write_text(content, encoding='utf-8')
+        with tmp.open('w', encoding='utf-8') as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(tmp, _sources.index_file)
     except OSError as exc:
         tmp.unlink(missing_ok=True)
