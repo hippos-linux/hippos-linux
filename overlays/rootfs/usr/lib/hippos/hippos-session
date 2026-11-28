@@ -5,7 +5,7 @@ export DISPLAY=:0
 mkdir -p /run/hippos
 echo $$ > /run/hippos/session-loop
 
-SESSION_PROCS="/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/cgroup.procs"
+SESSION_PROCS="/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup)/cgroup.procs"
 ES_QUIT_WAIT_S=20
 xorg_pid=""
 mode_pid=""
