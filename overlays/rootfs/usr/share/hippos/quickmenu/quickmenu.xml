@@ -78,104 +78,104 @@
 
 	<hgroup name="Keys" display="Keys">
 		<feature display="Keyboard keys sent by player 1's controller in this game" />
-		<feature display="Back to the system's keys" if="${hippos-padtokey edited}">
+		<feature display="Back to the system's keys" if="${hippos-padtokey values :: edited}">
 			<button_confirm display="Reset" action="hippos-padtokey reset" afterclick="bcc_refresh" />
 		</feature>
 		<feature display="Bottom button">
-			<text display="${hippos-padtokey get b}" />
-			<keypicker display="${hippos-padtokey key b}" action="hippos-padtokey set b" />
+			<text display="${hippos-padtokey values :: get b}" />
+			<keypicker display="${hippos-padtokey values :: key b}" action="hippos-padtokey set b" />
 		</feature>
 		<feature display="Right button">
-			<text display="${hippos-padtokey get a}" />
-			<keypicker display="${hippos-padtokey key a}" action="hippos-padtokey set a" />
+			<text display="${hippos-padtokey values :: get a}" />
+			<keypicker display="${hippos-padtokey values :: key a}" action="hippos-padtokey set a" />
 		</feature>
 		<feature display="Top button">
-			<text display="${hippos-padtokey get x}" />
-			<keypicker display="${hippos-padtokey key x}" action="hippos-padtokey set x" />
+			<text display="${hippos-padtokey values :: get x}" />
+			<keypicker display="${hippos-padtokey values :: key x}" action="hippos-padtokey set x" />
 		</feature>
 		<feature display="Left button">
-			<text display="${hippos-padtokey get y}" />
-			<keypicker display="${hippos-padtokey key y}" action="hippos-padtokey set y" />
+			<text display="${hippos-padtokey values :: get y}" />
+			<keypicker display="${hippos-padtokey values :: key y}" action="hippos-padtokey set y" />
 		</feature>
 		<feature display="L1">
-			<text display="${hippos-padtokey get pageup}" />
-			<keypicker display="${hippos-padtokey key pageup}" action="hippos-padtokey set pageup" />
+			<text display="${hippos-padtokey values :: get pageup}" />
+			<keypicker display="${hippos-padtokey values :: key pageup}" action="hippos-padtokey set pageup" />
 		</feature>
 		<feature display="R1">
-			<text display="${hippos-padtokey get pagedown}" />
-			<keypicker display="${hippos-padtokey key pagedown}" action="hippos-padtokey set pagedown" />
+			<text display="${hippos-padtokey values :: get pagedown}" />
+			<keypicker display="${hippos-padtokey values :: key pagedown}" action="hippos-padtokey set pagedown" />
 		</feature>
 		<feature display="L2">
-			<text display="${hippos-padtokey get l2}" />
-			<keypicker display="${hippos-padtokey key l2}" action="hippos-padtokey set l2" />
+			<text display="${hippos-padtokey values :: get l2}" />
+			<keypicker display="${hippos-padtokey values :: key l2}" action="hippos-padtokey set l2" />
 		</feature>
 		<feature display="R2">
-			<text display="${hippos-padtokey get r2}" />
-			<keypicker display="${hippos-padtokey key r2}" action="hippos-padtokey set r2" />
+			<text display="${hippos-padtokey values :: get r2}" />
+			<keypicker display="${hippos-padtokey values :: key r2}" action="hippos-padtokey set r2" />
 		</feature>
 		<feature display="L3 (stick press)">
-			<text display="${hippos-padtokey get l3}" />
-			<keypicker display="${hippos-padtokey key l3}" action="hippos-padtokey set l3" />
+			<text display="${hippos-padtokey values :: get l3}" />
+			<keypicker display="${hippos-padtokey values :: key l3}" action="hippos-padtokey set l3" />
 		</feature>
 		<feature display="R3 (stick press)">
-			<text display="${hippos-padtokey get r3}" />
-			<keypicker display="${hippos-padtokey key r3}" action="hippos-padtokey set r3" />
+			<text display="${hippos-padtokey values :: get r3}" />
+			<keypicker display="${hippos-padtokey values :: key r3}" action="hippos-padtokey set r3" />
 		</feature>
 		<feature display="Start">
-			<text display="${hippos-padtokey get start}" />
-			<keypicker display="${hippos-padtokey key start}" action="hippos-padtokey set start" />
+			<text display="${hippos-padtokey values :: get start}" />
+			<keypicker display="${hippos-padtokey values :: key start}" action="hippos-padtokey set start" />
 		</feature>
 		<feature display="Select">
-			<text display="${hippos-padtokey get select}" />
-			<keypicker display="${hippos-padtokey key select}" action="hippos-padtokey set select" />
+			<text display="${hippos-padtokey values :: get select}" />
+			<keypicker display="${hippos-padtokey values :: key select}" action="hippos-padtokey set select" />
 		</feature>
 		<feature display="D-pad up">
-			<text display="${hippos-padtokey get up}" />
-			<keypicker display="${hippos-padtokey key up}" action="hippos-padtokey set up" />
+			<text display="${hippos-padtokey values :: get up}" />
+			<keypicker display="${hippos-padtokey values :: key up}" action="hippos-padtokey set up" />
 		</feature>
 		<feature display="D-pad down">
-			<text display="${hippos-padtokey get down}" />
-			<keypicker display="${hippos-padtokey key down}" action="hippos-padtokey set down" />
+			<text display="${hippos-padtokey values :: get down}" />
+			<keypicker display="${hippos-padtokey values :: key down}" action="hippos-padtokey set down" />
 		</feature>
 		<feature display="D-pad left">
-			<text display="${hippos-padtokey get left}" />
-			<keypicker display="${hippos-padtokey key left}" action="hippos-padtokey set left" />
+			<text display="${hippos-padtokey values :: get left}" />
+			<keypicker display="${hippos-padtokey values :: key left}" action="hippos-padtokey set left" />
 		</feature>
 		<feature display="D-pad right">
-			<text display="${hippos-padtokey get right}" />
-			<keypicker display="${hippos-padtokey key right}" action="hippos-padtokey set right" />
+			<text display="${hippos-padtokey values :: get right}" />
+			<keypicker display="${hippos-padtokey values :: key right}" action="hippos-padtokey set right" />
 		</feature>
 		<feature display="Left stick up">
-			<text display="${hippos-padtokey get joystick1up}" />
-			<keypicker display="${hippos-padtokey key joystick1up}" action="hippos-padtokey set joystick1up" />
+			<text display="${hippos-padtokey values :: get joystick1up}" />
+			<keypicker display="${hippos-padtokey values :: key joystick1up}" action="hippos-padtokey set joystick1up" />
 		</feature>
 		<feature display="Left stick down">
-			<text display="${hippos-padtokey get joystick1down}" />
-			<keypicker display="${hippos-padtokey key joystick1down}" action="hippos-padtokey set joystick1down" />
+			<text display="${hippos-padtokey values :: get joystick1down}" />
+			<keypicker display="${hippos-padtokey values :: key joystick1down}" action="hippos-padtokey set joystick1down" />
 		</feature>
 		<feature display="Left stick left">
-			<text display="${hippos-padtokey get joystick1left}" />
-			<keypicker display="${hippos-padtokey key joystick1left}" action="hippos-padtokey set joystick1left" />
+			<text display="${hippos-padtokey values :: get joystick1left}" />
+			<keypicker display="${hippos-padtokey values :: key joystick1left}" action="hippos-padtokey set joystick1left" />
 		</feature>
 		<feature display="Left stick right">
-			<text display="${hippos-padtokey get joystick1right}" />
-			<keypicker display="${hippos-padtokey key joystick1right}" action="hippos-padtokey set joystick1right" />
+			<text display="${hippos-padtokey values :: get joystick1right}" />
+			<keypicker display="${hippos-padtokey values :: key joystick1right}" action="hippos-padtokey set joystick1right" />
 		</feature>
 		<feature display="Right stick up">
-			<text display="${hippos-padtokey get joystick2up}" />
-			<keypicker display="${hippos-padtokey key joystick2up}" action="hippos-padtokey set joystick2up" />
+			<text display="${hippos-padtokey values :: get joystick2up}" />
+			<keypicker display="${hippos-padtokey values :: key joystick2up}" action="hippos-padtokey set joystick2up" />
 		</feature>
 		<feature display="Right stick down">
-			<text display="${hippos-padtokey get joystick2down}" />
-			<keypicker display="${hippos-padtokey key joystick2down}" action="hippos-padtokey set joystick2down" />
+			<text display="${hippos-padtokey values :: get joystick2down}" />
+			<keypicker display="${hippos-padtokey values :: key joystick2down}" action="hippos-padtokey set joystick2down" />
 		</feature>
 		<feature display="Right stick left">
-			<text display="${hippos-padtokey get joystick2left}" />
-			<keypicker display="${hippos-padtokey key joystick2left}" action="hippos-padtokey set joystick2left" />
+			<text display="${hippos-padtokey values :: get joystick2left}" />
+			<keypicker display="${hippos-padtokey values :: key joystick2left}" action="hippos-padtokey set joystick2left" />
 		</feature>
 		<feature display="Right stick right">
-			<text display="${hippos-padtokey get joystick2right}" />
-			<keypicker display="${hippos-padtokey key joystick2right}" action="hippos-padtokey set joystick2right" />
+			<text display="${hippos-padtokey values :: get joystick2right}" />
+			<keypicker display="${hippos-padtokey values :: key joystick2right}" action="hippos-padtokey set joystick2right" />
 		</feature>
 	</hgroup>
 

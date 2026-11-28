@@ -47,23 +47,32 @@ class EditTests(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
+    def mapping(self, trigger):
+        values = dict(line.split('\t', 1) for line in cli.key_values(self.rom))
+        return values.get(f'get {trigger}', ''), values.get(f'key {trigger}', '')
+
     def test_first_edit_copies_the_system_profile_into_the_game_file(self):
         cli.set_keys(self.rom, 'b', ['KEY_SPACE'])
         saved = json.loads((self.folder / 'game.zip.keys').read_text())['actions_player1']
         self.assertIn({'trigger': 'a', 'type': 'key', 'target': 'KEY_ENTER'}, saved)
         self.assertIn({'trigger': 'joystick1', 'type': 'mouse'}, saved)
-        self.assertEqual(cli.get(self.rom, 'b'), 'Space')
+        self.assertEqual(self.mapping('b'), ('Space', 'KEY_SPACE'))
 
     def test_combination_is_saved_as_a_list_with_modifiers_first(self):
         cli.set_keys(self.rom, 'b', ['KEY_C', 'KEY_LEFTCTRL'])
         saved = json.loads((self.folder / 'game.zip.keys').read_text())['actions_player1']
         self.assertIn({'trigger': 'b', 'type': 'key', 'target': ['KEY_LEFTCTRL', 'KEY_C'],
                        'description': 'Left Ctrl + C'}, saved)
-        self.assertEqual(cli.get(self.rom, 'b'), 'Left Ctrl + C')
+        self.assertEqual(self.mapping('b'), ('Left Ctrl + C', 'KEY_LEFTCTRL KEY_C'))
 
     def test_not_mapped_removes_the_input(self):
         cli.set_keys(self.rom, 'a', [])
-        self.assertEqual(cli.get(self.rom, 'a'), '')
+        self.assertEqual(self.mapping('a'), ('', ''))
+
+    def test_values_mark_a_game_with_its_own_profile(self):
+        self.assertNotIn('edited\t1', cli.key_values(self.rom))
+        cli.set_keys(self.rom, 'b', ['KEY_SPACE'])
+        self.assertIn('edited\t1', cli.key_values(self.rom))
 
 
 KEY_LAYOUT = LIB.parent.parent / 'share' / 'hippos' / 'quickmenu' / 'keys.json'

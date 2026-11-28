@@ -73,6 +73,12 @@ class PrepareAndRunTests(unittest.TestCase):
             yield Path('/run/mnt') / rom.stem
             ev.append('unmounted')
 
+        @contextmanager
+        def quick_menu():
+            ev.append('quick menu started')
+            yield
+            ev.append('quick menu stopped')
+
         def bezel(ctx, conf):
             ev.append(f'bezel uses {ctx.rom.name} at {ctx.resolution}')
 
@@ -85,6 +91,7 @@ class PrepareAndRunTests(unittest.TestCase):
             'start_controller_monitor': lambda ctx, profiles: None,
             'game_power_settings': power,
             'mount_squashfs': squashfs,
+            '_hidden_quick_menu': quick_menu,
             '_start_save_sync': lambda: ev.append('save sync'),
         }
         for name, value in patches.items():
@@ -108,7 +115,8 @@ class PrepareAndRunTests(unittest.TestCase):
         self.assertIn('power uses game.squashfs', self.events)
         self.assertIn('bezel uses game.squashfs at (1280, 720)', self.events)
         launched = self.events.index('launch /run/mnt/game')
-        for teardown in ('video restored to 1920x1080', 'power restored', 'unmounted'):
+        self.assertLess(self.events.index('quick menu started'), launched)
+        for teardown in ('video restored to 1920x1080', 'power restored', 'unmounted', 'quick menu stopped'):
             self.assertGreater(self.events.index(teardown), launched)
         self.assertEqual(self.events[-1], 'save sync')
 

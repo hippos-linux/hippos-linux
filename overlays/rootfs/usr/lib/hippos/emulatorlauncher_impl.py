@@ -505,6 +505,7 @@ def _prepare_and_run(ctx: LaunchContext, conf: dict[str, str], emulator: Emulato
             timed('hud', _hud(conf, ctx)),
             timed('power', game_power_settings(conf, ctx.system, ctx.rom)),
             timed('lobby', lobby),
+            timed('quick menu', _hidden_quick_menu()),
             timed('rom', _prepared_rom(ctx, emulator)),
         ))
         ctx.rom = rom
@@ -527,6 +528,17 @@ def _display(conf: dict[str, str], ctx: LaunchContext) -> Iterator[None]:
         yield
     finally:
         _restore_video_mode(game_output, original_mode, conf)
+
+@contextmanager
+def _hidden_quick_menu() -> Iterator[None]:
+    menu = subprocess.Popen(
+        ['emulationstation', '--controlcenter', '--controlcenter-hidden'],
+        cwd=HOME, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    try:
+        yield
+    finally:
+        menu.terminate()
 
 @contextmanager
 def _hud(conf: dict[str, str], ctx: LaunchContext) -> Iterator[None]:
