@@ -28,6 +28,7 @@ shared_features:
 - vrr_runloop_enable
 - video_threaded
 - rumble_gain
+- handheld_controller
 - audio_volume
 - mangohud
 - vkbasalt

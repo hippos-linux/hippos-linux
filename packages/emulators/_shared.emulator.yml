@@ -464,6 +464,16 @@ custom_features:
       '8': '8'
       '9': '9'
       '10': '10'
+  handheld_controller:
+    prompt: HANDHELD CONTROLLER TYPE
+    description: The controller this game sees from a handheld's built-in controls, while it runs. Try Xbox 360 for older games that ignore the controls. Auto keeps the handheld's controller type.
+    choices:
+      Xbox 360: xb360
+      Xbox Elite: xbox-elite
+      Xbox Series: xbox-series
+      DualSense: ds5
+      DualSense Edge: ds5-edge
+      Steam Deck: deck
   rumble_gain:
     prompt: RUMBLE LEVEL
     description: For emulators and controllers supporting force feedback.

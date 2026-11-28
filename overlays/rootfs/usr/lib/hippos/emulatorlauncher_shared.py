@@ -70,6 +70,9 @@ def launch_step(name: str):
 NETPLAY_MODES: frozenset[str] = frozenset({'host', 'client', 'spectator'})
 NETPLAY_DEFAULT_PORT = '55435'
 NETPLAY_DEFAULT_NICKNAME = 'HippOS Player'
+HANDHELD_BIN = '/usr/lib/hippos/hippos-handheld'
+SDL_GUID_LENGTH = 32
+SDL_GUID_CRC_START = 4
 
 @dataclass(frozen=True)
 class NetplaySession:
@@ -183,13 +186,21 @@ def generate_sdl_game_controller_config(controllers: list[ControllerInfo], ignor
         if not mapping:
             continue
 
-        seen_guids.add(_normalize(guid))
         name = (ctrl.name or profile.device_name or 'HippOS Controller').replace(',', ' ').strip()
-        fields = [guid, name, 'platform:Linux']
-        fields.extend(f'{key}:{value}' for key, value in mapping)
-        lines.append(','.join(fields) + ',')
+        for mapping_guid in (guid, _guid_without_crc(guid)):
+            if _normalize(mapping_guid) in seen_guids:
+                continue
+            seen_guids.add(_normalize(mapping_guid))
+            fields = [mapping_guid, name, 'platform:Linux']
+            fields.extend(f'{key}:{value}' for key, value in mapping)
+            lines.append(','.join(fields) + ',')
 
     return '\n'.join(lines)
+
+def _guid_without_crc(guid: str) -> str:
+    if len(guid) != SDL_GUID_LENGTH:
+        return guid
+    return guid[:SDL_GUID_CRC_START] + '0000' + guid[SDL_GUID_CRC_START + 4:]
 
 def _sdl_binding_value(binding: ESBinding, positive: Optional[bool] = None) -> Optional[str]:
     if binding.type == 'button':
@@ -639,6 +650,18 @@ def game_monitor_primary(ctx: Optional[LaunchContext]):
         if connector and previous and connector != previous:
             _hippos_resolution('applyPrimaryOutput', previous)
 
+@contextmanager
+def game_handheld_controller(conf: dict[str, str], ctx: LaunchContext):
+    gamepad = _game_setting(conf, ctx.system, ctx.rom, 'handheld_controller')
+    if not gamepad:
+        yield
+        return
+    subprocess.run([HANDHELD_BIN, 'game', gamepad], check=False)
+    try:
+        yield
+    finally:
+        subprocess.run([HANDHELD_BIN, 'restore'], check=False)
+
 def _gamescope_wrap(cmd: list[str], conf: dict[str, str], ctx: LaunchContext) -> list[str]:
     def setting(name: str, default: str = '') -> str:
         return _game_setting(conf, ctx.system, ctx.rom, name) or _conf_value(conf, f'global.{name}', default)
@@ -758,7 +781,7 @@ def _run_game_command(
     if _hud_config_path() is not None and emulator is not None and emulator.hud_wrapper and _hud_supported(ctx.system):
         cmd = ['mangohud'] + cmd
     try:
-        with game_monitor_primary(ctx):
+        with game_monitor_primary(ctx), game_handheld_controller(conf, ctx):
             with wheel_proxy_context(ctx, env):
                 with hotkey_context(emulator.hotkey_context if emulator else ctx.emulator):
                     profiles = _load_es_input_configs()

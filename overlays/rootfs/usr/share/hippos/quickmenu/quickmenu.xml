@@ -55,6 +55,10 @@
 		<feature display="On-screen keyboard">
 			<button display="Show / hide" action="hippos-hotkeys --send onscreen-keyboard" afterclick="bcc_close" />
 		</feature>
+		<feature display="Controller type for this game" if="${hippos-handheld available &amp;&amp; echo 1}">
+			<text display="${hippos-handheld this-game}" refresh="2" />
+			<choice_cmd display="${hippos-handheld choices game | cut -f 1}" action="hippos-handheld this-game" action_arg="${hippos-handheld choices game | cut -f 2}" />
+		</feature>
 		<feature display="Save state">
 			<button display="Save" action="hippos-hotkeys --send save_state" afterclick="bcc_close" />
 		</feature>

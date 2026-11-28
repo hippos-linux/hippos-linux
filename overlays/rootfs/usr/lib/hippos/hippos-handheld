@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""Usage: hippos-handheld available | list | choices controller|profile | set KEY=VALUE... | apply | watch
+"""Usage: hippos-handheld available | list | choices controller|profile|game | set KEY=VALUE... | apply | watch
+       hippos-handheld game CONTROLLER | restore | this-game [CONTROLLER|auto]
 
 Lists and changes the built-in controller settings of a handheld.
+`game` switches the controller type until `restore`.
+`this-game` saves the controller type for the running game and switches to it; without a value it prints it.
 """
 
 from __future__ import annotations
@@ -9,6 +12,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,6 +23,10 @@ TARGET_IFACE      = 'org.shadowblip.Input.Target'
 PROPERTIES_IFACE  = 'org.freedesktop.DBus.Properties'
 OBJECT_MANAGER    = 'org.freedesktop.DBus.ObjectManager'
 SETTINGS_BIN      = '/usr/bin/hippos-settings'
+GAME_SETTING      = 'handheld_controller'
+AUTO              = 'auto'
+GAME_RESTORE_DIR  = Path('/run/hippos/handheld-game')
+TARGET_READY_TIMEOUT_SECONDS = 5
 
 GAMEPAD_TARGETS = {
     'xbox-elite':   'Xbox Elite',
@@ -111,6 +119,20 @@ def _save(key: str, value: str) -> None:
     subprocess.run([SETTINGS_BIN, 'set', key, value], check=True)
 
 
+def _forget(key: str) -> None:
+    subprocess.run([SETTINGS_BIN, 'del', key], check=True)
+
+
+def running_game_key() -> str:
+    from emulatorlauncher_shared import game_config_name
+    from hippos_padtokey import running_game
+
+    game = running_game()
+    if not game:
+        return ''
+    return f'{game["system"]}["{game_config_name(Path(game["rom"]))}"].{GAME_SETTING}'
+
+
 class InputPlumber:
     def __init__(self) -> None:
         import dbus
@@ -143,6 +165,14 @@ class InputPlumber:
             self._object(handheld.path).SetTargetDevices(with_gamepad(handheld.targets, gamepad),
                                                          dbus_interface=COMPOSITE_IFACE)
 
+    def wait_for_gamepad(self, path: str, gamepad: str) -> bool:
+        deadline = time.monotonic() + TARGET_READY_TIMEOUT_SECONDS
+        while self.handheld(path).gamepad != gamepad:
+            if time.monotonic() > deadline:
+                return False
+            time.sleep(0.1)
+        return True
+
     def load_profile(self, handheld: Handheld, profile_path: str) -> None:
         if profile_path and profile_path != handheld.profile_path and Path(profile_path).is_file():
             self._object(handheld.path).LoadProfilePath(profile_path, dbus_interface=COMPOSITE_IFACE)
@@ -167,6 +197,9 @@ def cmd_list() -> int:
 
 
 def cmd_choices(args: list[str]) -> int:
+    if args == ['game']:
+        print('\n'.join([f'Auto\t{AUTO}'] + [f'{title}\t{kind}' for kind, title in GAMEPAD_TARGETS.items()]))
+        return 0
     if args not in (['controller'], ['profile']):
         print(__doc__, file=sys.stderr)
         return 2
@@ -190,6 +223,7 @@ def cmd_set(args: list[str]) -> int:
             return 1
         _save(f'handheld.{key}', value)
         if name == 'controller':
+            (GAME_RESTORE_DIR / setting_id).unlink(missing_ok=True)
             plumber.set_gamepad(handheld, value)
         else:
             plumber.load_profile(handheld, value)
@@ -201,6 +235,69 @@ def cmd_apply() -> int:
     for handheld in plumber.handhelds():
         plumber.apply_saved(handheld.path)
     return 0
+
+
+def cmd_this_game(args: list[str]) -> int:
+    key = running_game_key()
+    if not key:
+        print('No game is running.', file=sys.stderr)
+        return 1
+    if not args:
+        print(GAMEPAD_TARGETS.get(_saved(key), 'Auto'))
+        return 0
+    if len(args) != 1 or args[0] not in (*GAMEPAD_TARGETS, AUTO):
+        print(__doc__, file=sys.stderr)
+        return 2
+    if args[0] == AUTO:
+        _forget(key)
+        return cmd_restore()
+    _save(key, args[0])
+    return cmd_game(args)
+
+
+def cmd_game(args: list[str]) -> int:
+    import dbus
+    if len(args) != 1 or args[0] not in GAMEPAD_TARGETS:
+        print(__doc__, file=sys.stderr)
+        return 2
+    gamepad = args[0]
+    try:
+        plumber = InputPlumber()
+        handhelds = plumber.handhelds()
+    except dbus.exceptions.DBusException:
+        print('No handheld controls found, the controller type is unchanged.', file=sys.stderr)
+        return 1
+    for handheld in handhelds:
+        if not handheld.gamepad or handheld.gamepad == gamepad:
+            continue
+        restore = GAME_RESTORE_DIR / handheld.setting_id
+        if not restore.exists():
+            restore.write_text(handheld.gamepad)
+        plumber.set_gamepad(handheld, gamepad)
+        if not plumber.wait_for_gamepad(handheld.path, gamepad):
+            print(f'{handheld.name} did not switch to {GAMEPAD_TARGETS[gamepad]}.', file=sys.stderr)
+    return 0
+
+
+def cmd_restore() -> int:
+    restores = sorted(GAME_RESTORE_DIR.glob('*'))
+    if not restores:
+        return 0
+    plumber = InputPlumber()
+    handhelds = {handheld.setting_id: handheld for handheld in plumber.handhelds()}
+    failed = 0
+    for restore in restores:
+        handheld = handhelds.get(restore.name)
+        gamepad = restore.read_text().strip()
+        if handheld is None:
+            continue
+        plumber.set_gamepad(handheld, gamepad)
+        if plumber.wait_for_gamepad(handheld.path, gamepad):
+            restore.unlink()
+        else:
+            print(f'{handheld.name} did not switch back to {GAMEPAD_TARGETS.get(gamepad, gamepad)}.', file=sys.stderr)
+            failed += 1
+    return 1 if failed else 0
 
 
 def cmd_watch() -> int:
@@ -237,6 +334,12 @@ def main(argv: list[str]) -> int:
             return cmd_apply()
         case 'watch':
             return cmd_watch()
+        case 'game':
+            return cmd_game(args)
+        case 'restore':
+            return cmd_restore()
+        case 'this-game':
+            return cmd_this_game(args)
     print(__doc__, file=sys.stderr)
     return 2
 
