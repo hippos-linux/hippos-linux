@@ -23,7 +23,7 @@ while IFS= read -r target_file; do
         log "Patching missing <algorithm> include in ${target_file}"
         sed -i '1i #include <algorithm>' "${target_file}"
     fi
-done < <(grep -R "std::transform" -l "${SRC}" --include='*.cpp' --include='*.h' --include='*.hpp' 2>/dev/null || true)
+done < <(grep -R -E "std::(transform|remove)\(" -l "${SRC}" --include='*.cpp' --include='*.h' --include='*.hpp' 2>/dev/null || true)
 
 rm -rf "${BUILD}"
 mkdir -p "${BUILD}" "${STAGING}/bin"
