@@ -15,8 +15,16 @@ write_conf() {
     cat > "${XORG_CONF_D}/21-hippos-vrr.conf" <<EOF
 # Written by hippos-xorg-setup from display.vrr
 Section "OutputClass"
-    Identifier  "HippOS VRR"
-    MatchDriver "amdgpu|i915|xe|nouveau"
+    Identifier  "HippOS VRR amdgpu"
+    MatchDriver "amdgpu"
+    Driver      "amdgpu"
+    Option      "VariableRefresh" "${vrr}"
+EndSection
+
+Section "OutputClass"
+    Identifier  "HippOS VRR modesetting"
+    MatchDriver "i915|xe|nouveau"
+    Driver      "modesetting"
     Option      "VariableRefresh" "${vrr}"
 EndSection
 EOF
