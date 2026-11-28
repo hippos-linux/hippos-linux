@@ -2974,6 +2974,7 @@ quiver:
   hardware: os
   manufacturer: Quiver Launcher
   name: Quiver Launcher
+  platform: n64, gc, wii, switch, psx, ps2, xbox360, pc
   release: 2026
 steam:
   extensions:
