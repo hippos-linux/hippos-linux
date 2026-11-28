@@ -23,7 +23,8 @@ mkdir -p "${STAGING}/bin"
 (
     cd "${SRC}/src"
     cp vars_x86linux_sdl2 vars
-    make -j"$(nproc)" gsplus
+    make clean
+    make -j"$(nproc)" CC="${CC:-gcc}" LD="${CC:-gcc}" AS="${CC:-gcc}" gsplus
 )
 
 cp "${SRC}/gsplus" "${STAGING}/bin/gsplus"
